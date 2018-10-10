@@ -2,6 +2,24 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Haiping Chen</Authors>
+    <Description>NumPy port in C#</Description>
+    <PackageProjectUrl>https://github.com/Oceania2018/NumSharp</PackageProjectUrl>
+    <Copyright>Apache 2.0</Copyright>
+    <RepositoryUrl>https://github.com/Oceania2018/NumSharp</RepositoryUrl>
+    <PackageReleaseNotes>Implemented arange, reshape, max, min, normalize.</PackageReleaseNotes>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
+    <Version>0.1.0</Version>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/Oceania2018/NumSharp/master/LICENSE</PackageLicenseUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
 
 </Project>
