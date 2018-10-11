@@ -50,7 +50,7 @@ namespace NumSharp
         /// The dimensions of the array. 
         /// n rows and m columns will be (n, m)
         /// </summary>
-        public NdArrayShape Shape { get { return new NdArrayShape { Rows = Data.Count, Dimensions = NDim }; } }
+        public (int, int) Shape { get { return (Data.Count, NDim); } }
 
         public IList<TData> Data { get; set; }
 
