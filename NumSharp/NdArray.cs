@@ -39,6 +39,8 @@ namespace NumSharp
         /// </summary>
         public int NDim { get; set; }
 
+        public int Length { get { return Data.Count; } }
+
         /// <summary>
         /// The total number of elements of the array.
         /// </summary>
@@ -48,7 +50,7 @@ namespace NumSharp
         /// The dimensions of the array. 
         /// n rows and m columns will be (n, m)
         /// </summary>
-        public Tuple<double, double> Shape { get { return new Tuple<double, double>(Data.Count, NDim); } }
+        public NdArrayShape Shape { get { return new NdArrayShape { Rows = Data.Count, Dimensions = NDim }; } }
 
         public IList<TData> Data { get; set; }
 
