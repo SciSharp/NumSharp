@@ -16,8 +16,10 @@
  * along with this program.  If not, see <http://www.apache.org/licenses/LICENSE-2.0/>.
  */
 
+using NumSharp.Extensions;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace NumSharp
@@ -53,6 +55,33 @@ namespace NumSharp
         public (int, int) Shape { get { return (Data.Count, NDim); } }
 
         public IList<TData> Data { get; set; }
+
+        public TData this[int i]
+        {
+            get
+            {
+                return Data[i];
+            }
+        }
+
+        public IList<TData> this[IEnumerable<int> select]
+        {
+            get
+            {
+                int i = 0;
+                return Data.Where(x => select.Contains(i++)).ToList();
+            }
+        }
+
+        public NdArray<TData> this[NdArray<int> select]
+        {
+            get
+            {
+                int i = 0;
+                var array = Data.Where(x => select.Data.Contains(i++)).ToList();
+                return new NdArray<TData>().Array(array);
+            }
+        }
 
         public override string ToString()
         {
