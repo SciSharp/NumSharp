@@ -8,18 +8,13 @@ namespace NumSharp.Extensions
 {
     public static partial class NdArrayExtensions
     {
-        public static NdArray<TData> ARange<TData>(this NdArray<TData> np, double stop, double start = 0, double step = 1)
+        public static NdArray<int> ARange(this NdArray<int> np, int stop, int start = 0, int step = 1)
         {
-            np.Data = new List<TData>();
+            int index = 0;
 
-            int size = 0;
-
-            for (double i = start; i < stop; i = i + step)
-            {
-                np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom(i.ToString()));
-
-                size++;
-            }
+            np.Data = Enumerable.Range(start, stop - start)
+                .Where(x => index++ % step == 0)
+                .ToList();
 
             np.NDim = 1;
 
