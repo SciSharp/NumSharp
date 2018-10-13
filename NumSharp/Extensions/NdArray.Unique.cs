@@ -11,7 +11,7 @@ namespace NumSharp.Extensions
         {
             var list = np.Data.Distinct();
 
-            return np.Array(list);
+            return new NdArray<T>().Array(list);
         }
     }
 }
