@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NumSharp\NumSharp.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp\NumSharp.csproj" />
   </ItemGroup>
 
 </Project>
