@@ -16,7 +16,7 @@ namespace NumSharp.Extensions
         /// <param name="rows"></param>
         /// <param name="dimenstions"></param>
         /// <returns></returns>
-        public static NdArray<List<TData>> Zeros<TData>(this NdArray<TData> np, int rows, int dimenstions = 1)
+        public static NdArray<List<TData>> Zeros<TData>(this NdArray<TData> np, int rows, int dimenstions)
         {
             np.Data = new List<TData>();
 
@@ -28,6 +28,20 @@ namespace NumSharp.Extensions
             np.NDim = dimenstions * rows;
 
             return np.ReShape(rows, dimenstions);
+        }
+
+        public static NdArray<TData> Zeros<TData>(this NdArray<TData> np, int rows)
+        {
+            np.Data = new List<TData>();
+
+            for (int i = 0; i < rows; i++)
+            {
+                np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom("0"));
+            }
+
+            np.NDim = 1;
+
+            return np;
         }
     }
 }

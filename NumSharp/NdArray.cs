@@ -62,6 +62,11 @@ namespace NumSharp
             {
                 return Data[i];
             }
+
+            set
+            {
+                Data[i] = value;
+            }
         }
 
         public IList<TData> this[IEnumerable<int> select]
