@@ -69,12 +69,13 @@ namespace NumSharp
             }
         }
 
-        public IList<TData> this[IEnumerable<int> select]
+        public NdArray<TData> this[IEnumerable<int> select]
         {
             get
             {
                 int i = 0;
-                return Data.Where(x => select.Contains(i++)).ToList();
+                var array = Data.Where(x => select.Contains(i++)).ToList();
+                return new NdArray<TData>().Array(array);
             }
         }
 
