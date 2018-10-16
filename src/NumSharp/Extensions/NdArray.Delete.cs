@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArray<TData> Delete<TData>(this NdArray<TData> np, IEnumerable<TData> delete)
+        public static NDArray<TData> Delete<TData>(this NDArray<TData> np, IEnumerable<TData> delete)
         {
             return np.Array(np.Data.Where(x => !delete.Contains(x)));
         }

@@ -6,9 +6,9 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArray<int> ARange(this NdArray<int> np, int stop, int start = 0, int step = 1)
+        public static NDArray<int> ARange(this NDArray<int> np, int stop, int start = 0, int step = 1)
         {
             int index = 0;
 

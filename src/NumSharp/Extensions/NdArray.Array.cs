@@ -6,9 +6,9 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArray<T> Array<T>(this NdArray<T> np, IEnumerable<T> array, int ndim = 1)
+        public static NDArray<T> Array<T>(this NDArray<T> np, IEnumerable<T> array, int ndim = 1)
         {
             np.Data = array.Select(x => x).ToList();
             np.NDim = ndim;
@@ -16,9 +16,9 @@ namespace NumSharp.Extensions
             return np;
         }
 
-        public static NdArray<List<int>> Array(this NdArray<List<int>> np, IList<List<int>> array, int ndim = 1)
+        public static NDArray<List<int>> Array(this NDArray<List<int>> np, IList<List<int>> array, int ndim = 1)
         {
-            var npTmp = new NdArray<int>();
+            var npTmp = new NDArray<int>();
 
             for (int r = 0; r < array.Count(); r++)
             {

@@ -5,13 +5,13 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArray<T> Unique<T>(this NdArray<T> np)
+        public static NDArray<T> Unique<T>(this NDArray<T> np)
         {
             var list = np.Data.Distinct();
 
-            return new NdArray<T>().Array(list);
+            return new NDArray<T>().Array(list);
         }
     }
 }

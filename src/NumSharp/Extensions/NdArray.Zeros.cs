@@ -6,7 +6,7 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
         /// <summary>
         /// Return a new array of given shape and type, filled with zeros.
@@ -16,7 +16,7 @@ namespace NumSharp.Extensions
         /// <param name="rows"></param>
         /// <param name="dimenstions"></param>
         /// <returns></returns>
-        public static NdArray<List<TData>> Zeros<TData>(this NdArray<TData> np, int rows, int dimenstions)
+        public static NDArray<List<TData>> Zeros<TData>(this NDArray<TData> np, int rows, int dimenstions)
         {
             np.Data = new List<TData>();
 
@@ -30,7 +30,7 @@ namespace NumSharp.Extensions
             return np.ReShape(rows, dimenstions);
         }
 
-        public static NdArray<TData> Zeros<TData>(this NdArray<TData> np, int rows)
+        public static NDArray<TData> Zeros<TData>(this NDArray<TData> np, int rows)
         {
             np.Data = new List<TData>();
 

@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ARange()
         {
-            var np = new NdArray<int>();
+            var np = new NDArray<int>();
             np.ARange(3);
 
             Assert.IsTrue(np.ToString().Equals("array([0, 1, 2])"));

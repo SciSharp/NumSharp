@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static int ArgMax(this NdArray<double> np)
+        public static int ArgMax(this NDArray<double> np)
         {
             var max = np.Data.Max();
 

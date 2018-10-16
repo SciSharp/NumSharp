@@ -5,14 +5,14 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayRandomExtensions
+    public static partial class NDArrayRandomExtensions
     {
-        public static NdArray<int> Permutation(this NdArrayRandom rand, int max)
+        public static NDArray<int> Permutation(this NDArrayRandom rand, int max)
         {
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NdArray<int>().ARange(max);
+            var np = new NDArray<int>().ARange(max);
 
             for(int i = 0; i < max; i++)
             {

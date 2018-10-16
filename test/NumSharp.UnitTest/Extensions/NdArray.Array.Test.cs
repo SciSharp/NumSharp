@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Array1Dim()
         {
-            var np = new NdArray<int>();
+            var np = new NDArray<int>();
             var list = new List<int> { 1, 2, 3 };
             np = np.Array(list);
 
@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Array2Dim()
         {
-            var np = new NdArray<List<int>>();
+            var np = new NDArray<List<int>>();
             var list = new List<List<int>>
             {
                 new List<int> { 1, 2},

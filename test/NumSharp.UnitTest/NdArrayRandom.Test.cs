@@ -7,7 +7,7 @@ using NumSharp.Extensions;
 namespace NumSharp.UnitTest
 {
     [TestClass]
-    public class NdArrayRandomTest
+    public class NDArrayRandomTest
     {
     }
 }

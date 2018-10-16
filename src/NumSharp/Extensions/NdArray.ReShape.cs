@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
         /// <summary>
         /// Gives a new shape to an array without changing its data.
@@ -15,7 +15,7 @@ namespace NumSharp.Extensions
         /// <param name="row"></param>
         /// <param name="dim"></param>
         /// <returns></returns>
-        public static NdArray<List<TData>> ReShape<TData>(this NdArray<TData> np, int row, int dim)
+        public static NDArray<List<TData>> ReShape<TData>(this NDArray<TData> np, int row, int dim)
         {
             // loop row
             var rows = new List<List<TData>>();
@@ -36,7 +36,7 @@ namespace NumSharp.Extensions
                 rows.Add(dims);
             }
 
-            return new NdArray<List<TData>>
+            return new NDArray<List<TData>>
             {
                 NDim = dim,
                 Data = rows

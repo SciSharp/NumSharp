@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Zeros1Dim()
         {
-            var np = new NdArray<int>();
+            var np = new NDArray<int>();
             np.Zeros(3);
 
             Assert.IsTrue(np.ToString().Equals("array([0, 0, 0])"));
@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Zeros2Dim()
         {
-            var np = new NdArray<int>();
+            var np = new NDArray<int>();
             var np2 = np.Zeros(3, 2);
 
             Assert.IsTrue(np2.ToString().Equals("array([[0, 0], [0, 0], [0, 0]])"));

@@ -5,11 +5,11 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArray<double> Min(this NdArray<NdArray<double>> np)
+        public static NDArray<double> Min(this NDArray<NDArray<double>> np)
         {
-            var min = new NdArray<double>();
+            var min = new NDArray<double>();
 
             for (int d = 0; d < np.NDim; d++)
             {

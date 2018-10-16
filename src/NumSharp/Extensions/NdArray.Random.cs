@@ -5,11 +5,11 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static NdArrayRandom Random<TData>(this NdArray<TData> np)
+        public static NDArrayRandom Random<TData>(this NDArray<TData> np)
         {
-            var rand = new NdArrayRandom();
+            var rand = new NDArrayRandom();
             return rand;
         }
     }

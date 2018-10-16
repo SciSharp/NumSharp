@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReShape()
         {
-            var np = new NdArray<int>();
+            var np = new NDArray<int>();
             var np2 = np.ARange(6).ReShape(3, 2);
 
             Assert.IsTrue(np2.ToString().Equals("array([[0, 1], [2, 3], [4, 5]])"));

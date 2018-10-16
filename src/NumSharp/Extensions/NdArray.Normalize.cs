@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NdArrayExtensions
+    public static partial class NDArrayExtensions
     {
-        public static void Normalize(this NdArray<NdArray<double>> np)
+        public static void Normalize(this NDArray<NDArray<double>> np)
         {
             var min = np.Min();
             var max = np.Max();

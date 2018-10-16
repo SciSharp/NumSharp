@@ -28,9 +28,9 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public class NdArray<TData>
+    public class NDArray<TData>
     {
-        public NdArray()
+        public NDArray()
         {
             Data = new List<TData>();
             NDim = -1;
@@ -69,23 +69,23 @@ namespace NumSharp
             }
         }
 
-        public NdArray<TData> this[IEnumerable<int> select]
+        public NDArray<TData> this[IEnumerable<int> select]
         {
             get
             {
                 int i = 0;
                 var array = Data.Where(x => select.Contains(i++)).ToList();
-                return new NdArray<TData>().Array(array);
+                return new NDArray<TData>().Array(array);
             }
         }
 
-        public NdArray<TData> this[NdArray<int> select]
+        public NDArray<TData> this[NDArray<int> select]
         {
             get
             {
                 int i = 0;
                 var array = Data.Where(x => select.Data.Contains(i++)).ToList();
-                return new NdArray<TData>().Array(array);
+                return new NDArray<TData>().Array(array);
             }
         }
 

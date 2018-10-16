@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NumSharp
 {
-    public class NdArrayRandom
+    public class NDArrayRandom
     {
         public static int Seed { get; set; }
     }
