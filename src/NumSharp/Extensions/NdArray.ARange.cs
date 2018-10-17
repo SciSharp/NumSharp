@@ -16,8 +16,6 @@ namespace NumSharp.Extensions
                 .Where(x => index++ % step == 0)
                 .ToList();
 
-            np.NDim = 1;
-
             return np;
         }
     }

@@ -25,8 +25,8 @@ namespace NumSharp.UnitTest.Extensions
             var np = new NDArray<List<int>>();
             var list = new List<List<int>>
             {
-                new List<int> { 1, 2},
-                new List<int> { 3, 4}
+                new List<int> { 1, 2 },
+                new List<int> { 3, 4 }
             };
 
             np = np.Array(list);

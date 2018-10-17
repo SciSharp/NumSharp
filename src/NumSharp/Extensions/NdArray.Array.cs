@@ -11,7 +11,6 @@ namespace NumSharp.Extensions
         public static NDArray<T> Array<T>(this NDArray<T> np, IEnumerable<T> array, int ndim = 1)
         {
             np.Data = array.Select(x => x).ToList();
-            np.NDim = ndim;
 
             return np;
         }
@@ -22,11 +21,6 @@ namespace NumSharp.Extensions
 
             for (int r = 0; r < array.Count(); r++)
             {
-                if (np.NDim < 0)
-                {
-                    np.NDim = array[0].Count;
-                }
-
                 for(int d =0; d < np.NDim; d++)
                 {
                     npTmp.Data.Add(array[r][d]);

@@ -38,7 +38,6 @@ namespace NumSharp.Extensions
 
             return new NDArray<List<TData>>
             {
-                NDim = dim,
                 Data = rows
             };
         }

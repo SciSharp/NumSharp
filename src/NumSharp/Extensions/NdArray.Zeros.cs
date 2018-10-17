@@ -25,8 +25,6 @@ namespace NumSharp.Extensions
                 np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom("0"));
             }
 
-            np.NDim = dimenstions * rows;
-
             return np.ReShape(rows, dimenstions);
         }
 
@@ -38,8 +36,6 @@ namespace NumSharp.Extensions
             {
                 np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom("0"));
             }
-
-            np.NDim = 1;
 
             return np;
         }

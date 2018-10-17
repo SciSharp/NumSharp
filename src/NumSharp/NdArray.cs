@@ -21,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NumSharp
 {
@@ -33,13 +34,18 @@ namespace NumSharp
         public NDArray()
         {
             Data = new List<TData>();
-            NDim = -1;
         }
 
         /// <summary>
         /// The number of axes (dimensions) of the array.
         /// </summary>
-        public int NDim { get; set; }
+        public int NDim
+        {
+            get
+            {
+                return Regex.Matches(typeof(TData).FullName, @"\.Generic\.").Count + 1;
+            }
+        }
 
         public int Length { get { return Data.Count; } }
 
