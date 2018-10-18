@@ -11,6 +11,7 @@ NumSharp has implemented the arange, array, max, min, reshape, normalize, unique
 * NdArray
   * Arange
   * Array
+  * Convolve
   * Delete
   * Max
   * Min
