@@ -31,6 +31,8 @@ namespace NumSharp
     /// </summary>
     public class NDArray<TData>
     {
+        private int nDim = 0;
+
         public NDArray()
         {
             Data = new List<TData>();
@@ -43,8 +45,14 @@ namespace NumSharp
         {
             get
             {
-                return Regex.Matches(typeof(TData).FullName, @"\.Generic\.").Count + 1;
+                if (nDim == 0)
+                {
+                    nDim = Regex.Matches(typeof(TData).FullName, @"\.Generic\.|\.NDArray").Count + 1;
+                }
+
+                return nDim;
             }
+
         }
 
         public int Length { get { return Data.Count; } }
