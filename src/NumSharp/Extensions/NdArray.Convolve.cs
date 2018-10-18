@@ -42,11 +42,58 @@ namespace NumSharp.Extensions
                 
                 numSharpReturn.Data = out_;
             }
-            else 
+            else if (mode.Equals("valid"))
             {
-           
+                var min_v = (nf < ng) ? numSharpArray1 : numSharpArray2;
+                var max_v = (nf < ng) ? numSharpArray2 : numSharpArray1;
+            
+                int n  = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
+                
+                double[] out_ = new double[n];
+  
+                for(int idx = 0; idx < n; ++idx) 
+                {
+                    int kdx = idx; 
+                    
+                    for(int jdx = (min_v.Length - 1); jdx >= 0; --jdx) 
+                    {
+                        out_[idx] += min_v[jdx] * max_v[kdx];
+                        ++kdx;
+                    }
+                }
+                numSharpReturn.Data = out_;
             }
+            else if (mode.Equals("same"))
+            {
+                // followed the discussion on 
+                // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
+                // implemented numpy convolve because we follow numpy
+                var npad = numSharpArray2.Length - 1;
 
+                if (npad % 2 == 1)
+                {
+                    npad = (int) Math.Floor(((double)npad) / 2.0);
+                    
+                    numSharpArray1.Data.ToList().AddRange(new double[npad+1]);
+                    var puffer = (new double[npad]).ToList();
+                    puffer.AddRange(numSharpArray1.Data);
+                    numSharpArray1.Data = puffer; 
+                }
+                else 
+                {
+                    npad = npad / 2;
+                    
+                    var puffer = numSharpArray1.Data.ToList(); 
+                    puffer.AddRange(new double[npad]);
+                    numSharpArray1.Data = puffer;
+                    
+                    puffer = (new double[npad]).ToList();
+                    puffer.AddRange(numSharpArray1.Data);
+                    numSharpArray1.Data = puffer; 
+                }
+
+                numSharpReturn = numSharpArray1.Convolve(numSharpArray2,"valid");
+            }
             return numSharpReturn;
         }
     }
