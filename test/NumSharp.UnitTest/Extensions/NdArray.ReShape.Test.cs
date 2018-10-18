@@ -15,6 +15,7 @@ namespace NumSharp.UnitTest.Extensions
             var np = new NDArray<int>();
             var np2 = np.ARange(6).ReShape(3, 2);
 
+            Assert.IsTrue(np2.Shape2.Item1 == 3 && np2.Shape2.Item2 == 2);
             Assert.IsTrue(np2.ToString().Equals("array([[0, 1], [2, 3], [4, 5]])"));
         }
     }

@@ -23,13 +23,9 @@ namespace NumSharp.UnitTest.Extensions
             np.Data.Add(series1);
             np.Data.Add(series2);
 
-            double[] expectedResultDefault = new double[] { 2.5 };
-            double[] expectedResult0 = new double[] { 2, 3 };
-            double[] expectedResult1 = new double[] { 1.5, 3.5 };
-
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean().Data, expectedResultDefault));
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(0).Data, expectedResult0));
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(1).Data, expectedResult1));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean().Data, new double[] { 2.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(0).Data, new double[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(1).Data, new double[] { 1.5, 3.5 }));
         }
     }
 }
