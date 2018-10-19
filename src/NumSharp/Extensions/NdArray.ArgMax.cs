@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<TData>
     {
-        public static int ArgMax(this NDArray<double> np)
+        public int ArgMax()
         {
+            var np = this;
+
             var max = np.Data.Max();
 
             return np.Data.IndexOf(max);
