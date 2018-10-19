@@ -4,9 +4,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<TData>
     {
         /// <summary>
         /// Return a new array of given shape and type, filled with zeros.
@@ -16,8 +16,10 @@ namespace NumSharp.Extensions
         /// <param name="rows"></param>
         /// <param name="dimenstions"></param>
         /// <returns></returns>
-        public static NDArray<List<TData>> Zeros<TData>(this NDArray<TData> np, int rows, int dimenstions)
+        public NDArray<List<TData>> Zeros(int rows, int dimenstions)
         {
+            dynamic np = this;
+
             np.Data = new List<TData>();
 
             for (int i = 0; i < rows * dimenstions; i++)
@@ -28,8 +30,10 @@ namespace NumSharp.Extensions
             return np.ReShape(rows, dimenstions);
         }
 
-        public static NDArray<TData> Zeros<TData>(this NDArray<TData> np, int rows)
+        public NDArray<TData> Zeros(int rows)
         {
+            dynamic np = this;
+            
             np.Data = new List<TData>();
 
             for (int i = 0; i < rows; i++)

@@ -31,7 +31,7 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public class NDArray<TData>
+    public partial class NDArray<TData>
     {
         private int nDim = 0;
 

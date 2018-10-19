@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<TData>
     {
-        public static NDArray<TData> Delete<TData>(this NDArray<TData> np, IEnumerable<TData> delete)
+        public NDArray<TData> Delete(IEnumerable<TData> delete)
         {
+            var np = this;
+            
             return np.Array(np.Data.Where(x => !delete.Contains(x)));
         }
     }

@@ -5,9 +5,9 @@ using System.Linq;
 using System.Text;
 using NumSharp;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtension
+    public partial class NDArray<TData>
     {
         /// <summary>
         /// Convolution of 2 series  
@@ -16,8 +16,10 @@ namespace NumSharp.Extensions
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public static NDArray<double> Convolve(this NDArray<double> numSharpArray1, NDArray<double> numSharpArray2, string mode  = "full")
+        public NDArray<double> Convolve(NDArray<double> numSharpArray2, string mode  = "full")
         {
+            dynamic numSharpArray1 = this;
+
             int nf = numSharpArray1.Length;
             int ng = numSharpArray2.Length;
 
@@ -83,7 +85,7 @@ namespace NumSharp.Extensions
                 {
                     npad = npad / 2;
                     
-                    var puffer = numSharpArray1.Data.ToList(); 
+                    var puffer = ((double[]) numSharpArray1.Data).ToList(); 
                     puffer.AddRange(new double[npad]);
                     numSharpArray1.Data = puffer;
                     

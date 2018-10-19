@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<TData>
     {
         /// <summary>
         /// Gives a new shape to an array without changing its data.
@@ -15,8 +15,10 @@ namespace NumSharp.Extensions
         /// <param name="row"></param>
         /// <param name="dim"></param>
         /// <returns></returns>
-        public static NDArray<List<TData>> ReShape<TData>(this NDArray<TData> np, int row, int dim)
+        public NDArray<List<TData>> ReShape(int row, int dim)
         {
+            var np = this;
+
             // loop row
             var rows = new List<List<TData>>();
 
