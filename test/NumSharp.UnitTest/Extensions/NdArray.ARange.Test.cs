@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
+using System.Linq;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -13,15 +14,15 @@ namespace NumSharp.UnitTest.Extensions
         public void ARange()
         {
             var np = new NDArray<int>();
-            np.ARange(3);
 
-            Assert.IsTrue(np.ToString().Equals("array([0, 1, 2])"));
+            np.ARange(3);
+            Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 });
 
             np.ARange(7, 3);
-            Assert.IsTrue(np.ToString().Equals("array([3, 4, 5, 6])"));
+            Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 });
 
             np.ARange(7, 3, 2);
-            Assert.IsTrue(np.ToString().Equals("array([3, 5])"));
+            Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 });
         }
     }
 }

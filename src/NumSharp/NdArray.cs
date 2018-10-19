@@ -19,8 +19,11 @@
 using NumSharp.Extensions;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Dynamic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NumSharp
 {
@@ -30,29 +33,99 @@ namespace NumSharp
     /// </summary>
     public partial class NDArray<TData>
     {
+        private int nDim = 0;
+
         public NDArray()
         {
             Data = new List<TData>();
-            NDim = -1;
         }
 
         /// <summary>
         /// The number of axes (dimensions) of the array.
         /// </summary>
-        public int NDim { get; set; }
+        public int NDim
+        {
+            get
+            {
+                if (nDim == 0)
+                {
+                    nDim = Regex.Matches(typeof(TData).FullName, @"\.Generic\.|\.NDArray").Count + 1;
+                }
+
+                return nDim;
+            }
+
+        }
 
         public int Length { get { return Data.Count; } }
 
         /// <summary>
         /// The total number of elements of the array.
         /// </summary>
-        public int Size { get { return NDim * Data.Count; } }
+        public int Size
+        {
+            get
+            {
+                int size = 0;
+
+                for(int d = 1; d <= nDim; d++)
+                {
+                    if (size == 0) size = 1;
+                    size *= DimensionSize(d);
+                }
+
+                return size;
+            }
+        }
 
         /// <summary>
         /// The dimensions of the array. 
         /// n rows and m columns will be (n, m)
         /// </summary>
-        public (int, int) Shape { get { return (Data.Count, NDim); } }
+        public int Shape { get { return Data.Count; } }
+
+        /// <summary>
+        /// 2 dimension shape
+        /// </summary>
+        public (int, int) Shape2
+        {
+            get
+            {
+                int x = DimensionSize(1);
+                int y = DimensionSize(2);
+
+                return (x, y);
+            }
+        }
+
+        private int DimensionSize(int dim)
+        {
+            int size = 0;
+
+            if (dim == 1)
+            {
+                return Data.Count;
+            }
+            else if (dim == 2)
+            {
+                if (typeof(TData).Name == "List`1")
+                {
+                    if (typeof(TData).GenericTypeArguments[0] == typeof(Int32))
+                    {
+                        size = (Data[0] as List<int>).Count;
+                    }
+                }
+                else if (typeof(TData).Name == "NDArray`1")
+                {
+                    if (typeof(TData).GenericTypeArguments[0] == typeof(double))
+                    {
+                        size = (Data[0] as NDArray<double>).Length;
+                    }
+                }
+            }
+
+            return size;
+        }
 
         public IList<TData> Data { get; set; }
 

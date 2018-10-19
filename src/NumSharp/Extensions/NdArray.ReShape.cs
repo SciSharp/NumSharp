@@ -40,7 +40,6 @@ namespace NumSharp
 
             return new NDArray<List<TData>>
             {
-                NDim = dim,
                 Data = rows
             };
         }

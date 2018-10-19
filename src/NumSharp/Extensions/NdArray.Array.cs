@@ -12,8 +12,7 @@ namespace NumSharp
         {
             var np = this;
 
-            np.Data = array.Select(x => x).ToArray();
-            np.NDim = ndim;
+            np.Data = array.Select(x => x).ToList();
 
             return np;
         }
@@ -26,11 +25,6 @@ namespace NumSharp
 
             for (int r = 0; r < array.Count(); r++)
             {
-                if (np.NDim < 0)
-                {
-                    np.NDim = array[0].Count;
-                }
-
                 for(int d =0; d < np.NDim; d++)
                 {
                     npTmp.Data.Add(array[r][d]);
