@@ -33,8 +33,6 @@ namespace NumSharp
     /// </summary>
     public partial class NDArray<TData>
     {
-        private int nDim = 0;
-
         public NDArray()
         {
             Data = new List<TData>();
@@ -47,12 +45,7 @@ namespace NumSharp
         {
             get
             {
-                if (nDim == 0)
-                {
-                    nDim = Regex.Matches(typeof(TData).FullName, @"\.Generic\.|\.NDArray").Count + 1;
-                }
-
-                return nDim;
+                return Regex.Matches(typeof(TData).FullName, @"\.Generic\.|\.NDArray").Count + 1;
             }
 
         }
@@ -67,11 +60,10 @@ namespace NumSharp
             get
             {
                 int size = 0;
-
-                for(int d = 1; d <= nDim; d++)
+                for(int d = 0; d < NDim ; d++)
                 {
                     if (size == 0) size = 1;
-                    size *= DimensionSize(d);
+                    size *= DimensionSize(d + 1);
                 }
 
                 return size;

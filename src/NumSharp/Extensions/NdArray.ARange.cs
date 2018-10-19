@@ -37,7 +37,6 @@ namespace NumSharp
 
                 }
                 np.Data = (TData[]) puffer;
-                np.NDim = 1;
             }
 
             return np;
