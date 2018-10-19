@@ -4,19 +4,41 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<TData>
     {
-        public static NDArray<int> ARange(this NDArray<int> np, int stop, int start = 0, int step = 1)
+        public NDArray<TData> ARange(int stop, int start = 0, int step = 1)
         {
+            var np = this;
+
             int index = 0;
 
-            np.Data = Enumerable.Range(start, stop - start)
-                .Where(x => index++ % step == 0)
-                .ToList();
+            var npElementType = typeof(TData);
 
-            np.NDim = 1;
+            if (!npElementType.IsEnum)
+            {
+                var array = Enumerable.Range(start, stop - start)
+                                          .Where(x => index++ % step == 0)
+                                          .ToArray();
+                dynamic puffer = null;     
+                
+                if (npElementType == typeof(int))
+                {
+                    puffer = array;
+                }
+                else if (npElementType == typeof(double)) 
+                {
+                    puffer = array.Select(x => (double)x )
+                                          .ToArray();
+                }
+                else 
+                {
+
+                }
+                np.Data = (TData[]) puffer;
+                np.NDim = 1;
+            }
 
             return np;
         }
