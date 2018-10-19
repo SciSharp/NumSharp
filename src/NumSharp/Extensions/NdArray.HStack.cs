@@ -18,5 +18,26 @@ namespace NumSharp.Extensions
 
             return returnValue;
         }
+
+        public static NDArray<NDArray<double>> HStack(this NDArray<NDArray<double>> np, NDArray<int> np2)
+        {
+            var np3 = new NDArray<NDArray<double>>();
+
+            for (int r = 0; r < np.Length; r++)
+            {
+                var row = new NDArray<double>();
+
+                for (int c = 0; c < np[r].Length; c++)
+                {
+                    row.Data.Add(np[r][c]);
+                }
+
+                row.Data.Add(np2[r]);
+
+                np3.Data.Add(row);
+            }
+
+            return np3;
+        }
     }
 }
