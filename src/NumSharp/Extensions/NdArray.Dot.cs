@@ -35,5 +35,25 @@ namespace NumSharp.Extensions
 
             return sum;
         }
+        public static NDArray<double> Dot(this NDArray<double> np, double scalar)
+        {
+            double[] array1Double = np.Data.ToArray();
+
+            array1Double = array1Double.Select(x => scalar * x).ToArray();
+            
+            np.Data = array1Double;
+
+            return np;
+        }
+        public static NDArray<float> Dot(this NDArray<float> np, float scalar)
+        {
+            np.Data = np.Data.Select(x => x * scalar).ToArray();
+            return np;
+        }
+        public static NDArray<int> Dot(this NDArray<int> np, int scalar)
+        {
+            np.Data = np.Data.Select(x => x * scalar).ToArray();
+            return np;
+        }
     }
 }
