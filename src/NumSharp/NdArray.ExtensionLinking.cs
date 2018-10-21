@@ -68,6 +68,13 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,np2Dyn);
         }
+        public NDArray<TData> Dot(TData scalar)
+        {
+            dynamic np1Dyn = this;
+            dynamic scalarDyn = scalar;
+            
+            return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
+        }
         public NDArray<TData> Delete(IEnumerable<TData> delete)
         {
             return NumSharp.Extensions.NDArrayExtensions.Delete(this, delete);
