@@ -61,12 +61,19 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.Convolve(npDyn, np2Dyn,mode);
         }
-        public TData Dot(NDArray<TData> np2)
+        public NDArray<TData> Dot(NDArray<TData> np2)
         {
             dynamic np1Dyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,np2Dyn);
+        }
+        public NDArray<TData> Dot(TData scalar)
+        {
+            dynamic np1Dyn = this;
+            dynamic scalarDyn = scalar;
+            
+            return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
         }
         public NDArray<TData> Delete(IEnumerable<TData> delete)
         {
