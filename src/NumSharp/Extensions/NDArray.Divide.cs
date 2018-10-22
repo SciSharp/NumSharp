@@ -9,15 +9,13 @@ namespace NumSharp.Extensions
     {
         public static NDArray<NDArray<double>> Divide(this NDArray<NDArray<double>> np, double divisor)
         {
-            for(int row = 0; row < np.Length; row++)
+            return new NDArray<NDArray<double>>
             {
-                for(int col = 0; col < np[row].Length; col++)
+                Data = np.Data.Select(row => new NDArray<double>
                 {
-                    np[row][col] /= divisor;
-                }
-            }
-
-            return np;
+                    Data = row.Data.Select(col => col / divisor).ToList()
+                }).ToList()
+            };
         }
     }
 }

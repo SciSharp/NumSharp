@@ -14,14 +14,7 @@ namespace NumSharp.Extensions
             // axis == -1: DEFAULT; to compute the mean of the flattened array.
             if (axis == -1)
             {
-                double sum = 0;
-                for (int d = 0; d < np.Length; d++)
-                {
-                    for (int p = 0; p < np[d].Length; p++)
-                    {
-                        sum += np.Data[d][p];
-                    }
-                }
+                var sum = np.Data.Select(d => d.Data.Sum()).Sum();
 
                 mean.Data.Add(sum / np.Size);
             }

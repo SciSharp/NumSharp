@@ -9,15 +9,13 @@ namespace NumSharp.Extensions
     {
         public static NDArray<NDArray<double>> Minus(this NDArray<NDArray<double>> np, double minus)
         {
-            for(int row = 0; row < np.Length; row++)
+            return new NDArray<NDArray<double>>
             {
-                for(int col = 0; col < np[row].Length; col++)
+                Data = np.Data.Select(row => new NDArray<double>
                 {
-                    np[row][col] -= minus;
-                }
-            }
-
-            return np;
+                    Data = row.Data.Select(col => col - minus).ToList()
+                }).ToList()
+            };
         }
     }
 }

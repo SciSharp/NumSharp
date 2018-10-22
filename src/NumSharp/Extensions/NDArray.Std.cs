@@ -16,14 +16,7 @@ namespace NumSharp.Extensions
             // axis == -1: DEFAULT; to compute the standard deviation of the flattened array.
             if (axis == -1)
             {
-                double sum = 0;
-                for (int d = 0; d < np.Length; d++)
-                {
-                    for (int p = 0; p < np[d].Length; p++)
-                    {
-                        sum += Math.Pow(Math.Abs(np.Data[d][p] - mean.Data[0]), 2);
-                    }
-                }
+                var sum = np.Data.Select(d => d.Data.Select(p => Math.Pow(Math.Abs(p - mean.Data[0]), 2)).Sum()).Sum();
 
                 std.Data.Add(Math.Sqrt(sum / np.Size));
             }
