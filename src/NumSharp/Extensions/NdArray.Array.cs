@@ -34,5 +34,21 @@ namespace NumSharp
 
             return puffer.ReShape(array.Count, np.NDim);
         }
+        public NDArray<NDArray<double>> Array(double[,] array)
+        {
+            NDArray<NDArray<double>> returnArray = new NDArray<NDArray<double>>();
+
+            returnArray.Data = new NDArray<double>[array.GetLength(0)];
+            for (int idx = 0;idx < array.GetLength(0); idx++)
+            {
+                returnArray.Data[idx] = new NDArray<double>();
+                returnArray.Data[idx].Data = new double[array.GetLength(1)];
+                for (int jdx =0; jdx < array.GetLength(1); jdx++)
+                {
+                    returnArray.Data[idx].Data[jdx] = array[idx,jdx];
+                }
+            }
+            return returnArray;
+        }
     }
 }
