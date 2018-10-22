@@ -61,7 +61,7 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.Convolve(npDyn, np2Dyn,mode);
         }
-        public TData Dot(NDArray<TData> np2)
+        public NDArray<TData> Dot(NDArray<TData> np2)
         {
             dynamic np1Dyn = this;
             dynamic np2Dyn = np2;

@@ -2,12 +2,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Numerics;
 
 namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static double Dot(this NDArray<double> np, NDArray<double> np2)
+        public static NDArray<double> Dot(this NDArray<double> np, NDArray<double> np2)
         {
             double[] array1Double = np.Data.ToArray();
             double[] array2Double = np2.Data.ToArray();
@@ -19,7 +20,7 @@ namespace NumSharp.Extensions
                 sum += array1Double[idx] * array2Double[idx];
             }
 
-            return sum;
+            return new NDArray<double>().Array(new double[]{sum});
         }
         public static int Dot(this NDArray<int> np, NDArray<int> np2)
         {
@@ -34,6 +35,49 @@ namespace NumSharp.Extensions
             }
 
             return sum;
+        }
+        public static NDArray<NDArray<double>> Dot(this NDArray<NDArray<double>> np,NDArray<NDArray<double>> np2)
+        {
+            // the following lines are slow performance I guess
+            int numOfLines = np.Length;
+            int numOfColumns = np2[0].Length;
+
+            NDArray<NDArray<double>> result = new NDArray<NDArray<double>>();
+            result.Data = new NDArray<double>[numOfLines];
+            
+            for (int idx =0; idx < numOfLines;idx++)
+            {
+                result.Data[idx] = new NDArray<double>();
+                result.Data[idx].Data = new double[numOfColumns];    
+            }
+
+            for (int idx = 0; idx < numOfLines;idx++)
+            {
+                for( int jdx = 0; jdx < numOfColumns; jdx++)
+                {
+                    result[idx][jdx] = 0;
+                    for (int kdx = 0; kdx < np2.Length; kdx++)
+                    {
+                        result[idx][jdx] += np[idx][kdx] * np2[kdx][jdx];
+                    }
+                }
+            }
+
+            return result;
+        }
+        public static NDArray<Complex> Dot(this NDArray<Complex> np, NDArray<Complex> np2)
+        {
+            var array1Complex = np.Data.ToArray();
+            var array2Complex = np2.Data.ToArray();
+
+            Complex sum = 0;
+
+            for (int idx = 0; idx < array1Complex.Length; idx++)
+            {
+                sum += array1Complex[idx] * array2Complex[idx];
+            }
+
+            return new NDArray<Complex>().Array(new Complex[]{new Complex(sum.Real,sum.Imaginary)} );
         }
         public static NDArray<double> Dot(this NDArray<double> np, double scalar)
         {
