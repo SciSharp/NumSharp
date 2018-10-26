@@ -1,6 +1,6 @@
 # NumSharp
 NumPy port in C#
-
+![NumSharp](https://ci.appveyor.com/api/projects/status/bmaauxd9rx5lsq9i?svg=true)
 Is it difficult to translate python machine learning code into C#? Because too many functions can’t be found in the corresponding code in the .Net SDK. NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# code. Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
 
 ![comparision](docs/_static/screenshots/python-csharp-comparision.png)
@@ -48,6 +48,7 @@ $ pip install recommonmark
 $ cd docs
 $ make html
 ```
+[Documents](https://numsharp.readthedocs.io)
 
 NumSharp is referenced by:
 * [Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
