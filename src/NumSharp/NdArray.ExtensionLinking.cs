@@ -79,5 +79,10 @@ namespace NumSharp
         {
             return NumSharp.Extensions.NDArrayExtensions.Delete(this, delete);
         }
+        public Matrix<double> AsMatrix()
+        {
+            dynamic np = this;
+            return NumSharp.Extensions.NDArrayExtensions.AsMatrix(np);
+        }
     }
 }
