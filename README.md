@@ -9,24 +9,44 @@ NumSharp has implemented the arange, array, max, min, reshape, normalize, unique
 
 ## Implemented APIs
 * NdArray
-  * Arange
+  * ARange
+  * ArgMax
   * Array
+  * AsMatrix
   * Convolve
   * Delete
+  * Divide
+  * Dot
+  * HStack
   * Max
+  * Mean
   * Min
+  * Minus
   * Normalize
   * Random
   * ReShape
+  * Std
+  * Sum
   * Unique
   * Zeros
   
 * NdArrayRandom
   * Permutation
+  * Shuffle
+
+* Matrix
 
 ## Install NumSharp in NuGet
 ```
 Install-Package NumSharp -Version 0.1.0
+```
+
+# How to make docs
+```
+$ pip install sphinx
+$ pip install recommonmark
+$ cd docs
+$ make html
 ```
 
 NumSharp is referenced by:

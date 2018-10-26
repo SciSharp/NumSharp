@@ -14,7 +14,23 @@ Welcome to NumSharp's documentation!
 
 Indices and tables
 ==================
+The main documentation for the site is organized into a couple sections:
 
-* :ref:`genindex`
-* :ref:`modindex`
+:ref:`User Documentation <user-docs>`
+:ref:`Developer's Documentation <developer-docs>`
+
+.. _user-docs:
+
+.. toctree::
+   :maxdepth: 3
+   :caption: User Documentation:
+   
+   user-docs/overview
+
+.. _developer-docs:
+   :maxdepth: 3
+   :caption: Developer's Documentation:
+   
+   developer-docs/overview
+
 * :ref:`search`
