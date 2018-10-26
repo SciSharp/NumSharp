@@ -3,20 +3,30 @@ using System.Linq;
 
 namespace NumSharp
 {
-    public class Matrix<TData>
+    public partial class Matrix<TData>
     {
         public TData[,] Data {get;set;}
-
         public Matrix()
         {
 
         }
         public Matrix(string matrixString)
         {
-            string[][] splitted = matrixString.Split(';')
+            string[][] splitted = null;
+
+            if (matrixString.Contains(","))
+            {
+                splitted = matrixString.Split(';')
+                                              .Select(x => x.Split(',') )
+                                              .ToArray();
+            }
+            else 
+            {
+                splitted = matrixString.Split(';')
                                               .Select(x => x.Split(' ') )
                                               .ToArray();
-
+            }
+            
             int dim0 = splitted.Length;
             int dim1 = splitted[0].Length;
 
@@ -28,7 +38,6 @@ namespace NumSharp
             }
             
         }
-
         /// <summary>
         /// Convert a string to Double[,] and store
         /// in Data field of Matrix object
