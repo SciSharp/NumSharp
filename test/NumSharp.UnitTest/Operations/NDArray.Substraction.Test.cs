@@ -24,6 +24,24 @@ namespace NumSharp.UnitTest
 
         }
         [TestMethod]
+        public void Double1DPlusOffset()
+        {
+            var np1 = new NDArray<double>().Array(new double[]{3,5,7});
+
+            var np2 = np1 - 3;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{0,2,4},np2.Data));
+        }
+        [TestMethod]
+        public void Complex1DPlusOffset()
+        {
+            var np1 = new NDArray<Complex>().Array(new Complex[]{new Complex(6,8),new Complex(10,12)});
+
+            var np2 = np1 - new Complex(2,1);
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[]{new Complex(4,7),new Complex(8,11)},np2.Data));
+        }
+        [TestMethod]
         public void  ComplexTwo1D()
         {
             var np1 = new NDArray<Complex>().Array(new Complex[]{new Complex(6,8),new Complex(10,12)});

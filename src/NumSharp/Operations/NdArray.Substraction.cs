@@ -26,5 +26,22 @@ namespace NumSharp
             
             return (NDArray<TData>) sum;
         }
+        public static NDArray<TData> operator -(NDArray<TData> np, TData scalar)
+        {
+            dynamic sum = null;
+            dynamic npDyn = np;
+            dynamic scalarDyn = scalar;
+
+            var dataType = typeof(TData);
+
+            switch (dataType.Name)
+            {
+                case ("Double"): sum = new NDArray<double>().Array(((NDArray<double>)npDyn).Data.Select((x) => x - (double)scalarDyn)); break;
+                case ("Float"): sum = new NDArray<float>().Array(((NDArray<float>)npDyn).Data.Select((x,idx) => x - (float)scalarDyn)); break;
+                case ("Complex"): sum = new NDArray<Complex>().Array(((NDArray<Complex>)npDyn).Data.Select((x,idx) => x - (Complex) scalarDyn )); break;
+            }
+            
+            return (NDArray<TData>) sum;
+        }
     }
 }
