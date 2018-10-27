@@ -32,9 +32,13 @@ namespace NumSharp
 
             Data = new TData[dim0,dim1];
 
-            if(typeof(TData) == typeof(double))
-            { 
-                this.StringToDoubleMatrix(splitted) ;
+            var dataType = typeof(TData);
+
+            switch (dataType.Name)
+            {
+                case ("Double"): this.StringToDoubleMatrix(splitted); break;
+                case ("Float"): ; break;
+                case ("Complex"): this.StringToComplexMatrix(splitted); break;
             }
             
         }
@@ -54,6 +58,10 @@ namespace NumSharp
                     matrixData[idx,jdx] = Double.Parse(matrix[idx][jdx]);
                 }
             }
+        }
+        protected void StringToComplexMatrix(string[][] matrix)
+        {
+            
         }
 
         public override string ToString()
