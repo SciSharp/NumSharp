@@ -6,21 +6,29 @@ using System.Text;
 
 namespace NumSharp
 {
-    public partial class NDArray<TData>
+    public static partial class NDArrayExtensions
     {
-        public NDArray<TData> Array(IEnumerable<TData> array, int ndim = 1)
+        public static NDArray<TData> Array<TData>(this NDArray<TData> np, IEnumerable<TData> array, int ndim = 1)
         {
-            var np = this;
-
             np.Data = array.Select(x => x).ToList();
 
             return np;
         }
-
-        public NDArray<TData> Array(IList<List<int>> array, int ndim = 1)
+        public static NDArray<TData[]> Array<TData>(this NDArray<TData[]> np, TData[][] array )
         {
-            var np = this;
+            np.Data = array;
 
+            return np;
+        }
+        public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
+        {
+            
+            np.Data = array.Select(x => x).ToList();
+
+            return np;
+        }
+        public static NDArray<TData> Array<TData>(this NDArray<TData> np, IList<List<int>> array, int ndim = 1)
+        {
             var npTmp = new NDArray<int>();
 
             for (int r = 0; r < array.Count(); r++)
@@ -34,7 +42,7 @@ namespace NumSharp
 
             return puffer.ReShape(array.Count, np.NDim);
         }
-        public NDArray<NDArray<double>> Array(double[,] array)
+        public static NDArray<NDArray<double>> Array<TData>(this NDArray<TData> np, double[,] array)
         {
             NDArray<NDArray<double>> returnArray = new NDArray<NDArray<double>>();
 
