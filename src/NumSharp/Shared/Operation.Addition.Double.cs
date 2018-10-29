@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace NumSharp.Shared
 {
-    internal static partial class Addtion
+    internal static partial class Addition
     {
         //start 1 
         internal static double[] AddDoubleArrayToDoubleArray(double[] np1, double[]np2)
