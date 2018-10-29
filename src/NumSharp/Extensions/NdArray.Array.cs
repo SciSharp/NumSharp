@@ -14,7 +14,19 @@ namespace NumSharp
 
             return np;
         }
+        public static NDArray<TData[]> Array<TData>(this NDArray<TData[]> np, TData[][] array )
+        {
+            np.Data = array;
 
+            return np;
+        }
+        public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
+        {
+            
+            np.Data = array.Select(x => x).ToList();
+
+            return np;
+        }
         public static NDArray<TData> Array<TData>(this NDArray<TData> np, IList<List<int>> array, int ndim = 1)
         {
             var npTmp = new NDArray<int>();

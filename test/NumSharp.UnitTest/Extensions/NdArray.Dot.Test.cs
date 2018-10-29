@@ -4,6 +4,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
+using NumSharp.UnitTest.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Extensions
@@ -28,14 +29,41 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(innerProduct[0] == 3.5);
         }
         [TestMethod]
-        public void MatrixMultiply()
-        {
-            var matrix1 = new NDArray<NDArray<double>>().Array(new double[,] {{1,2},{3,4},{5,6} });
-            var matrix2 = new NDArray<NDArray<double>>().Array(new double[,] {{7,8,9},{10,11,12}});
+        public void MatrixMultiplyDouble()
+        {   
+            NDArray<double[]> matrix1 = new NDArray<double[]>();
+            matrix1.Data = ArrayHelper.CreateJaggedArrayByMatrix( new double[,] {{1,2},{3,4},{5,6}} ); 
+            
+            var matrix2 = new NDArray<double[]>();
+            matrix2.Data = ArrayHelper.CreateJaggedArrayByMatrix(new double[,] {{7,8,9},{10,11,12}});
 
             var matrix3 = matrix1.Dot(matrix2);
             
-            var expectedResult = new NDArray<NDArray<double>>().Array(new double[,]{{27,30,33}, {61,68,75},{95,106,117}});
+            Assert.IsTrue(ArrayHelper.CompareTwoJaggedArrays((double[][])matrix3.Data,ArrayHelper.CreateJaggedArrayByMatrix(new double[,]{{27,30,33}, {61,68,75},{95,106,117}}) ));
+        }
+        [TestMethod]
+        public void MatrixMultiplyComplex()
+        {   
+            NDArray<Complex[]> matrix1 = new NDArray<Complex[]>();
+            matrix1.Data = ArrayHelper.CreateJaggedArrayByMatrix( new Complex[,] {{new Complex(1,-1),new Complex(2,-2)},{3,4},{5,6}} ); 
+
+            var matrix2 = new NDArray<Complex[]>();
+            matrix2.Data = ArrayHelper.CreateJaggedArrayByMatrix(new Complex[,] {{7,8,9},{new Complex(10,-10),11, new Complex(12,-12)}});
+
+            var matrix3 = matrix1.Dot(matrix2);
+
+            var expectedResult = new Complex[3,3];
+            expectedResult[0,0] = new Complex(7,-47);
+            expectedResult[0,1] = new Complex(30,-30);
+            expectedResult[0,2] = new Complex(9,-57);
+            expectedResult[1,0] = new Complex(61,-40);
+            expectedResult[1,1] = new Complex(68,0);
+            expectedResult[1,2] = new Complex(75,-48);
+            expectedResult[2,0] = new Complex(95,-60);
+            expectedResult[2,1] = new Complex(106,0);
+            expectedResult[2,2] = new Complex(117,-72);
+            
+            Assert.IsTrue(ArrayHelper.CompareTwoJaggedArrays((Complex[][])matrix3.Data,ArrayHelper.CreateJaggedArrayByMatrix(expectedResult) ));
         }
         [TestMethod]
         public void DotTwo1DComplex()
