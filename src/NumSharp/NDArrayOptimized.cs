@@ -40,10 +40,34 @@ namespace NumSharp
             Shape = new List<int>();
         }
 
+        public T this[params int[] select]
+        {
+            get
+            {
+                // 2 dim
+                /*if(select.Length == 2)
+                {
+                    int i = 0;
+                    int idx = Shape[Shape.Count - 1 - i] * select[i] + select[select.Length - 1];
+
+                    return Data[idx];
+                }*/
+
+                int idx = 0;
+                // n dim
+                for (int i = 0; i < select.Length - 1; i++)
+                {
+                    idx += Shape[Shape.Count - 1 - i] * select[i];
+                }
+                idx += select[select.Length - 1];
+
+                return Data[idx];
+            }
+        }
+
         public NDArrayOptimized<T> arange(int stop, int start = 0, int step = 1)
         {
-            Shape.Clear();
-            Shape.Add(stop);
+            Shape = new List<int>(stop);
 
             int index = 0;
 
@@ -52,6 +76,29 @@ namespace NumSharp
                                 .Select(x => (T)TypeDescriptor.GetConverter(typeof(T)).ConvertFrom(x.ToString()))
                                 .ToArray();
             return this;
+        }
+
+        public NDArrayOptimized<T> reshape(params int[] n)
+        {
+            Shape.Clear();
+            Shape = n;
+
+            return this;
+        }
+
+        public override string ToString()
+        {
+            string output = "array([";
+
+            // loop
+            for (int r = 0; r < Data.Length; r++)
+            {
+                output += (r == 0) ? Data[r] + "" : ", " + Data[r];
+            }
+
+            output += "])";
+
+            return output;
         }
     }
 }

@@ -31,13 +31,13 @@ namespace NumSharp.UnitTest.Extensions
             var np = new NDArrayOptimized<int>();
 
             np.arange(3);
-            Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 });
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 }));
 
             np.arange(7, 3);
-            Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 });
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 }));
 
             np.arange(7, 3, 2);
-            Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 });
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 }));
         }
     }
 }
