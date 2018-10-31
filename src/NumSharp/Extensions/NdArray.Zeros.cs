@@ -4,42 +4,41 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp
+namespace NumSharp.Extensions
 {
-    public partial class NDArray_Legacy<TData>
+    public partial class NDArrayExtensions
     {
         /// <summary>
         /// Return a new array of given shape and type, filled with zeros.
         /// </summary>
         /// <typeparam name="TData"></typeparam>
         /// <param name="np"></param>
-        /// <param name="rows"></param>
         /// <param name="dimenstions"></param>
         /// <returns></returns>
-        public NDArray_Legacy<List<TData>> Zeros(int rows, int dimenstions)
+        public static NDArray<int> Zeros(this NDArray<int> np, params int[] select)
         {
-            dynamic np = this;
+            int length = 1;
 
-            np.Data = new List<TData>();
-
-            for (int i = 0; i < rows * dimenstions; i++)
+            for(int i = 0; i< select.Length; i++)
             {
-                np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom("0"));
+                length *= select[i];
             }
 
-            return np.ReShape(rows, dimenstions);
+            np.ARange(length).ReShape(select);
+
+            return np;
         }
 
-        public NDArray_Legacy<TData> Zeros(int rows)
+        public static NDArray<double> Zeros(this NDArray<double> np, params int[] select)
         {
-            dynamic np = this;
-            
-            np.Data = new List<TData>();
+            int length = 1;
 
-            for (int i = 0; i < rows; i++)
+            for (int i = 0; i < select.Length; i++)
             {
-                np.Data.Add((TData)TypeDescriptor.GetConverter(typeof(TData)).ConvertFrom("0"));
+                length *= select[i];
             }
+
+            np.ARange(length).ReShape(select);
 
             return np;
         }

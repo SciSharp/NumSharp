@@ -13,21 +13,6 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ARange()
         {
-            var np = new NDArray_Legacy<int>();
-
-            np.ARange(3);
-            Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 });
-
-            np.ARange(7, 3);
-            Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 });
-
-            np.ARange(7, 3, 2);
-            Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 });
-        }
-
-        [TestMethod]
-        public void arange()
-        {
             var np = new NDArray<int>();
 
             np.ARange(3);
