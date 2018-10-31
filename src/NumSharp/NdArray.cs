@@ -38,6 +38,8 @@ namespace NumSharp
 
         public int Size { get { return Data.Length; } }
 
+        public int Length { get { return Shape[0]; } }
+
         public NDArray()
         {
             Shape = new List<int>();
@@ -47,21 +49,31 @@ namespace NumSharp
         {
             get
             {
-                int idx = 0;
-                for(int i = 0; i < select.Length - 1; i++)
-                {
-                    int cnt = 1;
-                    for (int s = i + 1; s < Shape.Count; s++)
-                    {
-                        cnt *= Shape[s];
-                    }
-
-                    idx += cnt * select[i];
-                }
-                idx += select[select.Length - 1];
-
-                return Data[idx];
+                return Data[GetIndexInShape(select)];
             }
+
+            set
+            {
+                Data[GetIndexInShape(select)] = value;
+            }
+        }
+
+        private int GetIndexInShape(params int[] select)
+        {
+            int idx = 0;
+            for (int i = 0; i < select.Length - 1; i++)
+            {
+                int cnt = 1;
+                for (int s = i + 1; s < Shape.Count; s++)
+                {
+                    cnt *= Shape[s];
+                }
+
+                idx += cnt * select[i];
+            }
+            idx += select[select.Length - 1];
+
+            return idx;
         }
 
         public override string ToString()
