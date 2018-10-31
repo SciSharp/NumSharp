@@ -31,16 +31,16 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public partial class NDArray<TData>
+    public partial class NDArray_Legacy<TData>
     {
-        public NDArray<TData> HStack(NDArray<TData> np2 )
+        public NDArray_Legacy<TData> HStack(NDArray_Legacy<TData> np2 )
         {
             dynamic npDyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.HStack(npDyn,np2Dyn);
         }
-        public NDArray<TData> ARange(int stop, int start = 0, int step = 1)
+        public NDArray_Legacy<TData> ARange(int stop, int start = 0, int step = 1)
         {
             dynamic npDyn = this;
 
@@ -54,28 +54,28 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.ArgMax(npDyn);
         }
-        public NDArray<TData> Convolve(NDArray<TData> np2, string mode = "full")
+        public NDArray_Legacy<TData> Convolve(NDArray_Legacy<TData> np2, string mode = "full")
         {
             dynamic npDyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.Convolve(npDyn, np2Dyn,mode);
         }
-        public NDArray<TData> Dot(NDArray<TData> np2)
+        public NDArray_Legacy<TData> Dot(NDArray_Legacy<TData> np2)
         {
             dynamic np1Dyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,np2Dyn);
         }
-        public NDArray<TData> Dot(TData scalar)
+        public NDArray_Legacy<TData> Dot(TData scalar)
         {
             dynamic np1Dyn = this;
             dynamic scalarDyn = scalar;
             
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
         }
-        public NDArray<TData> Delete(IEnumerable<TData> delete)
+        public NDArray_Legacy<TData> Delete(IEnumerable<TData> delete)
         {
             return NumSharp.Extensions.NDArrayExtensions.Delete(this, delete);
         }

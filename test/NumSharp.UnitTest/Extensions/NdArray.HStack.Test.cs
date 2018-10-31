@@ -16,10 +16,10 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void HStackTwo1DArrays()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArray_Legacy<double>();
             series1.Data = new double[]{1, 2, 3};
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArray_Legacy<double>();
             series2.Data = new double[]{2,3,4};
 
             var series3 = series1.HStack(series2);

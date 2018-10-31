@@ -19,10 +19,10 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DotTwo1DDouble()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArray_Legacy<double>();
             series1.Data = new double[]{1, 2, 3};
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArray_Legacy<double>();
             series2.Data = new double[]{0, 1, 0.5};
 
             var innerProduct = series1.Dot(series2);
@@ -31,10 +31,10 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyDouble()
         {   
-            NDArray<double[]> matrix1 = new NDArray<double[]>();
+            NDArray_Legacy<double[]> matrix1 = new NDArray_Legacy<double[]>();
             matrix1.Data = ArrayHelper.CreateJaggedArrayByMatrix( new double[,] {{1,2},{3,4},{5,6}} ); 
             
-            var matrix2 = new NDArray<double[]>();
+            var matrix2 = new NDArray_Legacy<double[]>();
             matrix2.Data = ArrayHelper.CreateJaggedArrayByMatrix(new double[,] {{7,8,9},{10,11,12}});
 
             var matrix3 = matrix1.Dot(matrix2);
@@ -44,10 +44,10 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyComplex()
         {   
-            NDArray<Complex[]> matrix1 = new NDArray<Complex[]>();
+            NDArray_Legacy<Complex[]> matrix1 = new NDArray_Legacy<Complex[]>();
             matrix1.Data = ArrayHelper.CreateJaggedArrayByMatrix( new Complex[,] {{new Complex(1,-1),new Complex(2,-2)},{3,4},{5,6}} ); 
 
-            var matrix2 = new NDArray<Complex[]>();
+            var matrix2 = new NDArray_Legacy<Complex[]>();
             matrix2.Data = ArrayHelper.CreateJaggedArrayByMatrix(new Complex[,] {{7,8,9},{new Complex(10,-10),11, new Complex(12,-12)}});
 
             var matrix3 = matrix1.Dot(matrix2);
@@ -68,9 +68,9 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DotTwo1DComplex()
         {
-            var series1 = new NDArray<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
+            var series1 = new NDArray_Legacy<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
             
-            var series2 = new NDArray<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
+            var series2 = new NDArray_Legacy<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
         
             var series3 = series1.Dot(series2);
 

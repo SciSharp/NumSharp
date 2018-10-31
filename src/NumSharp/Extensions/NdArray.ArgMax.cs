@@ -11,13 +11,13 @@ namespace NumSharp.Extensions
         {
             var max = np.Data.Max();
 
-            return np.Data.IndexOf(max);
+            return np.Data.ToList().IndexOf(max);
         }
         public static int ArgMax(this NDArray<int> np )
         {
             var max = np.Data.Max();
 
-            return np.Data.IndexOf(max);
+            return np.Data.ToList().IndexOf(max);
         }
     }
 }

@@ -7,9 +7,9 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Min(this NDArray<NDArray<double>> np)
+        public static NDArray_Legacy<double> Min(this NDArray_Legacy<NDArray_Legacy<double>> np)
         {
-            var min = new NDArray<double>();
+            var min = new NDArray_Legacy<double>();
 
             for (int d = 0; d < np.NDim; d++)
             {

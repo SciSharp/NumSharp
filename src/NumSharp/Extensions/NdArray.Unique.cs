@@ -7,11 +7,11 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<T> Unique<T>(this NDArray<T> np)
+        public static NDArray_Legacy<T> Unique<T>(this NDArray_Legacy<T> np)
         {
             var list = np.Data.Distinct();
 
-            return new NDArray<T>().Array(list);
+            return new NDArray_Legacy<T>().Array(list);
         }
     }
 }

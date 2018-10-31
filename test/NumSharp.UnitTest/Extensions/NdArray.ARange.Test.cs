@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ARange()
         {
-            var np = new NDArray<int>();
+            var np = new NDArray_Legacy<int>();
 
             np.ARange(3);
             Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 });
@@ -28,15 +28,15 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void arange()
         {
-            var np = new NDArrayOptimized<int>();
+            var np = new NDArray<int>();
 
-            np.arange(3);
+            np.ARange(3);
             Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 }));
 
-            np.arange(7, 3);
+            np.ARange(7, 3);
             Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 }));
 
-            np.arange(7, 3, 2);
+            np.ARange(7, 3, 2);
             Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 }));
         }
     }

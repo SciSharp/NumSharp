@@ -15,8 +15,12 @@ namespace NumSharp.Extensions
             np.Data = Enumerable.Range(start,stop - start)
                                 .Where(x => index++ % step == 0)
                                 .ToArray();
+
+            np.Shape = new List<int>() { stop };
+
             return np;
         }
+
         public static NDArray<double> ARange(this NDArray<double> np,int stop, int start = 0, int step = 1)
         {
             int index = 0;

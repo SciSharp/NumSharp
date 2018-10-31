@@ -8,9 +8,9 @@ using NumSharp.Shared;
 
 namespace NumSharp
 {
-    public partial class NDArray<TData>
+    public partial class NDArray_Legacy<TData>
     {
-        public static NDArray<TData> operator -(NDArray<TData> np1, NDArray<TData> np2)
+        public static NDArray_Legacy<TData> operator -(NDArray_Legacy<TData> np1, NDArray_Legacy<TData> np2)
         {
             dynamic sub = null;
             dynamic np1Dyn = np1.Data.ToArray();
@@ -20,19 +20,19 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sub = new NDArray<double>().Array(((double[])Substraction.SubDoubleArrayFromDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Float"): sub = new NDArray<float>().Array(((float[])Substraction.SubfloatArrayFromfloatArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Complex"): sub = new NDArray<Complex>().Array(((Complex[])Substraction.SubComplexArrayFromComplexArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Quaternion"): sub = new NDArray<Quaternion>().Array(((Quaternion[])Substraction.SubQuaternionArrayFromQuaternionArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Double[]"): sub = new NDArray<double[]>().Array((double[][])Substraction.SubDoubleMatrixFromDoubleMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Complex[]") : sub = new NDArray<Complex[]>().Array((Complex[][])Substraction.SubComplexMatrixFromComplexMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Float[]") : sub = new NDArray<float[]>().Array((float[][])Substraction.SubfloatMatrixFromfloatMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Quaternion[]"): sub = new NDArray<Quaternion[]>().Array((Quaternion[][])Substraction.SubQuaternionMatrixFromQuaternionMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Double"): sub = new NDArray_Legacy<double>().Array(((double[])Substraction.SubDoubleArrayFromDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Float"): sub = new NDArray_Legacy<float>().Array(((float[])Substraction.SubfloatArrayFromfloatArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Complex"): sub = new NDArray_Legacy<Complex>().Array(((Complex[])Substraction.SubComplexArrayFromComplexArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Quaternion"): sub = new NDArray_Legacy<Quaternion>().Array(((Quaternion[])Substraction.SubQuaternionArrayFromQuaternionArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Double[]"): sub = new NDArray_Legacy<double[]>().Array((double[][])Substraction.SubDoubleMatrixFromDoubleMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Complex[]") : sub = new NDArray_Legacy<Complex[]>().Array((Complex[][])Substraction.SubComplexMatrixFromComplexMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Float[]") : sub = new NDArray_Legacy<float[]>().Array((float[][])Substraction.SubfloatMatrixFromfloatMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Quaternion[]"): sub = new NDArray_Legacy<Quaternion[]>().Array((Quaternion[][])Substraction.SubQuaternionMatrixFromQuaternionMatrix(np1Dyn,np2Dyn) ); break;
             }
             
-            return (NDArray<TData>) sub;
+            return (NDArray_Legacy<TData>) sub;
         }
-        public static NDArray<TData> operator -(NDArray<TData> np, TData scalar)
+        public static NDArray_Legacy<TData> operator -(NDArray_Legacy<TData> np, TData scalar)
         {
             dynamic sub = null;
             dynamic npDyn = np;
@@ -42,14 +42,14 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sub = new NDArray<double>().Array(((NDArray<double>)npDyn).Data.Select((x) => x - (double)scalarDyn)); break;
-                case ("Float"): sub = new NDArray<float>().Array(((NDArray<float>)npDyn).Data.Select((x,idx) => x - (float)scalarDyn)); break;
-                case ("Complex"): sub = new NDArray<Complex>().Array(((NDArray<Complex>)npDyn).Data.Select((x,idx) => x - (Complex) scalarDyn )); break;
+                case ("Double"): sub = new NDArray_Legacy<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x - (double)scalarDyn)); break;
+                case ("Float"): sub = new NDArray_Legacy<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x - (float)scalarDyn)); break;
+                case ("Complex"): sub = new NDArray_Legacy<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x - (Complex) scalarDyn )); break;
             }
             
-            return (NDArray<TData>) sub;
+            return (NDArray_Legacy<TData>) sub;
         }
-        protected NDArray<double[]> SubstractDoubleMatrix(double[][] np2)
+        protected NDArray_Legacy<double[]> SubstractDoubleMatrix(double[][] np2)
         {
             int dim0 = np2.Length;
             int dim1 = np2[0].Length;
@@ -67,12 +67,12 @@ namespace NumSharp
                 }
             }
 
-            var subNDArray = new NDArray<double[]>();
+            var subNDArray = new NDArray_Legacy<double[]>();
             subNDArray.Data = sub;
 
             return subNDArray;
         }
-        protected NDArray<Complex[]> SubstractComplexMatrix(Complex[][] np2)
+        protected NDArray_Legacy<Complex[]> SubstractComplexMatrix(Complex[][] np2)
         {
             int dim0 = np2.Length;
             int dim1 = np2[0].Length;
@@ -90,12 +90,12 @@ namespace NumSharp
                 }
             }
 
-            var subNDArray = new NDArray<Complex[]>();
+            var subNDArray = new NDArray_Legacy<Complex[]>();
             subNDArray.Data = sub;
 
             return subNDArray;
         }
-        protected NDArray<float[]> SubstractFloatMatrix(float[][] np2)
+        protected NDArray_Legacy<float[]> SubstractFloatMatrix(float[][] np2)
         {
             int dim0 = np2.Length;
             int dim1 = np2[0].Length;
@@ -113,7 +113,7 @@ namespace NumSharp
                 }
             }
 
-            var subNDArray = new NDArray<float[]>();
+            var subNDArray = new NDArray_Legacy<float[]>();
             subNDArray.Data = sub;
 
             return subNDArray;

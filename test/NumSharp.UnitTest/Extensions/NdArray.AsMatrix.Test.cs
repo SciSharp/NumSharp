@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()
         {
-            var np = new NDArray<NDArray<double>>().Array(new double[,]{{1,2,3},{4,5,6},{7,8,9}});
+            var np = new NDArray_Legacy<NDArray_Legacy<double>>().Array(new double[,]{{1,2,3},{4,5,6},{7,8,9}});
 
             var npAsMatrix = np.AsMatrix();
 

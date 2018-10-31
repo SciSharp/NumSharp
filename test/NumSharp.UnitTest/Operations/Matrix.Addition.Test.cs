@@ -24,8 +24,8 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void  ComplexTwo2D()
         {
-            var np1 = new NDArray<Complex>().Array(new Complex[]{new Complex(1,2),new Complex(3,4)});
-            var np2 = new NDArray<Complex>().Array(new Complex[]{new Complex(5,6),new Complex(7,8)});
+            var np1 = new NDArray_Legacy<Complex>().Array(new Complex[]{new Complex(1,2),new Complex(3,4)});
+            var np2 = new NDArray_Legacy<Complex>().Array(new Complex[]{new Complex(5,6),new Complex(7,8)});
 
             var np3 = np1 + np2;
 

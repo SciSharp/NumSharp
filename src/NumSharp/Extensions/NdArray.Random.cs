@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp
 {
-    public partial class NDArray<TData>
+    public partial class NDArray_Legacy<TData>
     {
         public NDArrayRandom Random()
         {

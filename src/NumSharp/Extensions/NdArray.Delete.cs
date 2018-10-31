@@ -7,7 +7,7 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<TData> Delete<TData>(this NDArray<TData> np,  IEnumerable<TData> delete)
+        public static NDArray_Legacy<TData> Delete<TData>(this NDArray_Legacy<TData> np,  IEnumerable<TData> delete)
         {            
             return np.Array(np.Data.Where(x => !delete.Contains(x)));
         }

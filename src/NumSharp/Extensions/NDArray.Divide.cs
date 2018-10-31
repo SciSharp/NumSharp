@@ -7,11 +7,11 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<NDArray<double>> Divide(this NDArray<NDArray<double>> np, double divisor)
+        public static NDArray_Legacy<NDArray_Legacy<double>> Divide(this NDArray_Legacy<NDArray_Legacy<double>> np, double divisor)
         {
-            return new NDArray<NDArray<double>>
+            return new NDArray_Legacy<NDArray_Legacy<double>>
             {
-                Data = np.Data.Select(row => new NDArray<double>
+                Data = np.Data.Select(row => new NDArray_Legacy<double>
                 {
                     Data = row.Data.Select(col => col / divisor).ToList()
                 }).ToList()

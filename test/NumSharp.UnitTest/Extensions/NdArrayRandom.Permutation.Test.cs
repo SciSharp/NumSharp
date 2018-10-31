@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Prmutation()
         {
-            var np = new NDArray<int>();
+            var np = new NDArray_Legacy<int>();
             var rands = np.Random().Permutation(10);
             var results = rands.Data.Distinct();
 

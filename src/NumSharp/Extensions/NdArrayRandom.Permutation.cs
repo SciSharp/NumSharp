@@ -7,12 +7,12 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static NDArray<int> Permutation(this NDArrayRandom rand, int max)
+        public static NDArray_Legacy<int> Permutation(this NDArrayRandom rand, int max)
         {
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NDArray<int>().ARange(max);
+            var np = new NDArray_Legacy<int>().ARange(max);
 
             for(int i = 0; i < max; i++)
             {

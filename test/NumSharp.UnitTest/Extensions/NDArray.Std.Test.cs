@@ -13,13 +13,13 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void StdTest()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArray_Legacy<double>();
             series1.Data = new double[] { 1, 2 };
 
-            var series2 = new NDArray<double>();
+            var series2 = new NDArray_Legacy<double>();
             series2.Data = new double[] { 3, 4 };
 
-            var np = new NDArray<NDArray<double>>();
+            var np = new NDArray_Legacy<NDArray_Legacy<double>>();
             np.Data.Add(series1);
             np.Data.Add(series2);
 

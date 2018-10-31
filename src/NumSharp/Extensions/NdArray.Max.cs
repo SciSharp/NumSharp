@@ -7,9 +7,9 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Max(this NDArray<NDArray<double>> np)
+        public static NDArray_Legacy<double> Max(this NDArray_Legacy<NDArray_Legacy<double>> np)
         {
-            var max = new NDArray<double>();
+            var max = new NDArray_Legacy<double>();
 
             for (int d = 0; d < np.NDim; d++)
             {
