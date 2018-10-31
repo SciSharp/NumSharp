@@ -1,4 +1,22 @@
-﻿using System;
+﻿/*
+ * NumSharp
+ * Copyright (C) 2018 Haiping Chen
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the Apache License 2.0 as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the Apache License 2.0
+ * along with this program.  If not, see <http://www.apache.org/licenses/LICENSE-2.0/>.
+ */
+
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -20,20 +38,7 @@ namespace NumSharp
 
         public int Size { get { return Data.Length; } }
 
-        public int Length
-        {
-            get
-            {
-                int size = 0;
-                for (int d = 0; d < NDim; d++)
-                {
-                    if (size == 0) size = 1;
-                    // size *= DimensionSize(d + 1);
-                }
-
-                return size;
-            }
-        }
+        public int Length { get { return Shape[0]; } }
 
         public NDArrayOptimized()
         {
@@ -44,20 +49,16 @@ namespace NumSharp
         {
             get
             {
-                // 2 dim
-                /*if(select.Length == 2)
-                {
-                    int i = 0;
-                    int idx = Shape[Shape.Count - 1 - i] * select[i] + select[select.Length - 1];
-
-                    return Data[idx];
-                }*/
-
                 int idx = 0;
-                // n dim
-                for (int i = 0; i < select.Length - 1; i++)
+                for(int i = 0; i < select.Length - 1; i++)
                 {
-                    idx += Shape[Shape.Count - 1 - i] * select[i];
+                    int cnt = 1;
+                    for (int s = i + 1; s < Shape.Count; s++)
+                    {
+                        cnt *= Shape[s];
+                    }
+
+                    idx += cnt * select[i];
                 }
                 idx += select[select.Length - 1];
 
@@ -67,7 +68,7 @@ namespace NumSharp
 
         public NDArrayOptimized<T> arange(int stop, int start = 0, int step = 1)
         {
-            Shape = new List<int>(stop);
+            Shape = new List<int>() { stop };
 
             int index = 0;
 
