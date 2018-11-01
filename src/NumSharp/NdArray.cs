@@ -32,7 +32,28 @@ namespace NumSharp
     {
         public T[] Data { get; set; }
 
-        public IList<int> Shape { get; set; }
+        private IList<int> shape;
+        public IList<int> Shape
+        {
+            get
+            {
+                return shape;
+            }
+
+            set
+            {
+                shape = value;
+                ShapeOffset = new List<int> { 1 };
+
+                for (int s = Shape.Count-1; s >= 1; s--)
+                {
+                    ShapeOffset.Add(ShapeOffset[Shape.Count - 1 - s] * shape[s]);
+                }
+                ShapeOffset = ShapeOffset.Reverse().ToList();
+            }
+        }
+
+        public IList<int> ShapeOffset { get; set; }
 
         public int NDim { get { return Shape.Count; } }
 
@@ -46,6 +67,7 @@ namespace NumSharp
         {
             // default as 1 dim
             Shape = new List<int>() { 0 };
+            ShapeOffset = new List<int> { 0 };
             Data = new T[] { };
             Random = new NDArrayRandom();
         }
@@ -91,17 +113,10 @@ namespace NumSharp
         private int GetIndexInShape(params int[] select)
         {
             int idx = 0;
-            for (int i = 0; i < select.Length - 1; i++)
+            for (int i = 0; i < select.Length; i++)
             {
-                int cnt = 1;
-                for (int s = i + 1; s < Shape.Count; s++)
-                {
-                    cnt *= Shape[s];
-                }
-
-                idx += cnt * select[i];
+                idx += ShapeOffset[i] * select[i];
             }
-            idx += select[select.Length - 1];
 
             return idx;
         }

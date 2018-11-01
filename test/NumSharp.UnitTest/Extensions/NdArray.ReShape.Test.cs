@@ -28,6 +28,10 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(np[0, 0, 1] == 1);
             Assert.IsTrue(np[1, 0, 1] == 7);
             Assert.IsTrue(np[1, 1, 0] == 8);
+
+            np.ARange(12).ReShape(3, 4);
+            Assert.IsTrue(np[1, 1] == 5);
+            Assert.IsTrue(np[2, 0] == 8);
         }
 
         [TestMethod]
