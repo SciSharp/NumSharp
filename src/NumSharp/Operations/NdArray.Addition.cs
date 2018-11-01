@@ -20,14 +20,14 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sum = new NDArray_Legacy<double>().Array(((double[])Addition.AddDoubleArrayToDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Float"): sum = new NDArray_Legacy<float>().Array( ((float[])Addition.AddfloatArrayTofloatArray (np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Complex"): sum = new NDArray_Legacy<Complex>().Array( ((Complex[])Addition.AddComplexArrayToComplexArray(np1Dyn,np2Dyn)).ToList()); break;
-                case ("Quaternion"): sum = new NDArray_Legacy<Quaternion>().Array( ((Quaternion[])Addition.AddQuaternionArrayToQuaternionArray(np1Dyn,np2Dyn)).ToList()); break;
-                case ("Double[]"): sum = new NDArray_Legacy<double[]>().Array((double[][]) Addition.AddDoubleMatrixToDoubleMatrix (np1Dyn,np2Dyn) ); break;
-                case ("Complex[]") : sum = new NDArray_Legacy<Complex[]>().Array((Complex[][])Addition.AddComplexMatrixToComplexMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Float[]") : sum = new NDArray_Legacy<float[]>().Array((float[][])Addition.AddfloatMatrixTofloatMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Quaternion[]"): sum = new NDArray_Legacy<Quaternion[]>().Array((Quaternion[][])Addition.AddQuaternionMatrixToQuaternionMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Double"): sum = new NDArray<double>().Array(((double[])Addition.AddDoubleArrayToDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Float"): sum = new NDArray<float>().Array( ((float[])Addition.AddfloatArrayTofloatArray (np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Complex"): sum = new NDArray<Complex>().Array( ((Complex[])Addition.AddComplexArrayToComplexArray(np1Dyn,np2Dyn)).ToList()); break;
+                case ("Quaternion"): sum = new NDArray<Quaternion>().Array( ((Quaternion[])Addition.AddQuaternionArrayToQuaternionArray(np1Dyn,np2Dyn)).ToList()); break;
+                case ("Double[]"): sum = new NDArray<double[]>().Array((double[][]) Addition.AddDoubleMatrixToDoubleMatrix (np1Dyn,np2Dyn) ); break;
+                case ("Complex[]") : sum = new NDArray<Complex[]>().Array((Complex[][])Addition.AddComplexMatrixToComplexMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Float[]") : sum = new NDArray<float[]>().Array((float[][])Addition.AddfloatMatrixTofloatMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Quaternion[]"): sum = new NDArray<Quaternion[]>().Array((Quaternion[][])Addition.AddQuaternionMatrixToQuaternionMatrix(np1Dyn,np2Dyn) ); break;
             }
             
             return (NDArray_Legacy<TData>) sum;
@@ -42,9 +42,9 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sum = new NDArray_Legacy<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x + (double)scalarDyn)); break;
-                case ("Float"): sum = new NDArray_Legacy<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x + (float)scalarDyn)); break;
-                case ("Complex"): sum = new NDArray_Legacy<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x + (Complex) scalarDyn )); break;
+                case ("Double"): sum = new NDArray<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x + (double)scalarDyn)); break;
+                case ("Float"): sum = new NDArray<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x + (float)scalarDyn)); break;
+                case ("Complex"): sum = new NDArray<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x + (Complex) scalarDyn )); break;
                 //case ("Double[]") : sum = np ;break; 
             }
             

@@ -7,17 +7,11 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<double> Min(this NDArray_Legacy<NDArray_Legacy<double>> np)
+        public static int Min(this NDArray<double> np)
         {
-            var min = new NDArray_Legacy<double>();
+            var val = np.Data.Min();
 
-            for (int d = 0; d < np.NDim; d++)
-            {
-                var value = np.Data.Select(x => x.Data[d]).Min();
-                min.Data.Add(value);
-            }
-
-            return min;
+            return np.Data.ToList().IndexOf(val);
         }
     }
 }

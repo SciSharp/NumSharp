@@ -7,9 +7,12 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<TData> Delete<TData>(this NDArray_Legacy<TData> np,  IEnumerable<TData> delete)
+        public static NDArray<T> Delete<T>(this NDArray<T> np,  IEnumerable<T> delete)
         {            
-            return np.Array(np.Data.Where(x => !delete.Contains(x)));
+            var np1 = np.Array(np.Data.Where(x => !delete.Contains(x)));
+            np1.Shape[0] = np.Data.Length;
+
+            return np1;
         }
     }
 }

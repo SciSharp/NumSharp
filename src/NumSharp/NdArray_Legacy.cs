@@ -134,23 +134,23 @@ namespace NumSharp
             }
         }
 
-        public NDArray_Legacy<TData> this[IEnumerable<int> select]
+        public NDArray<TData> this[IEnumerable<int> select]
         {
             get
             {
                 int i = 0;
                 var array = Data.Where(x => select.Contains(i++)).ToList();
-                return new NDArray_Legacy<TData>().Array(array);
+                return new NDArray<TData>().Array(array);
             }
         }
 
-        public NDArray_Legacy<TData> this[NDArray_Legacy<int> select]
+        public NDArray<TData> this[NDArray_Legacy<int> select]
         {
             get
             {
                 int i = 0;
                 var array = Data.Where(x => select.Data.Contains(i++)).ToList();
-                return new NDArray_Legacy<TData>().Array(array);
+                return new NDArray<TData>().Array(array);
             }
         }
 

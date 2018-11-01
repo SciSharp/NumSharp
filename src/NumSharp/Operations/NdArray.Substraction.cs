@@ -20,14 +20,14 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sub = new NDArray_Legacy<double>().Array(((double[])Substraction.SubDoubleArrayFromDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Float"): sub = new NDArray_Legacy<float>().Array(((float[])Substraction.SubfloatArrayFromfloatArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Complex"): sub = new NDArray_Legacy<Complex>().Array(((Complex[])Substraction.SubComplexArrayFromComplexArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Quaternion"): sub = new NDArray_Legacy<Quaternion>().Array(((Quaternion[])Substraction.SubQuaternionArrayFromQuaternionArray(np1Dyn,np2Dyn)).ToList() ); break;
-                case ("Double[]"): sub = new NDArray_Legacy<double[]>().Array((double[][])Substraction.SubDoubleMatrixFromDoubleMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Complex[]") : sub = new NDArray_Legacy<Complex[]>().Array((Complex[][])Substraction.SubComplexMatrixFromComplexMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Float[]") : sub = new NDArray_Legacy<float[]>().Array((float[][])Substraction.SubfloatMatrixFromfloatMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Quaternion[]"): sub = new NDArray_Legacy<Quaternion[]>().Array((Quaternion[][])Substraction.SubQuaternionMatrixFromQuaternionMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Double"): sub = new NDArray<double>().Array(((double[])Substraction.SubDoubleArrayFromDoubleArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Float"): sub = new NDArray<float>().Array(((float[])Substraction.SubfloatArrayFromfloatArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Complex"): sub = new NDArray<Complex>().Array(((Complex[])Substraction.SubComplexArrayFromComplexArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Quaternion"): sub = new NDArray<Quaternion>().Array(((Quaternion[])Substraction.SubQuaternionArrayFromQuaternionArray(np1Dyn,np2Dyn)).ToList() ); break;
+                case ("Double[]"): sub = new NDArray<double[]>().Array((double[][])Substraction.SubDoubleMatrixFromDoubleMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Complex[]") : sub = new NDArray<Complex[]>().Array((Complex[][])Substraction.SubComplexMatrixFromComplexMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Float[]") : sub = new NDArray<float[]>().Array((float[][])Substraction.SubfloatMatrixFromfloatMatrix(np1Dyn,np2Dyn) ); break;
+                case ("Quaternion[]"): sub = new NDArray<Quaternion[]>().Array((Quaternion[][])Substraction.SubQuaternionMatrixFromQuaternionMatrix(np1Dyn,np2Dyn) ); break;
             }
             
             return (NDArray_Legacy<TData>) sub;
@@ -42,9 +42,9 @@ namespace NumSharp
 
             switch (dataType.Name)
             {
-                case ("Double"): sub = new NDArray_Legacy<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x - (double)scalarDyn)); break;
-                case ("Float"): sub = new NDArray_Legacy<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x - (float)scalarDyn)); break;
-                case ("Complex"): sub = new NDArray_Legacy<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x - (Complex) scalarDyn )); break;
+                case ("Double"): sub = new NDArray<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x - (double)scalarDyn)); break;
+                case ("Float"): sub = new NDArray<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x - (float)scalarDyn)); break;
+                case ("Complex"): sub = new NDArray<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x - (Complex) scalarDyn )); break;
             }
             
             return (NDArray_Legacy<TData>) sub;

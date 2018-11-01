@@ -27,7 +27,7 @@ namespace NumSharp.Extensions
             
             return ((NDArray_Legacy<TData[]>) prod);
         }
-        public static NDArray_Legacy<double> Dot(this NDArray_Legacy<double> np, NDArray_Legacy<double> np2)
+        public static NDArray<double> Dot(this NDArray_Legacy<double> np, NDArray_Legacy<double> np2)
         {
             double[] array1Double = np.Data.ToArray();
             double[] array2Double = np2.Data.ToArray();
@@ -39,7 +39,7 @@ namespace NumSharp.Extensions
                 sum += array1Double[idx] * array2Double[idx];
             }
 
-            return new NDArray_Legacy<double>().Array(new double[]{sum});
+            return new NDArray<double>().Array(new double[]{sum});
         }
         public static int Dot(this NDArray_Legacy<int> np, NDArray_Legacy<int> np2)
         {
@@ -84,7 +84,7 @@ namespace NumSharp.Extensions
 
             return result;
         }
-        public static NDArray_Legacy<Complex> Dot(this NDArray_Legacy<Complex> np, NDArray_Legacy<Complex> np2)
+        public static NDArray<Complex> Dot(this NDArray<Complex> np, NDArray<Complex> np2)
         {
             var array1Complex = np.Data.ToArray();
             var array2Complex = np2.Data.ToArray();
@@ -96,7 +96,7 @@ namespace NumSharp.Extensions
                 sum += array1Complex[idx] * array2Complex[idx];
             }
 
-            return new NDArray_Legacy<Complex>().Array(new Complex[]{new Complex(sum.Real,sum.Imaginary)} );
+            return new NDArray<Complex>().Array(new Complex[]{new Complex(sum.Real,sum.Imaginary)} );
         }
         public static NDArray_Legacy<double> Dot(this NDArray_Legacy<double> np, double scalar)
         {

@@ -40,9 +40,14 @@ namespace NumSharp
 
         public int Length { get { return Shape[0]; } }
 
+        public NDArrayRandom Random { get; set; }
+
         public NDArray()
         {
-            Shape = new List<int>();
+            // default as 1 dim
+            Shape = new List<int>() { 0 };
+            Data = new T[] { };
+            Random = new NDArrayRandom();
         }
 
         public T this[params int[] select]
@@ -56,6 +61,31 @@ namespace NumSharp
             {
                 Data[GetIndexInShape(select)] = value;
             }
+        }
+
+        public NDArray<T> this[IEnumerable<int> select]
+        {
+            get
+            {
+                int i = 0;
+                var array = Data.Where(x => select.Contains(i++)).ToList();
+                return new NDArray<T>().Array(array);
+            }
+        }
+
+        public NDArray<T> this[NDArray<int> select]
+        {
+            get
+            {
+                int i = 0;
+                var array = Data.Where(x => select.Data.Contains(i++)).ToList();
+                return new NDArray<T>().Array(array);
+            }
+        }
+
+        public NDArray<T> Get(params int[] select)
+        {
+            return new NDArray<T>();
         }
 
         private int GetIndexInShape(params int[] select)

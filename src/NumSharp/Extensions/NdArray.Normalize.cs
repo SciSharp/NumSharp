@@ -7,19 +7,15 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static void Normalize(this NDArray_Legacy<NDArray_Legacy<double>> np)
+        public static void Normalize(this NDArray<double> np)
         {
             var min = np.Min();
             var max = np.Max();
 
-            np.Data.ToList().ForEach(data => {
-                for(int d = 0; d < np.NDim; d++)
-                {
-                    double der = max.Data[d] - min.Data[d];
-
-                    data.Data[d] = (data.Data[d] - min.Data[d]) / der;
-                }
-            });
+            np.Data = np.Data.Select(data => {
+                    double der = max - min;
+                    return (data - min) / der;
+            }).ToArray();
         }
     }
 }

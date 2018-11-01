@@ -75,10 +75,7 @@ namespace NumSharp
             
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
         }
-        public NDArray_Legacy<TData> Delete(IEnumerable<TData> delete)
-        {
-            return NumSharp.Extensions.NDArrayExtensions.Delete(this, delete);
-        }
+
         public Matrix<double> AsMatrix()
         {
             dynamic np = this;

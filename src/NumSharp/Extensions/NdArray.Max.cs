@@ -7,17 +7,11 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<double> Max(this NDArray_Legacy<NDArray_Legacy<double>> np)
+        public static int Max(this NDArray<double> np)
         {
-            var max = new NDArray_Legacy<double>();
+            var val = np.Data.Max();
 
-            for (int d = 0; d < np.NDim; d++)
-            {
-                var value = np.Data.Select(x => x.Data[d]).Max();
-                max.Data.Add(value);
-            }
-
-            return max;
+            return np.Data.ToList().IndexOf(val);
         }
     }
 }
