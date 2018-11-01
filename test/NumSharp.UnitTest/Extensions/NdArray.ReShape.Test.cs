@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest.Extensions
         public void PerformaceBitmapSimulation()
         {
             var npRealWorldBitmap = new NDArray<byte>();
-            npRealWorldBitmap.ARange(2081 * 2531);
+            //npRealWorldBitmap.ARange(2081 * 2531);
             npRealWorldBitmap.ReShape(2531, 2081);
         }
 
