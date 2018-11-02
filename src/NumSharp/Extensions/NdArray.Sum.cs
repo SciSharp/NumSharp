@@ -7,10 +7,10 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static int Sum<TData>(this NDArray_Legacy<TData> np, NDArray_Legacy<TData> np2)
+        public static int Sum<TData>(this NDArray<TData> np, NDArray<TData> np2)
         {
             int result = 0;
-            for(int i = 0; i < np.Length; i++)
+            for(int i = 0; i < np.Data.Length; i++)
             {
                 if(np[i].Equals(np2[i]))
                 {

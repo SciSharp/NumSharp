@@ -8,15 +8,15 @@ using NumSharp.Shared;
 
 namespace NumSharp
 {
-    public partial class NDArray_Legacy<TData>
+    public partial class NDArray<T>
     {
-        public static NDArray_Legacy<TData> operator *(NDArray_Legacy<TData> np1, NDArray_Legacy<TData> np2)
+        public static NDArray<T> operator *(NDArray<T> np1, NDArray<T> np2)
         {
             dynamic sum = null;
             dynamic np1Dyn = np1.Data.ToArray();
             dynamic np2Dyn = np2.Data.ToArray();
 
-            var dataType = typeof(TData);
+            var dataType = typeof(T);
 
             switch (dataType.Name)
             {
@@ -24,30 +24,26 @@ namespace NumSharp
                 case ("Float"): sum = new NDArray<float>().Array( ((float[])Multiplication.MultiplyfloatArrayTofloatArray (np1Dyn,np2Dyn)).ToList() ); break;
                 case ("Complex"): sum = new NDArray<Complex>().Array( ((Complex[])Multiplication.MultiplyComplexArrayToComplexArray(np1Dyn,np2Dyn)).ToList()); break;
                 case ("Quaternion"): sum = new NDArray<Quaternion>().Array( ((Quaternion[])Multiplication.MultiplyQuaternionArrayToQuaternionArray(np1Dyn,np2Dyn)).ToList()); break;
-                case ("Double[]"): sum = new NDArray<double[]>().Array((double[][]) Multiplication.MultiplyDoubleMatrixToDoubleMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Complex[]") : sum = new NDArray<Complex[]>().Array((Complex[][])Multiplication.MultiplyComplexMatrixToComplexMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Float[]") : sum = new NDArray<float[]>().Array((float[][])Multiplication.MultiplyfloatMatrixTofloatMatrix(np1Dyn,np2Dyn) ); break;
-                case ("Quaternion[]"): sum = new NDArray<Quaternion[]>().Array((Quaternion[][]) Multiplication.MultiplyQuaternionMatrixToQuaternionMatrix (np1Dyn,np2Dyn) ); break;
             }
             
-            return (NDArray_Legacy<TData>) sum;
+            return (NDArray<T>) sum;
         }
-        public static NDArray_Legacy<TData> operator *(NDArray_Legacy<TData> np, TData scalar)
+        public static NDArray<T> operator *(NDArray<T> np, T scalar)
         {
             dynamic sum = null;
             dynamic npDyn = np;
             dynamic scalarDyn = scalar;
 
-            var dataType = typeof(TData);
+            var dataType = typeof(T);
 
             switch (dataType.Name)
             {
-                case ("Double"): sum = new NDArray<double>().Array(((NDArray_Legacy<double>)npDyn).Data.Select((x) => x * (double)scalarDyn)); break;
-                case ("Float"): sum = new NDArray<float>().Array(((NDArray_Legacy<float>)npDyn).Data.Select((x,idx) => x * (float)scalarDyn)); break;
-                case ("Complex"): sum = new NDArray<Complex>().Array(((NDArray_Legacy<Complex>)npDyn).Data.Select((x,idx) => x * (Complex) scalarDyn )); break;
+                case ("Double"): sum = new NDArray<double>().Array(((NDArray<double>)npDyn).Data.Select((x) => x * (double)scalarDyn)); break;
+                case ("Float"): sum = new NDArray<float>().Array(((NDArray<float>)npDyn).Data.Select((x,idx) => x * (float)scalarDyn)); break;
+                case ("Complex"): sum = new NDArray<Complex>().Array(((NDArray<Complex>)npDyn).Data.Select((x,idx) => x * (Complex) scalarDyn )); break;
             }
             
-            return (NDArray_Legacy<TData>) sum;
+            return (NDArray<T>) sum;
         }
     }
 }
