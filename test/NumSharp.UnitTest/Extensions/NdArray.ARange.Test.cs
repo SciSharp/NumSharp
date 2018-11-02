@@ -11,18 +11,18 @@ namespace NumSharp.UnitTest.Extensions
     public class NdArrayARangeTest
     {
         [TestMethod]
-        public void ARange()
+        public void arange()
         {
-            var np = new NDArray<int>();
+            var np = new NumPy<int>();
 
-            np.ARange(3);
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 0, 1, 2 }));
+            var n = np.arange(3);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 1, 2 }));
 
-            np.ARange(7, 3);
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 4, 5, 6 }));
+            n = np.arange(3, 7);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 3, 4, 5, 6 }));
 
-            np.ARange(7, 3, 2);
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Data, new int[] { 3, 5 }));
+            n = np.arange(3, 7, 2);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 3, 5 }));
         }
     }
 }

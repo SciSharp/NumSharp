@@ -24,7 +24,8 @@ namespace NumSharp
 
         public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
         {
-            np.Data = array.Select(x => x).ToArray();
+            np.Data = array;
+            np.Shape[0] = np.Data.Length;
 
             return np;
         }

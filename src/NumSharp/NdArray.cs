@@ -28,11 +28,18 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public class NDArray<T>
+    public partial class NDArray<T>
     {
+        /// <summary>
+        /// 1 dim array data storage
+        /// </summary>
         public T[] Data { get; set; }
 
         private IList<int> shape;
+
+        /// <summary>
+        /// Data length of every dimension
+        /// </summary>
         public IList<int> Shape
         {
             get
@@ -43,35 +50,49 @@ namespace NumSharp
             set
             {
                 shape = value;
-                ShapeOffset = new List<int> { 1 };
+                shapeOffset = new List<int> { 1 };
 
                 for (int s = Shape.Count-1; s >= 1; s--)
                 {
-                    ShapeOffset.Add(ShapeOffset[Shape.Count - 1 - s] * shape[s]);
+                    shapeOffset.Add(shapeOffset[Shape.Count - 1 - s] * shape[s]);
                 }
-                ShapeOffset = ShapeOffset.Reverse().ToList();
+                shapeOffset = shapeOffset.Reverse().ToList();
             }
         }
 
-        public IList<int> ShapeOffset { get; set; }
+        /// <summary>
+        /// Speed up index accessor
+        /// </summary>
+        private IList<int> shapeOffset { get; set; }
 
+        /// <summary>
+        /// Dimension count
+        /// </summary>
         public int NDim { get { return Shape.Count; } }
 
+        /// <summary>
+        /// Total of elements
+        /// </summary>
         public int Size { get { return Data.Length; } }
 
-        public int Length { get { return Shape[0]; } }
-
+        /// <summary>
+        /// Random reference
+        /// </summary>
         public NDArrayRandom Random { get; set; }
 
         public NDArray()
         {
-            // default as 1 dim
+            // set default shape as 1 dim and 0 elements.
             Shape = new List<int>() { 0 };
-            ShapeOffset = new List<int> { 0 };
             Data = new T[] { };
             Random = new NDArrayRandom();
         }
 
+        /// <summary>
+        /// Index accessor
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public T this[params int[] select]
         {
             get
@@ -84,7 +105,34 @@ namespace NumSharp
                 Data[GetIndexInShape(select)] = value;
             }
         }
+        /*
+        public NDArray<T> this[params int[] select]
+        {
+            get
+            {
+                if (select.Length == NDim)
+                {
+                    var data = Data[GetIndexInShape(select)];
+                    return new NDArray<T>().Array(new T[] { data });
+                }
+                else
+                {
+                    var data = Data[GetIndexInShape(select)];
+                    return new NDArray<T>().Array(new T[] { data });
+                }
+            }
 
+            set
+            {
+                Data[GetIndexInShape(select)] = value.Data[0];
+            }
+        }*/
+
+        /// <summary>
+        /// Filter specific elements through select.
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns>Return a new NDArray with filterd elements.</returns>
         public NDArray<T> this[IEnumerable<int> select]
         {
             get
@@ -95,6 +143,11 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        /// Overload
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public NDArray<T> this[NDArray<int> select]
         {
             get
@@ -105,17 +158,12 @@ namespace NumSharp
             }
         }
 
-        public NDArray<T> Get(params int[] select)
-        {
-            return new NDArray<T>();
-        }
-
         private int GetIndexInShape(params int[] select)
         {
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
             {
-                idx += ShapeOffset[i] * select[i];
+                idx += shapeOffset[i] * select[i];
             }
 
             return idx;
@@ -134,6 +182,21 @@ namespace NumSharp
             output += "])";
 
             return output;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return Data[0].Equals(obj);
+        }
+
+        public static bool operator ==(NDArray<T> np, object obj)
+        {
+            return np.Data[0].Equals(obj);
+        }
+
+        public static bool operator !=(NDArray<T> np, object obj)
+        {
+            return np.Data[0].Equals(obj);
         }
     }
 }
