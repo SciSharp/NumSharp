@@ -1,4 +1,15 @@
 ﻿using System;
+using System.Linq;
+
+/*
+[Fact]
+        
+
+        [Fact]
+        
+        [Fact]
+        
+ */
 
 namespace NumSharp.Benchmark
 {
@@ -6,7 +17,11 @@ namespace NumSharp.Benchmark
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            ArrayTester.Access();
+            ArrayTester.CheckPlusOperation();
+            ArrayTester.CheckMatrixMultiplication();
+            
+            Console.ReadKey();
         }
     }
 }
