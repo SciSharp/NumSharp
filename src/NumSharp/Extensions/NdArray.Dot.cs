@@ -9,23 +9,30 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<TData[]> Dot<TData>(this NDArray_Legacy<TData[]> np1, NDArray_Legacy<TData[]> np2)
+        public static NDArray<TData> Dot<TData>(this NDArray<TData> np1, NDArray<TData> np2)
         {
-            dynamic prod = new NDArray_Legacy<TData[]>();
+            dynamic prod = new NDArray<TData>();
+            
             dynamic np1Dyn = np1.Data.ToArray();
             dynamic np2Dyn = np2.Data.ToArray();
+
+            int dim0 = np1.Shape[0];
+            int dim1 = np2.Shape[1];
+            int iterator = np1.Shape[1];
+
+            prod.Shape = new int[] {dim0,dim1};
 
             var dataType = typeof(TData);
 
             switch (dataType.Name)
             {
-                case ("Double"): prod.Data = MatrixMultiplication.MatrixMultiplyDoubleMatrix(np1Dyn,np2Dyn); break;
-                case ("Float"): prod.Data = MatrixMultiplication.MatrixMultiplyfloatMatrix(np1Dyn,np2Dyn); break;
-                case ("Complex"): prod.Data = MatrixMultiplication.MatrixMultiplyComplexMatrix(np1Dyn,np2Dyn); break;
-                case ("Quaternion"): prod.Data = MatrixMultiplication.MatrixMultiplyQuaternionMatrix(np1Dyn,np2Dyn) ; break;
+                case ("Double"): prod.Data = MatrixMultiplication.MatrixMultiplyDoubleMatrix(np1Dyn,np2Dyn,dim0,dim1,iterator); break;
+                case ("Float"): prod.Data = MatrixMultiplication.MatrixMultiplyfloatMatrix(np1Dyn,np2Dyn,dim0,dim1,iterator); break;
+                case ("Complex"): prod.Data = MatrixMultiplication.MatrixMultiplyComplexMatrix(np1Dyn,np2Dyn,dim0,dim1,iterator); break;
+                case ("Quaternion"): prod.Data = MatrixMultiplication.MatrixMultiplyQuaternionMatrix(np1Dyn,np2Dyn,dim0,dim1,iterator) ; break;
             }
             
-            return ((NDArray_Legacy<TData[]>) prod);
+            return ((NDArray<TData>) prod);
         }
         public static NDArray<double> Dot(this NDArray_Legacy<double> np, NDArray_Legacy<double> np2)
         {
