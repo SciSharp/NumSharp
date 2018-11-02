@@ -50,20 +50,20 @@ namespace NumSharp
             set
             {
                 shape = value;
-                shapeOffset = new List<int> { 1 };
+                dimOffset = new List<int> { 1 };
 
                 for (int s = Shape.Count-1; s >= 1; s--)
                 {
-                    shapeOffset.Add(shapeOffset[Shape.Count - 1 - s] * shape[s]);
+                    dimOffset.Add(dimOffset[Shape.Count - 1 - s] * shape[s]);
                 }
-                shapeOffset = shapeOffset.Reverse().ToList();
+                dimOffset = dimOffset.Reverse().ToList();
             }
         }
 
         /// <summary>
         /// Speed up index accessor
         /// </summary>
-        private IList<int> shapeOffset { get; set; }
+        private IList<int> dimOffset { get; set; }
 
         /// <summary>
         /// Dimension count
@@ -105,28 +105,25 @@ namespace NumSharp
                 Data[GetIndexInShape(select)] = value;
             }
         }
-        /*
-        public NDArray<T> this[params int[] select]
-        {
-            get
-            {
-                if (select.Length == NDim)
-                {
-                    var data = Data[GetIndexInShape(select)];
-                    return new NDArray<T>().Array(new T[] { data });
-                }
-                else
-                {
-                    var data = Data[GetIndexInShape(select)];
-                    return new NDArray<T>().Array(new T[] { data });
-                }
-            }
 
-            set
+        public NDArray<T> Vector(params int[] select)
+        {
+            if (select.Length == NDim)
             {
-                Data[GetIndexInShape(select)] = value.Data[0];
+                throw new Exception("Please use NDArray[m, n] to access element.");
             }
-        }*/
+            else
+            {
+                int start = GetIndexInShape(select);
+                int length = dimOffset[select.Length - 1];
+
+                var n = new NDArray<T>();
+                n.Data = Data.Skip(start).Take(length).ToArray();
+                n.Shape = shape.Skip(select.Length).ToList();
+
+                return n;
+            }
+        }
 
         /// <summary>
         /// Filter specific elements through select.
@@ -163,7 +160,7 @@ namespace NumSharp
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
             {
-                idx += shapeOffset[i] * select[i];
+                idx += dimOffset[i] * select[i];
             }
 
             return idx;
