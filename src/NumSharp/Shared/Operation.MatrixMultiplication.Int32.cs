@@ -9,19 +9,20 @@ namespace NumSharp.Shared
    internal static partial class MatrixMultiplication
    {
         //start 1 
-        internal static Int32[] MatrixMultiplyInt32Matrix(Int32[]np1, Int32[]np2, int dim0, int dim1, int iterator)
+        internal static Int32[] MatrixMultiplyInt32Matrix(Int32[]np1, Int32[]np2, int[] dimNp1, int[] dimNp2)
         {
-            var result = new Int32[dim0 * dim1];
+            var result = new Int32[dimNp1[0] * dimNp2[1]];
+
+            int iterator = dimNp1[1];
 
             for (int idx = 0; idx < result.Length;idx++)
             {
-                int line = idx % dim0;
-                int column = idx / dim1;
-
-                result[idx] = 0;
-                for (int kdx = 0; kdx < 3;kdx++)
+                int line = idx % dimNp1[0];
+                int column = idx / dimNp2[1];
+                
+                for (int kdx = 0; kdx < iterator;kdx++)
                 {
-                    result[idx] += np1[line + kdx * dim0] * np2[3 * dim1 + kdx];    
+                    result[idx] += np1[line + kdx * dimNp1[0]] * np2[column * dimNp2[0] + kdx];    
                 }
             }
 
