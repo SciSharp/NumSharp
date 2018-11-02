@@ -17,23 +17,28 @@ namespace NumSharp
 
         public NDArray<T> arange(int start, int stop, int step = 1)
         {
-            if (typeof(T) == typeof(int))
+            if(start > stop)
             {
-                var n = new NDArray<int>();
-                n.ARange(stop, start, step);
-
-                return n as NDArray<T>;
+                throw new Exception("parameters invalid");
             }
-            else if (typeof(T) == typeof(double))
-            {
-                var n = new NDArray<double>();
-                n.ARange(stop, start, step);
 
-                return n as NDArray<T>;
-            }
-            else
+            switch (typeof(T).Name)
             {
-                throw new NotImplementedException();
+                case "Int32":
+                    {
+                        var n = new NDArray<int>();
+                        n.ARange(stop, start, step);
+                        return n as NDArray<T>;
+                    }
+
+                case "Double":
+                    {
+                        var n = new NDArray<double>();
+                        n.ARange(stop, start, step);
+                        return n as NDArray<T>;
+                    }
+                default:
+                    throw new NotImplementedException();
             }
         }
 
