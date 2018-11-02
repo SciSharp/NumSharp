@@ -23,6 +23,9 @@ namespace NumSharp.UnitTest.Extensions
 
             n = np.arange(3, 7, 2);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 3, 5 }));
+
+            n = np.arange(0, 11, 3);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 3, 6, 9 }));
         }
     }
 }

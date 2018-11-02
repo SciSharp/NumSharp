@@ -19,10 +19,15 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(n[2, 0] == 8);
 
             n = np.arange(12).reshape(2, 3, 2);
-            n = n.Vector(1);
+            var n1 = n.Vector(1);
 
-            Assert.IsTrue(n[1, 1] == 9);
-            Assert.IsTrue(n[2, 1] == 11);
+            Assert.IsTrue(n1[1, 1] == 9);
+            Assert.IsTrue(n1[2, 1] == 11);
+
+            var n2 = n.Vector(1, 2);
+
+            Assert.IsTrue(n2[0] == 10);
+            Assert.IsTrue(n2[1] == 11);
         }
     }
 }
