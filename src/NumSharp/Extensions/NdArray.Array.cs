@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Drawing;
 
 namespace NumSharp
 {
@@ -14,14 +15,27 @@ namespace NumSharp
 
             return np;
         }
+        public static NDArray<Byte> Array(this NDArray<Byte> np, System.Drawing.Bitmap image )
+        {
+            NDArray<Byte> imageArray = new NDArray<byte>();
 
+            var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppRgb );
+            var dataSize = bmpd.Stride * bmpd.Height;
+            
+            imageArray.Data = new byte[dataSize];
+            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, imageArray.Data, 0, imageArray.Data.Length);
+            image.UnlockBits(bmpd);
+
+            imageArray.Shape = new int[] { bmpd.Height, bmpd.Width, 3 };
+    
+            return imageArray;  
+        }   
         public static NDArray<TData[]> Array<TData>(this NDArray<TData[]> np, TData[][] array )
         {
             np.Data = array;
 
             return np;
         }
-
         public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
         {
             np.Data = array;
