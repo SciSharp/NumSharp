@@ -47,7 +47,6 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(imageNDArray[0,0,0] == 255);
             Assert.IsTrue(imageNDArray[0,0,1] == 253);
             Assert.IsTrue(imageNDArray[0,0,2] == 252);
-
         }
     }
 }
