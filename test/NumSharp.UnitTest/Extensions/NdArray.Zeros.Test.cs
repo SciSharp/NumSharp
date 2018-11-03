@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
+using System.Linq;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -12,19 +13,17 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Zeros1Dim()
         {
-            var np = new NDArray<int>();
-            np.Zeros(3);
-
-            // Assert.IsTrue(np.ToString().Equals("array([0, 0, 0])"));
+            var np = new NumPy<int>();
+            var n = np.zeros(3);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 0, 0 }));
         }
 
         [TestMethod]
         public void Zeros2Dim()
         {
-            var np = new NDArray<int>();
-            np.Zeros(3, 2);
-
-            // Assert.IsTrue(np.ToString().Equals("array([[0, 0], [0, 0], [0, 0]])"));
+            var np = new NumPy<int>();
+            var n = np.zeros(3, 2);
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 0, 0, 0, 0, 0 }));
         }
     }
 }

@@ -48,5 +48,27 @@ namespace NumSharp
 
             return np;
         }
+
+        public NDArray<T> zeros(params int[] shape)
+        {
+            switch (typeof(T).Name)
+            {
+                case "Int32":
+                    {
+                        var n = new NDArray<int>();
+                        n.Zeros(shape);
+                        return n as NDArray<T>;
+                    }
+
+                case "Double":
+                    {
+                        var n = new NDArray<double>();
+                        n.Zeros(shape);
+                        return n as NDArray<T>;
+                    }
+                default:
+                    throw new NotImplementedException();
+            }
+        }
     }
 }

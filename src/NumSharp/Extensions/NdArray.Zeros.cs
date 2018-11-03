@@ -11,34 +11,35 @@ namespace NumSharp.Extensions
         /// <summary>
         /// Return a new array of given shape and type, filled with zeros.
         /// </summary>
-        /// <typeparam name="TData"></typeparam>
         /// <param name="np"></param>
-        /// <param name="dimenstions"></param>
+        /// <param name="shape"></param>
         /// <returns></returns>
-        public static NDArray<int> Zeros(this NDArray<int> np, params int[] select)
+        public static NDArray<int> Zeros(this NDArray<int> np, params int[] shape)
         {
             int length = 1;
 
-            for(int i = 0; i< select.Length; i++)
+            for(int i = 0; i< shape.Length; i++)
             {
-                length *= select[i];
+                length *= shape[i];
             }
 
-            np.ARange(length).ReShape(select);
+            np.Data = Enumerable.Range(0, length).Select(x => 0).ToArray();
+            np.ReShape(shape);
 
             return np;
         }
 
-        public static NDArray<double> Zeros(this NDArray<double> np, params int[] select)
+        public static NDArray<double> Zeros(this NDArray<double> np, params int[] shape)
         {
             int length = 1;
 
-            for (int i = 0; i < select.Length; i++)
+            for (int i = 0; i < shape.Length; i++)
             {
-                length *= select[i];
+                length *= shape[i];
             }
 
-            np.ARange(length).ReShape(select);
+            np.Data = Enumerable.Range(0, length).Select(x => 0.0).ToArray();
+            np.ReShape(shape);
 
             return np;
         }
