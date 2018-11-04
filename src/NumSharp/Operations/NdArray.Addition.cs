@@ -42,6 +42,8 @@ namespace NumSharp
                 case ("Float"): sum = new NDArray<float>().Array(((NDArray<float>)npDyn).Data.Select((x,idx) => x + (float)scalarDyn)); break;
                 case ("Complex"): sum = new NDArray<Complex>().Array(((NDArray<Complex>)npDyn).Data.Select((x,idx) => x + (Complex) scalarDyn )); break;
             }
+
+            sum.Shape = np.Shape;
             
             return (NDArray<T>) sum;
         }
