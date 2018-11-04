@@ -43,5 +43,47 @@ namespace NumSharp.UnitTest
             // columns first than rows
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0,1,10,11}, np1.Data ));
         }
+        [TestMethod]
+        public void ToDotNetArray1D()
+        {
+            var np1 = new NDArray<double>().ARange(9);
+
+            double[] np1_ = (double[])np1.ToDotNetArray();
+
+            Assert.IsTrue(Enumerable.SequenceEqual(np1_,np1.Data));
+        } 
+        [TestMethod]
+        public void ToDotNetArray2D()
+        {
+            var np1 = new NDArray<double>().ARange(9).ReShape(3,3);
+
+            double[][] np1_ = (double[][])np1.ToDotNetArray();
+
+            for (int idx = 0; idx < 3; idx ++)
+            {
+                for (int jdx = 0; jdx < 3; jdx ++)
+                {
+                    Assert.IsTrue(np1[idx,jdx] == np1_[idx][jdx]);
+                }    
+            }
+        }
+        [TestMethod]
+          public void ToDotNetArray3D()
+        {
+            var np1 = new NDArray<double>().ARange(27).ReShape(3,3,3);
+
+            double[][][] np1_ = (double[][][])np1.ToDotNetArray();
+
+            for (int idx = 0; idx < 3; idx ++)
+            {
+                for (int jdx = 0; jdx < 3; jdx ++)
+                {
+                    for (int kdx = 0; kdx < 3;kdx++)
+                    {
+                        Assert.IsTrue(np1[idx,jdx,kdx] == np1_[idx][jdx][kdx]);
+                    }
+                }    
+            }
+        }
     }
 }
