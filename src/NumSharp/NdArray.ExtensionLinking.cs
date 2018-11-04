@@ -91,5 +91,9 @@ namespace NumSharp
             dynamic np = this;
             return NumSharp.Extensions.NDArrayExtensions.AsMatrix(np);
         }
+        public NDArray<T> Onces(params int[] shape)
+        {
+            return NumSharp.Extensions.NDArrayExtensions.Onces(this,shape);
+        }
     }
 }
