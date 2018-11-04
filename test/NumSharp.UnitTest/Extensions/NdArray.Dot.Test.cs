@@ -32,13 +32,45 @@ namespace NumSharp.UnitTest.Extensions
         {   
             NDArray<double> matrix1 = new NDArray<double>().ARange(7,1,1).ReShape(3,2);
             
+            Assert.IsTrue(matrix1[0,0] == 1);
+            Assert.IsTrue(matrix1[0,1] == 2);
+            Assert.IsTrue(matrix1[1,0] == 3);
+            Assert.IsTrue(matrix1[2,0] == 5);
+
             NDArray<double> matrix2 = new NDArray<double>().ARange(13,7,1).ReShape(2,3) ;
         
-            var matrix3 = matrix1.Dot(matrix2);
-            
-            var matrix4 = new double[]{39,54,69,49,68,87,59,82,105};
+            Assert.IsTrue(matrix2[0,0] == 7);
+            Assert.IsTrue(matrix2[0,1] == 8);
+            Assert.IsTrue(matrix2[1,0] == 10);
+            Assert.IsTrue(matrix2[0,2] == 9);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(matrix3.Data,matrix4));
+
+            var matrix3 = matrix1.Dot(matrix2);
+
+            var matrix4 = new NDArray<double>().Zeros(3,3);
+
+            for (int idx = 0; idx < 3; idx++)
+            {
+                for (int jdx = 0; jdx < 3;jdx++)
+                {
+                    matrix4[idx,jdx] = 0;
+                    for (int kdx = 0; kdx < 2;kdx++)
+                    {
+                        matrix4[idx,jdx] += matrix1[idx,kdx] * matrix2[kdx,jdx];
+                    }
+                }
+            }
+
+            Assert.IsTrue(matrix4[0,0] == matrix3[0,0]);
+            Assert.IsTrue(matrix4[0,1] == matrix3[0,1]);
+            Assert.IsTrue(matrix4[0,2] == matrix3[0,2]);
+            Assert.IsTrue(matrix4[1,0] == matrix3[1,0]);
+            Assert.IsTrue(matrix4[1,1] == matrix3[1,1]);
+            Assert.IsTrue(matrix4[1,2] == matrix3[1,2]);
+            Assert.IsTrue(matrix4[2,0] == matrix3[2,0]);
+            Assert.IsTrue(matrix4[2,1] == matrix3[2,1]);
+            Assert.IsTrue(matrix4[2,2] == matrix3[2,2]);
+
         }
         [TestMethod]
         public void MatrixMultiplyComplex()
