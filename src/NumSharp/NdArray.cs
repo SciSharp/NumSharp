@@ -213,7 +213,7 @@ namespace NumSharp
         {
             return np.Data[0].Equals(obj);
         }
-        public dynamic ToDotNetArray()
+        public TCast ToDotNetArray<TCast>()
         {
             dynamic dotNetArray = null;
             switch (this.NDim)
@@ -256,7 +256,8 @@ namespace NumSharp
                     break;
                 }
             }
-            return dotNetArray;
+            TCast castedDotNetArray = (TCast)dotNetArray;
+            return castedDotNetArray;
         }
         protected string _ToMatrixString()
         {

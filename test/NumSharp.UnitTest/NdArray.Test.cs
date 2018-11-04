@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<double>().ARange(9);
 
-            double[] np1_ = (double[])np1.ToDotNetArray();
+            double[] np1_ = np1.ToDotNetArray<double[]>();
 
             Assert.IsTrue(Enumerable.SequenceEqual(np1_,np1.Data));
         } 
@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<double>().ARange(9).ReShape(3,3);
 
-            double[][] np1_ = (double[][])np1.ToDotNetArray();
+            double[][] np1_ = np1.ToDotNetArray<double[][]>();
 
             for (int idx = 0; idx < 3; idx ++)
             {
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<double>().ARange(27).ReShape(3,3,3);
 
-            double[][][] np1_ = (double[][][])np1.ToDotNetArray();
+            double[][][] np1_ = np1.ToDotNetArray<double[][][]>();
 
             for (int idx = 0; idx < 3; idx ++)
             {
