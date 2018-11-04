@@ -118,9 +118,13 @@ namespace NumSharp
                 int length = dimOffset[select.Length - 1];
 
                 var n = new NDArray<T>();
-                n.Data = Data.Skip(start).Take(length).ToArray();
-                n.Shape = shape.Skip(select.Length).ToList();
-
+                //n.Data = Data.Skip(start).Take(length).ToArray();
+                //n.Shape = shape.Skip(select.Length).ToList();
+                n.Data = new Span<T>(Data, start, length).ToArray();
+                // Since n.Shape is a IList it cannot be converted to Span<T>
+                // This is a lot of hoops to jump throught to get it into a span
+                // shape.Skip(select.Length).ToList() may be more efficient - not sure
+                n.Shape = shape.ToArray().AsSpan().Slice(select.Length).ToArray().ToList();
                 return n;
             }
         }
