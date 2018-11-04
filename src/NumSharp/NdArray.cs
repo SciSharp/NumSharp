@@ -213,6 +213,51 @@ namespace NumSharp
         {
             return np.Data[0].Equals(obj);
         }
+        public dynamic ToDotNetArray()
+        {
+            dynamic dotNetArray = null;
+            switch (this.NDim)
+            {
+                case 1 : dotNetArray = new T[this.Shape[0]].ToArray();break;
+                case 2 : dotNetArray = new T[this.Shape[0]][].Select(x => new T[this.Shape[1]].ToArray()).ToArray();break;
+                case 3 : dotNetArray = new T[this.Shape[0]][][].Select(x => new T[this.Shape[1]][].Select(y => new T[this.Shape[2]].ToArray().ToArray()).ToArray()).ToArray();break;
+            }
+
+            switch (this.NDim)
+            {
+                case 1 : 
+                {
+                    dotNetArray = this.Data.ToArray();
+                    break;
+                }
+                case 2 : 
+                {
+                    for(int idx = 0; idx < this.Shape[0];idx++)
+                    {
+                        for(int jdx = 0; jdx < this.Shape[1];jdx++)
+                        {
+                            dotNetArray[idx][jdx] = this[idx,jdx];
+                        }
+                    }
+                    break;
+                }
+                case 3 : 
+                {
+                    for(int idx = 0; idx < this.Shape[0];idx++)
+                    {
+                        for(int jdx = 0; jdx < this.Shape[1];jdx++)
+                        {
+                            for(int kdx = 0; kdx < this.Shape[2];kdx++)
+                            {
+                                dotNetArray[idx][jdx][kdx] = this[idx,jdx,kdx];
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            return dotNetArray;
+        }
         protected string _ToMatrixString()
         {
             string returnValue = "array([[";
