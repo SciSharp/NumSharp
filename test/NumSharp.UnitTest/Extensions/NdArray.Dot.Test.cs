@@ -86,15 +86,15 @@ namespace NumSharp.UnitTest.Extensions
             var matrix3 = matrix1.Dot(matrix2);
 
             var matrix4 = new Complex[9];
-            matrix4[0] = new Complex(39,-7);
-            matrix4[1] = new Complex(54,-14);
-            matrix4[2] = new Complex(69,0);
-            matrix4[3] = new Complex(49,-49);
-            matrix4[4] = new Complex(68,-68);
-            matrix4[5] = new Complex(87,-60);
-            matrix4[6] = new Complex(59,-59);
-            matrix4[7] = new Complex(82,-82);
-            matrix4[8] = new Complex(105,-72);
+            matrix4[0] = new Complex(7,-47);
+            matrix4[1] = new Complex(30,-30);
+            matrix4[2] = new Complex(9,-57);
+            matrix4[3] = new Complex(61,-40);
+            matrix4[4] = new Complex(68,0);
+            matrix4[5] = new Complex(75,-48);
+            matrix4[6] = new Complex(95,-60);
+            matrix4[7] = new Complex(106,0);
+            matrix4[8] = new Complex(117,-72);
 
             Assert.IsTrue(Enumerable.SequenceEqual(matrix4,matrix3.Data));
         }
