@@ -15,13 +15,14 @@ namespace NumSharp.Extensions
             int dim0 = np.Length;
             int dim1 = np.Data[0].Length;
 
-            npAsMatrix.Data = new double[dim0,dim1];
+            npAsMatrix.Shape = new List<int>(){ dim0,dim1 }.ToList();
+            npAsMatrix.Data = new double[dim0 * dim1];
 
             for (int idx = 0; idx < dim0;idx++)
             {
                 for (int jdx = 0;jdx < dim1;jdx++)
                 {
-                    npAsMatrix.Data[idx,jdx] = np[idx][jdx];
+                    npAsMatrix[idx,jdx] = np[idx][jdx];
                 }
             }
             
