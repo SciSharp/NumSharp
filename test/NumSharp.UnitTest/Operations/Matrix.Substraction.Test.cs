@@ -20,15 +20,7 @@ namespace NumSharp.UnitTest
 
             var np3 = np1 - np2;
 
-            var np3EnumExpected = new Matrix<Double>("0 0 0;0 0 0;0 0 0");
-
-            for(int idx = 0;idx < 3; idx++)
-            {
-                for (int jdx = 0; jdx < 3;jdx++)
-                {
-                    Assert.IsTrue(np3.Data[idx,jdx] == np3EnumExpected.Data[idx,jdx]);
-                }
-            }
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{0,0,0,0,0,0,0,0,0},np3.Data ));
         }
         [TestMethod]
         public void  ComplexTwo2D()
@@ -36,20 +28,14 @@ namespace NumSharp.UnitTest
             var np1 = new Matrix<Complex>();
             var np2 = new Matrix<Complex>();
 
-            np1.Data = new Complex[,] {{new Complex(1,2), new Complex(3,4)},{new Complex(5,6), new Complex(7,8)}};
-            np2.Data = new Complex[,] {{new Complex(8,7), new Complex(6,5)},{new Complex(4,3), new Complex(2,1)}};
+            np1.Data = new Complex[] {new Complex(1,2), new Complex(3,4),new Complex(5,6), new Complex(7,8)};
+            np2.Data = new Complex[] {new Complex(8,7), new Complex(6,5),new Complex(4,3), new Complex(2,1)};
             
             var np3 = np1 - np2;
 
-            var expArray = new Complex[,] {{new Complex(-7,-5), new Complex(-3,-1)},{new Complex(1,3), new Complex(5,7)}};
+            var expArray = new Complex[] {new Complex(-7,-5), new Complex(-3,-1),new Complex(1,3), new Complex(5,7)};
 
-            for(int idx = 0;idx < 2; idx++)
-            {
-                for (int jdx = 0; jdx < 2;jdx++)
-                {
-                    Assert.IsTrue(np3.Data[idx,jdx] == expArray[idx,jdx]);
-                }
-            }
+            Assert.IsTrue(Enumerable.SequenceEqual(expArray,np3.Data));
         }
         
     }

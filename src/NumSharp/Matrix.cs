@@ -3,9 +3,8 @@ using System.Linq;
 
 namespace NumSharp
 {
-    public partial class Matrix<TData>
+    public partial class Matrix<TData> : NDArray<TData>
     {
-        public TData[,] Data {get;set;}
         public Matrix()
         {
 
@@ -30,7 +29,8 @@ namespace NumSharp
             int dim0 = splitted.Length;
             int dim1 = splitted[0].Length;
 
-            Data = new TData[dim0,dim1];
+            this.Data = new TData[dim0 * dim1];
+            this.Shape = (new int[] {dim0,dim1}).ToList();
 
             var dataType = typeof(TData);
 
@@ -38,7 +38,6 @@ namespace NumSharp
             {
                 case ("Double"): this.StringToDoubleMatrix(splitted); break;
                 case ("Float"): ; break;
-                case ("Complex"): this.StringToComplexMatrix(splitted); break;
             }
             
         }
@@ -49,8 +48,7 @@ namespace NumSharp
         /// <param name="matrix"></param>
         protected void StringToDoubleMatrix(string[][] matrix)
         {
-            dynamic matrixData = this.Data;
-
+            dynamic matrixData = this;
             for (int idx = 0; idx< matrix.Length;idx++)
             {
                 for (int jdx = 0; jdx < matrix[0].Length;jdx++)
@@ -58,32 +56,28 @@ namespace NumSharp
                     matrixData[idx,jdx] = Double.Parse(matrix[idx][jdx]);
                 }
             }
+            this.Data = (TData[])matrixData.Data;
         }
-        protected void StringToComplexMatrix(string[][] matrix)
-        {
-            
-        }
-
         public override string ToString()
         {
             string returnValue = "matrix([[";
 
-            int dim0 = Data.GetLength(0);
-            int dim1 = Data.GetLength(1);
+            int dim0 = Shape[0];
+            int dim1 = Shape[1];
 
             for (int idx = 0; idx < (dim0-1);idx++)
             {
                 for (int jdx = 0;jdx < (dim1-1);jdx++)
                 {
-                    returnValue += (Data[idx,jdx] + ", ");
+                    returnValue += (this[idx,jdx] + ", ");
                 }
-                returnValue += (Data[idx,dim1-1] + "],   \n        [");
+                returnValue += (this[idx,dim1-1] + "],   \n        [");
             }
             for (int jdx = 0; jdx < (dim1-1);jdx++)
             {
-                returnValue += (Data[dim0-1,jdx] + ", ");
+                returnValue += (this[dim0-1,jdx] + ", ");
             }
-            returnValue += (Data[dim0-1,dim1-1] + "]])");
+            returnValue += (this[dim0-1,dim1-1] + "]])");
 
             return returnValue;    
         }

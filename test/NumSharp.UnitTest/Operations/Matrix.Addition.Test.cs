@@ -20,17 +20,18 @@ namespace NumSharp.UnitTest
 
             var np3 = np1 + np2;
 
+            Assert.IsTrue( Enumerable.SequenceEqual(new double[]{2, 4, 6, 8, 10, 12, 14, 16, 18},np3.Data));
         }
         [TestMethod]
         public void  ComplexTwo2D()
         {
-            /*var np1 = new NDArray<Complex>().Array(new Complex[]{new Complex(1,2),new Complex(3,4)});
+            var np1 = new NDArray<Complex>().Array(new Complex[]{new Complex(1,2),new Complex(3,4)});
             var np2 = new NDArray<Complex>().Array(new Complex[]{new Complex(5,6),new Complex(7,8)});
 
             var np3 = np1 + np2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new Complex[]{new Complex(6,8),new Complex(10,12)},np3.Data));
-            */
+            
         }
         
     }
