@@ -31,16 +31,16 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public partial class NDArray_Legacy<TData>
+    public partial class NDArray<T>
     {
-        public NDArray_Legacy<TData> HStack(NDArray_Legacy<TData> np2 )
+        public NDArray<T> HStack(NDArray<T> np2 )
         {
             dynamic npDyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.HStack(npDyn,np2Dyn);
         }
-        public NDArray_Legacy<TData> ARange(int stop, int start = 0, int step = 1)
+        public NDArray<T> ARange(int stop, int start = 0, int step = 1)
         {
             dynamic npDyn = this;
 
@@ -54,26 +54,36 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.ArgMax(npDyn);
         }
-        public NDArray_Legacy<TData> Convolve(NDArray_Legacy<TData> np2, string mode = "full")
+        public NDArray<T> Convolve(NDArray<T> np2, string mode = "full")
         {
             dynamic npDyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.Convolve(npDyn, np2Dyn,mode);
         }
-        public NDArray_Legacy<TData> Dot(NDArray_Legacy<TData> np2)
+        public NDArray<T> Dot(NDArray<T> np2)
         {
             dynamic np1Dyn = this;
             dynamic np2Dyn = np2;
 
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,np2Dyn);
         }
-        public NDArray_Legacy<TData> Dot(TData scalar)
+        public NDArray<T> Dot(T scalar)
         {
             dynamic np1Dyn = this;
             dynamic scalarDyn = scalar;
             
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
+        }
+        public NDArray<T> ReShape(params int[] shape)
+        {
+            return NumSharp.Extensions.NDArrayExtensions.ReShape(this, shape);
+        }
+        public NDArray<T> Zeros(params int[] select)
+        {
+            dynamic np1Dyn = this;
+
+            return NumSharp.Extensions.NDArrayExtensions.Zeros(np1Dyn,select);
         }
 
         public Matrix<double> AsMatrix()

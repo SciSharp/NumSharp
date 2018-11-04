@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
+using System.Linq;
 
 namespace NumSharp.UnitTest
 {
@@ -28,6 +29,19 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(n2[0] == 10);
             Assert.IsTrue(n2[1] == 11);
+        }
+        [TestMethod]
+        public void DimOrder()
+        {
+            NDArray<double> np1 = new NDArray<double>().Zeros(2,2);
+
+            np1[0,0] = 0;
+            np1[1,0] = 10;
+            np1[0,1] = 1;
+            np1[1,1] = 11;
+
+            // columns first than rows
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0,1,10,11}, np1.Data ));
         }
     }
 }
