@@ -213,6 +213,18 @@ namespace NumSharp
         {
             return np.Data[0].Equals(obj);
         }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var result = 1337;
+                result = (result * 397) ^ this.NDim;
+                result = (result * 397) ^ this.Size;
+                return result;
+            }
+        }
+
         public TCast ToDotNetArray<TCast>()
         {
             dynamic dotNetArray = null;
