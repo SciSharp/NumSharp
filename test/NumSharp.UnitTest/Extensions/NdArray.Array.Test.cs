@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
+using System.Linq;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -12,27 +13,28 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Array1Dim()
         {
-            var np = new NDArray<int>();
-            var list = new List<int> { 1, 2, 3 };
-            // np = np.Array(list);
+            var np = new NumPy<int>();
+            var list = new int[] { 1, 2, 3 };
+            var n = np.array(list);
 
-            // Assert.IsTrue(np.ToString().Equals("array([1, 2, 3])"));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 1, 2, 3 }));
         }
 
         [TestMethod]
         public void Array2Dim()
         {
-            var np = new NDArray<List<int>>();
-            var list = new List<List<int>>
+            var np = new NumPy<int>();
+            var list = new int[][]
             {
-                new List<int> { 1, 2 },
-                new List<int> { 3, 4 }
+                new int[] { 1, 2 },
+                new int[] { 3, 4 }
             };
 
-            // np = np.Array(list);
+            var n = np.array(list);
 
-            // Assert.IsTrue(np.ToString().Equals("array([[1, 2], [3, 4]])"));
+            Assert.IsTrue(n[1, 0] == 3);
         }
+
         [TestMethod]
         public void ArrayImage()
         {
@@ -47,7 +49,6 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(imageNDArray[0,0,0] == 255);
             Assert.IsTrue(imageNDArray[0,0,1] == 253);
             Assert.IsTrue(imageNDArray[0,0,2] == 252);
-
         }
     }
 }

@@ -135,8 +135,12 @@ namespace NumSharp
             get
             {
                 int i = 0;
-                var array = Data.Where(x => select.Contains(i++)).ToList();
-                return new NDArray<T>().Array(array);
+
+                var n = new NDArray<T>();
+                n.Data = Data.Where(x => select.Contains(i++)).ToArray();
+                n.Shape[0] = n.Data.Length;
+
+                return n;
             }
         }
 
@@ -150,8 +154,13 @@ namespace NumSharp
             get
             {
                 int i = 0;
-                var array = Data.Where(x => select.Data.Contains(i++)).ToList();
-                return new NDArray<T>().Array(array);
+
+                var n = new NDArray<T>();
+                n.Data = Data.Where(x => select.Data.Contains(i++)).ToArray();
+                n.Shape = shape;
+                n.Shape[0] = select.shape[0];
+
+                return n;
             }
         }
 

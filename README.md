@@ -12,33 +12,41 @@ Is it difficult to translate python machine learning code into C#? Because too m
 NumSharp has implemented the arange, array, max, min, reshape, normalize, unique interfaces. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.
 
 ## Implemented APIs
-* NdArray
-  * ARange
-  * ArgMax
-  * Array
-  * AsMatrix
-  * Convolve
-  * Delete
-  * Divide
-  * Dot
-  * HStack
-  * Max
-  * Mean
-  * Min
-  * Minus
-  * Normalize
-  * Random
-  * ReShape
-  * Std
-  * Sum
-  * Unique
-  * Zeros
-  
-* NdArrayRandom
-  * Permutation
-  * Shuffle
 
-* Matrix
+The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
+
+* NumPy
+  * arange
+  * array
+  * reshape
+  * zeros
+
+## How to use
+```
+// init NumPy instance which pesists integer data type
+var np = new NumPy<int>();
+// create a 2-dimension vector
+var n = np.arange(12).reshape(3, 4);
+
+// access data by index
+Assert.IsTrue(n[1, 1] == 5);
+Assert.IsTrue(n[2, 0] == 8);
+
+// create a 3-dimension vector
+n = np.arange(12).reshape(2, 3, 2);
+// get the 2nd vector in the 1st dimension
+var n1 = n.Vector(1);
+
+Assert.IsTrue(n1[1, 1] == 9);
+Assert.IsTrue(n1[2, 1] == 11);
+
+// get the 3rd vector in the (axis 1, axis 2) dimension
+var n2 = n.Vector(1, 2);
+
+Assert.IsTrue(n2[0] == 10);
+Assert.IsTrue(n2[1] == 11);
+
+```
 
 ## Install NumSharp in NuGet
 ```
@@ -56,5 +64,5 @@ Online [documents](https://numsharp.readthedocs.io)
 
 NumSharp is referenced by:
 * [Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
-
+* [CherubNLP](https://github.com/Oceania2018/CherubNLP)
 Welcome to fork and pull request to add more APIs, and make reference list longer.
