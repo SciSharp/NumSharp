@@ -168,15 +168,24 @@ namespace NumSharp
 
         public override string ToString()
         {
-            string output = "array([";
+            string output = "";
 
-            // loop
-            for (int r = 0; r < Data.Length; r++)
+            if (this.NDim == 2)
             {
-                output += (r == 0) ? Data[r] + "" : ", " + Data[r];
+                output = this._ToMatrixString();
             }
+            else
+            {
+                output = "array([";
 
-            output += "])";
+                // loop
+                for (int r = 0; r < Data.Length; r++)
+                {
+                    output += (r == 0) ? Data[r] + "" : ", " + Data[r];
+                }
+
+                output += "])";
+            }
 
             return output;
         }
@@ -194,6 +203,29 @@ namespace NumSharp
         public static bool operator !=(NDArray<T> np, object obj)
         {
             return np.Data[0].Equals(obj);
+        }
+        protected string _ToMatrixString()
+        {
+            string returnValue = "array([[";
+
+            int dim0 = Shape[0];
+            int dim1 = Shape[1];
+
+            for (int idx = 0; idx < (dim0-1);idx++)
+            {
+                for (int jdx = 0;jdx < (dim1-1);jdx++)
+                {
+                    returnValue += (this[idx,jdx] + ", ");
+                }
+                returnValue += (this[idx,dim1-1] + "],   \n       [");
+            }
+            for (int jdx = 0; jdx < (dim1-1);jdx++)
+            {
+                returnValue += (this[dim0-1,jdx] + ", ");
+            }
+            returnValue += (this[dim0-1,dim1-1] + "]])");
+
+            return returnValue;    
         }
     }
 }
