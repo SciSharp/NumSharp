@@ -18,9 +18,10 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
 * NumPy
   * arange
   * array
+  * random.randint
   * reshape
   * zeros
-
+  
 ## How to use
 ```
 // init NumPy instance which pesists integer data type

@@ -30,6 +30,8 @@ namespace NumSharp
     /// </summary>
     public partial class NDArray<T>
     {
+        private T[] data;
+
         /// <summary>
         /// 1 dim array data storage
         /// </summary>
@@ -118,14 +120,35 @@ namespace NumSharp
                 int length = dimOffset[select.Length - 1];
 
                 var n = new NDArray<T>();
-                //n.Data = Data.Skip(start).Take(length).ToArray();
                 //n.Shape = shape.Skip(select.Length).ToList();
-                n.Data = new Span<T>(Data, start, length).ToArray();
+                Span<T> data = Data;
+                n.Data = data.Slice(start, length).ToArray();
                 // Since n.Shape is a IList it cannot be converted to Span<T>
                 // This is a lot of hoops to jump throught to get it into a span
                 // shape.Skip(select.Length).ToList() may be more efficient - not sure
-                n.Shape = shape.ToArray().AsSpan().Slice(select.Length).ToArray().ToList();
+                n.Shape = shape.ToArray().AsSpan().Slice(select.Length).ToArray();
                 return n;
+            }
+        }
+
+        public void Vector(Shape shape, T value)
+        {
+            if (shape.Shapes.Length == NDim)
+            {
+                throw new Exception("Please use NDArray[m, n] to access element.");
+            }
+            else
+            {
+                int start = GetIndexInShape(shape.Shapes);
+                int length = dimOffset[shape.Length - 1];
+
+                Span<T> data = Data;
+                var elements = data.Slice(start, length);
+
+                for (int i = 0; i < elements.Length; i++)
+                {
+                    elements[i] = value;
+                }
             }
         }
 
