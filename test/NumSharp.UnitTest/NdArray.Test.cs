@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest
     public class NDArrayTest
     {
         [TestMethod]
-        public void IndexAccessor()
+        public void IndexAccessorGetter()
         {
             var np = new NumPy<int>();
             var n = np.arange(12).reshape(3, 4);
@@ -30,6 +30,23 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(n2[0] == 10);
             Assert.IsTrue(n2[1] == 11);
         }
+
+        [TestMethod]
+        public void IndexAccessorSetter()
+        {
+            var np = new NumPy<int>();
+            var n = np.arange(12).reshape(3, 4);
+
+            Assert.IsTrue(n[0, 3] == 3);
+            Assert.IsTrue(n[1, 3] == 7);
+
+            // set value
+            n.Vector(new Shape(0), 10);
+            Assert.IsTrue(n[0, 0] == 10);
+            Assert.IsTrue(n[0, 3] == 10);
+            Assert.IsTrue(n[1, 3] == 7);
+        }
+
         [TestMethod]
         public void StringCheck()
         {
@@ -65,6 +82,7 @@ namespace NumSharp.UnitTest
             // columns first than rows
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0,1,10,11}, np1.Data ));
         }
+
         [TestMethod]
         public void ToDotNetArray1D()
         {
@@ -74,6 +92,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(np1_,np1.Data));
         } 
+
         [TestMethod]
         public void ToDotNetArray2D()
         {
@@ -89,8 +108,9 @@ namespace NumSharp.UnitTest
                 }    
             }
         }
+
         [TestMethod]
-          public void ToDotNetArray3D()
+        public void ToDotNetArray3D()
         {
             var np1 = new NDArray<double>().ARange(27).ReShape(3,3,3);
 

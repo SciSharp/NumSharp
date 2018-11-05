@@ -26,6 +26,8 @@ namespace NumSharp
             this.shape = shape;
         }
 
+        public int Length { get { return shape.Length; } }
+
         public int[] Shapes { get { return shape; } }
 
         public int UniShape { get { return shape[0]; } }
