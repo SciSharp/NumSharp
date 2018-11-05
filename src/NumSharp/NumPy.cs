@@ -73,6 +73,14 @@ namespace NumSharp
             return n;
         }
 
+        public NDArrayRandom random 
+        {
+            get
+            {
+                return new NDArrayRandom();
+            }
+        }
+
         public NDArray<int> reshape(NDArray<int> np, params int[] shape)
         {
             np.Shape = shape;

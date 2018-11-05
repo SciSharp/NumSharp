@@ -45,12 +45,11 @@ var n2 = n.Vector(1, 2);
 
 Assert.IsTrue(n2[0] == 10);
 Assert.IsTrue(n2[1] == 11);
-
 ```
 
 ## Install NumSharp in NuGet
 ```
-Install-Package NumSharp -Version 0.1.0
+PM> Install-Package NumSharp
 ```
 
 # How to make docs
@@ -60,9 +59,12 @@ $ pip install recommonmark
 $ cd docs
 $ make html
 ```
-Online [documents](https://numsharp.readthedocs.io)
+Reference the online [documents](https://numsharp.readthedocs.io).
 
 NumSharp is referenced by:
+* [Pandas.NET](https://github.com/Oceania2018/Pandas.NET)
 * [Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
 * [CherubNLP](https://github.com/Oceania2018/CherubNLP)
+* [BotSharp](https://github.com/dotnetcore/BotSharp)
+
 Welcome to fork and pull request to add more APIs, and make reference list longer.
