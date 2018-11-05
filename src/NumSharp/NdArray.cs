@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Globalization;
 
 namespace NumSharp
 {
@@ -279,24 +280,59 @@ namespace NumSharp
         {
             string returnValue = "array([[";
 
-            int dim0 = Shape[0];
-            int dim1 = Shape[1];
+            int digitBefore = 0;
+            int digitAfter = 0;
 
-            for (int idx = 0; idx < (dim0-1);idx++)
-            {
-                for (int jdx = 0;jdx < (dim1-1);jdx++)
+           var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+
+            string elementFormatStart = "{0:";
+            
+            string elementFormatEnd = "";
+            for(int idx = 0; idx < digitAfter;idx++)
+                elementFormatEnd += "0";
+
+            elementFormatEnd += "}";
+            
+            int missingDigits;
+            string elementFormat;
+
+            for (int idx = 0; idx < (Data.Length-1);idx++)
+            {   
+                missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
+                
+                elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
+
+                if( ((idx+1) % Shape[1] ) == 0 )
                 {
-                    returnValue += (this[idx,jdx] + ", ");
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + "],   \n       [");    
                 }
-                returnValue += (this[idx,dim1-1] + "],   \n       [");
+                else 
+                {
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + ", ");
+                }
+                
             }
-            for (int jdx = 0; jdx < (dim1-1);jdx++)
-            {
-                returnValue += (this[dim0-1,jdx] + ", ");
-            }
-            returnValue += (this[dim0-1,dim1-1] + "]])");
+            missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
+                
+            elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
+
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data.Last()) + "]])");
 
             return returnValue;    
+        }
+        protected string _ParseNumber(T number, ref int  noBefore,ref int noAfter)
+        {
+            string parsed = string.Format(new CultureInfo("en-us"),"{0:0.00000000}",number);
+            
+            parsed = (parsed.StartsWith('-')) ? parsed : (" " + parsed); 
+
+            int noBefore_local = parsed.Split('.')[0].Length;
+            int noAfter_local = parsed.Split('.')[1].ToCharArray().Reverse().SkipWhile(x => x == '0').ToArray().Length;
+
+            noBefore = (noBefore_local > noBefore) ? noBefore_local : noBefore;
+            noAfter  = (noAfter_local  > noAfter ) ? noAfter_local  : noAfter;
+
+            return parsed;
         }
     }
 }

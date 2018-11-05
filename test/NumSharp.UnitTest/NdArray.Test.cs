@@ -31,6 +31,28 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(n2[1] == 11);
         }
         [TestMethod]
+        public void StringCheck()
+        {
+            var np = new NDArray<double>().ARange(9).ReShape(3,3);
+
+            var random = new Random();
+            np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
+            np.Data[1] = 1;
+            np.Data[2] -= 4;
+            np.Data[3] -= 20;
+            np.Data[8] += 23;
+
+            var stringOfNp = np.ToString();
+
+            Assert.IsTrue(stringOfNp.Contains("[[  0."));
+
+            np = new NDArray<double>().ARange(9).ReShape(3,3);
+
+            stringOfNp = np.ToString();        
+
+            Assert.IsTrue(stringOfNp.Contains("([[ 0,"));
+        }
+        [TestMethod]
         public void DimOrder()
         {
             NDArray<double> np1 = new NDArray<double>().Zeros(2,2);
