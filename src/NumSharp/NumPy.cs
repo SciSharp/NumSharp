@@ -88,6 +88,12 @@ namespace NumSharp
             return np;
         }
 
+        public NDArray<double> vstack(params NDArray<double>[] nps)
+        {
+            var n = new NDArray<double>();
+            return n.VStack(nps);
+        }
+
         public NDArray<T> zeros(params int[] shape)
         {
             switch (typeof(T).Name)
