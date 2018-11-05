@@ -347,7 +347,7 @@ namespace NumSharp
         {
             string parsed = string.Format(new CultureInfo("en-us"),"{0:0.00000000}",number);
             
-            parsed = (parsed.StartsWith('-')) ? parsed : (" " + parsed); 
+            parsed = (parsed.StartsWith("-")) ? parsed : (" " + parsed); 
 
             int noBefore_local = parsed.Split('.')[0].Length;
             int noAfter_local = parsed.Split('.')[1].ToCharArray().Reverse().SkipWhile(x => x == '0').ToArray().Length;
