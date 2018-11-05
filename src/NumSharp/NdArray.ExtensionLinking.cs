@@ -54,6 +54,11 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.ArgMax(npDyn);
         }
+        public Matrix<double> AsMatrix()
+        {
+            dynamic np = this;
+            return NumSharp.Extensions.NDArrayExtensions.AsMatrix(np);
+        }
         public NDArray<T> Convolve(NDArray<T> np2, string mode = "full")
         {
             dynamic npDyn = this;
@@ -75,25 +80,23 @@ namespace NumSharp
             
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
         }
+        public NDArray<T> Onces(params int[] shape)
+        {
+            return NumSharp.Extensions.NDArrayExtensions.Onces(this, shape);
+        }
         public NDArray<T> ReShape(params int[] shape)
         {
             return NumSharp.Extensions.NDArrayExtensions.ReShape(this, shape);
+        }
+        public NDArray<double> VStack(params NDArray<double>[] nps)
+        {
+            return NumSharp.Extensions.NDArrayExtensions.VStack(nps);
         }
         public NDArray<T> Zeros(params int[] select)
         {
             dynamic np1Dyn = this;
 
-            return NumSharp.Extensions.NDArrayExtensions.Zeros(np1Dyn,select);
-        }
-
-        public Matrix<double> AsMatrix()
-        {
-            dynamic np = this;
-            return NumSharp.Extensions.NDArrayExtensions.AsMatrix(np);
-        }
-        public NDArray<T> Onces(params int[] shape)
-        {
-            return NumSharp.Extensions.NDArrayExtensions.Onces(this,shape);
+            return NumSharp.Extensions.NDArrayExtensions.Zeros(np1Dyn, select);
         }
     }
 }
