@@ -18,7 +18,7 @@ namespace NumSharp.Extensions
             }
             else 
             {
-                np.Zeros(np.Shape.Shapes);
+                np.Zeros(np.Shape.Shapes.ToArray());
             }
             
             np.Data = new int[np.Size];
@@ -40,7 +40,7 @@ namespace NumSharp.Extensions
             }
             else 
             {
-                np.Zeros(np.Shape.Shapes);
+                np.Zeros(np.Shape.Shapes.ToArray());
             }
             
             np.Data = new double[np.Size];

@@ -4,17 +4,17 @@ using System.Text;
 
 namespace NumSharp
 {
-    public class Shape
+    public partial class Shape
     {
-        private readonly int[] shape;
-        private readonly int[] dimOffset;
+        private readonly IReadOnlyList<int> shape;
+        private readonly IReadOnlyList<int> dimOffset;
 
         public int Size
         {
             get
             {
                 int idx = 1;
-                for (int i = 0; i < shape.Length; i++)
+                for (int i = 0; i < shape.Count; i++)
                 {
                     idx *= shape[i];
                 }
@@ -27,16 +27,32 @@ namespace NumSharp
             if (shape.Length == 0)
                 throw new Exception("Shape cannot be empty.");
             this.shape = shape;
-            dimOffset = new int[shape.Length];
-            dimOffset[dimOffset.Length - 1] = 1;
+            int[] temp = new int[shape.Length];
+            temp[shape.Length - 1] = 1;
             for (int i = shape.Length - 1; i >= 1; i--)
             {
-                dimOffset[i - 1] = dimOffset[i] * shape[i];
+                temp[i - 1] = temp[i] * shape[i];
             }
+            dimOffset = temp;
         }
-        public int Length => shape.Length;
-        public int[] DimOffset => dimOffset;
-        public int[] Shapes => shape;
+
+        public Shape(IReadOnlyList<int> shape)
+        {
+            if (shape.Count == 0)
+                throw new Exception("Shape cannot be empty.");
+            this.shape = shape;
+            int[] temp = new int[shape.Count];
+            temp[shape.Count - 1] = 1;
+            for (int i = shape.Count - 1; i >= 1; i--)
+            {
+                temp[i - 1] = temp[i] * shape[i];
+            }
+            dimOffset = temp;
+        }
+
+        public int Length => shape.Count;
+        public IReadOnlyList<int> DimOffset => dimOffset;
+        public IReadOnlyList<int> Shapes => shape;
 
         public int UniShape => shape[0];
 

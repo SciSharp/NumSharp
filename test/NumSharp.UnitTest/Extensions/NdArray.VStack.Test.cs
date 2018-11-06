@@ -23,6 +23,7 @@ namespace NumSharp.UnitTest.Extensions
 
             var n = np.vstack(n1, n2);
 
+            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
             Assert.IsTrue(n[0, 0] == 1);
             Assert.IsTrue(n[1, 0] == 2);
             Assert.IsTrue(n[1, 2] == 4);
@@ -33,6 +34,7 @@ namespace NumSharp.UnitTest.Extensions
 
             n = np.vstack(n1, n2);
 
+            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
             Assert.IsTrue(n[0, 0] == 1);
             Assert.IsTrue(n[1, 0] == 2);
             Assert.IsTrue(n[2, 0] == 3);

@@ -102,20 +102,20 @@ namespace NumSharp
                 // Since n.Shape is a IList it cannot be converted to Span<T>
                 // This is a lot of hoops to jump throught to get it into a span
                 // shape.Skip(select.Length).ToList() may be more efficient - not sure
-                n.Shape = new Shape(Shape.Shapes.AsSpan().Slice(select.Length).ToArray());
+                n.Shape = new Shape(Shape.Shapes.ToArray().AsSpan().Slice(select.Length).ToArray());
                 return n;
             }
         }
 
         public void Vector(Shape shape, T value)
         {
-            if (shape.Shapes.Length == NDim)
+            if (shape.Length == NDim)
             {
                 throw new Exception("Please use NDArray[m, n] to access element.");
             }
             else
             {
-                int start = GetIndexInShape(shape.Shapes);
+                int start = GetIndexInShape(shape.Shapes.ToArray());
                 int length = Shape.DimOffset[shape.Length - 1];
 
                 Span<T> data = Data;
@@ -160,7 +160,7 @@ namespace NumSharp
 
                 var n = new NDArray<T>();
                 n.Data = Data.Where(x => select.Data.Contains(i++)).ToArray();
-                n.Shape = new Shape(Shape.Shapes);
+                n.Shape = new Shape(Shape.Shapes.ToArray());
                 //n.Shape = shape;
                 //n.Shape[0] = select.shape[0];
 

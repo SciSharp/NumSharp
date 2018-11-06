@@ -73,6 +73,12 @@ namespace NumSharp
             return n;
         }
 
+        public NDArray<double> hstack(params NDArray<double>[] nps)
+        {
+            var n = new NDArray<double>();
+            return n.HStack(nps);
+        }
+
         public NDArrayRandom random 
         {
             get

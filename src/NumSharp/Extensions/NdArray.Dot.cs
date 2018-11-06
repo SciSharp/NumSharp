@@ -37,8 +37,8 @@ namespace NumSharp.Extensions
                 }
                 case 3 : 
                 {
-                    int[] dim0 = np1.Shape.Shapes;
-                    int[] dim1 = np2.Shape.Shapes;
+                    int[] dim0 = np1.Shape.Shapes.ToArray();
+                    int[] dim1 = np2.Shape.Shapes.ToArray();
                     int iterator = np1.Shape.Shapes[1];
 
                     prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
@@ -54,8 +54,8 @@ namespace NumSharp.Extensions
                 }
                 case 4 : 
                 {
-                    int[] dim0 = np1.Shape.Shapes;
-                    int[] dim1 = np2.Shape.Shapes;
+                    int[] dim0 = np1.Shape.Shapes.ToArray();
+                    int[] dim1 = np2.Shape.Shapes.ToArray();
                     int iterator = np1.Shape.Shapes[1];
 
                     prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
