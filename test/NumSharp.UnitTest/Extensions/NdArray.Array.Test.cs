@@ -38,16 +38,25 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ArrayImage()
         {
-            var pwd = System.IO.Path.GetFullPath("../../..");
+            var relativePath = string.Empty;
+#if NETFRAMEWORK
+            relativePath = "../../../..";
+#else
+            relativePath = "../../..";
+#endif
+            var pwd = System.IO.Path.GetFullPath(relativePath);
 
-            var imagePath = System.IO.Path.Combine(pwd,"./data/image.jpg");            
+            var imagePath = System.IO.Path.Combine(pwd,"data/image.jpg");
 
-            var image = new System.Drawing.Bitmap(imagePath);
-            var imageNDArray = new NDArray<byte>().Array(image);
-            
-            Assert.IsTrue(imageNDArray[0,0,0] == 255);
-            Assert.IsTrue(imageNDArray[0,0,1] == 253);
-            Assert.IsTrue(imageNDArray[0,0,2] == 252);
+            if (System.IO.File.Exists(imagePath))
+            {
+                var image = new System.Drawing.Bitmap(imagePath);
+                var imageNDArray = new NDArray<byte>().Array(image);
+
+                Assert.IsTrue(imageNDArray[0, 0, 0] == 255);
+                Assert.IsTrue(imageNDArray[0, 0, 1] == 253);
+                Assert.IsTrue(imageNDArray[0, 0, 2] == 252);
+            }
         }
     }
 }
