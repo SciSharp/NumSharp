@@ -11,12 +11,12 @@ namespace NumSharp.Extensions
         {
             if(np.NDim == 2)
             {
-                var min = new NDArray<double>().Zeros(np.Shape[1]);
+                var min = new NDArray<double>().Zeros(np.Shape.Shapes[1]);
 
-                for (int col = 0; col < np.Shape[1]; col++)
+                for (int col = 0; col < np.Shape.Shapes[1]; col++)
                 {
                     min[col] = np[0, col];
-                    for (int row = 0; row < np.Shape[0]; row++)
+                    for (int row = 0; row < np.Shape.Shapes[0]; row++)
                     {
                         if(np[row, col] < min[col])
                         {

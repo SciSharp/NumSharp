@@ -18,7 +18,7 @@ namespace NumSharp.Extensions
             }
 
             np.Data= new T[numOFElements];
-            np.Shape = shape.ToList();
+            np.Shape = new Shape(shape);
 
             dynamic onceArray = np.Data;
 

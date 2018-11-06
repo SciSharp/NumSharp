@@ -15,11 +15,11 @@ namespace NumSharp.Extensions
 
             double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
 
-            NDArray<double> npInv = new NDArray<double>().Zeros(np.Shape[0],np.Shape[1]);
-            
-            for (int idx = 0; idx < npInv.Shape[0];idx++)
-                for (int jdx = 0; jdx < npInv.Shape[1];jdx++)
-                    npInv[idx,jdx] = matrixInv[idx][jdx];
+            NDArray<double> npInv = new NDArray<double>().Zeros(np.Shape.Shapes[0], np.Shape.Shapes[1]);
+
+            for (int idx = 0; idx < npInv.Shape.Shapes[0]; idx++)
+                for (int jdx = 0; jdx < npInv.Shape.Shapes[1]; jdx++)
+                    npInv[idx, jdx] = matrixInv[idx][jdx];
 
             return npInv;
         }

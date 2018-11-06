@@ -18,7 +18,7 @@ namespace NumSharp.Extensions
             }
 
             var np = new NDArray<int>();
-            np.Shape = size.Shapes;
+            np.Shape = new Shape(size.Shapes);
             np.Data = data;
 
             return np;

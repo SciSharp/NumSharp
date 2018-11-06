@@ -19,6 +19,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DotTwo1DDouble()
         {
+            
             var series1 = new NDArray<double>().ARange(4,1,1) ;
             
             var series2 = new NDArray<double>();
@@ -77,11 +78,11 @@ namespace NumSharp.UnitTest.Extensions
         {   
             NDArray<Complex> matrix1 = new NDArray<Complex>();
             matrix1.Data = new Complex[] {new Complex(1,-1),new Complex(2,-2), new Complex(3,0),new Complex(4,0), 5, 6}; 
-            matrix1.Shape = new int[] {3, 2};
+            matrix1.Shape = new Shape(new int[] { 3, 2 });
 
             NDArray<Complex> matrix2 = new NDArray<Complex>();
             matrix2.Data = new Complex[] {7,8,9,new Complex(10,-10),11, new Complex(12,-12)};
-            matrix2.Shape = new int[] {2,3};
+            matrix2.Shape = new Shape(new int[] { 2, 3 });
 
             var matrix3 = matrix1.Dot(matrix2);
 

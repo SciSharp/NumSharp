@@ -38,40 +38,15 @@ namespace NumSharp
         /// </summary>
         public T[] Data { get; set; }
 
-        private IList<int> shape;
-
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public IList<int> Shape
-        {
-            get
-            {
-                return shape;
-            }
-
-            set
-            {
-                shape = value;
-                dimOffset = new List<int> { 1 };
-
-                for (int s = Shape.Count-1; s >= 1; s--)
-                {
-                    dimOffset.Add(dimOffset[Shape.Count - 1 - s] * shape[s]);
-                }
-                dimOffset = dimOffset.Reverse().ToList();
-            }
-        }
-
-        /// <summary>
-        /// Speed up index accessor
-        /// </summary>
-        private IList<int> dimOffset { get; set; }
+        public Shape Shape { get; set; }
 
         /// <summary>
         /// Dimension count
         /// </summary>
-        public int NDim { get { return Shape.Count; } }
+        public int NDim { get { return Shape.Length; } }
 
         /// <summary>
         /// Total of elements
@@ -86,7 +61,7 @@ namespace NumSharp
         public NDArray()
         {
             // set default shape as 1 dim and 0 elements.
-            Shape = new List<int>() { 0 };
+            Shape = new Shape(new int[] { 0 });
             Data = new T[] { };
             Random = new NDArrayRandom();
         }
@@ -118,7 +93,7 @@ namespace NumSharp
             else
             {
                 int start = GetIndexInShape(select);
-                int length = dimOffset[select.Length - 1];
+                int length = Shape.DimOffset[select.Length - 1];
 
                 var n = new NDArray<T>();
                 //n.Shape = shape.Skip(select.Length).ToList();
@@ -127,7 +102,7 @@ namespace NumSharp
                 // Since n.Shape is a IList it cannot be converted to Span<T>
                 // This is a lot of hoops to jump throught to get it into a span
                 // shape.Skip(select.Length).ToList() may be more efficient - not sure
-                n.Shape = shape.ToArray().AsSpan().Slice(select.Length).ToArray();
+                n.Shape = new Shape(Shape.Shapes.AsSpan().Slice(select.Length).ToArray());
                 return n;
             }
         }
@@ -141,7 +116,7 @@ namespace NumSharp
             else
             {
                 int start = GetIndexInShape(shape.Shapes);
-                int length = dimOffset[shape.Length - 1];
+                int length = Shape.DimOffset[shape.Length - 1];
 
                 Span<T> data = Data;
                 var elements = data.Slice(start, length);
@@ -166,7 +141,7 @@ namespace NumSharp
 
                 var n = new NDArray<T>();
                 n.Data = Data.Where(x => select.Contains(i++)).ToArray();
-                n.Shape[0] = n.Data.Length;
+                n.Shape = new Shape(new int[] { n.Data.Length });
 
                 return n;
             }
@@ -185,8 +160,9 @@ namespace NumSharp
 
                 var n = new NDArray<T>();
                 n.Data = Data.Where(x => select.Data.Contains(i++)).ToArray();
-                n.Shape = shape;
-                n.Shape[0] = select.shape[0];
+                n.Shape = new Shape(Shape.Shapes);
+                //n.Shape = shape;
+                //n.Shape[0] = select.shape[0];
 
                 return n;
             }
@@ -197,7 +173,7 @@ namespace NumSharp
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
             {
-                idx += dimOffset[i] * select[i];
+                idx += Shape.DimOffset[i] * select[i];
             }
 
             return idx;
@@ -258,9 +234,9 @@ namespace NumSharp
             dynamic dotNetArray = null;
             switch (this.NDim)
             {
-                case 1 : dotNetArray = new T[this.Shape[0]].ToArray();break;
-                case 2 : dotNetArray = new T[this.Shape[0]][].Select(x => new T[this.Shape[1]].ToArray()).ToArray();break;
-                case 3 : dotNetArray = new T[this.Shape[0]][][].Select(x => new T[this.Shape[1]][].Select(y => new T[this.Shape[2]].ToArray().ToArray()).ToArray()).ToArray();break;
+                case 1 : dotNetArray = new T[this.Shape.Shapes[0]].ToArray();break;
+                case 2 : dotNetArray = new T[this.Shape.Shapes[0]][].Select(x => new T[this.Shape.Shapes[1]].ToArray()).ToArray();break;
+                case 3 : dotNetArray = new T[this.Shape.Shapes[0]][][].Select(x => new T[this.Shape.Shapes[1]][].Select(y => new T[this.Shape.Shapes[2]].ToArray().ToArray()).ToArray()).ToArray();break;
             }
 
             switch (this.NDim)
@@ -272,9 +248,9 @@ namespace NumSharp
                 }
                 case 2 : 
                 {
-                    for(int idx = 0; idx < this.Shape[0];idx++)
+                    for(int idx = 0; idx < this.Shape.Shapes[0];idx++)
                     {
-                        for(int jdx = 0; jdx < this.Shape[1];jdx++)
+                        for(int jdx = 0; jdx < this.Shape.Shapes[1];jdx++)
                         {
                             dotNetArray[idx][jdx] = this[idx,jdx];
                         }
@@ -283,11 +259,11 @@ namespace NumSharp
                 }
                 case 3 : 
                 {
-                    for(int idx = 0; idx < this.Shape[0];idx++)
+                    for(int idx = 0; idx < this.Shape.Shapes[0];idx++)
                     {
-                        for(int jdx = 0; jdx < this.Shape[1];jdx++)
+                        for(int jdx = 0; jdx < this.Shape.Shapes[1];jdx++)
                         {
-                            for(int kdx = 0; kdx < this.Shape[2];kdx++)
+                            for(int kdx = 0; kdx < this.Shape.Shapes[2];kdx++)
                             {
                                 dotNetArray[idx][jdx][kdx] = this[idx,jdx,kdx];
                             }
@@ -325,7 +301,7 @@ namespace NumSharp
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                if( ((idx+1) % Shape[1] ) == 0 )
+                if( ((idx+1) % Shape.Shapes[1] ) == 0 )
                 {
                     returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + "],   \n       [");    
                 }

@@ -6,7 +6,8 @@ namespace NumSharp
 {
     public class Shape
     {
-        private int[] shape { get; set; }
+        private readonly int[] shape;
+        private readonly int[] dimOffset;
 
         public int Size
         {
@@ -23,17 +24,24 @@ namespace NumSharp
 
         public Shape(params int[] shape)
         {
+            if (shape.Length == 0)
+                throw new Exception("Shape cannot be empty.");
             this.shape = shape;
+            dimOffset = new int[shape.Length];
+            dimOffset[dimOffset.Length - 1] = 1;
+            for (int i = shape.Length - 1; i >= 1; i--)
+            {
+                dimOffset[i - 1] = dimOffset[i] * shape[i];
+            }
         }
+        public int Length => shape.Length;
+        public int[] DimOffset => dimOffset;
+        public int[] Shapes => shape;
 
-        public int Length { get { return shape.Length; } }
+        public int UniShape => shape[0];
 
-        public int[] Shapes { get { return shape; } }
+        public (int, int) BiShape => (shape[0], shape[1]);
 
-        public int UniShape { get { return shape[0]; } }
-
-        public (int, int) BiShape { get { return (shape[0], shape[1]); } }
-
-        public (int, int, int) TriShape { get { return (shape[0], shape[1], shape[2]); } }
+        public (int, int, int) TriShape => (shape[0], shape[1], shape[2]);
     }
 }

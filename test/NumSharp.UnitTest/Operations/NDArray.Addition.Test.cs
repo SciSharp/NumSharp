@@ -29,11 +29,11 @@ namespace NumSharp.UnitTest
             var data2 = new Complex[]{new Complex(5,6),new Complex(7,8)};
             
             var np1 = new NDArray<Complex>();
-            np1.Shape = new int[]{2};
+            np1.Shape = new Shape(new int[] { 2 });
             np1.Data = data1;
 
             var np2 = new NDArray<Complex>();
-            np2.Shape = new int[]{2};
+            np2.Shape = new Shape(new int[] { 2 });
             np2.Data = data2;
 
             var np3 = np1 + np2;
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<Complex>(); 
             np1.Data = new Complex[]{new Complex(1,2),new Complex(3,4)};
-            np1.Shape = new int[] {2};
+            np1.Shape = new Shape(new int[] { 2 });
 
             var np2 = np1 + new Complex(1,2);    
 
@@ -66,11 +66,11 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<Complex>();
             np1.Data = new Complex[]{new Complex(4,1),new Complex(3,5),new Complex(0,-2),new Complex(-3,2)};
-            np1.Shape = new int[] {2,2};
+            np1.Shape = new Shape(new int[] { 2, 2 });
             
             var np2 = new NDArray<Complex>(); 
             np2.Data = new Complex[]{new Complex(1,2), new Complex(3,4), new Complex(1,2), new Complex(3,4)} ;
-            np2.Shape = new int[] {2,2};
+            np2.Shape = new Shape(new int[] { 2, 2 });
 
             var np3 = np1 + np2;
 
@@ -84,11 +84,11 @@ namespace NumSharp.UnitTest
         {
             var np1 = new NDArray<double>(); 
             np1.Data =  new double[]{1,2,3,4,5,6} ;
-            np1.Shape = new int[] { 2,3};
+            np1.Shape = new Shape(new int[] { 2, 3 });
 
             var np2 = new NDArray<double>(); 
             np2.Data = new double[]{9,8,7,6,5,4} ;
-            np2.Shape = new int[] {2,3};
+            np2.Shape = new Shape(new int[] { 2, 3 });
 
             var np3 = np1 + np2;
 

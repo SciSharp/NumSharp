@@ -18,14 +18,14 @@ namespace NumSharp.Extensions
             }
             else 
             {
-                np.Zeros(np.Shape.ToArray());
+                np.Zeros(np.Shape.Shapes);
             }
             
             np.Data = new int[np.Size];
 
             for(int idx = 0; idx < noOfDiagElement;idx++ )
              {
-                 np.Data[diagonalIndex + idx + idx * np.Shape[1]] = 1;
+                 np.Data[diagonalIndex + idx + idx * np.Shape.Shapes[1]] = 1;
              }
             
             return np;
@@ -40,7 +40,7 @@ namespace NumSharp.Extensions
             }
             else 
             {
-                np.Zeros(np.Shape.ToArray());
+                np.Zeros(np.Shape.Shapes);
             }
             
             np.Data = new double[np.Size];
@@ -49,14 +49,14 @@ namespace NumSharp.Extensions
             {
                 for(int idx = 0; idx < noOfDiagElement;idx++ )
                 {
-                     np.Data[diagonalIndex + idx + idx * np.Shape[1]] = 1;
+                     np.Data[diagonalIndex + idx + idx * np.Shape.Shapes[1]] = 1;
                 }
             }
             else
             {
                 for(int idx = 0; idx < noOfDiagElement;idx++ )
                 {
-                     np.Data[(-1)*diagonalIndex * dim + idx + idx * np.Shape[1]] = 1;
+                     np.Data[(-1)*diagonalIndex * dim + idx + idx * np.Shape.Shapes[1]] = 1;
                 }
             }
 

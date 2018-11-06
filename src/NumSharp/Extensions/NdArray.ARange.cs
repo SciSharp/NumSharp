@@ -16,7 +16,7 @@ namespace NumSharp.Extensions
                                 .Where(x => index++ % step == 0)
                                 .ToArray();
 
-            np.Shape = new List<int>() { stop };
+            np.Shape = new Shape(new int[] { stop });
 
             return np;
         }
@@ -29,6 +29,7 @@ namespace NumSharp.Extensions
                                 .Where(x => index++ % step == 0)
                                 .Select(x => (double)x)
                                 .ToArray();
+            np.Shape = new Shape(new int[] { stop });
             return np;
         }
     }

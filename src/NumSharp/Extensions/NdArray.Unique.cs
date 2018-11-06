@@ -11,7 +11,7 @@ namespace NumSharp.Extensions
         {
             var np2 = new NDArray<T>();
             np2.Data = np.Data.Distinct().ToArray();
-            np2.Shape[0] = np2.Data.Length;
+            np2.Shape = new Shape(new int[] { np2.Data.Length });
 
             return np2;
         }

@@ -15,7 +15,7 @@ namespace NumSharp.Extensions
             int dim0 = np.Length;
             int dim1 = np.Data[0].Length;
 
-            npAsMatrix.Shape = new List<int>(){ dim0,dim1 }.ToList();
+            npAsMatrix.Shape = new Shape(new int[] { dim0, dim1 });
             npAsMatrix.Data = new double[dim0 * dim1];
 
             for (int idx = 0; idx < dim0;idx++)

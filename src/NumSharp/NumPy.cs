@@ -46,7 +46,7 @@ namespace NumSharp
         {
             var n = new NDArray<T>();
             n.Data = data;
-            n.Shape[0] = data.Length;
+            n.Shape = new Shape(new int[] { data.Length });
 
             return n;
         }
@@ -68,7 +68,7 @@ namespace NumSharp
 
             var n = new NDArray<T>();
             n.Data = all;
-            n.Shape = new List<int> { data.Length, data[0].Length };
+            n.Shape = new Shape(new int[] { data.Length, data[0].Length });
 
             return n;
         }
@@ -83,7 +83,7 @@ namespace NumSharp
 
         public NDArray<int> reshape(NDArray<int> np, params int[] shape)
         {
-            np.Shape = shape;
+            np.Shape = new Shape(shape);
 
             return np;
         }

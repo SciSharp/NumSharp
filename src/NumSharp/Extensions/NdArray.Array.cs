@@ -12,7 +12,7 @@ namespace NumSharp
         public static NDArray<TData> Array<TData>(this NDArray<TData> np, IEnumerable<TData> array, int ndim = 1)
         {
             np.Data = array.Select(x => x).ToArray();
-            np.Shape[0] = np.Data.Length;
+            np.Shape = new Shape(new int[] { np.Data.Length });
 
             return np;
         }
@@ -28,7 +28,7 @@ namespace NumSharp
             System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, imageArray.Data, 0, imageArray.Data.Length);
             image.UnlockBits(bmpd);
 
-            imageArray.Shape = new int[] { bmpd.Height, bmpd.Width, 3 };
+            imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, 3 });
     
             return imageArray;  
         }
@@ -43,7 +43,7 @@ namespace NumSharp
         public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
         {
             np.Data = array;
-            np.Shape[0] = np.Data.Length;
+            np.Shape = new Shape(new int[] { np.Data.Length });
 
             return np;
         }

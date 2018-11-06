@@ -56,37 +56,37 @@ namespace NumSharp.UnitTest.Extensions
             var np = new NDArray<int>();
             np.ARange(12);
             np.ReShape(-1, 2);
-            Assert.IsTrue(np.Shape[0] == 6);
-            Assert.IsTrue(np.Shape[1] == 2);
+            Assert.IsTrue(np.Shape.Shapes[0] == 6);
+            Assert.IsTrue(np.Shape.Shapes[1] == 2);
 
             np.ARange(12);
             np.ReShape(2, -1);
-            Assert.IsTrue(np.Shape[0] == 2);
-            Assert.IsTrue(np.Shape[1] == 6);
+            Assert.IsTrue(np.Shape.Shapes[0] == 2);
+            Assert.IsTrue(np.Shape.Shapes[1] == 6);
 
             np.ARange(12);
             np.ReShape(1, 3, 4);
             np.ReShape(-1, 3);
-            Assert.IsTrue(np.Shape[0] == 4);
-            Assert.IsTrue(np.Shape[1] == 3);
+            Assert.IsTrue(np.Shape.Shapes[0] == 4);
+            Assert.IsTrue(np.Shape.Shapes[1] == 3);
 
             np.ARange(12);
             np.ReShape(1, 3, 4);
             np.ReShape(3, -1);
-            Assert.IsTrue(np.Shape[0] == 3);
-            Assert.IsTrue(np.Shape[1] == 4);
+            Assert.IsTrue(np.Shape.Shapes[0] == 3);
+            Assert.IsTrue(np.Shape.Shapes[1] == 4);
 
             np.ARange(100 * 100 * 3);
             np.ReShape(100, 100, 3);
             np.ReShape(-1, 3);
-            Assert.IsTrue(np.Shape[0] == 10000);
-            Assert.IsTrue(np.Shape[1] == 3);
+            Assert.IsTrue(np.Shape.Shapes[0] == 10000);
+            Assert.IsTrue(np.Shape.Shapes[1] == 3);
 
             np.ARange(15801033);
             np.ReShape(2531, 2081, 3);
             np.ReShape(-1, 3);
-            Assert.IsTrue(np.Shape[0] == 5267011);
-            Assert.IsTrue(np.Shape[1] == 3);
+            Assert.IsTrue(np.Shape.Shapes[0] == 5267011);
+            Assert.IsTrue(np.Shape.Shapes[1] == 3);
         }
     }
 }

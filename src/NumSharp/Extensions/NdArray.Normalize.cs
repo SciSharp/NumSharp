@@ -14,10 +14,10 @@ namespace NumSharp.Extensions
 
             if (np.NDim == 2)
             {
-                for (int col = 0; col < np.Shape[1]; col++)
+                for (int col = 0; col < np.Shape.Shapes[1]; col++)
                 {
                     double der = max[col] - min[col];
-                    for (int row = 0; row < np.Shape[0]; row++)
+                    for (int row = 0; row < np.Shape.Shapes[0]; row++)
                     {
                         np[row, col] = (np[row, col] - min[col]) / der;
                     }

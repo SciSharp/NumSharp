@@ -18,13 +18,13 @@ namespace NumSharp.Extensions
 
             var dataType = typeof(TData);
 
-            int dimensionSum = np1.Shape.Count + np2.Shape.Count;
+            int dimensionSum = np1.Shape.Length + np2.Shape.Length;
 
             switch (dimensionSum)
             {
                 case 2 : 
                 {
-                    prod.Shape = new int[] {1};
+                    prod.Shape = new Shape(new int[] {1});
 
                     switch (dataType.Name)
                     {
@@ -37,11 +37,11 @@ namespace NumSharp.Extensions
                 }
                 case 3 : 
                 {
-                    int[] dim0 = np1.Shape.ToArray();
-                    int[] dim1 = np2.Shape.ToArray();
-                    int iterator = np1.Shape[1];
+                    int[] dim0 = np1.Shape.Shapes;
+                    int[] dim1 = np2.Shape.Shapes;
+                    int iterator = np1.Shape.Shapes[1];
 
-                    prod.Shape = new int[] {dim0[0],dim1[1]};
+                    prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
                     
                     switch (dataType.Name)
                     {
@@ -54,11 +54,11 @@ namespace NumSharp.Extensions
                 }
                 case 4 : 
                 {
-                    int[] dim0 = np1.Shape.ToArray();
-                    int[] dim1 = np2.Shape.ToArray();
-                    int iterator = np1.Shape[1];
+                    int[] dim0 = np1.Shape.Shapes;
+                    int[] dim1 = np2.Shape.Shapes;
+                    int iterator = np1.Shape.Shapes[1];
 
-                    prod.Shape = new int[] {dim0[0],dim1[1]};
+                    prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
                     
                     switch (dataType.Name)
                     {

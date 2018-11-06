@@ -30,7 +30,7 @@ namespace NumSharp
             int dim1 = splitted[0].Length;
 
             this.Data = new TData[dim0 * dim1];
-            this.Shape = (new int[] {dim0,dim1}).ToList();
+            this.Shape = new Shape(new int[] { dim0, dim1 });
 
             var dataType = typeof(TData);
 
@@ -62,8 +62,8 @@ namespace NumSharp
         {
             string returnValue = "matrix([[";
 
-            int dim0 = Shape[0];
-            int dim1 = Shape[1];
+            int dim0 = Shape.Shapes[0];
+            int dim1 = Shape.Shapes[1];
 
             for (int idx = 0; idx < (dim0-1);idx++)
             {

@@ -10,7 +10,7 @@ namespace NumSharp.Extensions
     {
         public static NDArray<int> reshape(this NDArray<int> np, params int[] shape)
         {
-            np.Shape = shape;
+            np.Shape = new Shape(shape);
 
             return np;
         }
@@ -25,9 +25,9 @@ namespace NumSharp.Extensions
             var count = shape.Length;
             var idx = FindNegativeIndex(shape);
             if (idx == -1)
-                np.Shape = shape;
+                np.Shape = new Shape(shape);
             else
-                np.Shape = CalculateNegativeShape(idx, np.Shape, shape);
+                np.Shape = new Shape(CalculateNegativeShape(idx, np.Shape.Shapes.ToList(), shape));
 
             //np.Shape = newShape;
 
@@ -54,7 +54,7 @@ namespace NumSharp.Extensions
             return indexOfNegOne;
         }
 
-        private static IList<int> CalculateNegativeShape(int negativeIndex, IList<int> currentShape, params int[] shapeParams)
+        private static int[] CalculateNegativeShape(int negativeIndex, IList<int> currentShape, params int[] shapeParams)
         {
             var currentShapeCount = currentShape.Count;
             var shapeParamCount = shapeParams.Length;
@@ -97,9 +97,9 @@ namespace NumSharp.Extensions
                 }
             }
             else
-                return currentShape;
+                return currentShape.ToArray();
 
-            return newShape;
+            return newShape.ToArray();
         }
     }
 }

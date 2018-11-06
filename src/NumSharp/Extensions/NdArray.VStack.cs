@@ -19,25 +19,26 @@ namespace NumSharp.Extensions
                 throw new Exception("Input arrays can not be empty");
             List<double> list = new List<double>();
             NDArray<double> np = nps[0];
-            for (int i = 0; i < np.Shape.Count; i++)
+            for (int i = 0; i < np.Shape.Length; i++)
             {
                 foreach (NDArray<double> ele in nps)
                 {
-                    if (np.Shape[i] != ele.Shape[i])
+                    if (np.Shape.Shapes[i] != ele.Shape.Shapes[i])
                         throw new Exception("Arrays mush have same shapes");
                     list.AddRange(ele.Data);
                 }
             }
             np.Data = list.ToArray();
-            if (np.Shape.Count == 1)
+            if (np.Shape.Length == 1)
             {
-                np.Shape.Insert(0, nps.Length);
+                np.Shape = new Shape(new int[] { nps.Length, np.Shape.Shapes[0] });
             }
             else
             {
-                np.Shape[0] = np.Shape[0] * nps.Length;
+                int[] shapes = np.Shape.Shapes;
+                shapes[0] *= nps.Length;
+                np.Shape = new Shape(shapes);
             }
-            np.Shape = np.Shape;
             return np;
         }
     }
