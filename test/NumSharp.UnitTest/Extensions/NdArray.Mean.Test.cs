@@ -11,21 +11,26 @@ namespace NumSharp.UnitTest.Extensions
     public class NdArrayMeanTest
     {
         [TestMethod]
-        public void Mean()
+        public void MeanAxis0()
         {
-            var series1 = new NDArray_Legacy<double>();
-            series1.Data = new double[] { 1, 2 };
+            var np = new NDArray<double>().ARange(5,1).ReShape(2,2);
 
-            var series2 = new NDArray_Legacy<double>();
-            series2.Data = new double[] { 3, 4 };
-
-            var np = new NDArray_Legacy<NDArray_Legacy<double>>();
-            np.Data.Add(series1);
-            np.Data.Add(series2);
-
-            //Assert.IsTrue(Enumerable.SequenceEqual(np.Mean().Data, new double[] { 2.5 }));
             Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(0).Data, new double[] { 2, 3 }));
+        }
+        [TestMethod]
+        public void MeanAxis1()
+        {
+            var np = new NDArray<double>().ARange(5,1).ReShape(2,2);
+            
             Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(1).Data, new double[] { 1.5, 3.5 }));
+        }
+        [TestMethod]
+        public void MeanAxisMinus1()
+        {
+            var np = new NDArray<double>().ARange(5,1).ReShape(2,2);
+
+            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean().Data, new double[] { 2.5 }));
+            
         }
     }
 }

@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()
         {
-            /*var np = new NDArray<NDArray<double>>().Array(new double[,]{{1,2,3},{4,5,6},{7,8,9}});
+            var np = new NDArray<double>().ARange(9).ReShape(3,3);
 
             var npAsMatrix = np.AsMatrix();
 
@@ -21,9 +21,9 @@ namespace NumSharp.UnitTest.Extensions
             {
                 for(int jdx = 0; jdx < 3; jdx++)
                 {
-                    Assert.AreEqual(np[idx][jdx],npAsMatrix.Data[idx,jdx]);
+                    Assert.AreEqual(np[idx,jdx],npAsMatrix[idx,jdx]);
                 }
-            }*/
+            }
         }
     }
 }

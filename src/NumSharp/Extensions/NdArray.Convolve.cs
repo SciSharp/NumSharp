@@ -85,6 +85,7 @@ namespace NumSharp.Extensions
                         var puffer = (new double[npad]).ToList();
                         puffer.AddRange(numSharpArray1.Data);
                         numSharpArray1.Data = puffer.ToArray(); 
+                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length);
                     }
                     else 
                     {
@@ -93,10 +94,12 @@ namespace NumSharp.Extensions
                         var puffer = ((double[]) numSharpArray1.Data).ToList(); 
                         puffer.AddRange(new double[npad]);
                         numSharpArray1.Data = puffer.ToArray();
+                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length);
                     
                         puffer = (new double[npad]).ToList();
                         puffer.AddRange(numSharpArray1.Data);
-                        numSharpArray1.Data = puffer.ToArray(); 
+                        numSharpArray1.Data = puffer.ToArray();
+                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length); 
                     }
 
                     numSharpReturn = numSharpArray1.Convolve(numSharpArray2,"valid");
