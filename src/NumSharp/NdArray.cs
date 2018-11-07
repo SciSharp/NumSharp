@@ -29,7 +29,7 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public partial class NDArray<T>
+    public partial class NDArray<T> 
     {
         private T[] data;
 
@@ -189,15 +189,7 @@ namespace NumSharp
             }
             else
             {
-                output = "array([";
-
-                // loop
-                for (int r = 0; r < Data.Length; r++)
-                {
-                    output += (r == 0) ? Data[r] + "" : ", " + Data[r];
-                }
-
-                output += "])";
+                output = this._ToVectorString();
             }
 
             return output;
@@ -275,6 +267,42 @@ namespace NumSharp
             TCast castedDotNetArray = (TCast)dotNetArray;
             return castedDotNetArray;
         }
+        protected string _ToVectorString()
+        {
+            string returnValue = "array([";
+
+            int digitBefore = 0;
+            int digitAfter = 0;
+
+            var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+
+            string elementFormatStart = "{0:";
+            
+            string elementFormatEnd = "";
+            for(int idx = 0; idx < digitAfter;idx++)
+                elementFormatEnd += "0";
+
+            elementFormatEnd += "}";
+            
+            int missingDigits;
+            string elementFormat;
+
+            for (int idx = 0; idx < (Data.Length-1);idx++)
+            {   
+                missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
+                
+                elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
+
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + ", ");
+            }
+            missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
+                
+            elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
+
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data.Last()) + "])");
+
+            return returnValue;
+        }
         protected string _ToMatrixString()
         {
             string returnValue = "array([[";
@@ -282,7 +310,7 @@ namespace NumSharp
             int digitBefore = 0;
             int digitAfter = 0;
 
-           var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             

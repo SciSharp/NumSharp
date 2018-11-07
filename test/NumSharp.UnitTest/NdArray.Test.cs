@@ -70,6 +70,20 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(stringOfNp.Contains("([[ 0,"));
         }
         [TestMethod]
+        public void CheckVectorString()
+        {
+            var np = new NDArray<double>().ARange(9);
+
+            var random = new Random();
+            np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
+            np.Data[1] = 1;
+            np.Data[2] -= 4;
+            np.Data[3] -= 20;
+            np.Data[8] += 23;
+
+            var stringOfNp = np.ToString();
+        }
+        [TestMethod]
         public void DimOrder()
         {
             NDArray<double> np1 = new NDArray<double>().Zeros(2,2);
