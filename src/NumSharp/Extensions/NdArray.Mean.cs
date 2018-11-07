@@ -7,44 +7,51 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<double> Mean(this NDArray_Legacy<NDArray_Legacy<double>> np, int axis = -1)
+        public static NDArray<double> Mean(this NDArray<double> np, int axis = -1)
         {
-            var mean = new NDArray_Legacy<double>();
+            var mean = new NDArray<double>();
 
             // axis == -1: DEFAULT; to compute the mean of the flattened array.
             if (axis == -1)
             {
-                var sum = np.Data.Select(d => d.Data.Sum()).Sum();
+                var sum = np.Data.Sum();
 
-                mean.Data.Add(sum / np.Size);
+                mean.Data = new double[] { sum / np.Size};
             }
             // to compute mean by compressing row and row
             else if (axis == 0)
             {
-                double[] sumVec = new double[np.Data[0].Length];
-                for (int d = 0; d < np.Length; d++)
+                double[] sumVec = new double[np.Shape.Shapes[0]];
+                for (int d = 0; d < sumVec.Length; d++)
                 {
-                    for (int p = 0; p < np.Data[0].Length; p++)
+                    for (int p = 0; p < np.Shape.Shapes[1]; p++)
                     {
-                        sumVec[p] += np.Data[d][p];
+                        sumVec[p] += np[d,p];
                     }
                 }
-                for (int d = 0; d < np.Data[0].Length; d++)
+                var puffer = mean.Data.ToList();
+                for (int d = 0; d < np.Shape.Shapes[1]; d++)
                 {
-                    mean.Data.Add(sumVec[d] / np.Length);
+                    puffer.Add(sumVec[d] / np.Shape.Shapes[0]);
                 }
+                mean.Data = puffer.ToArray();
+                mean.Shape = new Shape(mean.Data.Length);
             }
             else if (axis == 1)
             {
-                for (int d = 0; d < np.Length; d++)
+                var puffer = mean.Data.ToList();
+                for (int d = 0; d < np.Shape.Shapes[0]; d++)
                 {
                     double rowSum = 0;
-                    for (int p = 0; p < np.Data[0].Length; p++)
+                    
+                    for (int p = 0; p < np.Shape.Shapes[1]; p++)
                     {
-                        rowSum += np.Data[d][p];
+                        rowSum += np[d,p];
                     }
-                    mean.Data.Add(rowSum / np.Data[0].Length);
+                    puffer.Add(rowSum / np.Shape.Shapes[1]);
                 }
+                mean.Data = puffer.ToArray();
+                mean.Shape = new Shape(mean.Data.Length);
             }
 
             return mean;

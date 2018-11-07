@@ -16,12 +16,12 @@ namespace NumSharp.Extensions
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public static NDArray_Legacy<double> Convolve(this NDArray_Legacy<double> numSharpArray1, NDArray_Legacy<double> numSharpArray2, string mode = "full" )
+        public static NDArray<double> Convolve(this NDArray<double> numSharpArray1, NDArray<double> numSharpArray2, string mode = "full" )
         {
-            int nf = numSharpArray1.Length;
-            int ng = numSharpArray2.Length;
+            int nf = numSharpArray1.Shape.Shapes[0];
+            int ng = numSharpArray2.Shape.Shapes[0];
 
-            var numSharpReturn = new NDArray_Legacy<double>();
+            var numSharpReturn = new NDArray<double>();
 
             switch (mode)
             {
@@ -59,7 +59,7 @@ namespace NumSharp.Extensions
                     {
                         int kdx = idx; 
                     
-                        for(int jdx = (min_v.Length - 1); jdx >= 0; --jdx) 
+                        for(int jdx = (min_v.Shape.Shapes[0] - 1); jdx >= 0; --jdx) 
                         {
                             outArray[idx] += min_v[jdx] * max_v[kdx];
                             ++kdx;
@@ -75,7 +75,7 @@ namespace NumSharp.Extensions
                     // followed the discussion on 
                     // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
                     // implemented numpy convolve because we follow numpy
-                    var npad = numSharpArray2.Length - 1;
+                    var npad = numSharpArray2.Shape.Shapes[0] - 1;
 
                     if (npad % 2 == 1)
                     {
@@ -84,7 +84,7 @@ namespace NumSharp.Extensions
                         numSharpArray1.Data.ToList().AddRange(new double[npad+1]);
                         var puffer = (new double[npad]).ToList();
                         puffer.AddRange(numSharpArray1.Data);
-                        numSharpArray1.Data = puffer; 
+                        numSharpArray1.Data = puffer.ToArray(); 
                     }
                     else 
                     {
@@ -92,17 +92,18 @@ namespace NumSharp.Extensions
                     
                         var puffer = ((double[]) numSharpArray1.Data).ToList(); 
                         puffer.AddRange(new double[npad]);
-                        numSharpArray1.Data = puffer;
+                        numSharpArray1.Data = puffer.ToArray();
                     
                         puffer = (new double[npad]).ToList();
                         puffer.AddRange(numSharpArray1.Data);
-                        numSharpArray1.Data = puffer; 
+                        numSharpArray1.Data = puffer.ToArray(); 
                     }
 
                     numSharpReturn = numSharpArray1.Convolve(numSharpArray2,"valid");
                     break;
                 }
             }
+            numSharpReturn.Shape = new Shape(numSharpReturn.Data.Length);
             return numSharpReturn;
         }
     }

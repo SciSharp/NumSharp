@@ -7,46 +7,50 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray_Legacy<double> Std(this NDArray_Legacy<NDArray_Legacy<double>> np, int axis = -1)
+        public static NDArray<double> Std(this NDArray<double> np, int axis = -1)
         {
-            var std = new NDArray_Legacy<double>();
+            var std = new NDArray<double>();
 
             var mean = np.Mean(axis);
 
             // axis == -1: DEFAULT; to compute the standard deviation of the flattened array.
             if (axis == -1)
             {
-                var sum = np.Data.Select(d => d.Data.Select(p => Math.Pow(Math.Abs(p - mean.Data[0]), 2)).Sum()).Sum();
+                var sum = np.Data.Select(d => Math.Pow(Math.Abs(d - mean.Data[0]), 2)).Sum();
 
-                std.Data.Add(Math.Sqrt(sum / np.Size));
+                std.Data = new double[]{ Math.Sqrt(sum / np.Size) };
             }
             // to compute mean by compressing row and row
             else if (axis == 0)
             {
-                double[] sumVec = new double[np.Data[0].Length];
-                for (int d = 0; d < np.Length; d++)
+                double[] sumVec = new double[np.Shape.Shapes[1]];
+                for (int d = 0; d < np.Shape.Shapes[0]; d++)
                 {
-                    for (int p = 0; p < np.Data[0].Length; p++)
+                    for (int p = 0; p < np.Shape.Shapes[1]; p++)
                     {
-                        sumVec[p] += np.Data[d][p];
+                        sumVec[p] += np[d,p];
                     }
                 }
-                for (int d = 0; d < np.Data[0].Length; d++)
+                var puffer = mean.Data.ToList();
+                for (int d = 0; d < np.Shape.Shapes[1]; d++)
                 {
-                    mean.Data.Add(sumVec[d] / np.Length);
+                    puffer.Add(sumVec[d] / np.Shape.Shapes[0]);
                 }
+                mean.Data = puffer.ToArray();
             }
             else if (axis == 1)
             {
-                for (int d = 0; d < np.Length; d++)
+                var puffer = mean.Data.ToList();
+                for (int d = 0; d < np.Shape.Shapes[0]; d++)
                 {
                     double rowSum = 0;
-                    for (int p = 0; p < np.Data[0].Length; p++)
+                    for (int p = 0; p < np.Shape.Shapes[1]; p++)
                     {
-                        rowSum += np.Data[d][p];
+                        rowSum += np[d,p];
                     }
-                    mean.Data.Add(rowSum / np.Data[0].Length);
+                    puffer.Add(rowSum / np.Shape.Shapes[1]);
                 }
+                mean.Data = puffer.ToArray();
             }
 
             return std;
