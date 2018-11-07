@@ -1,15 +1,7 @@
 ﻿using System;
 using System.Linq;
-
-/*
-[Fact]
-        
-
-        [Fact]
-        
-        [Fact]
-        
- */
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
 
 namespace NumSharp.Benchmark
 {
@@ -17,10 +9,8 @@ namespace NumSharp.Benchmark
     {
         static void Main(string[] args)
         {
-            ArrayTester.Access();
-            ArrayTester.CheckPlusOperation();
-            ArrayTester.CheckMatrixMultiplication();
-            
+            var accessSummary = BenchmarkRunner.Run<ArrayTester>();
+            Console.WriteLine("Please press any key to continue.");
             Console.ReadKey();
         }
     }
