@@ -21,15 +21,23 @@ namespace NumSharp.Extensions
             return np;
         }
 
-        public static NDArray<double> ARange(this NDArray<double> np,int stop, int start = 0, int step = 1)
+        public static NDArray<double> ARange(this NDArray<double> np, int stop, int start = 0, int step = 1)
         {
+            var list = new double[(stop - start) / step];
             int index = 0;
 
-            np.Data = Enumerable.Range(start,stop - start)
-                                .Where(x => index++ % step == 0)
-                                .Select(x => (double)x)
-                                .ToArray();
-            np.Shape = new Shape(new int[] { stop });
+            for (int i = start; i < stop; i += step)
+            {
+                if (i % step == 0)
+                {
+                    list[index] = i;
+                }
+                index++;
+            }
+
+            np.Data = list;
+            np.Shape = new Shape(stop);
+
             return np;
         }
     }
