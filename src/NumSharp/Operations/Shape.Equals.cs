@@ -28,5 +28,10 @@ namespace NumSharp
         {
             return base.GetHashCode();
         }
+
+        public override string ToString()
+        {
+            return "(" + String.Join(", ", shape) + ")";
+        }
     }
 }

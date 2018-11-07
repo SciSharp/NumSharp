@@ -22,6 +22,8 @@ namespace NumSharp
             }
         }
 
+        public int this[int dim] => shape[dim];
+
         public Shape(params int[] shape)
         {
             if (shape.Length == 0)
