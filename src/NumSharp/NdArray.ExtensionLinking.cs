@@ -80,6 +80,10 @@ namespace NumSharp
             
             return NumSharp.Extensions.NDArrayExtensions.Dot(np1Dyn,scalarDyn);
         }
+        public NDArray<double> HStack(params NDArray<double>[] nps)
+        {
+            return NumSharp.Extensions.NDArrayExtensions.HStack(nps);
+        }
         public NDArray<T> Onces(params int[] shape)
         {
             return NumSharp.Extensions.NDArrayExtensions.Onces(this, shape);

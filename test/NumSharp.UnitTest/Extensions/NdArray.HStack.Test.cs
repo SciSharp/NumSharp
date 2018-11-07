@@ -14,19 +14,52 @@ namespace NumSharp.UnitTest.Extensions
     public class NdArrayHStackTest
     {
         [TestMethod]
-        public void HStackTwo1DArrays()
+        public void HStackNDArrays()
         {
-            var series1 = new NDArray<double>();
-            series1.Data = new double[]{1, 2, 3};
-            
-            var series2 = new NDArray<double>();
-            series2.Data = new double[]{2,3,4};
+            //1D
+            var np = new NumPy<double>();
+            var n1 = np.array(new double[] { 1, 2, 3 });
+            var n2 = np.array(new double[] { 2, 3, 4 });
 
-            var series3 = series1.HStack(series2);
+            var n = np.hstack(n1, n2);
 
-            var expectedValue = new double[]{1,2,3,2,3,4};
+            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n[0] == 1);
+            Assert.IsTrue(n[1] == 2);
+            Assert.IsTrue(n[3] == 2);
+            Assert.IsTrue(n[5] == 4);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(series3.Data,expectedValue));
+            //2D
+            n1 = np.array(new double[][] { new double[] { 1 }, new double[] { 2 }, new double[] { 3 } });
+            n2 = np.array(new double[][] { new double[] { 4 }, new double[] { 5 }, new double[] { 6 } });
+
+            n = np.hstack(n1, n2);
+
+            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n[0, 0] == 1);
+            Assert.IsTrue(n[1, 0] == 2);
+            Assert.IsTrue(n[2, 0] == 3);
+            Assert.IsTrue(n[0, 1] == 4);
+            Assert.IsTrue(n[1, 1] == 5);
+            Assert.IsTrue(n[2, 1] == 6);
+
+            //3D
+            n1 = np.arange(12).ReShape(2, 3, 2);
+            n2 = np.arange(12).ReShape(2, 3, 2);
+            n = np.hstack(n1, n2);
+
+            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n[0, 0, 0] == 0);
+            Assert.IsTrue(n[0, 1, 0] == 2);
+            Assert.IsTrue(n[0, 2, 1] == 5);
+
+            //4D
+            //n1 = np.arange(24 * 10000000).ReShape(20000, 30, 20, 2);
+            //n2 = np.arange(24 * 10000000).ReShape(20000, 30, 20, 2);
+            //n = np.hstack(n1, n2);
+
+            //Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+
         }
     }
 }

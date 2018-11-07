@@ -31,8 +31,6 @@ namespace NumSharp
     /// </summary>
     public partial class NDArray<T> 
     {
-        private T[] data;
-
         /// <summary>
         /// 1 dim array data storage
         /// </summary>
@@ -46,24 +44,18 @@ namespace NumSharp
         /// <summary>
         /// Dimension count
         /// </summary>
-        public int NDim { get { return Shape.Length; } }
+        public int NDim => Shape.Length;
 
         /// <summary>
         /// Total of elements
         /// </summary>
-        public int Size { get { return Data.Length; } }
-
-        /// <summary>
-        /// Random reference
-        /// </summary>
-        public NDArrayRandom Random { get; set; }
+        public int Size => Data.Length;
 
         public NDArray()
         {
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
             Data = new T[] { };
-            Random = new NDArrayRandom();
         }
 
         /// <summary>
@@ -102,20 +94,20 @@ namespace NumSharp
                 // Since n.Shape is a IList it cannot be converted to Span<T>
                 // This is a lot of hoops to jump throught to get it into a span
                 // shape.Skip(select.Length).ToList() may be more efficient - not sure
-                n.Shape = new Shape(Shape.Shapes.AsSpan().Slice(select.Length).ToArray());
+                n.Shape = new Shape(Shape.Shapes.ToArray().AsSpan().Slice(select.Length).ToArray());
                 return n;
             }
         }
 
         public void Vector(Shape shape, T value)
         {
-            if (shape.Shapes.Length == NDim)
+            if (shape.Length == NDim)
             {
                 throw new Exception("Please use NDArray[m, n] to access element.");
             }
             else
             {
-                int start = GetIndexInShape(shape.Shapes);
+                int start = GetIndexInShape(shape.Shapes.ToArray());
                 int length = Shape.DimOffset[shape.Length - 1];
 
                 Span<T> data = Data;
@@ -133,15 +125,36 @@ namespace NumSharp
         /// </summary>
         /// <param name="select"></param>
         /// <returns>Return a new NDArray with filterd elements.</returns>
-        public NDArray<T> this[IEnumerable<int> select]
+        public NDArray<T> this[IList<int> select]
         {
             get
             {
-                int i = 0;
-
                 var n = new NDArray<T>();
-                n.Data = Data.Where(x => select.Contains(i++)).ToArray();
-                n.Shape = new Shape(new int[] { n.Data.Length });
+                if (NDim == 1)
+                {
+                    n.Data = new T[select.Count()];
+                    n.Shape = new Shape(select.Count());
+                    for (int i = 0; i < select.Count(); i++)
+                    {
+                        n[i] = this[select[i]];
+                    }
+                }
+                else if (NDim == 2)
+                {
+                    n.Data = new T[select.Count() * Shape[1]];
+                    n.Shape = new Shape(select.Count(), Shape[1]);
+                    for (int i = 0; i < select.Count(); i++)
+                    {
+                        for (int j = 0; j < Shape[1]; j++)
+                        {
+                            n[i, j] = this[select[i], j];
+                        }
+                    }
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
 
                 return n;
             }
@@ -152,21 +165,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
-        public NDArray<T> this[NDArray<int> select]
-        {
-            get
-            {
-                int i = 0;
-
-                var n = new NDArray<T>();
-                n.Data = Data.Where(x => select.Data.Contains(i++)).ToArray();
-                n.Shape = new Shape(Shape.Shapes);
-                //n.Shape = shape;
-                //n.Shape[0] = select.shape[0];
-
-                return n;
-            }
-        }
+        public NDArray<T> this[NDArray<int> select] => this[select.Data.ToList()];
 
         private int GetIndexInShape(params int[] select)
         {
