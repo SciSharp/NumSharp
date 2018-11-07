@@ -8,12 +8,12 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static Matrix<double> AsMatrix(this NDArray_Legacy<NDArray_Legacy<double>> np)
+        public static Matrix<double> AsMatrix(this NDArray<double> np)
         {
             Matrix<double> npAsMatrix = new Matrix<double>();
 
-            int dim0 = np.Length;
-            int dim1 = np.Data[0].Length;
+            int dim0 = np.Shape.Shapes[0];
+            int dim1 = np.Shape.Shapes[1];
 
             npAsMatrix.Shape = new Shape(new int[] { dim0, dim1 });
             npAsMatrix.Data = new double[dim0 * dim1];
@@ -22,7 +22,7 @@ namespace NumSharp.Extensions
             {
                 for (int jdx = 0;jdx < dim1;jdx++)
                 {
-                    npAsMatrix[idx,jdx] = np[idx][jdx];
+                    npAsMatrix[idx,jdx] = np[idx,jdx];
                 }
             }
             
