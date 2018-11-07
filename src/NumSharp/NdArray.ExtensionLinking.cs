@@ -40,14 +40,7 @@ namespace NumSharp
 
             return NumSharp.Extensions.NDArrayExtensions.HStack(npDyn,np2Dyn);
         }
-        public NDArray<T> ARange(int stop, int start = 0, int step = 1)
-        {
-            dynamic npDyn = this;
 
-            dynamic npResult = NumSharp.Extensions.NDArrayExtensions.ARange(npDyn, stop,start,step);
-
-            return npResult;
-        }
         public int ArgMax()
         {
             dynamic npDyn = this;
