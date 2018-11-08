@@ -9,7 +9,7 @@ namespace NumSharp.Benchmark
     {
         static void Main(string[] args)
         {
-            var accessSummary = BenchmarkRunner.Run<nparrange>();
+            var accessSummary = BenchmarkRunner.Run<npamin>();
             Console.WriteLine("Please press any key to continue.");
             Console.ReadKey();
         }

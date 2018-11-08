@@ -41,6 +41,12 @@ namespace NumSharp
             return NumSharp.Extensions.NDArrayExtensions.HStack(npDyn,np2Dyn);
         }
 
+        public NDArray<double> AMin(int? axis = null)
+        {
+            dynamic npDyn = this;
+            return NumSharp.Extensions.NDArrayExtensions.AMin(npDyn, axis);
+        }
+
         public int ArgMax()
         {
             dynamic npDyn = this;
@@ -85,7 +91,7 @@ namespace NumSharp
         {
             return NumSharp.Extensions.NDArrayExtensions.ReShape(this, shape);
         }
-        public NDArray<double> VStack(params NDArray<double>[] nps)
+        public NDArray<T> VStack(params NDArray<T>[] nps)
         {
             return NumSharp.Extensions.NDArrayExtensions.VStack(nps);
         }

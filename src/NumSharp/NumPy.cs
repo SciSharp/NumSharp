@@ -10,6 +10,12 @@ namespace NumSharp
     /// </summary>
     public class NumPy<T>
     {
+
+        public NDArray<double> amin(NDArray<double> np, int? axis = null)
+        {
+            return np.AMin(axis);
+        }
+
         public NDArray<T> arange(int stop)
         {
             return arange(0, stop);
