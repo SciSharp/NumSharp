@@ -12,7 +12,7 @@ namespace NumSharp.Extensions
             NDArray<double> res = new NDArray<double>();
             if (axis == null)
             {
-                double min = double.MaxValue;
+                double min = np.Data[0];
                 for (int i = 0; i < np.Size; i++)
                     min = Math.Min(min, np.Data[i]);
                 res.Data = new double[1];
@@ -25,8 +25,9 @@ namespace NumSharp.Extensions
                     throw new Exception("Invalid input: axis");
                 int[] resShapes = new int[np.Shape.Shapes.Count - 1];
                 int index = 0; //index for result shape set
-                int prev = 1;
-                int cur = 1; //numbers in a comparing set
+                //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
+                int prev = 1; 
+                int cur = 1;
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape
@@ -57,7 +58,7 @@ namespace NumSharp.Extensions
                     for (int j = i; j < i + post; j++)
                     {
                         start = j;
-                        min = double.MaxValue;
+                        min = np.Data[start];
                         for (int k = 0; k < cur; k++)
                         {
                             min = Math.Min(min, np.Data[start]);
@@ -69,5 +70,79 @@ namespace NumSharp.Extensions
             }
             return res;
         }
+
+        /*public static NDArray<T> AMin<T>(this NDArray<T> np, int? axis = null)
+        {
+            NDArray<T> res = new NDArray<T>();
+            if (axis == null)
+            {
+                T min = np.Data[0];
+                for (int i = 0; i < np.Size; i++)
+                {
+                    if (min is double m)
+                    {
+                        if (np.Data[i] is double n)
+                            min = (T)(object)Math.Min(n, m);
+                    }
+                }
+                res.Data = new T[1];
+                res.Data[0] = min;
+                res.Shape = new Shape(new int[] { 1 });
+            }
+            else
+            {
+                if (axis < 0 || axis >= np.Shape.Length)
+                    throw new Exception("Invalid input: axis");
+                int[] resShapes = new int[np.Shape.Shapes.Count - 1];
+                int index = 0; //index for result shape set
+                //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
+                int prev = 1;
+                int cur = 1;
+                int post = 1;
+                int size = 1; //total number of the elements for result
+                //Calculate new Shape
+                for (int i = 0; i < np.Shape.Shapes.Count; i++)
+                {
+                    if (i == axis)
+                        cur = np.Shape.Shapes[i];
+                    else
+                    {
+                        resShapes[index++] = np.Shape.Shapes[i];
+                        size *= np.Shape.Shapes[i];
+                        if (i < axis)
+                            prev *= np.Shape.Shapes[i];
+                        else
+                            post *= np.Shape.Shapes[i];
+                    }
+                }
+                res.Shape = new Shape(resShapes);
+                //Fill in data
+                index = 0; //index for result data set
+                int sameSetOffset = np.Shape.DimOffset[axis.Value];
+                int increments = cur * post;
+                res.Data = new T[size];
+                int start = 0;
+                T min;
+                for (int i = 0; i < np.Size; i += increments)
+                {
+                    for (int j = i; j < i + post; j++)
+                    {
+                        start = j;
+                        min = np.Data[start];
+                        for (int k = 0; k < cur; k++)
+                        {
+                            if (min is double m)
+                            {
+                                if (np.Data[start] is double n)
+                                    min = (T)(object)Math.Min(n, m);
+                            }
+                            start += sameSetOffset;
+                        }
+                        res.Data[index++] = min;
+                    }
+                }
+            }
+            return res;
+        }*/
     }
 }

@@ -31,8 +31,9 @@ namespace NumSharp.Extensions
                     throw new Exception("Invalid input: axis");
                 int[] resShapes = new int[np.Shape.Shapes.Count - 1];
                 int index = 0; //index for result shape set
+                //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
                 int prev = 1;
-                int cur = 1; //numbers in a comparing set
+                int cur = 1;
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape

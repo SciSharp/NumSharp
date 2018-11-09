@@ -23,12 +23,6 @@ namespace NumSharp.Benchmark
         }
 
         [Benchmark]
-        public void amin()
-        {
-            np.amin(nd);
-        }
-
-        [Benchmark]
         public void amin0axis()
         {
             np.amin(nd, 0);
