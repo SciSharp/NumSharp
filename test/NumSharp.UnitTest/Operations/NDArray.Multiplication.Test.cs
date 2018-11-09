@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void  DoubleTwo1D()
         {
-            var np1 = new NDArray<double>().ARange(4,1,1).ReShape(1,3);
-            var np2 = new NDArray<double>().ARange(5,2,1).ReShape(1,3);
+            var np1 = new NDArray<double>().ARange(4,1,1).reshape(1,3);
+            var np2 = new NDArray<double>().ARange(5,2,1).reshape(1,3);
 
             var np3 = np1 * np2;
 

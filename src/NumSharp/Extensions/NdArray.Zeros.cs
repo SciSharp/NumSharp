@@ -24,7 +24,7 @@ namespace NumSharp.Extensions
             }
 
             np.Data = Enumerable.Range(0, length).Select(x => 0).ToArray();
-            np.ReShape(shape);
+            np.reshape(shape);
 
             return np;
         }
@@ -39,7 +39,7 @@ namespace NumSharp.Extensions
             }
 
             np.Data = Enumerable.Range(0, length).Select(x => 0.0).ToArray();
-            np.ReShape(shape);
+            np.reshape(shape);
 
             return np;
         }

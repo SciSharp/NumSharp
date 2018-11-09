@@ -87,9 +87,9 @@ namespace NumSharp
         {
             return NumSharp.Extensions.NDArrayExtensions.Onces(this, shape);
         }
-        public NDArray<T> ReShape(params int[] shape)
+        public NDArray<T> reshape(params int[] shape)
         {
-            return NumSharp.Extensions.NDArrayExtensions.ReShape(this, shape);
+            return NumSharp.Extensions.NDArrayExtensions.reshape(this, shape);
         }
         public NDArray<T> VStack(params NDArray<T>[] nps)
         {

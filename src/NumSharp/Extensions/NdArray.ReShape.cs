@@ -20,7 +20,7 @@ namespace NumSharp.Extensions
         /// </summary>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public static NDArray<T> ReShape<T>(this NDArray<T> np, params int[] shape)
+        public static NDArray<T> reshape<T>(this NDArray<T> np, params int[] shape)
         {
             var count = shape.Length;
             var idx = FindNegativeIndex(shape);

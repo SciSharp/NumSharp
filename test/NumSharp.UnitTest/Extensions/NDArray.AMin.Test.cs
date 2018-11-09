@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Extensions;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -14,7 +15,7 @@ namespace NumSharp.UnitTest.Extensions
             var np = new NumPy<double>();
 
             //no axis
-            var n = np.arange(4).ReShape(2, 2);
+            var n = np.arange(4).reshape(2, 2);
             var n1 = np.amin(n);
             Assert.IsTrue(n1[0] == 0);
 
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n1[1] == 2);
 
             //3D
-            n = np.arange(24).ReShape(4, 3, 2);
+            n = np.arange(24).reshape(4, 3, 2);
             n1 = np.amin(n, 0);
             Assert.IsTrue(n1[0, 1] == 1);
             Assert.IsTrue(n1[2, 1] == 5);
@@ -38,7 +39,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n1[3, 0] == 18);
 
             //4D
-            n = np.arange(24).ReShape(2, 3, 2, 2);
+            n = np.arange(24).reshape(2, 3, 2, 2);
             n1 = np.amin(n, 1);
             Assert.IsTrue(n1[0, 0, 1] == 1);
             Assert.IsTrue(n1[1, 0, 1] == 13);

@@ -19,7 +19,7 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             np = new NumPy<double>();
-            nd = np.arange(240).ReShape(20, 3, 2, 2);
+            nd = np.arange(240).reshape(20, 3, 2, 2);
         }
 
         [Benchmark]

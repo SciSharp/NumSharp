@@ -14,12 +14,12 @@ namespace NumSharp.UnitTest
         public void IndexAccessorGetter()
         {
             var np = new NumPy<int>();
-            var n = np.arange(12).reshape(3, 4);
+            var n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[1, 1] == 5);
             Assert.IsTrue(n[2, 0] == 8);
 
-            n = np.arange(12).reshape(2, 3, 2);
+            n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 2, 3, 2);
             var n1 = n.Vector(1);
 
             Assert.IsTrue(n1[1, 1] == 9);
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest
         public void IndexAccessorSetter()
         {
             var np = new NumPy<int>();
-            var n = np.arange(12).reshape(3, 4);
+            var n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[0, 3] == 3);
             Assert.IsTrue(n[1, 3] == 7);
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            var np = new NDArray<double>().ARange(9).ReShape(3,3);
+            var np = new NDArray<double>().ARange(9).reshape(3,3);
 
             var random = new Random();
             np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(stringOfNp.Contains("[[  0."));
 
-            np = new NDArray<double>().ARange(9).ReShape(3,3);
+            np = new NDArray<double>().ARange(9).reshape(3,3);
 
             stringOfNp = np.ToString();        
 
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray2D()
         {
-            var np1 = new NDArray<double>().ARange(9).ReShape(3,3);
+            var np1 = new NDArray<double>().ARange(9).reshape(3,3);
 
             double[][] np1_ = np1.ToDotNetArray<double[][]>();
 
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray3D()
         {
-            var np1 = new NDArray<double>().ARange(27).ReShape(3,3,3);
+            var np1 = new NDArray<double>().ARange(27).reshape(3,3,3);
 
             double[][][] np1_ = np1.ToDotNetArray<double[][][]>();
 

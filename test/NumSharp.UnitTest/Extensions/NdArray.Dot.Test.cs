@@ -31,14 +31,14 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyDouble()
         {   
-            NDArray<double> matrix1 = new NDArray<double>().ARange(7,1,1).ReShape(3,2);
+            NDArray<double> matrix1 = new NDArray<double>().ARange(7,1,1).reshape(3,2);
             
             Assert.IsTrue(matrix1[0,0] == 1);
             Assert.IsTrue(matrix1[0,1] == 2);
             Assert.IsTrue(matrix1[1,0] == 3);
             Assert.IsTrue(matrix1[2,0] == 5);
 
-            NDArray<double> matrix2 = new NDArray<double>().ARange(13,7,1).ReShape(2,3) ;
+            NDArray<double> matrix2 = new NDArray<double>().ARange(13,7,1).reshape(2,3) ;
         
             Assert.IsTrue(matrix2[0,0] == 7);
             Assert.IsTrue(matrix2[0,1] == 8);
