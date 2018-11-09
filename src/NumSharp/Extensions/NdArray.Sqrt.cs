@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Text;
 
 namespace NumSharp.Extensions
@@ -11,6 +12,16 @@ namespace NumSharp.Extensions
             for (int i = 0; i < np.Data.Length; i++)
             {
                 np[i] = Math.Sqrt(np[i]);
+            }
+
+            return np;
+        }
+
+        public static NDArray<Complex> Sqrt(this NDArray<Complex> np)
+        {
+            for (int i = 0; i < np.Data.Length; i++)
+            {
+                np[i] = Complex.Sqrt(np[i]);
             }
 
             return np;
