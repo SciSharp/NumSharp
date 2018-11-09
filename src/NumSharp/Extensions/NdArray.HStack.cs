@@ -6,13 +6,13 @@ using System.Text;
 namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
-    {
+    {   
         /// <summary>
         /// Stack arrays in sequence horizontally
         /// </summary>
         /// <param name="nps"></param>
         /// <returns></returns>
-        public static NDArray<T> HStack<T>(params NDArray<T>[] nps)
+        public static NDArray<T> HStack<T>(this NDArray<T> np1, params NDArray<T>[] nps)
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");

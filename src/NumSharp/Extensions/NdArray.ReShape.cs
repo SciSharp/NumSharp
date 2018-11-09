@@ -8,13 +8,6 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<int> reshape(this NDArray<int> np, params int[] shape)
-        {
-            np.Shape = new Shape(shape);
-
-            return np;
-        }
-
         /// <summary>
         /// Gives a new shape to an array without changing its data.
         /// </summary>
