@@ -6,7 +6,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Operations
 {
     [TestClass]
     public class MatrixAdditionTest
