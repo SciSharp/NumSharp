@@ -10,7 +10,7 @@ namespace NumSharp
 {
     public partial class NDArray<T>
     {
-        public static NDArray<T> operator -(NDArray<T> np1, NDArray<T> np2)
+        public static NDArray<T> operator /(NDArray<T> np1, NDArray<T> np2)
         {
             NDArray<T> sum = new NDArray<T>();
             sum.Shape = np1.Shape;
@@ -24,7 +24,7 @@ namespace NumSharp
                     double[] np2Array = np2.Data as double[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        sumArray[idx] = np1Array[idx] / np2Array[idx];
                     break;
                 }
                 case float[] sumArray : 
@@ -33,7 +33,7 @@ namespace NumSharp
                     float[] np2Array = np2.Data as float[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        sumArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
                 }
                 case Complex[] sumArray : 
@@ -42,7 +42,7 @@ namespace NumSharp
                     Complex[] np2Array = np2.Data as Complex[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        sumArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
                 }
                 case Quaternion[] sumArray : 
@@ -51,7 +51,7 @@ namespace NumSharp
                     Quaternion[] np2Array = np2.Data as Quaternion[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        sumArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
                 }
                 default : 
@@ -62,7 +62,7 @@ namespace NumSharp
 
             return (NDArray<T>) sum;
         }
-        public static NDArray<T> operator -(NDArray<T> np1, T scalar)
+        public static NDArray<T> operator /(NDArray<T> np1, T scalar)
         {
             NDArray<T> sum = new NDArray<T>();
             sum.Shape = np1.Shape;
@@ -76,7 +76,7 @@ namespace NumSharp
                     double[] sumArray = sum.Data as double[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - scalarDouble;
+                        sumArray[idx] = np1Array[idx] / scalarDouble;
                     break;
                 }
                 case float scalarFloat : 
@@ -85,7 +85,7 @@ namespace NumSharp
                     float[] sumArray = sum.Data as float[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - scalarFloat;
+                        sumArray[idx] = np1Array[idx] / scalarFloat;
                     break; 
                 }
                 case Complex scalarComplex : 
@@ -94,7 +94,7 @@ namespace NumSharp
                     Complex[] sumArray = sum.Data as Complex[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - scalarComplex;
+                        sumArray[idx] = np1Array[idx] / scalarComplex;
                     break; 
                 }
                 case Quaternion scalarQuaternion : 
@@ -103,7 +103,7 @@ namespace NumSharp
                     Quaternion[] sumArray = sum.Data as Quaternion[];
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - scalarQuaternion;
+                        sumArray[idx] = np1Array[idx] / scalarQuaternion;
                     break; 
                 }
                 default : 

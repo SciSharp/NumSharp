@@ -37,7 +37,7 @@ namespace NumSharp.Extensions
             }
 
             np.Data = list;
-            np.Shape = new Shape(stop);
+            np.Shape = new Shape(np.Data.Length);
 
             return np;
         }
