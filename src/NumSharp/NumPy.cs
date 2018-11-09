@@ -6,7 +6,7 @@ using NumSharp.Extensions;
 namespace NumSharp
 {
     /// <summary>
-    /// NumPy bridge
+    /// API bridge between NumSharp and Python NumPy  
     /// </summary>
     public class NumPy<T>
     {
@@ -14,6 +14,11 @@ namespace NumSharp
         public NDArray<double> amin(NDArray<double> np, int? axis = null)
         {
             return np.AMin(axis);
+        }
+
+        public NDArray<double> amax(NDArray<double> np, int? axis = null)
+        {
+            return np.AMax(axis);
         }
 
         public NDArray<T> arange(int stop)

@@ -16,10 +16,14 @@ NumSharp has implemented the arange, array, max, min, reshape, normalize, unique
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
 * NumPy
+  * amin
   * arange
   * array
-  * random.randint
+  * hstack
+  * random
+    * randint
   * reshape
+  * vstack
   * zeros
   
 ## How to use
@@ -59,6 +63,11 @@ $ pip install sphinx
 $ pip install recommonmark
 $ cd docs
 $ make html
+```
+
+# How to run benchmark
+```
+C: \> dotnet NumSharp.Benchmark.dll
 ```
 Reference the online [documents](https://numsharp.readthedocs.io).
 
