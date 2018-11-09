@@ -24,6 +24,7 @@ namespace NumSharp.UnitTest.Extensions
             
             var series2 = new NDArray<double>();
             series2.Data = new double[]{0, 1, 0.5};
+            series2.Shape = new Shape(3);
 
             var innerProduct = series1.Dot(series2);
             Assert.IsTrue(innerProduct.Data[0] == 3.5);

@@ -3,76 +3,156 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Shared;
+using NumSharp.Extensions;
 
 namespace NumSharp.Extensions
 {
+    internal enum MultiplicationCase 
+    {
+        ArrayArray,
+        MatrixArray,
+        MatrixMatrix
+    }
     public static partial class NDArrayExtensions
     {
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="np1"></param>
+        /// <param name="np2"></param>
+        /// <typeparam name="TData"></typeparam>
+        /// <returns></returns>
         public static NDArray<TData> Dot<TData>(this NDArray<TData> np1, NDArray<TData> np2)
         {
-            dynamic prod = new NDArray<TData>();
+            NDArray<TData> prod = new NDArray<TData>();
+
+            // Shape 
+            var prodShape = new Shape(0);
+            var multipliationCase = ShapeDetermination(np1.Shape,np2.Shape,ref prodShape);
             
-            dynamic np1Dyn = np1.Data.ToArray();
-            dynamic np2Dyn = np2.Data.ToArray();
+            prod.Shape = prodShape;
+            int dataLength = (prodShape.Length == 1) ? ( prodShape.Shapes[0] ) : (prodShape.Shapes[0] * prodShape.Shapes[1]);
+            prod.Data = new TData[dataLength];
 
-            var dataType = typeof(TData);
-
-            int dimensionSum = np1.Shape.Length + np2.Shape.Length;
-
-            switch (dimensionSum)
+            switch (np1.Data)
             {
-                case 2 : 
+                case double[] np1Array : 
                 {
-                    prod.Shape = new Shape(new int[] {1});
+                    double[] result = prod.Data as double[];
+                    double[] np2Array = np2.Data as double[];
 
-                    switch (dataType.Name)
+                    if (multipliationCase == MultiplicationCase.ArrayArray)
+                    {    
+                        for (int idx = 0; idx < np1Array.Length;idx++)
+                            result[0] += np1Array[idx] * np2Array[idx]; 
+                    }
+                    else 
                     {
-                        case ("Double") : prod.Data = ScalarProduct1D.MuliplyScalarProd1DDouble((double[])np1Dyn,(double[])np2Dyn); break;
-                        case ("Float") : prod.Data = ScalarProduct1D.MuliplyScalarProd1Dfloat((float[])np1Dyn,(float[])np2Dyn); break;
-                        //case ("Complex") : prod.Data = ScalarProduct1D.Mult((float[])np1Dyn,(float[])np2Dyn); break;
-                        //case ("Quaternion") : prod.Data = ScalarProduct1D.MuliplyScalarProd1Dfloat((float[])np1Dyn,(float[])np2Dyn); break;
+                        for (int idx = 0; idx < prod.Data.Length;idx++)
+                            for (int kdx = 0; kdx < np1.Shape.Shapes[1];kdx++)
+                                result[idx] += np1Array[(idx / np1.Shape.Shapes[0]) * np1.Shape.Shapes[1] + kdx] * np2Array[np2.Shape.Shapes[1] * kdx + (idx % np2.Shape.Shapes[1])];    
                     }
                     break;
                 }
-                case 3 : 
+                case float[] np1Array : 
                 {
-                    int[] dim0 = np1.Shape.Shapes.ToArray();
-                    int[] dim1 = np2.Shape.Shapes.ToArray();
-                    int iterator = np1.Shape.Shapes[1];
+                    float[] result = prod.Data as float[];
+                    float[] np2Array = np2.Data as float[];
 
-                    prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
-                    
-                    switch (dataType.Name)
+                    if (multipliationCase == MultiplicationCase.ArrayArray)
+                    {    
+                        for (int idx = 0; idx < np1Array.Length;idx++)
+                            result[0] += np1Array[idx] * np2Array[idx]; 
+                    }
+                    else 
                     {
-                        case ("Double"): prod.Data = MatrixMultiplication.MatrixMultiplyDoubleMatrix((double[])np1Dyn,(double[])np2Dyn,dim0,dim1); break;
-                        case ("Float"): prod.Data = MatrixMultiplication.MatrixMultiplyfloatMatrix((float[])np1Dyn,(float[])np2Dyn,dim0,dim1); break;
-                        case ("Complex"): prod.Data = MatrixMultiplication.MatrixMultiplyComplexMatrix((Complex[])np1Dyn,(Complex[])np2Dyn,dim0,dim1); break;
-                        case ("Quaternion"): prod.Data = MatrixMultiplication.MatrixMultiplyQuaternionMatrix((Quaternion[])np1Dyn,(Quaternion[]) np2Dyn,dim0,dim1) ; break;
+                        for (int idx = 0; idx < prod.Data.Length;idx++)
+                            for (int kdx = 0; kdx < np1.Shape.Shapes[1];kdx++)
+                                result[idx] += np1Array[(idx / np1.Shape.Shapes[0]) * np1.Shape.Shapes[1] + kdx] * np2Array[np2.Shape.Shapes[1] * kdx + (idx % np2.Shape.Shapes[1])];    
                     }
                     break;
                 }
-                case 4 : 
+                case Complex[] np1Array : 
                 {
-                    int[] dim0 = np1.Shape.Shapes.ToArray();
-                    int[] dim1 = np2.Shape.Shapes.ToArray();
-                    int iterator = np1.Shape.Shapes[1];
+                    Complex[] result = prod.Data as Complex[];
+                    Complex[] np2Array = np2.Data as Complex[];
 
-                    prod.Shape = new Shape(new int[] {dim0[0],dim1[1]});
-                    
-                    switch (dataType.Name)
+                    if (multipliationCase == MultiplicationCase.ArrayArray)
+                    {    
+                        for (int idx = 0; idx < np1Array.Length;idx++)
+                            result[0] += np1Array[idx] * np2Array[idx]; 
+                    }
+                    else 
                     {
-                        case ("Double"): prod.Data = MatrixMultiplication.MatrixMultiplyDoubleMatrix((double[])np1Dyn,(double[])np2Dyn,dim0,dim1); break;
-                        case ("Float"): prod.Data = MatrixMultiplication.MatrixMultiplyfloatMatrix((float[])np1Dyn,(float[])np2Dyn,dim0,dim1); break;
-                        case ("Complex"): prod.Data = MatrixMultiplication.MatrixMultiplyComplexMatrix((Complex[])np1Dyn,(Complex[])np2Dyn,dim0,dim1); break;
-                        case ("Quaternion"): prod.Data = MatrixMultiplication.MatrixMultiplyQuaternionMatrix((Quaternion[])np1Dyn,(Quaternion[]) np2Dyn,dim0,dim1) ; break;
+                        for (int idx = 0; idx < prod.Data.Length;idx++)
+                            for (int kdx = 0; kdx < np1.Shape.Shapes[1];kdx++)
+                                result[idx] += np1Array[(idx / np1.Shape.Shapes[0]) * np1.Shape.Shapes[1] + kdx] * np2Array[np2.Shape.Shapes[1] * kdx + (idx % np2.Shape.Shapes[1])];    
                     }
                     break;
+                }
+                case Quaternion[] np1Array : 
+                {
+                    Quaternion[] result = prod.Data as Quaternion[];
+                    Quaternion[] np2Array = np2.Data as Quaternion[];
+
+                    if (multipliationCase == MultiplicationCase.ArrayArray)
+                    {    
+                        for (int idx = 0; idx < np1Array.Length;idx++)
+                            result[0] += np1Array[idx] * np2Array[idx]; 
+                    }
+                    else 
+                    {
+                        for (int idx = 0; idx < prod.Data.Length;idx++)
+                            for (int kdx = 0; kdx < np1.Shape.Shapes[1];kdx++)
+                                result[idx] += np1Array[(idx / np1.Shape.Shapes[0]) * np1.Shape.Shapes[1] + kdx] * np2Array[np2.Shape.Shapes[1] * kdx + (idx % np2.Shape.Shapes[1])];    
+                    }
+                    break;
+                }
+                default : 
+                {
+                    throw new Exception("The Dot method is not implemented for the "  + typeof(TData).Name);
                 }
             }
 
             return ((NDArray<TData>) prod);
         }
         
+        internal static NumSharp.Extensions.MultiplicationCase ShapeDetermination(Shape shape1, Shape shape2, ref Shape shapeResult)
+        {
+            NumSharp.Extensions.MultiplicationCase returnValue = 0;
+            
+            if ((shape1.Length == 1 ) & (shape2.Length == 1))
+                if (shape1.Shapes[0] != shape2.Shapes[0])
+                    throw new Exception("The Dot method does not work with this shape or was not already implemented."); 
+                else {}
+            else
+                if (shape1.Shapes[1] != shape2.Shapes[0])
+                    throw new Exception("The Dot method does not work with this shape or was not already implemented.");
+                
+
+            // matrix multiplication
+            if( (shape1.Length == 2 ) && (shape2.Length == 2 )  )
+            {
+                shapeResult = new Shape(shape1.Shapes[0],shape2.Shapes[1]);
+                returnValue = MultiplicationCase.MatrixMatrix;
+            }
+            // matrix array multiplication
+            else if ((shape1.Length == 2) && (shape2.Length == 1))
+            {
+                shapeResult = new Shape(shape1.Shapes[0]);
+                returnValue = MultiplicationCase.MatrixArray;
+            }
+            // scalar product 
+            else if ((shape1.Length == 1) && (shape2.Length == 1))
+            {
+                shapeResult = new Shape(1);
+                returnValue = MultiplicationCase.ArrayArray;
+            }
+            else 
+            {
+                throw new Exception("The Dot method does not work with this shape or was not already implemented.");
+            }
+            return returnValue;
+        }
     }
 }
