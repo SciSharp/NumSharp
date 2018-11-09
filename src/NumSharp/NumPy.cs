@@ -6,7 +6,7 @@ using NumSharp.Extensions;
 namespace NumSharp
 {
     /// <summary>
-    /// NumPy bridge
+    /// API bridge between NumSharp and Python NumPy  
     /// </summary>
     public class NumPy<T>
     {
