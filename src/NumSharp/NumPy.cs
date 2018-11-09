@@ -16,6 +16,11 @@ namespace NumSharp
             return np.AMin(axis);
         }
 
+        public NDArray<double> amax(NDArray<double> np, int? axis = null)
+        {
+            return np.AMax(axis);
+        }
+
         public NDArray<T> arange(int stop)
         {
             return arange(0, stop);
