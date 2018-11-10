@@ -10,14 +10,25 @@ namespace NumSharp.Benchmark
     {
         static void Main(string[] args)
         {
-            var accessSummary = BenchmarkRunner.Run<npamin>();
+            BenchmarkDotNet.Reports.Summary accessSummary;
 
-            accessSummary = BenchmarkRunner.Run<NDArrayTester1D>();
-            accessSummary = BenchmarkRunner.Run<NDArrayTester2D>();
-            accessSummary = BenchmarkRunner.Run<LinqTesterInt>();
-            accessSummary = BenchmarkRunner.Run<LinqTesterDouble>();
-            accessSummary = BenchmarkRunner.Run<LinqTesterQuaternion>();
+            if (args.Contains("Linq"))
+            {
+                accessSummary = BenchmarkRunner.Run<LinqTesterInt>();
+                accessSummary = BenchmarkRunner.Run<LinqTesterDouble>();
+                accessSummary = BenchmarkRunner.Run<LinqTesterQuaternion>();
 
+            }
+            if (args.Contains("NDArray"))
+            {
+                accessSummary = BenchmarkRunner.Run<NDArrayTester1D>();
+                accessSummary = BenchmarkRunner.Run<NDArrayTester2D>();
+            }
+            if (args.Contains("amin"))
+            {
+                accessSummary = BenchmarkRunner.Run<npamin>();
+            }
+                     
             Console.WriteLine("Please press any key to continue.");
             Console.ReadKey();
         }
