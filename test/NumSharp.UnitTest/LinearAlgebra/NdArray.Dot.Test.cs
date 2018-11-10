@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Extensions
             series2.Data = new double[]{0, 1, 0.5};
             series2.Shape = new Shape(3);
 
-            var innerProduct = series1.Dot(series2);
+            var innerProduct = series1.dot(series2);
             Assert.IsTrue(innerProduct.Data[0] == 3.5);
         }
         [TestMethod]
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(matrix2[0,2] == 9);
 
 
-            var matrix3 = matrix1.Dot(matrix2);
+            var matrix3 = matrix1.dot(matrix2);
 
             var matrix4 = new NDArray<double>().Zeros(3,3);
 
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest.Extensions
             matrix2.Data = new Complex[] {7,8,9,new Complex(10,-10),11, new Complex(12,-12)};
             matrix2.Shape = new Shape(new int[] { 2, 3 });
 
-            var matrix3 = matrix1.Dot(matrix2);
+            var matrix3 = matrix1.dot(matrix2);
 
             var matrix4 = new Complex[9];
             matrix4[0] = new Complex(7,-47);

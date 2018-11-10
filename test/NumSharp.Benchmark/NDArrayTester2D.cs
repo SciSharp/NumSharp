@@ -83,7 +83,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void NDArrayMatrixMultilication()
         {
-            np3Matrix = np1Matrix.Dot(np2Matrix);
+            np3Matrix = np1Matrix.dot(np2Matrix);
         }
     }
 }

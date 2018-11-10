@@ -9,7 +9,7 @@ namespace NumSharp
 {
     public partial class NDArray<T>
     {
-        public NDArray<T> Inv()
+        public NDArray<T> inv()
         {
             NDArray<T> npInv = new NDArray<T>();
             npInv.Shape = new Shape(this.Shape.Shapes);

@@ -15,9 +15,9 @@ namespace NumSharp.UnitTest.Extensions
         {
             NDArray<double> np1 = new NDArray<double>().ARange(4).reshape(2,2);
 
-            NDArray<double> np1Inv = np1.Inv();
+            NDArray<double> np1Inv = np1.inv();
 
-            var OncesMatrix = np1.Dot(np1Inv);
+            var OncesMatrix = np1.dot(np1Inv);
 
              Assert.IsTrue(OncesMatrix[0,0] == 1);
              Assert.IsTrue(OncesMatrix[1,1] == 1);
@@ -39,9 +39,9 @@ namespace NumSharp.UnitTest.Extensions
             np1[2,1] = 1;
             np1[2,2] = 0;
 
-            NDArray<double> np1Inv = np1.Inv();
+            NDArray<double> np1Inv = np1.inv();
 
-            var OncesMatrix = np1.Dot(np1Inv);
+            var OncesMatrix = np1.dot(np1Inv);
 
             Assert.IsTrue(Math.Abs(OncesMatrix[0,0]) < 1.000001);
             Assert.IsTrue(Math.Abs(OncesMatrix[1,1]) < 1.000001);

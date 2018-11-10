@@ -16,7 +16,7 @@ namespace NumSharp
         /// <param name="np2"></param>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArray<T> Dot(NDArray<T> np2)
+        public NDArray<T> dot(NDArray<T> np2)
         {
             if ((this.Shape.Length == 1 ) & (np2.Shape.Length == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
