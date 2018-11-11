@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            var np = new NDArray<double>().ARange(9).reshape(3,3);
+            var np = new NDArray<double>().arange(9).reshape(3,3);
 
             var random = new Random();
             np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(stringOfNp.Contains("[[  0."));
 
-            np = new NDArray<double>().ARange(9).reshape(3,3);
+            np = new NDArray<double>().arange(9).reshape(3,3);
 
             stringOfNp = np.ToString();        
 
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CheckVectorString()
         {
-            var np = new NDArray<double>().ARange(9);
+            var np = new NDArray<double>().arange(9);
 
             var random = new Random();
             np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray1D()
         {
-            var np1 = new NDArray<double>().ARange(9);
+            var np1 = new NDArray<double>().arange(9);
 
             double[] np1_ = np1.ToDotNetArray<double[]>();
 
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray2D()
         {
-            var np1 = new NDArray<double>().ARange(9).reshape(3,3);
+            var np1 = new NDArray<double>().arange(9).reshape(3,3);
 
             double[][] np1_ = np1.ToDotNetArray<double[][]>();
 
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray3D()
         {
-            var np1 = new NDArray<double>().ARange(27).reshape(3,3,3);
+            var np1 = new NDArray<double>().arange(27).reshape(3,3,3);
 
             double[][][] np1_ = np1.ToDotNetArray<double[][][]>();
 

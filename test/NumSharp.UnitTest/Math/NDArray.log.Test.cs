@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Simple1DArray()
         {
-            var np1 = new NDArray<double>().Array(new double[] {1, Math.E, Math.E*Math.E, 0});
+            var np1 = new NDArray<double>().array(new double[] {1, Math.E, Math.E*Math.E, 0});
             
             var np2 = np1.log();
             

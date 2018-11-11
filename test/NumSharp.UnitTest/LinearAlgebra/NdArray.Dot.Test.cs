@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Extensions
         public void DotTwo1DDouble()
         {
             
-            var series1 = new NDArray<double>().ARange(4,1,1) ;
+            var series1 = new NDArray<double>().arange(4,1,1) ;
             
             var series2 = new NDArray<double>();
             series2.Data = new double[]{0, 1, 0.5};
@@ -32,14 +32,14 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyDouble()
         {   
-            NDArray<double> matrix1 = new NDArray<double>().ARange(7,1,1).reshape(3,2);
+            NDArray<double> matrix1 = new NDArray<double>().arange(7,1,1).reshape(3,2);
             
             Assert.IsTrue(matrix1[0,0] == 1);
             Assert.IsTrue(matrix1[0,1] == 2);
             Assert.IsTrue(matrix1[1,0] == 3);
             Assert.IsTrue(matrix1[2,0] == 5);
 
-            NDArray<double> matrix2 = new NDArray<double>().ARange(13,7,1).reshape(2,3) ;
+            NDArray<double> matrix2 = new NDArray<double>().arange(13,7,1).reshape(2,3) ;
         
             Assert.IsTrue(matrix2[0,0] == 7);
             Assert.IsTrue(matrix2[0,1] == 8);
@@ -103,9 +103,9 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DotTwo1DComplex()
         {
-            var series1 = new NDArray<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
+            var series1 = new NDArray<Complex>().array(new Complex[]{new Complex(0,2),new Complex(0,3)});
             
-            var series2 = new NDArray<Complex>().Array(new Complex[]{new Complex(0,2),new Complex(0,3)});
+            var series2 = new NDArray<Complex>().array(new Complex[]{new Complex(0,2),new Complex(0,3)});
         
             //var series3 = series1.Dot(series2);
 
