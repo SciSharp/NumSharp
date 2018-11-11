@@ -25,12 +25,12 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             // first array
-            np1Matrix = new NDArray<double>().ARange(100 * 100+2,2).reshape(100,100);
+            np1Matrix = new NDArray<double>().arange(100 * 100+2,2).reshape(100,100);
 
             np1DoubleMatrix = np1Matrix.ToDotNetArray<double[][]>();
 
             // second array
-            np2Matrix = new NDArray<double>().ARange(100*100+1,1).reshape(100,100);;
+            np2Matrix = new NDArray<double>().arange(100*100+1,1).reshape(100,100);;
             
             np2DoubleMatrix = np2Matrix.ToDotNetArray<double[][]>();
         }

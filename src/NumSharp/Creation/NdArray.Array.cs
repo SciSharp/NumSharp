@@ -7,17 +7,17 @@ using System.Drawing;
  
 namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<T>
     {
-        public static NDArray<TData> Array<TData>(this NDArray<TData> np, IEnumerable<TData> array, int ndim = 1)
+        public NDArray<T> array(IEnumerable<T> array, int ndim = 1)
         {
-            np.Data = array.Select(x => x).ToArray();
-            np.Shape = new Shape(new int[] { np.Data.Length });
+            this.Data = array.ToArray();
+            this.Shape = new Shape(new int[] { this.Data.Length });
 
-            return np;
+            return this;
         }
         
-        public static NDArray<Byte> Array(this NDArray<Byte> np, System.Drawing.Bitmap image )
+        public NDArray<Byte> array(System.Drawing.Bitmap image )
         {
             NDArray<Byte> imageArray = new NDArray<byte>();
 
@@ -33,19 +33,17 @@ namespace NumSharp
             return imageArray;  
         }
 
-        public static NDArray<TData[]> Array<TData>(this NDArray<TData[]> np, TData[][] array )
+        public NDArray<T> array(T[][] array )
         {
-            np.Data = array;
+            this.Data = new T[array.Length * array[0].Length];
+            this.Shape = new Shape(array.Length,array[0].Length);
 
-            return np;
+            for (int idx = 0; idx < array.Length;idx++)
+                for (int jdx = 0; jdx < array[0].Length;jdx++)
+                    this[idx,jdx] = array[idx][jdx];
+
+            return this;
         }
 
-        public static NDArray<TData> Array<TData>(this NDArray<TData> np, TData[] array)
-        {
-            np.Data = array;
-            np.Shape = new Shape(new int[] { np.Data.Length });
-
-            return np;
-        }
     }
 }

@@ -38,14 +38,14 @@ namespace NumSharp
                 case "Int32":
                     {
                         var n = new NDArray<int>();
-                        n.ARange(stop, start, step);
+                        n.arange(stop, start, step);
                         return n as NDArray<T>;
                     }
 
                 case "Double":
                     {
                         var n = new NDArray<double>();
-                        n.ARange(stop, start, step);
+                        n.arange(stop, start, step);
                         return n as NDArray<T>;
                     }
                 default:

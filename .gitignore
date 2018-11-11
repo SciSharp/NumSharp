@@ -329,3 +329,24 @@ ASALocalRun/
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
 /docs/_build
+src/NumSharp.Python/Ironpython/IronPython.dll
+src/NumSharp.Python/Ironpython/DLLs/IronPython.SQLite.xml
+src/NumSharp.Python/Ironpython/IronPython.xml
+src/NumSharp.Python/Ironpython/IronPython.Modules.dll
+src/NumSharp.Python/Ironpython/IronPython.Modules.xml
+src/NumSharp.Python/Ironpython/Microsoft.Dynamic.dll
+src/NumSharp.Python/Ironpython/Microsoft.Dynamic.xml
+src/NumSharp.Python/Ironpython/Microsoft.Scripting.dll
+src/NumSharp.Python/Ironpython/Microsoft.Scripting.xml
+src/NumSharp.Python/Ironpython/System.CodeDom.dll
+src/NumSharp.Python/Ironpython/System.Configuration.ConfigurationManager.dll
+src/NumSharp.Python/Ironpython/System.Runtime.CompilerServices.Unsafe.dll
+src/NumSharp.Python/Ironpython/System.Security.Cryptography.ProtectedData.dll
+src/NumSharp.Python/Ironpython/System.Security.Permissions.dll
+src/NumSharp.Python/Ironpython/System.Text.Encoding.CodePages.dll
+src/NumSharp.Python/Ironpython/ipy.bat
+src/NumSharp.Python/Ironpython/ipy.dll
+src/NumSharp.Python/Ironpython/ipy.sh
+src/NumSharp.Python/Ironpython/ipy.runtimeconfig.json
+src/NumSharp.Python/Ironpython/DLLs/IronPython.SQLite.dll
+src/NumSharp.Python/NumSharpPy/NumSharp.dll

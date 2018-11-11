@@ -38,7 +38,7 @@ namespace NumSharp.Benchmark
         public void arange_ndarray()
         {
             var n = new NDArray<int>();
-            n.ARange(length, start, step);
+            n.arange(length, start, step);
         }
 
         [Benchmark]

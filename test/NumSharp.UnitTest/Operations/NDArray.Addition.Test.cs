@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void DoubleTwo1D_NDArrayAddition()
         {
-            var np1 = new NDArray<double>().ARange(4, 1);
-            var np2 = new NDArray<double>().ARange(5, 2);
+            var np1 = new NDArray<double>().arange(4, 1);
+            var np2 = new NDArray<double>().arange(5, 2);
 
             var np3 = np1 + np2;
 
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double1DPlusOffset_NDArrayAddition()
         {
-            var np1 = new NDArray<double>().ARange(4, 1);
+            var np1 = new NDArray<double>().arange(4, 1);
 
             var np3 = np1 + 2;
 

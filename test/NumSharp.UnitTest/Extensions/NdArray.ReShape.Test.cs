@@ -54,35 +54,35 @@ namespace NumSharp.UnitTest.Extensions
         public void ReshapeNegative()
         {
             var np = new NDArray<int>();
-            np.ARange(12);
+            np.arange(12);
             np.reshape(-1, 2);
             Assert.IsTrue(np.Shape.Shapes[0] == 6);
             Assert.IsTrue(np.Shape.Shapes[1] == 2);
 
-            np.ARange(12);
+            np.arange(12);
             np.reshape(2, -1);
             Assert.IsTrue(np.Shape.Shapes[0] == 2);
             Assert.IsTrue(np.Shape.Shapes[1] == 6);
 
-            np.ARange(12);
+            np.arange(12);
             np.reshape(1, 3, 4);
             np.reshape(-1, 3);
             Assert.IsTrue(np.Shape.Shapes[0] == 4);
             Assert.IsTrue(np.Shape.Shapes[1] == 3);
 
-            np.ARange(12);
+            np.arange(12);
             np.reshape(1, 3, 4);
             np.reshape(3, -1);
             Assert.IsTrue(np.Shape.Shapes[0] == 3);
             Assert.IsTrue(np.Shape.Shapes[1] == 4);
 
-            np.ARange(100 * 100 * 3);
+            np.arange(100 * 100 * 3);
             np.reshape(100, 100, 3);
             np.reshape(-1, 3);
             Assert.IsTrue(np.Shape.Shapes[0] == 10000);
             Assert.IsTrue(np.Shape.Shapes[1] == 3);
 
-            np.ARange(15801033);
+            np.arange(15801033);
             np.reshape(2531, 2081, 3);
             np.reshape(-1, 3);
             Assert.IsTrue(np.Shape.Shapes[0] == 5267011);

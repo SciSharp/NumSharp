@@ -12,7 +12,7 @@ namespace NumSharp.Extensions
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NDArray<int>().ARange(max);
+            var np = new NDArray<int>().arange(max);
 
             for(int i = 0; i < max; i++)
             {

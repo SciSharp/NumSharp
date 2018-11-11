@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DoubleSqrtTest()
         {
-            var np = new NDArray<double>().ARange(3);
+            var np = new NDArray<double>().arange(3);
             np[0] = 1;
             np[1] = 4;
             np[2] = 9;

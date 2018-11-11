@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Simple2x2()
         {
-            NDArray<double> np1 = new NDArray<double>().ARange(4).reshape(2,2);
+            NDArray<double> np1 = new NDArray<double>().arange(4).reshape(2,2);
 
             NDArray<double> np1Inv = np1.inv();
 
