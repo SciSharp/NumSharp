@@ -1,0 +1,1 @@
+dotnet test ./test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
