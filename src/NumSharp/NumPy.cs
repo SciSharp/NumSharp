@@ -10,6 +10,10 @@ namespace NumSharp
     /// </summary>
     public class NumPy<T>
     {
+        public NDArray<double> absolute(NDArray<double> np)
+        {
+            return np.Absolute();
+        }
 
         public NDArray<double> amin(NDArray<double> np, int? axis = null)
         {
