@@ -5,6 +5,10 @@ using System.Collections.Generic;
 
 public static partial class numpy 
 {
+    public static dynamic arange(object stop)
+    {
+        return numpy.arange(0,stop,1);
+    }
     public static dynamic arange(object start, object stop, object step)
     {
         dynamic returnValue = null;
