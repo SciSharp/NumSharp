@@ -13,23 +13,23 @@ namespace NumSharp.UnitTest.Extensions
         public void ReShape()
         {
             var np = new NumPy<int>();
-            var n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(6), 3, 2);
+            var n = np.reshape(np.arange(6), 3, 2);
 
             Assert.IsTrue(n[0, 0] == 0);
             Assert.IsTrue(n[1, 1] == 3);
             Assert.IsTrue(n[2, 1] == 5);
             // Assert.IsTrue(np2.ToString().Equals("array([[0, 1], [2, 3], [4, 5]])"));
 
-            n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(6), 2, 3, 1);
+            n = np.reshape(np.arange(6), 2, 3, 1);
             Assert.IsTrue(n[1, 1, 0] == 4);
             Assert.IsTrue(n[1, 2, 0] == 5);
 
-            n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 2, 3, 2);
+            n = np.reshape(np.arange(12), 2, 3, 2);
             Assert.IsTrue(n[0, 0, 1] == 1);
             Assert.IsTrue(n[1, 0, 1] == 7);
             Assert.IsTrue(n[1, 1, 0] == 8);
 
-            n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 3, 4);
+            n = np.reshape(np.arange(12), 3, 4);
             Assert.IsTrue(n[1, 1] == 5);
             Assert.IsTrue(n[2, 0] == 8);
 
