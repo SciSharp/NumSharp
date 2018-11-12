@@ -90,6 +90,18 @@ namespace NumSharp
             return n.HStack(nps);
         }
 
+        /// <summary>
+        /// Returns num evenly spaced samples, calculated over the interval [start, stop].
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="stop"></param>
+        /// <param name="num"></param>
+        /// <returns></returns>
+        public NDArray<double> linspace(double start, double stop, int num = 50)
+        {
+            return new NDArray<double>().linspace(start, stop, num);
+        }
+
         public NDArrayRandom random 
         {
             get
