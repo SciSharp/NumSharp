@@ -14,12 +14,12 @@ namespace NumSharp.UnitTest
         public void IndexAccessorGetter()
         {
             var np = new NumPy<int>();
-            var n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 3, 4);
+            var n = np.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[1, 1] == 5);
             Assert.IsTrue(n[2, 0] == 8);
 
-            n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 2, 3, 2);
+            n = np.reshape(np.arange(12), 2, 3, 2);
             var n1 = n.Vector(1);
 
             Assert.IsTrue(n1[1, 1] == 9);
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest
         public void IndexAccessorSetter()
         {
             var np = new NumPy<int>();
-            var n = NumSharp.Extensions.NDArrayExtensions.reshape(np.arange(12), 3, 4);
+            var n = np.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[0, 3] == 3);
             Assert.IsTrue(n[1, 3] == 7);
