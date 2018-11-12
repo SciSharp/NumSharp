@@ -10,17 +10,17 @@ namespace NumSharp
         public static int Seed { get; set; }
 
         /// <summary>
-        /// 
+        /// Return a sample (or samples) from the “standard normal” distribution.
         /// </summary>
-        /// <param name="shapes"></param>
+        /// <param name="d"></param>
         /// <returns></returns>
-        public NDArray<double> randn(int[] shapes)
+        public NDArray<double> randn(params int[] d)
         {
-            if (shapes.Length == 0)
-                throw new Exception("Shapes cannot be empty.");
+            if (d.Length == 0)
+                throw new Exception("d cannot be empty.");
             NDArray<double> array = new NDArray<double>();
             Random rand = new Random(); //reuse this if you are generating many
-            array.Shape = new Shape(shapes);
+            array.Shape = new Shape(d);
             for (int i = 0; i < array.Shape.Size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
