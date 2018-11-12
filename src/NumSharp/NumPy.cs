@@ -10,6 +10,10 @@ namespace NumSharp
     /// </summary>
     public class NumPy<T>
     {
+        public NDArray<double> absolute(NDArray<double> np)
+        {
+            return np.Absolute();
+        }
 
         public NDArray<double> amin(NDArray<double> np, int? axis = null)
         {
@@ -88,6 +92,18 @@ namespace NumSharp
         {
             var n = new NDArray<double>();
             return n.HStack(nps);
+        }
+
+        /// <summary>
+        /// Returns num evenly spaced samples, calculated over the interval [start, stop].
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="stop"></param>
+        /// <param name="num"></param>
+        /// <returns></returns>
+        public NDArray<double> linspace(double start, double stop, int num = 50)
+        {
+            return new NDArray<double>().linspace(start, stop, num);
         }
 
         public NDArrayRandom random 

@@ -29,6 +29,7 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
+    /// <typeparam name="T">dtype</typeparam>
     public partial class NDArray<T> 
     {
         /// <summary>
