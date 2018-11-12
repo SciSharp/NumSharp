@@ -4,27 +4,25 @@ using System.ComponentModel;
 using System.Text;
 using System.Linq;
 
-namespace NumSharp.Extensions
+namespace NumSharp
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray<T>
     {
         /// <summary>
         /// Gives a new shape to an array without changing its data.
         /// </summary>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public static NDArray<T> reshape<T>(this NDArray<T> np, params int[] shape)
+        public NDArray<T> reshape(params int[] shape)
         {
             var count = shape.Length;
             var idx = FindNegativeIndex(shape);
             if (idx == -1)
-                np.Shape = new Shape(shape);
+                this.Shape = new Shape(shape);
             else
-                np.Shape = new Shape(CalculateNegativeShape(idx, np.Shape.Shapes.ToList(), shape));
+                this.Shape = new Shape(CalculateNegativeShape(idx, this.Shape.Shapes.ToList(), shape));
 
-            //np.Shape = newShape;
-
-            return np;
+            return this;
         }
 
         private static int FindNegativeIndex(params int[] shape)
