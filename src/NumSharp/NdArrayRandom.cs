@@ -21,6 +21,8 @@ namespace NumSharp
             NDArray<double> array = new NDArray<double>();
             Random rand = new Random(); //reuse this if you are generating many
             array.Shape = new Shape(d);
+            array.Data = new double[array.Shape.Size];
+
             for (int i = 0; i < array.Shape.Size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
