@@ -9,11 +9,16 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NDArrayRandomTest
     {
+        NumPy<double> np = new NumPy<double>();
         [TestMethod]
-        public void NDArrayRandom()
+        public void randn()
         {
-            NumPy<double> np = new NumPy<double>();
             var n = np.random.randn(5, 2);
+        }
+
+        public void normal()
+        {
+            var n = np.random.normal(0, 1, 5);
         }
     }
 }
