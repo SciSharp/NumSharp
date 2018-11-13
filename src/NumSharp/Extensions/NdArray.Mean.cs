@@ -10,6 +10,7 @@ namespace NumSharp.Extensions
         public static NDArray<double> Mean(this NDArray<double> np, int axis = -1)
         {
             var mean = new NDArray<double>();
+            mean.Data = new double[0];
 
             // axis == -1: DEFAULT; to compute the mean of the flattened array.
             if (axis == -1)
