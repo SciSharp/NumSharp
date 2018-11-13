@@ -12,25 +12,11 @@ namespace NumSharp
         /// <summary>
         /// Return a sample (or samples) from the “standard normal” distribution.
         /// </summary>
-        /// <param name="d"></param>
+        /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray<double> randn(params int[] d)
+        public NDArray<double> randn(params int[] size)
         {
-            if (d.Length == 0)
-                throw new Exception("d cannot be empty.");
-            NDArray<double> array = new NDArray<double>();
-            Random rand = new Random(); //reuse this if you are generating many
-            array.Shape = new Shape(d);
-            for (int i = 0; i < array.Shape.Size; i++)
-            {
-                double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
-                double u2 = 1.0 - rand.NextDouble();
-                double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
-                             Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
-                double randNormal = 0 + 1 * randStdNormal; //random normal(mean,stdDev^2)
-                array.Data[i] = rand.Next();
-            }
-            return array;
+            return this.stardard_normal(size);
         }
 
         /// <summary>
@@ -38,15 +24,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">Mean of the distribution</param>
         /// <param name="scale">Standard deviation of the distribution</param>
-        /// <param name="d"></param>
+        /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray<double> normal(double loc, double scale, params int[] d)
+        public NDArray<double> normal(double loc, double scale, params int[] size)
         {
-            if (d.Length == 0)
+            if (size.Length == 0)
                 throw new Exception("d cannot be empty.");
             NDArray<double> array = new NDArray<double>();
             Random rand = new Random(); //reuse this if you are generating many
-            array.Shape = new Shape(d);
+            array.Shape = new Shape(size);
             for (int i = 0; i < array.Shape.Size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
@@ -57,6 +43,16 @@ namespace NumSharp
                 array.Data[i] = rand.Next();
             }
             return array;
+        }
+
+        /// <summary>
+        /// Draw samples from a standard Normal distribution (mean=0, stdev=1).
+        /// </summary>
+        /// <param name="size"></param>
+        /// <returns></returns>
+        public NDArray<double> stardard_normal(params int[] size)
+        {
+            return this.normal(0, 1.0, size);
         }
     }
 }
