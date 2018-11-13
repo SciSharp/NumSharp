@@ -32,7 +32,7 @@ namespace NumSharp
                 throw new Exception("d cannot be empty.");
             NDArray<double> array = new NDArray<double>();
             Random rand = new Random(); //reuse this if you are generating many
-            array.Shape = new Shape(d);
+            array.Shape = new Shape(size);
             array.Data = new double[array.Shape.Size];
 
             for (int i = 0; i < array.Shape.Size; i++)
