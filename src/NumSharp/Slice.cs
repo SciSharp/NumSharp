@@ -10,18 +10,29 @@ namespace NumSharp
     /// </summary>
     public class Slice
     {
-        private int start;
-        private int stop;
-        private int step;
+        public int Start { get; set; }
+        public int Stop { get; set; }
+        public int Step { get; set; }
 
+        public int Length => Stop - Start;
+
+        /// <summary>
+        /// start, stop, step
+        /// </summary>
+        /// <param name="p"></param>
         public Slice(params int[] p)
         {
             switch (p.Length)
             {
+                case 2:
+                    Start = p[0];
+                    Stop = p[1];
+                    Step = 1;
+                    break;
                 case 3:
-                    start = p[0];
-                    stop = p[1];
-                    step = p[2];
+                    Start = p[0];
+                    Stop = p[1];
+                    Step = p[2];
                     break;
             }
         }

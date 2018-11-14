@@ -15,14 +15,14 @@ namespace NumSharp
             return np.Absolute();
         }
 
-        public NDArray<double> amin(NDArray<double> np, int? axis = null)
-        {
-            return np.AMin(axis);
-        }
-
         public NDArray<double> amax(NDArray<double> np, int? axis = null)
         {
             return np.AMax(axis);
+        }
+
+        public NDArray<double> amin(NDArray<double> np, int? axis = null)
+        {
+            return np.AMin(axis);
         }
 
         public NDArray<T> arange(int stop)
@@ -119,6 +119,11 @@ namespace NumSharp
             np.Shape = new Shape(shape);
 
             return np;
+        }
+
+        public NDArray<double> sin(NDArray<double> nd)
+        {
+            return nd.sin();
         }
 
         public NDArray<double> vstack(params NDArray<double>[] nps)
