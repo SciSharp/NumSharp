@@ -106,6 +106,11 @@ namespace NumSharp
             return new NDArray<double>().linspace(start, stop, num);
         }
 
+        public NDArray<double> power(NDArray<double> nd, double exponent)
+        {
+            return nd.power(exponent);
+        }
+
         public NDArrayRandom random 
         {
             get
