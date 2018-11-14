@@ -29,6 +29,7 @@ namespace NumSharp
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
+    /// <typeparam name="T">dtype</typeparam>
     public partial class NDArray<T> 
     {
         /// <summary>
@@ -36,10 +37,21 @@ namespace NumSharp
         /// </summary>
         public T[] Data { get; set; }
 
+        private Shape shape;
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public Shape Shape { get; set; }
+        public Shape Shape
+        {
+            get
+            {
+                return shape;
+            }
+            set
+            {
+                shape = value;
+            }
+        }
 
         /// <summary>
         /// Dimension count
@@ -55,48 +67,6 @@ namespace NumSharp
         {
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
-            Data = new T[] { };
-        }
-
-        /// <summary>
-        /// Index accessor
-        /// </summary>
-        /// <param name="select"></param>
-        /// <returns></returns>
-        public T this[params int[] select]
-        {
-            get
-            {
-                return Data[GetIndexInShape(select)];
-            }
-
-            set
-            {
-                Data[GetIndexInShape(select)] = value;
-            }
-        }
-
-        public NDArray<T> Vector(params int[] select)
-        {
-            if (select.Length == NDim)
-            {
-                throw new Exception("Please use NDArray[m, n] to access element.");
-            }
-            else
-            {
-                int start = GetIndexInShape(select);
-                int length = Shape.DimOffset[select.Length - 1];
-
-                var n = new NDArray<T>();
-                //n.Shape = shape.Skip(select.Length).ToList();
-                Span<T> data = Data;
-                n.Data = data.Slice(start, length).ToArray();
-                // Since n.Shape is a IList it cannot be converted to Span<T>
-                // This is a lot of hoops to jump throught to get it into a span
-                // shape.Skip(select.Length).ToList() may be more efficient - not sure
-                n.Shape = new Shape(Shape.Shapes.ToArray().AsSpan().Slice(select.Length).ToArray());
-                return n;
-            }
         }
 
         public void Vector(Shape shape, T value)
@@ -118,64 +88,6 @@ namespace NumSharp
                     elements[i] = value;
                 }
             }
-        }
-
-        /// <summary>
-        /// Filter specific elements through select.
-        /// </summary>
-        /// <param name="select"></param>
-        /// <returns>Return a new NDArray with filterd elements.</returns>
-        public NDArray<T> this[IList<int> select]
-        {
-            get
-            {
-                var n = new NDArray<T>();
-                if (NDim == 1)
-                {
-                    n.Data = new T[select.Count()];
-                    n.Shape = new Shape(select.Count());
-                    for (int i = 0; i < select.Count(); i++)
-                    {
-                        n[i] = this[select[i]];
-                    }
-                }
-                else if (NDim == 2)
-                {
-                    n.Data = new T[select.Count() * Shape[1]];
-                    n.Shape = new Shape(select.Count(), Shape[1]);
-                    for (int i = 0; i < select.Count(); i++)
-                    {
-                        for (int j = 0; j < Shape[1]; j++)
-                        {
-                            n[i, j] = this[select[i], j];
-                        }
-                    }
-                }
-                else
-                {
-                    throw new NotImplementedException();
-                }
-
-                return n;
-            }
-        }
-
-        /// <summary>
-        /// Overload
-        /// </summary>
-        /// <param name="select"></param>
-        /// <returns></returns>
-        public NDArray<T> this[NDArray<int> select] => this[select.Data.ToList()];
-
-        private int GetIndexInShape(params int[] select)
-        {
-            int idx = 0;
-            for (int i = 0; i < select.Length; i++)
-            {
-                idx += Shape.DimOffset[i] * select[i];
-            }
-
-            return idx;
         }
 
         public override string ToString()

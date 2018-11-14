@@ -6,7 +6,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 
-namespace NumSharp.UnitTest.Operations
+namespace NumSharp.UnitTest
 {
     [TestClass]
     public class LogTest

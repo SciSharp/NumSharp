@@ -114,6 +114,10 @@ namespace NumSharp
 
             return (NDArray<T>) sum;
         }
-        
+
+        public static NDArray<T> operator *(T scalar, NDArray<T> np1)
+        {
+            return np1 * scalar;
+        }
     }
 }

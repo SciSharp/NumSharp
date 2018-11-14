@@ -10,15 +10,19 @@ namespace NumSharp
     /// </summary>
     public class NumPy<T>
     {
-
-        public NDArray<double> amin(NDArray<double> np, int? axis = null)
+        public NDArray<double> absolute(NDArray<double> np)
         {
-            return np.AMin(axis);
+            return np.Absolute();
         }
 
         public NDArray<double> amax(NDArray<double> np, int? axis = null)
         {
             return np.AMax(axis);
+        }
+
+        public NDArray<double> amin(NDArray<double> np, int? axis = null)
+        {
+            return np.AMin(axis);
         }
 
         public NDArray<T> arange(int stop)
@@ -90,6 +94,23 @@ namespace NumSharp
             return n.HStack(nps);
         }
 
+        /// <summary>
+        /// Returns num evenly spaced samples, calculated over the interval [start, stop].
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="stop"></param>
+        /// <param name="num"></param>
+        /// <returns></returns>
+        public NDArray<double> linspace(double start, double stop, int num = 50)
+        {
+            return new NDArray<double>().linspace(start, stop, num);
+        }
+
+        public NDArray<double> power(NDArray<double> nd, double exponent)
+        {
+            return nd.power(exponent);
+        }
+
         public NDArrayRandom random 
         {
             get
@@ -103,6 +124,11 @@ namespace NumSharp
             np.Shape = new Shape(shape);
 
             return np;
+        }
+
+        public NDArray<double> sin(NDArray<double> nd)
+        {
+            return nd.sin();
         }
 
         public NDArray<double> vstack(params NDArray<double>[] nps)
