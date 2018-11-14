@@ -42,7 +42,7 @@ namespace NumSharp
                 double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
                              Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
                 double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
-                array.Data[i] = rand.Next();
+                array.Data[i] = randNormal;
             }
             return array;
         }
