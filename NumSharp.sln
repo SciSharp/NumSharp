@@ -9,11 +9,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\N
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\NumSharp.Benchmark\NumSharp.Benchmark.csproj", "{2D475706-0F69-4C9B-83B9-03AB1AE38186}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.PowerShell", "src\NumSharp.PowerShell\NumSharp.PowerShell.csproj", "{CA5288B3-C1C9-441B-9D34-D2580E2920FB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.PowerShell", "src\NumSharp.PowerShell\NumSharp.PowerShell.csproj", "{CA5288B3-C1C9-441B-9D34-D2580E2920FB}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E2079C90-B890-4DF8-9D64-D6AF361F705F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{678A1916-B250-49AA-88C1-507E6616F834}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{381613F6-A794-4255-B50E-D2315F8A8CEC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,18 +37,15 @@ Global
 		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{678A1916-B250-49AA-88C1-507E6616F834}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{678A1916-B250-49AA-88C1-507E6616F834}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{678A1916-B250-49AA-88C1-507E6616F834}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{678A1916-B250-49AA-88C1-507E6616F834}.Release|Any CPU.Build.0 = Release|Any CPU
+		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{678A1916-B250-49AA-88C1-507E6616F834} = {E2079C90-B890-4DF8-9D64-D6AF361F705F}
 	EndGlobalSection
 EndGlobal

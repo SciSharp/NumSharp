@@ -24,6 +24,7 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
   * array
   * hstack
   * linspace
+  * max
   * power
   * random
     * normal
