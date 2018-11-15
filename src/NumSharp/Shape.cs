@@ -58,8 +58,8 @@ namespace NumSharp
 
         public int UniShape => shape[0];
 
-        public (int, int) BiShape => (shape[0], shape[1]);
+        public (int, int) BiShape => shape.Count == 2 ? (shape[0], shape[1]) : (0, 0);
 
-        public (int, int, int) TriShape => (shape[0], shape[1], shape[2]);
+        public (int, int, int) TriShape => shape.Count == 3 ? (shape[0], shape[1], shape[2]) : (0, 0, 0);
     }
 }

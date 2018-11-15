@@ -6,11 +6,13 @@ namespace NumSharp
 {
     public partial class NDArray<T>
     {
-        public NDArray<T>[] this[Slice select]
+        public NDArray<NDArray<T>> this[Slice select]
         {
             get
             {
-                var list = new List<NDArray<T>>();
+                var result = new NDArray<NDArray<T>>();
+                result.Data = new NDArray<T>[select.Length];
+                result.shape = new Shape(select.Length);
 
                 int[] shape = new int[Shape.Length];
                 for (int i = 0; i < Shape.Length; i++)
@@ -25,6 +27,8 @@ namespace NumSharp
                     }
                 }
 
+                int index = 0;
+                var list = new NDArray<T>();
                 for (int s = select.Start; s< select.Stop; s+= select.Step)
                 {
                     var n = new NDArray<T>();
@@ -32,10 +36,11 @@ namespace NumSharp
                     n.Data = data.Slice(s, select.Step).ToArray();
                     n.Shape = new Shape(shape);
 
-                    list.Add(n);
+                    result.Data[index] = n;
+                    index++;
                 }
 
-                return list.ToArray();
+                return result;
             }
         }
     }

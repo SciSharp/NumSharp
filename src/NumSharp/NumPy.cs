@@ -131,11 +131,6 @@ namespace NumSharp
             return np;
         }
 
-        public NDArray<double> sin(NDArray<double> nd)
-        {
-            return nd.sin();
-        }
-
         public NDArray<double> vstack(params NDArray<double>[] nps)
         {
             var n = new NDArray<double>();
