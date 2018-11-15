@@ -14,9 +14,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void ThreeMultiplication()
         {
-            NDArray<double> np1 = new NDArray<double>().arange(4).reshape(2,2);
+            NDArray<double> np1 = new NumPy<double>().arange(4).reshape(2,2);
             NDArray<double> np2 = np1.inv();
-            NDArray<double> np3 = new NDArray<double>().Onces(2,2);
+            NDArray<double> np3 = new NumPy<double>().ones(new Shape(2,2));
 
             var OncesMatrix = np1.multi_dot(np2,np3);
 

@@ -61,7 +61,7 @@ namespace NumSharp
         /// <summary>
         /// Total of elements
         /// </summary>
-        public int Size => Data.Length;
+        public int Size => Shape.Size;
 
         public NDArray()
         {
