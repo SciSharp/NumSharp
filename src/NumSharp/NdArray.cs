@@ -69,7 +69,7 @@ namespace NumSharp
             Shape = new Shape(new int[] { 0 });
         }
 
-        public void Vector(Shape shape, T value)
+        public void Set(Shape shape, T value)
         {
             if (shape.Length == NDim)
             {

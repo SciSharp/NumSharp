@@ -9,7 +9,15 @@ namespace NumSharp.Extensions
     {
         public static NDArray<double> Max(this NDArray<double> np)
         {
-            if (np.NDim == 2)
+            if (np.NDim == 1)
+            {
+                var max = new NDArray<double>().Zeros(np.Size);
+                max.Shape = new Shape(1);
+                max.Data = new double[] { np.Data.Max() };
+
+                return max;
+            }
+            else if (np.NDim == 2)
             {
                 var max = new NDArray<double>().Zeros(np.Shape.Shapes[1]);
 
