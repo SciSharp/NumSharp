@@ -31,7 +31,7 @@ namespace NumSharp
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
     /// <typeparam name="T">dtype</typeparam>
-    public partial class NDArray<T> : IEnumerable<T>
+    public partial class NDArray<T>
     {
         /// <summary>
         /// 1 dim array data storage
@@ -272,16 +272,6 @@ namespace NumSharp
             noAfter  = (noAfter_local  > noAfter ) ? noAfter_local  : noAfter;
 
             return parsed;
-        }
-
-        public IEnumerator<T> GetEnumerator()
-        {
-            return ((IEnumerable<T>)Data).GetEnumerator();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return ((IEnumerable<T>)Data).GetEnumerator();
         }
     }
 }
