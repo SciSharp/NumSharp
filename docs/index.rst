@@ -58,6 +58,7 @@ The main documentation for the site is organized into a couple sections:
    :caption: User Documentation:
    
    user-docs/overview
+   user-docs/NDArray.Creation
 
 .. _developer-docs:
    :maxdepth: 3
