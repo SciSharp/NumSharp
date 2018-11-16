@@ -7,17 +7,18 @@ using System.Drawing;
  
 namespace NumSharp
 {
-    public partial class NDArray<T>
-    {
-        public NDArray<T> array(IEnumerable<T> array, int ndim = 1)
+	public static partial class NumPyExtensions
+	{
+        public static NDArray<T> array<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
         {
-            this.Data = array.ToArray();
-            this.Shape = new Shape(new int[] { this.Data.Length });
+			var nd = new NDArray<T>();
+			nd.Data = array.ToArray();
+            nd.Shape = new Shape(new int[] { nd.Data.Length });
 
-            return this;
+            return nd;
         }
         
-        public NDArray<Byte> array(System.Drawing.Bitmap image )
+        public static NDArray<Byte> array(System.Drawing.Bitmap image )
         {
             NDArray<Byte> imageArray = new NDArray<byte>();
 
@@ -33,17 +34,27 @@ namespace NumSharp
             return imageArray;  
         }
 
-        public NDArray<T> array(T[][] array )
-        {
-            this.Data = new T[array.Length * array[0].Length];
-            this.Shape = new Shape(array.Length,array[0].Length);
+		public static NDArray<T> array<T>(T[][] data)
+		{
+			int size = data.Length * data[0].Length;
+			var all = new T[size];
 
-            for (int idx = 0; idx < array.Length;idx++)
-                for (int jdx = 0; jdx < array[0].Length;jdx++)
-                    this[idx,jdx] = array[idx][jdx];
+			int idx = 0;
+			for (int row = 0; row < data.Length; row++)
+			{
+				for (int col = 0; col < data[row].Length; col++)
+				{
+					all[idx] = data[row][col];
+					idx++;
+				}
+			}
 
-            return this;
-        }
+			var n = new NDArray<T>();
+			n.Data = all;
+			n.Shape = new Shape(new int[] { data.Length, data[0].Length });
 
-    }
+			return n;
+		}
+
+	}
 }
