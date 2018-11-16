@@ -41,25 +41,24 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
 // init NumPy instance which pesists integer data type
 var np = new NumPy<int>();
 // create a 2-dimension vector
-var n = np.arange(12).reshape(3, 4);
+var nd = np.arange(12).reshape(3, 4);
 
 // access data by index
-Assert.IsTrue(n[1, 1] == 5);
-Assert.IsTrue(n[2, 0] == 8);
+var data = nd[1, 1];
 
 // create a 3-dimension vector
-n = np.arange(12).reshape(2, 3, 2);
+nd = np.arange(12).reshape(2, 3, 2);
 // get the 2nd vector in the 1st dimension
-var n1 = n.Vector(1);
-
-Assert.IsTrue(n1[1, 1] == 9);
-Assert.IsTrue(n1[2, 1] == 11);
+data = n[new Shape(1)];
 
 // get the 3rd vector in the (axis 1, axis 2) dimension
-var n2 = n.Vector(1, 2);
+data = n[new Shape(1, 2)];
 
-Assert.IsTrue(n2[0] == 10);
-Assert.IsTrue(n2[1] == 11);
+// interate ndarray
+foreach (data in nd)
+{
+	// data is a ndarray or a value
+}
 ```
 
 ### Install NumSharp in NuGet
@@ -83,8 +82,10 @@ Reference the online [documents](https://numsharp.readthedocs.io).
 
 NumSharp is referenced by:
 * [Pandas.NET](https://github.com/Oceania2018/Pandas.NET)
+* [SciSharp Learn](https://github.com/SciSharp/scisharp-learn)
 * [Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
 * [CherubNLP](https://github.com/Oceania2018/CherubNLP)
 * [BotSharp](https://github.com/dotnetcore/BotSharp)
 
+NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 Welcome to fork and pull request to add more APIs, and make reference list longer.
