@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Extensions
             if (System.IO.File.Exists(imagePath))
             {
                 var image = new System.Drawing.Bitmap(imagePath);
-                var imageNDArray = new NDArray<byte>().array(image);
+                var imageNDArray = new NumPy<byte>().array(image);
 
                 Assert.IsTrue(imageNDArray[0, 0, 0] == 255);
                 Assert.IsTrue(imageNDArray[0, 0, 1] == 253);

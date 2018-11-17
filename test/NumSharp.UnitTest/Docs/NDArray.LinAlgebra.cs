@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Docs
             // the values over t - linear dependence with noice 
             var values = time * 3 + 5 + np.random.randn(time.Data.Length);
 
-            var matrixA = new NDArray<double>().array(new double[2000]);
+            var matrixA = new NumPy<double>().array(new double[2000]);
          
         }
     }

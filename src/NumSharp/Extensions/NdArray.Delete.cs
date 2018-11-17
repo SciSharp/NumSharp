@@ -5,14 +5,14 @@ using System.Text;
 
 namespace NumSharp.Extensions
 {
-    public static partial class NDArrayExtensions
+    public static partial class NumPyExtensions
     {
-        public static NDArray<T> Delete<T>(this NDArray<T> np,  IEnumerable<T> delete)
+        public static NDArray<T> delete<T>(this NumPy<T> np, NDArray<T> nd, IEnumerable<T> delete)
         {            
-            var np1 = np.array(np.Data.Where(x => !delete.Contains(x)));
-            np1.Shape = new Shape(new int[] { np.Data.Length });
+            var nd1 = np.array(nd.Data.Where(x => !delete.Contains(x)));
+            nd1.Shape = new Shape(nd1.Data.Length);
 
-            return np1;
+            return nd1;
         }
     }
 }

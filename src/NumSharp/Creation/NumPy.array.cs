@@ -18,7 +18,7 @@ namespace NumSharp
             return nd;
         }
         
-        public static NDArray<Byte> array(System.Drawing.Bitmap image )
+        public static NDArray<Byte> array<T>(this NumPy<T> np, System.Drawing.Bitmap image )
         {
             NDArray<Byte> imageArray = new NDArray<byte>();
 
@@ -34,7 +34,7 @@ namespace NumSharp
             return imageArray;  
         }
 
-		public static NDArray<T> array<T>(T[][] data)
+		public static NDArray<T> array<T>(this NumPy<T> np, T[][] data)
 		{
 			int size = data.Length * data[0].Length;
 			var all = new T[size];
