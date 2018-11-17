@@ -89,3 +89,5 @@ NumSharp is referenced by:
 
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 Welcome to fork and pull request to add more APIs, and make reference list longer.
+
+<img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
