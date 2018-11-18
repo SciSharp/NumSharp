@@ -1,0 +1,320 @@
+{
+  "homepages": [],
+  "source_base_path": "C:/Users/KAC2ST/GitHub/NumSharp/docfx_project",
+  "xrefmap": "xrefmap.yml",
+  "files": [
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.NDArrayExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.NDArrayExtensions.html",
+          "hash": "/90OFxXvoQh68yLYHdQ/2Q=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.NDArrayRandomExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.NDArrayRandomExtensions.html",
+          "hash": "yIEIqUl4YZ48JHvrLDQ/qg=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.NumPyExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.NumPyExtensions.html",
+          "hash": "8VhL+c5DBZw+I3ndGW6LPw=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.html",
+          "hash": "ePGRTl2Z3/cRTx5EdYNXhg=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Matrix-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Matrix-1.html",
+          "hash": "GPjQpHSqM63GR0crJyTlJQ=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArray-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArray-1.html",
+          "hash": "+I39XC6lIYrxSP8oxXA0mA=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArrayRandom.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArrayRandom.html",
+          "hash": "bw88TNRHS1mmbI+0XDT9sg=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArray_Legacy-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArray_Legacy-1.html",
+          "hash": "9TuV9lGcxygoA3e4W8VQkQ=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NumPy-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NumPy-1.html",
+          "hash": "x0WdCiqGxayI9ya4aSBueA=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NumPyExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NumPyExtensions.html",
+          "hash": "9YEPXgybVQhLBgvkMeCrSg=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.PowerShell.GetGreeting.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.PowerShell.GetGreeting.html",
+          "hash": "LtKqFMNd3d4Jp7wQA0ZlVA=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.PowerShell.NewNDArray.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.PowerShell.NewNDArray.html",
+          "hash": "RtgmQq/yg43C5Bf6O0XSCg=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.PowerShell.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.PowerShell.html",
+          "hash": "WSY8veHUolI8ZEgCymrT9Q=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Shape.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Shape.html",
+          "hash": "6r3hzJ7b4WqUdwjLTPtbFQ=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Slice.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Slice.html",
+          "hash": "n7UgHY555mBdqcMRYvbubA=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.html",
+          "hash": "6Kz50wWhG2MsELyB4K1tSw=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "api/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "api/index.html",
+          "hash": "UGM5821fGYPiuz2Ygh9B/A=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "api/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/toc.html",
+          "hash": "cjgXMpghTL/Cf2fY6O/IdQ=="
+        }
+      },
+      "is_incremental": false,
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "articles/NDArray.Creation.md",
+      "output": {
+        ".html": {
+          "relative_path": "articles/NDArray.Creation.html",
+          "hash": "sjNupCedhcTa2bfVVPzQHw=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "articles/intro.md",
+      "output": {
+        ".html": {
+          "relative_path": "articles/intro.html",
+          "hash": "oA3VnVwN0NdNBQjUglBphQ=="
+        }
+      },
+      "is_incremental": false,
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "articles/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "articles/toc.html",
+          "hash": "XWvZh7dOpJ2OuF+qD1hm1w=="
+        }
+      },
+      "is_incremental": false,
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "index.md",
+      "output": {
+        ".html": {
+          "relative_path": "index.html",
+          "hash": "oxT/YIdDuKMxSX9nXEp5VQ=="
+        }
+      },
+      "is_incremental": true,
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "toc.html",
+          "hash": "k+/dkjFuwAVS32HduMpmBw=="
+        }
+      },
+      "is_incremental": false,
+      "version": ""
+    }
+  ],
+  "incremental_info": [
+    {
+      "status": {
+        "can_incremental": true,
+        "incrementalPhase": "build"
+      },
+      "processors": {
+        "ConceptualDocumentProcessor": {
+          "can_incremental": true,
+          "incrementalPhase": "build"
+        },
+        "ManagedReferenceDocumentProcessor": {
+          "can_incremental": true,
+          "incrementalPhase": "build"
+        },
+        "TocDocumentProcessor": {
+          "can_incremental": false,
+          "details": "Processor TocDocumentProcessor cannot support incremental build because the processor doesn't implement ISupportIncrementalDocumentProcessor interface.",
+          "incrementalPhase": "build"
+        }
+      }
+    },
+    {
+      "status": {
+        "can_incremental": true,
+        "details": "Can support incremental post processing.",
+        "incrementalPhase": "postProcessing"
+      },
+      "processors": {}
+    }
+  ],
+  "version_info": {},
+  "groups": [
+    {
+      "xrefmap": "xrefmap.yml"
+    }
+  ]
+}
