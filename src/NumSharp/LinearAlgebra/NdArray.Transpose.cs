@@ -12,7 +12,7 @@ namespace NumSharp
         public NDArray<T> transpose()
         {
             var np = new NDArray<T>();
-            np.Data = this.Data;
+            np.Data = new T[this.Data.Length];
 
             if (NDim == 1)
             {
@@ -21,6 +21,9 @@ namespace NumSharp
             else 
             {
                 np.Shape = new Shape(this.Shape.Shapes.Reverse().ToArray());
+                for (int idx = 0;idx < np.shape.Shapes[0];idx++)
+                    for (int jdx = 0;jdx < np.shape.Shapes[1];jdx++)
+                        np[idx,jdx] = this[jdx,idx];
             }
             
             return np;
