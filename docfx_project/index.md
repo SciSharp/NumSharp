@@ -1,14 +1,8 @@
-.. NumSharp documentation master file, created by
-   sphinx-quickstart on Thu Oct 11 20:29:54 2018.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome Seeker to NumSharp's documentation!
 ===========================================
 
-Welcome Seeker to NumSharp. 
-
 Since you reached our documentation, you must be interested into .NET or into machine learning. 
+
 No matter what you was searching, you will be satisfied. 
 
 NumSharp is quite new open source project with one big goal: adapt the famous and well-known python library numpy and bring it into .NET world. 
@@ -18,9 +12,10 @@ Yes maybe a little bit. As crazy as bring .NET on mobile phones (Xamarin) or int
 
 Why we should do that?
 
+- Because in .NET we trust (everybody knows why ^^)
 - Because we can do (hey we are .NET developer we can do cloud computing, do fancy web side stuff, are No. 1 for GUI programming in windows area, experiment with WASM – a.k.a. the Blazor project, do mobile things with Xamarin – yes, so how hard it can be to improve our numeric stack?)  
 - Because Microsoft also try to let .NET framework become an important framework for machine learning area. Therefore, it is time for us to support the F# developers who always were the leading experts in numeric area and machine learning. Let us help to shape .NET for numeric area. 
-- Because we can reach more languages than any other framework can do. It is not just a project for C#. We are not just C# developers – we are .NET developers and we are like a big family. Code one time and give it to all other languages. Because of this we are not just interested into C# - we also want to deliver packages special for F#, Powershell, VB.NET, Ironpython, PHP, … we want to write the core in C# but we want to give each language the sugar it deserves. 
+- Because we can reach more languages than any other framework can do. It is not just a project for C#. We are not just C# developers – we are .NET developers and we are like a big family. Code one time and give it to all other languages. Because of this we are not just interested into C# - we also want to deliver packages special for F#, Powershell, VB, Ironpython, PHP, … we want to write the core in C# but we want to give each language the sugar it deserves. 
 
 What does Numsharp make different than the other numeric frameworks?
 
@@ -29,41 +24,8 @@ What does Numsharp make different than the other numeric frameworks?
 
 So I hope seeker you got a quite well impression of what this is all about.
 
-Curious? 
-- dotnet add package NumSharp
+- Curious? &rarr; ```dotnet add package NumSharp```
+- Want new features? &rarr; https://github.com/SciSharp/NumSharp 
+- Want to chat in digital "Coffeeroom"? &rarr; https://gitter.im/numsharp/Lobby
+- Want to support? &rarr; fork us on Github ;)  
 
-Want new features?
-- 
-
-Want to support? 
-- fork us on Github ;) 
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-
-
-Indices and tables
-==================
-The main documentation for the site is organized into a couple sections:
-
-:ref:`User Documentation <user-docs>`
-:ref:`Developer's Documentation <developer-docs>`
-
-.. _user-docs:
-
-.. toctree::
-   :maxdepth: 3
-   :caption: User Documentation:
-   
-   user-docs/overview
-   user-docs/NDArray.Creation
-
-.. _developer-docs:
-   :maxdepth: 3
-   :caption: Developer's Documentation:
-   
-   developer-docs/overview
-
-* :ref:`search`

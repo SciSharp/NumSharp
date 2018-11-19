@@ -1,3 +1,5 @@
+# Array creation
+
 Before we do some fancy numeric stuff or even machine learning we have to clear one thing. 
 
 **How do we generate NDArrays?**
@@ -6,10 +8,9 @@ Since NDArray is the key class in SciSharp stack there must be numerous possibil
 
 Maybe first of all we should see the dump way – which can be always used but is not too user friendly.  
 
-----
-Dump way 
+**Dump way**
 
-```
+```CSHARP
 // first standard constructor
 // you also specify the generic type of the NDArray
 var np = new NDArray<double>();
@@ -31,10 +32,9 @@ So with this 3x3 shaped NDArray we can do matrix multiplication but with a 1x9 w
 
 Always be careful with your shape and be sure what you want to do with your elements. 
 
-----
-Create by enumeration 
+**Create by enumeration**
 
-```
+```CSHARP
 // at this point we use a numpy class so it looks like numpy function call 
 var np = new Numpy<double>();
 

@@ -1,0 +1,390 @@
+﻿<!DOCTYPE html>
+<!--[if IE]><![endif]-->
+<html>
+  
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Class Matrix&lt;TData&gt;
+   </title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="title" content="Class Matrix&lt;TData&gt;
+   ">
+    <meta name="generator" content="docfx 2.40.2.0">
+    
+    <link rel="shortcut icon" href="../favicon.ico">
+    <link rel="stylesheet" href="../styles/docfx.vendor.css">
+    <link rel="stylesheet" href="../styles/docfx.css">
+    <link rel="stylesheet" href="../styles/main.css">
+    <meta property="docfx:navrel" content="../toc.html">
+    <meta property="docfx:tocrel" content="toc.html">
+    
+    
+    
+  </head>
+  <body data-spy="scroll" data-target="#affix" data-offset="120">
+    <div id="wrapper">
+      <header>
+        
+        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
+          <div class="container">
+            <div class="navbar-header">
+              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+              </button>
+              
+              <a class="navbar-brand" href="../index.html">
+                <img id="logo" class="svg" src="../logo.svg" alt="">
+              </a>
+            </div>
+            <div class="collapse navbar-collapse" id="navbar">
+              <form class="navbar-form navbar-right" role="search" id="search">
+                <div class="form-group">
+                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
+                </div>
+              </form>
+            </div>
+          </div>
+        </nav>
+        
+        <div class="subnav navbar navbar-default">
+          <div class="container hide-when-search" id="breadcrumb">
+            <ul class="breadcrumb">
+              <li></li>
+            </ul>
+          </div>
+        </div>
+      </header>
+      <div role="main" class="container body-content hide-when-search">
+        
+        <div class="sidenav hide-when-search">
+          <a class="btn toc-toggle collapse" data-toggle="collapse" href="#sidetoggle" aria-expanded="false" aria-controls="sidetoggle">Show / Hide Table of Contents</a>
+          <div class="sidetoggle collapse" id="sidetoggle">
+            <div id="sidetoc"></div>
+          </div>
+        </div>
+        <div class="article row grid-right">
+          <div class="col-md-10">
+            <article class="content wrap" id="_content" data-uid="NumSharp.Matrix`1">
+  
+  
+  <h1 id="NumSharp_Matrix_1" data-uid="NumSharp.Matrix`1" class="text-break">Class Matrix&lt;TData&gt;
+  </h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="inheritance">
+    <h5>Inheritance</h5>
+    <div class="level0"><span class="xref">System.Object</span></div>
+    <div class="level1"><a class="xref" href="NumSharp.NDArray-1.html">NDArray</a>&lt;TData&gt;</div>
+    <div class="level2"><span class="xref">Matrix&lt;TData&gt;</span></div>
+  </div>
+  <div classs="implements">
+    <h5>Implements</h5>
+    <div><span class="xref">System.Collections.IEnumerable</span></div>
+    <div><span class="xref">System.Collections.IEnumerator</span></div>
+  </div>
+  <div class="inheritedMembers">
+    <h5>Inherited Members</h5>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_arange_System_Int32_System_Int32_System_Int32_">NDArray&lt;TData&gt;.arange(Int32, Int32, Int32)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_linspace_System_Double_System_Double_System_Int32_System_Boolean_">NDArray&lt;TData&gt;.linspace(Double, Double, Int32, Boolean)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_reshape_System_Int32___">NDArray&lt;TData&gt;.reshape(Int32[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_dot_NumSharp_NDArray__0__">NDArray&lt;TData&gt;.dot(NDArray&lt;TData&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_inv">NDArray&lt;TData&gt;.inv()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_multi_dot_NumSharp_NDArray__0____">NDArray&lt;TData&gt;.multi_dot(NDArray&lt;TData&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_transpose">NDArray&lt;TData&gt;.transpose()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_log">NDArray&lt;TData&gt;.log()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_power__0_">NDArray&lt;TData&gt;.power(TData)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Data">NDArray&lt;TData&gt;.Data</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Shape">NDArray&lt;TData&gt;.Shape</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_NDim">NDArray&lt;TData&gt;.NDim</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Size">NDArray&lt;TData&gt;.Size</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Set_NumSharp_Shape__0_">NDArray&lt;TData&gt;.Set(Shape, TData)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Equals_System_Object_">NDArray&lt;TData&gt;.Equals(Object)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_GetHashCode">NDArray&lt;TData&gt;.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_ToDotNetArray__1">NDArray&lt;TData&gt;.ToDotNetArray&lt;TCast&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1__ToVectorString">NDArray&lt;TData&gt;._ToVectorString()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1__ToMatrixString">NDArray&lt;TData&gt;._ToMatrixString()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1__ParseNumber__0_System_Int32__System_Int32__">NDArray&lt;TData&gt;._ParseNumber(TData, Int32, Int32)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Current">NDArray&lt;TData&gt;.Current</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_GetEnumerator">NDArray&lt;TData&gt;.GetEnumerator()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_MoveNext">NDArray&lt;TData&gt;.MoveNext()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Reset">NDArray&lt;TData&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Item_System_Int32___">NDArray&lt;TData&gt;.Item[Int32[]]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Item_NumSharp_Shape_">NDArray&lt;TData&gt;.Item[Shape]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Item_System_Collections_Generic_IList_System_Int32__">NDArray&lt;TData&gt;.Item[IList&lt;Int32&gt;]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Item_NumSharp_NDArray_System_Int32__">NDArray&lt;TData&gt;.Item[NDArray&lt;Int32&gt;]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray-1.html#NumSharp_NDArray_1_Item_NumSharp_Slice_">NDArray&lt;TData&gt;.Item[Slice]</a>
+    </div>
+    <div>
+      <span class="xref">System.Object.Equals(System.Object, System.Object)</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.GetType()</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.MemberwiseClone()</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.ReferenceEquals(System.Object, System.Object)</span>
+    </div>
+  </div>
+  <h6><strong>Namespace</strong>: <a class="xref" href="NumSharp.html">NumSharp</a></h6>
+  <h6><strong>Assembly</strong>: NumSharp.dll</h6>
+  <h5 id="NumSharp_Matrix_1_syntax">Syntax</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Matrix&lt;TData&gt; : NDArray&lt;TData&gt;, IEnumerable, IEnumerator</code></pre>
+  </div>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">TData</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="constructors">Constructors
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Matrix_1__ctor.md&amp;value=---%0Auid%3A%20NumSharp.Matrix%601.%23ctor%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Matrix.cs/#L8">View Source</a>
+  </span>
+  <a id="NumSharp_Matrix_1__ctor_" data-uid="NumSharp.Matrix`1.#ctor*"></a>
+  <h4 id="NumSharp_Matrix_1__ctor" data-uid="NumSharp.Matrix`1.#ctor">Matrix()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix()</code></pre>
+  </div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Matrix_1__ctor_System_String_.md&amp;value=---%0Auid%3A%20NumSharp.Matrix%601.%23ctor(System.String)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Matrix.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Matrix_1__ctor_" data-uid="NumSharp.Matrix`1.#ctor*"></a>
+  <h4 id="NumSharp_Matrix_1__ctor_System_String_" data-uid="NumSharp.Matrix`1.#ctor(System.String)">Matrix(String)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix(string matrixString)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td><span class="parametername">matrixString</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="methods">Methods
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Matrix_1_StringToDoubleMatrix_System_String_____.md&amp;value=---%0Auid%3A%20NumSharp.Matrix%601.StringToDoubleMatrix(System.String%5B%5D%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Matrix.cs/#L49">View Source</a>
+  </span>
+  <a id="NumSharp_Matrix_1_StringToDoubleMatrix_" data-uid="NumSharp.Matrix`1.StringToDoubleMatrix*"></a>
+  <h4 id="NumSharp_Matrix_1_StringToDoubleMatrix_System_String_____" data-uid="NumSharp.Matrix`1.StringToDoubleMatrix(System.String[][])">StringToDoubleMatrix(String[][])</h4>
+  <div class="markdown level1 summary"><p>Convert a string to Double[,] and store
+in Data field of Matrix object</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void StringToDoubleMatrix(string[][] matrix)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span>[][]</td>
+        <td><span class="parametername">matrix</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Matrix_1_ToString.md&amp;value=---%0Auid%3A%20NumSharp.Matrix%601.ToString%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Matrix.cs/#L61">View Source</a>
+  </span>
+  <a id="NumSharp_Matrix_1_ToString_" data-uid="NumSharp.Matrix`1.ToString*"></a>
+  <h4 id="NumSharp_Matrix_1_ToString" data-uid="NumSharp.Matrix`1.ToString">ToString()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="overrides">Overrides</h5>
+  <div><span class="xref">NumSharp.NDArray&lt;TData&gt;.ToString()</span></div>
+  <h3 id="implements">Implements</h3>
+  <div>
+      <span class="xref">System.Collections.IEnumerable</span>
+  </div>
+  <div>
+      <span class="xref">System.Collections.IEnumerator</span>
+  </div>
+  <h3 id="extensionmethods">Extension Methods</h3>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.NDArrayExtensions.html#NumSharp_Extensions_NDArrayExtensions_HStack__1_NumSharp_NDArray___0__NumSharp_NDArray___0____">NDArrayExtensions.HStack&lt;T&gt;(NDArray&lt;T&gt;, NDArray&lt;T&gt;[])</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.NDArrayExtensions.html#NumSharp_Extensions_NDArrayExtensions_Sum__1_NumSharp_NDArray___0__NumSharp_NDArray___0__">NDArrayExtensions.Sum&lt;TData&gt;(NDArray&lt;TData&gt;, NDArray&lt;TData&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.NDArrayExtensions.html#NumSharp_Extensions_NDArrayExtensions_Unique__1_NumSharp_NDArray___0__">NDArrayExtensions.Unique&lt;T&gt;(NDArray&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.NDArrayExtensions.html#NumSharp_Extensions_NDArrayExtensions_VStack__1_NumSharp_NDArray___0__NumSharp_NDArray___0____">NDArrayExtensions.VStack&lt;T&gt;(NDArray&lt;T&gt;, NDArray&lt;T&gt;[])</a>
+  </div>
+</article>
+          </div>
+          
+          <div class="hidden-sm col-md-2" role="complementary">
+            <div class="sideaffix">
+              <div class="contribution">
+                <ul class="nav">
+                  <li>
+                    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Matrix_1.md&amp;value=---%0Auid%3A%20NumSharp.Matrix%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A" class="contribution-link">Improve this Doc</a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Matrix.cs/#L6" class="contribution-link">View Source</a>
+                  </li>
+                </ul>
+              </div>
+              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
+              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <footer>
+        <div class="grad-bottom"></div>
+        <div class="footer">
+          <div class="container">
+            <span class="pull-right">
+              <a href="#top">Back to top</a>
+            </span>
+            
+            <span>Generated by <strong>DocFX</strong></span>
+          </div>
+        </div>
+      </footer>
+    </div>
+    
+    <script type="text/javascript" src="../styles/docfx.vendor.js"></script>
+    <script type="text/javascript" src="../styles/docfx.js"></script>
+    <script type="text/javascript" src="../styles/main.js"></script>
+  </body>
+</html>
