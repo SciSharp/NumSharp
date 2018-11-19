@@ -19,7 +19,13 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             np = new NumPy<double>();
-            nd = np.arange(240).reshape(20, 3, 2, 2);
+            nd = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
+        }
+
+        [Benchmark]
+        public void min()
+        {
+            np.amin(nd);
         }
 
         [Benchmark]
@@ -29,9 +35,9 @@ namespace NumSharp.Benchmark
         }
 
         [Benchmark]
-        public void amin3axis()
+        public void amin2axis()
         {
-            np.amin(nd, 3);
+            np.amin(nd, 2);
         }
     }
 }
