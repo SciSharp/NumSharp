@@ -1,0 +1,2901 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.NumPy`1
+  commentId: T:NumSharp.NumPy`1
+  id: NumPy`1
+  parent: NumSharp
+  children:
+  - NumSharp.NumPy`1.absolute(NumSharp.NDArray{System.Double})
+  - NumSharp.NumPy`1.amax(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  - NumSharp.NumPy`1.amin(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  - NumSharp.NumPy`1.arange(System.Int32)
+  - NumSharp.NumPy`1.arange(System.Int32,System.Int32,System.Int32)
+  - NumSharp.NumPy`1.array(`0[])
+  - NumSharp.NumPy`1.array(`0[][])
+  - NumSharp.NumPy`1.hstack(NumSharp.NDArray{System.Double}[])
+  - NumSharp.NumPy`1.linspace(System.Double,System.Double,System.Int32)
+  - NumSharp.NumPy`1.max(NumSharp.NDArray{System.Double})
+  - NumSharp.NumPy`1.power(NumSharp.NDArray{System.Double},System.Double)
+  - NumSharp.NumPy`1.random
+  - NumSharp.NumPy`1.reshape(NumSharp.NDArray{System.Int32},System.Int32[])
+  - NumSharp.NumPy`1.vstack(NumSharp.NDArray{System.Double}[])
+  - NumSharp.NumPy`1.zeros(System.Int32[])
+  langs:
+  - csharp
+  - vb
+  name: NumPy<T>
+  nameWithType: NumPy<T>
+  fullName: NumSharp.NumPy<T>
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: NumPy
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 10
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nAPI bridge between NumSharp and Python NumPy  \n"
+  example: []
+  syntax:
+    content: public class NumPy<T>
+    typeParameters:
+    - id: T
+    content.vb: Public Class NumPy(Of T)
+  inheritance:
+  - System.Object
+  inheritedMembers:
+  - System.Object.Equals(System.Object)
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetHashCode
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  - System.Object.ToString
+  extensionMethods:
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1(System.Collections.Generic.IEnumerable{{T}},System.Int32)
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1(System.Drawing.Bitmap)
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1({T}[][])
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.asarray``1(System.Collections.Generic.IEnumerable{{T}},System.Int32)
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.ones_like``1(NumSharp.NDArray{{T}},System.String)
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{{T}})
+  - NumSharp.NumPy`1.NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{NumSharp.NDArray{{T}}})
+  - NumSharp.NumPy`1.NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.Shape)
+  - NumSharp.NumPy`1.NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NDArray{{T}},System.Collections.Generic.IEnumerable{{T}})
+  nameWithType.vb: NumPy(Of T)
+  modifiers.csharp:
+  - public
+  - class
+  modifiers.vb:
+  - Public
+  - Class
+  fullName.vb: NumSharp.NumPy(Of T)
+  name.vb: NumPy(Of T)
+- uid: NumSharp.NumPy`1.absolute(NumSharp.NDArray{System.Double})
+  commentId: M:NumSharp.NumPy`1.absolute(NumSharp.NDArray{System.Double})
+  id: absolute(NumSharp.NDArray{System.Double})
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: absolute(NDArray<Double>)
+  nameWithType: NumPy<T>.absolute(NDArray<Double>)
+  fullName: NumSharp.NumPy<T>.absolute(NumSharp.NDArray<System.Double>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: absolute
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 12
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> absolute(NDArray<double> np)
+    parameters:
+    - id: np
+      type: NumSharp.NDArray{System.Double}
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function absolute(np As NDArray(Of Double)) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.absolute*
+  nameWithType.vb: NumPy(Of T).absolute(NDArray(Of Double))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).absolute(NumSharp.NDArray(Of System.Double))
+  name.vb: absolute(NDArray(Of Double))
+- uid: NumSharp.NumPy`1.amax(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  commentId: M:NumSharp.NumPy`1.amax(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  id: amax(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: amax(NDArray<Double>, Nullable<Int32>)
+  nameWithType: NumPy<T>.amax(NDArray<Double>, Nullable<Int32>)
+  fullName: NumSharp.NumPy<T>.amax(NumSharp.NDArray<System.Double>, System.Nullable<System.Int32>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: amax
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 17
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> amax(NDArray<double> np, int? axis = default(int? ))
+    parameters:
+    - id: np
+      type: NumSharp.NDArray{System.Double}
+    - id: axis
+      type: System.Nullable{System.Int32}
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function amax(np As NDArray(Of Double), axis As Integer? = Nothing) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.amax*
+  nameWithType.vb: NumPy(Of T).amax(NDArray(Of Double), Nullable(Of Int32))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).amax(NumSharp.NDArray(Of System.Double), System.Nullable(Of System.Int32))
+  name.vb: amax(NDArray(Of Double), Nullable(Of Int32))
+- uid: NumSharp.NumPy`1.amin(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  commentId: M:NumSharp.NumPy`1.amin(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  id: amin(NumSharp.NDArray{System.Double},System.Nullable{System.Int32})
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: amin(NDArray<Double>, Nullable<Int32>)
+  nameWithType: NumPy<T>.amin(NDArray<Double>, Nullable<Int32>)
+  fullName: NumSharp.NumPy<T>.amin(NumSharp.NDArray<System.Double>, System.Nullable<System.Int32>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: amin
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 22
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> amin(NDArray<double> np, int? axis = default(int? ))
+    parameters:
+    - id: np
+      type: NumSharp.NDArray{System.Double}
+    - id: axis
+      type: System.Nullable{System.Int32}
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function amin(np As NDArray(Of Double), axis As Integer? = Nothing) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.amin*
+  nameWithType.vb: NumPy(Of T).amin(NDArray(Of Double), Nullable(Of Int32))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).amin(NumSharp.NDArray(Of System.Double), System.Nullable(Of System.Int32))
+  name.vb: amin(NDArray(Of Double), Nullable(Of Int32))
+- uid: NumSharp.NumPy`1.arange(System.Int32)
+  commentId: M:NumSharp.NumPy`1.arange(System.Int32)
+  id: arange(System.Int32)
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: arange(Int32)
+  nameWithType: NumPy<T>.arange(Int32)
+  fullName: NumSharp.NumPy<T>.arange(System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: arange
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 27
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> arange(int stop)
+    parameters:
+    - id: stop
+      type: System.Int32
+    return:
+      type: NumSharp.NDArray{{T}}
+    content.vb: Public Function arange(stop As Integer) As NDArray(Of T)
+  overload: NumSharp.NumPy`1.arange*
+  nameWithType.vb: NumPy(Of T).arange(Int32)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).arange(System.Int32)
+- uid: NumSharp.NumPy`1.arange(System.Int32,System.Int32,System.Int32)
+  commentId: M:NumSharp.NumPy`1.arange(System.Int32,System.Int32,System.Int32)
+  id: arange(System.Int32,System.Int32,System.Int32)
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: arange(Int32, Int32, Int32)
+  nameWithType: NumPy<T>.arange(Int32, Int32, Int32)
+  fullName: NumSharp.NumPy<T>.arange(System.Int32, System.Int32, System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: arange
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 32
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> arange(int start, int stop, int step = 1)
+    parameters:
+    - id: start
+      type: System.Int32
+    - id: stop
+      type: System.Int32
+    - id: step
+      type: System.Int32
+    return:
+      type: NumSharp.NDArray{{T}}
+    content.vb: Public Function arange(start As Integer, stop As Integer, step As Integer = 1) As NDArray(Of T)
+  overload: NumSharp.NumPy`1.arange*
+  nameWithType.vb: NumPy(Of T).arange(Int32, Int32, Int32)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).arange(System.Int32, System.Int32, System.Int32)
+- uid: NumSharp.NumPy`1.array(`0[])
+  commentId: M:NumSharp.NumPy`1.array(`0[])
+  id: array(`0[])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: array(T[])
+  nameWithType: NumPy<T>.array(T[])
+  fullName: NumSharp.NumPy<T>.array(T[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: array
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 59
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> array(T[] data)
+    parameters:
+    - id: data
+      type: '{T}[]'
+    return:
+      type: NumSharp.NDArray{{T}}
+    content.vb: Public Function array(data As T()) As NDArray(Of T)
+  overload: NumSharp.NumPy`1.array*
+  nameWithType.vb: NumPy(Of T).array(T())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).array(T())
+  name.vb: array(T())
+- uid: NumSharp.NumPy`1.array(`0[][])
+  commentId: M:NumSharp.NumPy`1.array(`0[][])
+  id: array(`0[][])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: array(T[][])
+  nameWithType: NumPy<T>.array(T[][])
+  fullName: NumSharp.NumPy<T>.array(T[][])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: array
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 68
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> array(T[][] data)
+    parameters:
+    - id: data
+      type: '{T}[][]'
+    return:
+      type: NumSharp.NDArray{{T}}
+    content.vb: Public Function array(data As T()()) As NDArray(Of T)
+  overload: NumSharp.NumPy`1.array*
+  nameWithType.vb: NumPy(Of T).array(T()())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).array(T()())
+  name.vb: array(T()())
+- uid: NumSharp.NumPy`1.hstack(NumSharp.NDArray{System.Double}[])
+  commentId: M:NumSharp.NumPy`1.hstack(NumSharp.NDArray{System.Double}[])
+  id: hstack(NumSharp.NDArray{System.Double}[])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: hstack(NDArray<Double>[])
+  nameWithType: NumPy<T>.hstack(NDArray<Double>[])
+  fullName: NumSharp.NumPy<T>.hstack(NumSharp.NDArray<System.Double>[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: hstack
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 90
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> hstack(params NDArray<double>[] nps)
+    parameters:
+    - id: nps
+      type: NumSharp.NDArray{System.Double}[]
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function hstack(ParamArray nps As NDArray(Of Double)()) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.hstack*
+  nameWithType.vb: NumPy(Of T).hstack(NDArray(Of Double)())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).hstack(NumSharp.NDArray(Of System.Double)())
+  name.vb: hstack(NDArray(Of Double)())
+- uid: NumSharp.NumPy`1.linspace(System.Double,System.Double,System.Int32)
+  commentId: M:NumSharp.NumPy`1.linspace(System.Double,System.Double,System.Int32)
+  id: linspace(System.Double,System.Double,System.Int32)
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: linspace(Double, Double, Int32)
+  nameWithType: NumPy<T>.linspace(Double, Double, Int32)
+  fullName: NumSharp.NumPy<T>.linspace(System.Double, System.Double, System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: linspace
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 103
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nReturns num evenly spaced samples, calculated over the interval [start, stop].\n"
+  example: []
+  syntax:
+    content: public NDArray<double> linspace(double start, double stop, int num = 50)
+    parameters:
+    - id: start
+      type: System.Double
+      description: ''
+    - id: stop
+      type: System.Double
+      description: ''
+    - id: num
+      type: System.Int32
+      description: ''
+    return:
+      type: NumSharp.NDArray{System.Double}
+      description: ''
+    content.vb: Public Function linspace(start As Double, stop As Double, num As Integer = 50) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.linspace*
+  nameWithType.vb: NumPy(Of T).linspace(Double, Double, Int32)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).linspace(System.Double, System.Double, System.Int32)
+- uid: NumSharp.NumPy`1.max(NumSharp.NDArray{System.Double})
+  commentId: M:NumSharp.NumPy`1.max(NumSharp.NDArray{System.Double})
+  id: max(NumSharp.NDArray{System.Double})
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: max(NDArray<Double>)
+  nameWithType: NumPy<T>.max(NDArray<Double>)
+  fullName: NumSharp.NumPy<T>.max(NumSharp.NDArray<System.Double>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: max
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 108
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> max(NDArray<double> nd)
+    parameters:
+    - id: nd
+      type: NumSharp.NDArray{System.Double}
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function max(nd As NDArray(Of Double)) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.max*
+  nameWithType.vb: NumPy(Of T).max(NDArray(Of Double))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).max(NumSharp.NDArray(Of System.Double))
+  name.vb: max(NDArray(Of Double))
+- uid: NumSharp.NumPy`1.power(NumSharp.NDArray{System.Double},System.Double)
+  commentId: M:NumSharp.NumPy`1.power(NumSharp.NDArray{System.Double},System.Double)
+  id: power(NumSharp.NDArray{System.Double},System.Double)
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: power(NDArray<Double>, Double)
+  nameWithType: NumPy<T>.power(NDArray<Double>, Double)
+  fullName: NumSharp.NumPy<T>.power(NumSharp.NDArray<System.Double>, System.Double)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: power
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 113
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> power(NDArray<double> nd, double exponent)
+    parameters:
+    - id: nd
+      type: NumSharp.NDArray{System.Double}
+    - id: exponent
+      type: System.Double
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function power(nd As NDArray(Of Double), exponent As Double) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.power*
+  nameWithType.vb: NumPy(Of T).power(NDArray(Of Double), Double)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).power(NumSharp.NDArray(Of System.Double), System.Double)
+  name.vb: power(NDArray(Of Double), Double)
+- uid: NumSharp.NumPy`1.random
+  commentId: P:NumSharp.NumPy`1.random
+  id: random
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: random
+  nameWithType: NumPy<T>.random
+  fullName: NumSharp.NumPy<T>.random
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: random
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 118
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArrayRandom random { get; }
+    parameters: []
+    return:
+      type: NumSharp.NDArrayRandom
+    content.vb: Public ReadOnly Property random As NDArrayRandom
+  overload: NumSharp.NumPy`1.random*
+  nameWithType.vb: NumPy(Of T).random
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NumPy(Of T).random
+- uid: NumSharp.NumPy`1.reshape(NumSharp.NDArray{System.Int32},System.Int32[])
+  commentId: M:NumSharp.NumPy`1.reshape(NumSharp.NDArray{System.Int32},System.Int32[])
+  id: reshape(NumSharp.NDArray{System.Int32},System.Int32[])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: reshape(NDArray<Int32>, Int32[])
+  nameWithType: NumPy<T>.reshape(NDArray<Int32>, Int32[])
+  fullName: NumSharp.NumPy<T>.reshape(NumSharp.NDArray<System.Int32>, System.Int32[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: reshape
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 126
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<int> reshape(NDArray<int> np, params int[] shape)
+    parameters:
+    - id: np
+      type: NumSharp.NDArray{System.Int32}
+    - id: shape
+      type: System.Int32[]
+    return:
+      type: NumSharp.NDArray{System.Int32}
+    content.vb: Public Function reshape(np As NDArray(Of Integer), ParamArray shape As Integer()) As NDArray(Of Integer)
+  overload: NumSharp.NumPy`1.reshape*
+  nameWithType.vb: NumPy(Of T).reshape(NDArray(Of Int32), Int32())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).reshape(NumSharp.NDArray(Of System.Int32), System.Int32())
+  name.vb: reshape(NDArray(Of Int32), Int32())
+- uid: NumSharp.NumPy`1.vstack(NumSharp.NDArray{System.Double}[])
+  commentId: M:NumSharp.NumPy`1.vstack(NumSharp.NDArray{System.Double}[])
+  id: vstack(NumSharp.NDArray{System.Double}[])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: vstack(NDArray<Double>[])
+  nameWithType: NumPy<T>.vstack(NDArray<Double>[])
+  fullName: NumSharp.NumPy<T>.vstack(NumSharp.NDArray<System.Double>[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: vstack
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 133
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<double> vstack(params NDArray<double>[] nps)
+    parameters:
+    - id: nps
+      type: NumSharp.NDArray{System.Double}[]
+    return:
+      type: NumSharp.NDArray{System.Double}
+    content.vb: Public Function vstack(ParamArray nps As NDArray(Of Double)()) As NDArray(Of Double)
+  overload: NumSharp.NumPy`1.vstack*
+  nameWithType.vb: NumPy(Of T).vstack(NDArray(Of Double)())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).vstack(NumSharp.NDArray(Of System.Double)())
+  name.vb: vstack(NDArray(Of Double)())
+- uid: NumSharp.NumPy`1.zeros(System.Int32[])
+  commentId: M:NumSharp.NumPy`1.zeros(System.Int32[])
+  id: zeros(System.Int32[])
+  parent: NumSharp.NumPy`1
+  langs:
+  - csharp
+  - vb
+  name: zeros(Int32[])
+  nameWithType: NumPy<T>.zeros(Int32[])
+  fullName: NumSharp.NumPy<T>.zeros(System.Int32[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NumPy.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: zeros
+    path: ../src/NumSharp/NumPy.cs
+    startLine: 139
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> zeros(params int[] shape)
+    parameters:
+    - id: shape
+      type: System.Int32[]
+    return:
+      type: NumSharp.NDArray{{T}}
+    content.vb: Public Function zeros(ParamArray shape As Integer()) As NDArray(Of T)
+  overload: NumSharp.NumPy`1.zeros*
+  nameWithType.vb: NumPy(Of T).zeros(Int32())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NumPy(Of T).zeros(System.Int32())
+  name.vb: zeros(Int32())
+references:
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1(System.Collections.Generic.IEnumerable{{T}},System.Int32)
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  name: array<T>(IEnumerable<T>, Int32)
+  nameWithType: NumPyExtensions.array<T>(IEnumerable<T>, Int32)
+  fullName: NumSharp.NumPyExtensions.array<T>(System.Collections.Generic.IEnumerable<T>, System.Int32)
+  nameWithType.vb: NumPyExtensions.array(Of T)(IEnumerable(Of T), Int32)
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(System.Collections.Generic.IEnumerable(Of T), System.Int32)
+  name.vb: array(Of T)(IEnumerable(Of T), Int32)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1(System.Drawing.Bitmap)
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+  name: array<T>(Bitmap)
+  nameWithType: NumPyExtensions.array<T>(Bitmap)
+  fullName: NumSharp.NumPyExtensions.array<T>(System.Drawing.Bitmap)
+  nameWithType.vb: NumPyExtensions.array(Of T)(Bitmap)
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(System.Drawing.Bitmap)
+  name.vb: array(Of T)(Bitmap)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(System.Drawing.Bitmap)
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Drawing.Bitmap
+    name: Bitmap
+    nameWithType: Bitmap
+    fullName: System.Drawing.Bitmap
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(System.Drawing.Bitmap)
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Drawing.Bitmap
+    name: Bitmap
+    nameWithType: Bitmap
+    fullName: System.Drawing.Bitmap
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.array``1({T}[][])
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+  name: array<T>(T[][])
+  nameWithType: NumPyExtensions.array<T>(T[][])
+  fullName: NumSharp.NumPyExtensions.array<T>(T[][])
+  nameWithType.vb: NumPyExtensions.array(Of T)(T()())
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(T()())
+  name.vb: array(Of T)(T()())
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(``0[][])
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(``0[][])
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.asarray``1(System.Collections.Generic.IEnumerable{{T}},System.Int32)
+  commentId: M:NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  name: asarray<T>(IEnumerable<T>, Int32)
+  nameWithType: NumPyExtensions.asarray<T>(IEnumerable<T>, Int32)
+  fullName: NumSharp.NumPyExtensions.asarray<T>(System.Collections.Generic.IEnumerable<T>, System.Int32)
+  nameWithType.vb: NumPyExtensions.asarray(Of T)(IEnumerable(Of T), Int32)
+  fullName.vb: NumSharp.NumPyExtensions.asarray(Of T)(System.Collections.Generic.IEnumerable(Of T), System.Int32)
+  name.vb: asarray(Of T)(IEnumerable(Of T), Int32)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.asarray``1(System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: asarray<T>
+    nameWithType: NumPyExtensions.asarray<T>
+    fullName: NumSharp.NumPyExtensions.asarray<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.asarray``1(System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: asarray(Of T)
+    nameWithType: NumPyExtensions.asarray(Of T)
+    fullName: NumSharp.NumPyExtensions.asarray(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.ones_like``1(NumSharp.NDArray{{T}},System.String)
+  commentId: M:NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+  name: ones_like<T>(NDArray<T>, String)
+  nameWithType: NumPyExtensions.ones_like<T>(NDArray<T>, String)
+  fullName: NumSharp.NumPyExtensions.ones_like<T>(NumSharp.NDArray<T>, System.String)
+  nameWithType.vb: NumPyExtensions.ones_like(Of T)(NDArray(Of T), String)
+  fullName.vb: NumSharp.NumPyExtensions.ones_like(Of T)(NumSharp.NDArray(Of T), System.String)
+  name.vb: ones_like(Of T)(NDArray(Of T), String)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NDArray{``0},System.String)
+    name: ones_like<T>
+    nameWithType: NumPyExtensions.ones_like<T>
+    fullName: NumSharp.NumPyExtensions.ones_like<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NDArray{``0},System.String)
+    name: ones_like(Of T)
+    nameWithType: NumPyExtensions.ones_like(Of T)
+    fullName: NumSharp.NumPyExtensions.ones_like(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{{T}})
+  commentId: M:NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+  name: sin<T>(NDArray<T>)
+  nameWithType: NumPyExtensions.sin<T>(NDArray<T>)
+  fullName: NumSharp.NumPyExtensions.sin<T>(NumSharp.NDArray<T>)
+  nameWithType.vb: NumPyExtensions.sin(Of T)(NDArray(Of T))
+  fullName.vb: NumSharp.NumPyExtensions.sin(Of T)(NumSharp.NDArray(Of T))
+  name.vb: sin(Of T)(NDArray(Of T))
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{``0})
+    name: sin<T>
+    nameWithType: NumPyExtensions.sin<T>
+    fullName: NumSharp.NumPyExtensions.sin<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{``0})
+    name: sin(Of T)
+    nameWithType: NumPyExtensions.sin(Of T)
+    fullName: NumSharp.NumPyExtensions.sin(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{NumSharp.NDArray{{T}}})
+  commentId: M:NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+  parent: NumSharp.NumPyExtensions
+  definition: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+  name: sin<T>(NDArray<NDArray<T>>)
+  nameWithType: NumPyExtensions.sin<T>(NDArray<NDArray<T>>)
+  fullName: NumSharp.NumPyExtensions.sin<T>(NumSharp.NDArray<NumSharp.NDArray<T>>)
+  nameWithType.vb: NumPyExtensions.sin(Of T)(NDArray(Of NDArray(Of T)))
+  fullName.vb: NumSharp.NumPyExtensions.sin(Of T)(NumSharp.NDArray(Of NumSharp.NDArray(Of T)))
+  name.vb: sin(Of T)(NDArray(Of NDArray(Of T)))
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{NumSharp.NDArray{``0}})
+    name: sin<T>
+    nameWithType: NumPyExtensions.sin<T>
+    fullName: NumSharp.NumPyExtensions.sin<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NDArray{NumSharp.NDArray{``0}})
+    name: sin(Of T)
+    nameWithType: NumPyExtensions.sin(Of T)
+    fullName: NumSharp.NumPyExtensions.sin(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.Shape)
+  commentId: M:NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+  parent: NumSharp.Extensions.NumPyExtensions
+  definition: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+  name: ones<T>(Shape)
+  nameWithType: NumPyExtensions.ones<T>(Shape)
+  fullName: NumSharp.Extensions.NumPyExtensions.ones<T>(NumSharp.Shape)
+  nameWithType.vb: NumPyExtensions.ones(Of T)(Shape)
+  fullName.vb: NumSharp.Extensions.NumPyExtensions.ones(Of T)(NumSharp.Shape)
+  name.vb: ones(Of T)(Shape)
+  spec.csharp:
+  - uid: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.Shape)
+    name: ones<T>
+    nameWithType: NumPyExtensions.ones<T>
+    fullName: NumSharp.Extensions.NumPyExtensions.ones<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.Shape
+    name: Shape
+    nameWithType: Shape
+    fullName: NumSharp.Shape
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.Shape)
+    name: ones(Of T)
+    nameWithType: NumPyExtensions.ones(Of T)
+    fullName: NumSharp.Extensions.NumPyExtensions.ones(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.Shape
+    name: Shape
+    nameWithType: Shape
+    fullName: NumSharp.Shape
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NDArray{{T}},System.Collections.Generic.IEnumerable{{T}})
+  commentId: M:NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+  parent: NumSharp.Extensions.NumPyExtensions
+  definition: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+  name: delete<T>(NDArray<T>, IEnumerable<T>)
+  nameWithType: NumPyExtensions.delete<T>(NDArray<T>, IEnumerable<T>)
+  fullName: NumSharp.Extensions.NumPyExtensions.delete<T>(NumSharp.NDArray<T>, System.Collections.Generic.IEnumerable<T>)
+  nameWithType.vb: NumPyExtensions.delete(Of T)(NDArray(Of T), IEnumerable(Of T))
+  fullName.vb: NumSharp.Extensions.NumPyExtensions.delete(Of T)(NumSharp.NDArray(Of T), System.Collections.Generic.IEnumerable(Of T))
+  name.vb: delete(Of T)(NDArray(Of T), IEnumerable(Of T))
+  spec.csharp:
+  - uid: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+    name: delete<T>
+    nameWithType: NumPyExtensions.delete<T>
+    fullName: NumSharp.Extensions.NumPyExtensions.delete<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+    name: delete(Of T)
+    nameWithType: NumPyExtensions.delete(Of T)
+    fullName: NumSharp.Extensions.NumPyExtensions.delete(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  isExternal: true
+  name: array<T>(NumPy<T>, IEnumerable<T>, Int32)
+  nameWithType: NumPyExtensions.array<T>(NumPy<T>, IEnumerable<T>, Int32)
+  fullName: NumSharp.NumPyExtensions.array<T>(NumSharp.NumPy<T>, System.Collections.Generic.IEnumerable<T>, System.Int32)
+  nameWithType.vb: NumPyExtensions.array(Of T)(NumPy(Of T), IEnumerable(Of T), Int32)
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(NumSharp.NumPy(Of T), System.Collections.Generic.IEnumerable(Of T), System.Int32)
+  name.vb: array(Of T)(NumPy(Of T), IEnumerable(Of T), Int32)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions
+  commentId: T:NumSharp.NumPyExtensions
+  parent: NumSharp
+  name: NumPyExtensions
+  nameWithType: NumPyExtensions
+  fullName: NumSharp.NumPyExtensions
+- uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+  isExternal: true
+  name: array<T>(NumPy<T>, Bitmap)
+  nameWithType: NumPyExtensions.array<T>(NumPy<T>, Bitmap)
+  fullName: NumSharp.NumPyExtensions.array<T>(NumSharp.NumPy<T>, System.Drawing.Bitmap)
+  nameWithType.vb: NumPyExtensions.array(Of T)(NumPy(Of T), Bitmap)
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(NumSharp.NumPy(Of T), System.Drawing.Bitmap)
+  name.vb: array(Of T)(NumPy(Of T), Bitmap)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Drawing.Bitmap
+    name: Bitmap
+    nameWithType: Bitmap
+    fullName: System.Drawing.Bitmap
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},System.Drawing.Bitmap)
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Drawing.Bitmap
+    name: Bitmap
+    nameWithType: Bitmap
+    fullName: System.Drawing.Bitmap
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+  commentId: M:NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+  name: array<T>(NumPy<T>, T[][])
+  nameWithType: NumPyExtensions.array<T>(NumPy<T>, T[][])
+  fullName: NumSharp.NumPyExtensions.array<T>(NumSharp.NumPy<T>, T[][])
+  nameWithType.vb: NumPyExtensions.array(Of T)(NumPy(Of T), T()())
+  fullName.vb: NumSharp.NumPyExtensions.array(Of T)(NumSharp.NumPy(Of T), T()())
+  name.vb: array(Of T)(NumPy(Of T), T()())
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+    name: array<T>
+    nameWithType: NumPyExtensions.array<T>
+    fullName: NumSharp.NumPyExtensions.array<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.array``1(NumSharp.NumPy{``0},``0[][])
+    name: array(Of T)
+    nameWithType: NumPyExtensions.array(Of T)
+    fullName: NumSharp.NumPyExtensions.array(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  commentId: M:NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+  isExternal: true
+  name: asarray<T>(NumPy<T>, IEnumerable<T>, Int32)
+  nameWithType: NumPyExtensions.asarray<T>(NumPy<T>, IEnumerable<T>, Int32)
+  fullName: NumSharp.NumPyExtensions.asarray<T>(NumSharp.NumPy<T>, System.Collections.Generic.IEnumerable<T>, System.Int32)
+  nameWithType.vb: NumPyExtensions.asarray(Of T)(NumPy(Of T), IEnumerable(Of T), Int32)
+  fullName.vb: NumSharp.NumPyExtensions.asarray(Of T)(NumSharp.NumPy(Of T), System.Collections.Generic.IEnumerable(Of T), System.Int32)
+  name.vb: asarray(Of T)(NumPy(Of T), IEnumerable(Of T), Int32)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: asarray<T>
+    nameWithType: NumPyExtensions.asarray<T>
+    fullName: NumSharp.NumPyExtensions.asarray<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.asarray``1(NumSharp.NumPy{``0},System.Collections.Generic.IEnumerable{``0},System.Int32)
+    name: asarray(Of T)
+    nameWithType: NumPyExtensions.asarray(Of T)
+    fullName: NumSharp.NumPyExtensions.asarray(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+  commentId: M:NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+  isExternal: true
+  name: ones_like<T>(NumPy<T>, NDArray<T>, String)
+  nameWithType: NumPyExtensions.ones_like<T>(NumPy<T>, NDArray<T>, String)
+  fullName: NumSharp.NumPyExtensions.ones_like<T>(NumSharp.NumPy<T>, NumSharp.NDArray<T>, System.String)
+  nameWithType.vb: NumPyExtensions.ones_like(Of T)(NumPy(Of T), NDArray(Of T), String)
+  fullName.vb: NumSharp.NumPyExtensions.ones_like(Of T)(NumSharp.NumPy(Of T), NumSharp.NDArray(Of T), System.String)
+  name.vb: ones_like(Of T)(NumPy(Of T), NDArray(Of T), String)
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+    name: ones_like<T>
+    nameWithType: NumPyExtensions.ones_like<T>
+    fullName: NumSharp.NumPyExtensions.ones_like<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.ones_like``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.String)
+    name: ones_like(Of T)
+    nameWithType: NumPyExtensions.ones_like(Of T)
+    fullName: NumSharp.NumPyExtensions.ones_like(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+  commentId: M:NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+  name: sin<T>(NumPy<T>, NDArray<T>)
+  nameWithType: NumPyExtensions.sin<T>(NumPy<T>, NDArray<T>)
+  fullName: NumSharp.NumPyExtensions.sin<T>(NumSharp.NumPy<T>, NumSharp.NDArray<T>)
+  nameWithType.vb: NumPyExtensions.sin(Of T)(NumPy(Of T), NDArray(Of T))
+  fullName.vb: NumSharp.NumPyExtensions.sin(Of T)(NumSharp.NumPy(Of T), NumSharp.NDArray(Of T))
+  name.vb: sin(Of T)(NumPy(Of T), NDArray(Of T))
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+    name: sin<T>
+    nameWithType: NumPyExtensions.sin<T>
+    fullName: NumSharp.NumPyExtensions.sin<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0})
+    name: sin(Of T)
+    nameWithType: NumPyExtensions.sin(Of T)
+    fullName: NumSharp.NumPyExtensions.sin(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+  commentId: M:NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+  name: sin<T>(NumPy<T>, NDArray<NDArray<T>>)
+  nameWithType: NumPyExtensions.sin<T>(NumPy<T>, NDArray<NDArray<T>>)
+  fullName: NumSharp.NumPyExtensions.sin<T>(NumSharp.NumPy<T>, NumSharp.NDArray<NumSharp.NDArray<T>>)
+  nameWithType.vb: NumPyExtensions.sin(Of T)(NumPy(Of T), NDArray(Of NDArray(Of T)))
+  fullName.vb: NumSharp.NumPyExtensions.sin(Of T)(NumSharp.NumPy(Of T), NumSharp.NDArray(Of NumSharp.NDArray(Of T)))
+  name.vb: sin(Of T)(NumPy(Of T), NDArray(Of NDArray(Of T)))
+  spec.csharp:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+    name: sin<T>
+    nameWithType: NumPyExtensions.sin<T>
+    fullName: NumSharp.NumPyExtensions.sin<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.NumPyExtensions.sin``1(NumSharp.NumPy{``0},NumSharp.NDArray{NumSharp.NDArray{``0}})
+    name: sin(Of T)
+    nameWithType: NumPyExtensions.sin(Of T)
+    fullName: NumSharp.NumPyExtensions.sin(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+  commentId: M:NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+  name: ones<T>(NumPy<T>, Shape)
+  nameWithType: NumPyExtensions.ones<T>(NumPy<T>, Shape)
+  fullName: NumSharp.Extensions.NumPyExtensions.ones<T>(NumSharp.NumPy<T>, NumSharp.Shape)
+  nameWithType.vb: NumPyExtensions.ones(Of T)(NumPy(Of T), Shape)
+  fullName.vb: NumSharp.Extensions.NumPyExtensions.ones(Of T)(NumSharp.NumPy(Of T), NumSharp.Shape)
+  name.vb: ones(Of T)(NumPy(Of T), Shape)
+  spec.csharp:
+  - uid: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+    name: ones<T>
+    nameWithType: NumPyExtensions.ones<T>
+    fullName: NumSharp.Extensions.NumPyExtensions.ones<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.Shape
+    name: Shape
+    nameWithType: Shape
+    fullName: NumSharp.Shape
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NumPyExtensions.ones``1(NumSharp.NumPy{``0},NumSharp.Shape)
+    name: ones(Of T)
+    nameWithType: NumPyExtensions.ones(Of T)
+    fullName: NumSharp.Extensions.NumPyExtensions.ones(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.Shape
+    name: Shape
+    nameWithType: Shape
+    fullName: NumSharp.Shape
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NumPyExtensions
+  commentId: T:NumSharp.Extensions.NumPyExtensions
+  parent: NumSharp.Extensions
+  name: NumPyExtensions
+  nameWithType: NumPyExtensions
+  fullName: NumSharp.Extensions.NumPyExtensions
+- uid: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+  commentId: M:NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+  isExternal: true
+  name: delete<T>(NumPy<T>, NDArray<T>, IEnumerable<T>)
+  nameWithType: NumPyExtensions.delete<T>(NumPy<T>, NDArray<T>, IEnumerable<T>)
+  fullName: NumSharp.Extensions.NumPyExtensions.delete<T>(NumSharp.NumPy<T>, NumSharp.NDArray<T>, System.Collections.Generic.IEnumerable<T>)
+  nameWithType.vb: NumPyExtensions.delete(Of T)(NumPy(Of T), NDArray(Of T), IEnumerable(Of T))
+  fullName.vb: NumSharp.Extensions.NumPyExtensions.delete(Of T)(NumSharp.NumPy(Of T), NumSharp.NDArray(Of T), System.Collections.Generic.IEnumerable(Of T))
+  name.vb: delete(Of T)(NumPy(Of T), NDArray(Of T), IEnumerable(Of T))
+  spec.csharp:
+  - uid: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+    name: delete<T>
+    nameWithType: NumPyExtensions.delete<T>
+    fullName: NumSharp.Extensions.NumPyExtensions.delete<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NumPyExtensions.delete``1(NumSharp.NumPy{``0},NumSharp.NDArray{``0},System.Collections.Generic.IEnumerable{``0})
+    name: delete(Of T)
+    nameWithType: NumPyExtensions.delete(Of T)
+    fullName: NumSharp.Extensions.NumPyExtensions.delete(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Collections.Generic.IEnumerable`1
+    name: IEnumerable
+    nameWithType: IEnumerable
+    fullName: System.Collections.Generic.IEnumerable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions
+  commentId: N:NumSharp.Extensions
+  name: NumSharp.Extensions
+  nameWithType: NumSharp.Extensions
+  fullName: NumSharp.Extensions
+- uid: NumSharp.NumPy`1.absolute*
+  commentId: Overload:NumSharp.NumPy`1.absolute
+  name: absolute
+  nameWithType: NumPy<T>.absolute
+  fullName: NumSharp.NumPy<T>.absolute
+  nameWithType.vb: NumPy(Of T).absolute
+  fullName.vb: NumSharp.NumPy(Of T).absolute
+- uid: NumSharp.NDArray{System.Double}
+  commentId: T:NumSharp.NDArray{System.Double}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<Double>
+  nameWithType: NDArray<Double>
+  fullName: NumSharp.NDArray<System.Double>
+  nameWithType.vb: NDArray(Of Double)
+  fullName.vb: NumSharp.NDArray(Of System.Double)
+  name.vb: NDArray(Of Double)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1
+  commentId: T:NumSharp.NDArray`1
+  parent: NumSharp
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.amax*
+  commentId: Overload:NumSharp.NumPy`1.amax
+  name: amax
+  nameWithType: NumPy<T>.amax
+  fullName: NumSharp.NumPy<T>.amax
+  nameWithType.vb: NumPy(Of T).amax
+  fullName.vb: NumSharp.NumPy(Of T).amax
+- uid: System.Nullable{System.Int32}
+  commentId: T:System.Nullable{System.Int32}
+  parent: System
+  definition: System.Nullable`1
+  name: Nullable<Int32>
+  nameWithType: Nullable<Int32>
+  fullName: System.Nullable<System.Int32>
+  nameWithType.vb: Nullable(Of Int32)
+  fullName.vb: System.Nullable(Of System.Int32)
+  name.vb: Nullable(Of Int32)
+  spec.csharp:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Nullable`1
+  commentId: T:System.Nullable`1
+  isExternal: true
+  name: Nullable<T>
+  nameWithType: Nullable<T>
+  fullName: System.Nullable<T>
+  nameWithType.vb: Nullable(Of T)
+  fullName.vb: System.Nullable(Of T)
+  name.vb: Nullable(Of T)
+  spec.csharp:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.amin*
+  commentId: Overload:NumSharp.NumPy`1.amin
+  name: amin
+  nameWithType: NumPy<T>.amin
+  fullName: NumSharp.NumPy<T>.amin
+  nameWithType.vb: NumPy(Of T).amin
+  fullName.vb: NumSharp.NumPy(Of T).amin
+- uid: NumSharp.NumPy`1.arange*
+  commentId: Overload:NumSharp.NumPy`1.arange
+  name: arange
+  nameWithType: NumPy<T>.arange
+  fullName: NumSharp.NumPy<T>.arange
+  nameWithType.vb: NumPy(Of T).arange
+  fullName.vb: NumSharp.NumPy(Of T).arange
+- uid: System.Int32
+  commentId: T:System.Int32
+  parent: System
+  isExternal: true
+  name: Int32
+  nameWithType: Int32
+  fullName: System.Int32
+- uid: NumSharp.NDArray{{T}}
+  commentId: T:NumSharp.NDArray{``0}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPy`1.array*
+  commentId: Overload:NumSharp.NumPy`1.array
+  name: array
+  nameWithType: NumPy<T>.array
+  fullName: NumSharp.NumPy<T>.array
+  nameWithType.vb: NumPy(Of T).array
+  fullName.vb: NumSharp.NumPy(Of T).array
+- uid: '{T}[]'
+  isExternal: true
+  name: T[]
+  nameWithType: T[]
+  fullName: T[]
+  nameWithType.vb: T()
+  fullName.vb: T()
+  name.vb: T()
+  spec.csharp:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: '{T}[][]'
+  isExternal: true
+  name: T[][]
+  nameWithType: T[][]
+  fullName: T[][]
+  nameWithType.vb: T()()
+  fullName.vb: T()()
+  name.vb: T()()
+  spec.csharp:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NumPy`1.hstack*
+  commentId: Overload:NumSharp.NumPy`1.hstack
+  name: hstack
+  nameWithType: NumPy<T>.hstack
+  fullName: NumSharp.NumPy<T>.hstack
+  nameWithType.vb: NumPy(Of T).hstack
+  fullName.vb: NumSharp.NumPy(Of T).hstack
+- uid: NumSharp.NDArray{System.Double}[]
+  isExternal: true
+  name: NDArray<Double>[]
+  nameWithType: NDArray<Double>[]
+  fullName: NumSharp.NDArray<System.Double>[]
+  nameWithType.vb: NDArray(Of Double)()
+  fullName.vb: NumSharp.NDArray(Of System.Double)()
+  name.vb: NDArray(Of Double)()
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NumPy`1.linspace*
+  commentId: Overload:NumSharp.NumPy`1.linspace
+  name: linspace
+  nameWithType: NumPy<T>.linspace
+  fullName: NumSharp.NumPy<T>.linspace
+  nameWithType.vb: NumPy(Of T).linspace
+  fullName.vb: NumSharp.NumPy(Of T).linspace
+- uid: System.Double
+  commentId: T:System.Double
+  parent: System
+  isExternal: true
+  name: Double
+  nameWithType: Double
+  fullName: System.Double
+- uid: NumSharp.NumPy`1.max*
+  commentId: Overload:NumSharp.NumPy`1.max
+  name: max
+  nameWithType: NumPy<T>.max
+  fullName: NumSharp.NumPy<T>.max
+  nameWithType.vb: NumPy(Of T).max
+  fullName.vb: NumSharp.NumPy(Of T).max
+- uid: NumSharp.NumPy`1.power*
+  commentId: Overload:NumSharp.NumPy`1.power
+  name: power
+  nameWithType: NumPy<T>.power
+  fullName: NumSharp.NumPy<T>.power
+  nameWithType.vb: NumPy(Of T).power
+  fullName.vb: NumSharp.NumPy(Of T).power
+- uid: NumSharp.NumPy`1.random*
+  commentId: Overload:NumSharp.NumPy`1.random
+  name: random
+  nameWithType: NumPy<T>.random
+  fullName: NumSharp.NumPy<T>.random
+  nameWithType.vb: NumPy(Of T).random
+  fullName.vb: NumSharp.NumPy(Of T).random
+- uid: NumSharp.NDArrayRandom
+  commentId: T:NumSharp.NDArrayRandom
+  parent: NumSharp
+  name: NDArrayRandom
+  nameWithType: NDArrayRandom
+  fullName: NumSharp.NDArrayRandom
+- uid: NumSharp.NumPy`1.reshape*
+  commentId: Overload:NumSharp.NumPy`1.reshape
+  name: reshape
+  nameWithType: NumPy<T>.reshape
+  fullName: NumSharp.NumPy<T>.reshape
+  nameWithType.vb: NumPy(Of T).reshape
+  fullName.vb: NumSharp.NumPy(Of T).reshape
+- uid: NumSharp.NDArray{System.Int32}
+  commentId: T:NumSharp.NDArray{System.Int32}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<Int32>
+  nameWithType: NDArray<Int32>
+  fullName: NumSharp.NDArray<System.Int32>
+  nameWithType.vb: NDArray(Of Int32)
+  fullName.vb: NumSharp.NDArray(Of System.Int32)
+  name.vb: NDArray(Of Int32)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Int32[]
+  isExternal: true
+  name: Int32[]
+  nameWithType: Int32[]
+  fullName: System.Int32[]
+  nameWithType.vb: Int32()
+  fullName.vb: System.Int32()
+  name.vb: Int32()
+  spec.csharp:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NumPy`1.vstack*
+  commentId: Overload:NumSharp.NumPy`1.vstack
+  name: vstack
+  nameWithType: NumPy<T>.vstack
+  fullName: NumSharp.NumPy<T>.vstack
+  nameWithType.vb: NumPy(Of T).vstack
+  fullName.vb: NumSharp.NumPy(Of T).vstack
+- uid: NumSharp.NumPy`1.zeros*
+  commentId: Overload:NumSharp.NumPy`1.zeros
+  name: zeros
+  nameWithType: NumPy<T>.zeros
+  fullName: NumSharp.NumPy<T>.zeros
+  nameWithType.vb: NumPy(Of T).zeros
+  fullName.vb: NumSharp.NumPy(Of T).zeros

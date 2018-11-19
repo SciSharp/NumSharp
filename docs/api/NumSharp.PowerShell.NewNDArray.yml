@@ -1,0 +1,2036 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.PowerShell.NewNDArray
+  commentId: T:NumSharp.PowerShell.NewNDArray
+  id: NewNDArray
+  parent: NumSharp.PowerShell
+  children:
+  - NumSharp.PowerShell.NewNDArray._NDArray
+  - NumSharp.PowerShell.NewNDArray.Array
+  - NumSharp.PowerShell.NewNDArray.DataType
+  - NumSharp.PowerShell.NewNDArray.ProcessRecord
+  langs:
+  - csharp
+  - vb
+  name: NewNDArray
+  nameWithType: NewNDArray
+  fullName: NumSharp.PowerShell.NewNDArray
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp.PowerShell/GetGreeting.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: NewNDArray
+    path: ../src/NumSharp.PowerShell/GetGreeting.cs
+    startLine: 6
+  assemblies:
+  - NumSharp.PowerShell
+  namespace: NumSharp.PowerShell
+  syntax:
+    content: >-
+      [Cmdlet("New", "NDArray")]
+
+      [OutputType(new Type[]{typeof(NDArray<>)})]
+
+      public class NewNDArray : Cmdlet
+    content.vb: >-
+      <Cmdlet("New", "NDArray")>
+
+      <OutputType(New Type() {GetType(NDArray(Of ))})>
+
+      Public Class NewNDArray
+          Inherits Cmdlet
+  inheritance:
+  - System.Object
+  - System.Management.Automation.Internal.InternalCommand
+  - System.Management.Automation.Cmdlet
+  inheritedMembers:
+  - System.Management.Automation.Cmdlet.GetResourceString(System.String,System.String)
+  - System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+  - System.Management.Automation.Cmdlet.WriteObject(System.Object)
+  - System.Management.Automation.Cmdlet.WriteObject(System.Object,System.Boolean)
+  - System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+  - System.Management.Automation.Cmdlet.WriteWarning(System.String)
+  - System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+  - System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+  - System.Management.Automation.Cmdlet.WriteDebug(System.String)
+  - System.Management.Automation.Cmdlet.WriteInformation(System.Object,System.String[])
+  - System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+  - System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+  - System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String)
+  - System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String)
+  - System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String,System.Management.Automation.ShouldProcessReason@)
+  - System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String)
+  - System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean@,System.Boolean@)
+  - System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean,System.Boolean@,System.Boolean@)
+  - System.Management.Automation.Cmdlet.Invoke
+  - System.Management.Automation.Cmdlet.Invoke``1
+  - System.Management.Automation.Cmdlet.TransactionAvailable
+  - System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+  - System.Management.Automation.Cmdlet.BeginProcessing
+  - System.Management.Automation.Cmdlet.EndProcessing
+  - System.Management.Automation.Cmdlet.StopProcessing
+  - System.Management.Automation.Cmdlet.CommonParameters
+  - System.Management.Automation.Cmdlet.OptionalCommonParameters
+  - System.Management.Automation.Cmdlet.Stopping
+  - System.Management.Automation.Cmdlet.CommandRuntime
+  - System.Management.Automation.Cmdlet.CurrentPSTransaction
+  - System.Management.Automation.Internal.InternalCommand.CommandOrigin
+  - System.Object.Equals(System.Object)
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetHashCode
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  - System.Object.ToString
+  attributes:
+  - type: System.Management.Automation.CmdletAttribute
+    ctor: System.Management.Automation.CmdletAttribute.#ctor(System.String,System.String)
+    arguments:
+    - type: System.String
+      value: New
+    - type: System.String
+      value: NDArray
+  modifiers.csharp:
+  - public
+  - class
+  modifiers.vb:
+  - Public
+  - Class
+- uid: NumSharp.PowerShell.NewNDArray._NDArray
+  commentId: F:NumSharp.PowerShell.NewNDArray._NDArray
+  id: _NDArray
+  parent: NumSharp.PowerShell.NewNDArray
+  langs:
+  - csharp
+  - vb
+  name: _NDArray
+  nameWithType: NewNDArray._NDArray
+  fullName: NumSharp.PowerShell.NewNDArray._NDArray
+  type: Field
+  source:
+    remote:
+      path: src/NumSharp.PowerShell/GetGreeting.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: _NDArray
+    path: ../src/NumSharp.PowerShell/GetGreeting.cs
+    startLine: 10
+  assemblies:
+  - NumSharp.PowerShell
+  namespace: NumSharp.PowerShell
+  syntax:
+    content: protected dynamic _NDArray
+    return:
+      type: System.Object
+    content.vb: Protected _NDArray As Object
+  modifiers.csharp:
+  - protected
+  modifiers.vb:
+  - Protected
+- uid: NumSharp.PowerShell.NewNDArray.Array
+  commentId: P:NumSharp.PowerShell.NewNDArray.Array
+  id: Array
+  parent: NumSharp.PowerShell.NewNDArray
+  langs:
+  - csharp
+  - vb
+  name: Array
+  nameWithType: NewNDArray.Array
+  fullName: NumSharp.PowerShell.NewNDArray.Array
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp.PowerShell/GetGreeting.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Array
+    path: ../src/NumSharp.PowerShell/GetGreeting.cs
+    startLine: 11
+  assemblies:
+  - NumSharp.PowerShell
+  namespace: NumSharp.PowerShell
+  syntax:
+    content: >-
+      [ValidateNotNull]
+
+      [Parameter(Position = 0, HelpMessage = "A collection of numbers")]
+
+      public IList<object> Array { get; set; }
+    parameters: []
+    return:
+      type: System.Collections.Generic.IList{System.Object}
+    content.vb: >-
+      <ValidateNotNull>
+
+      <Parameter(Position:=0, HelpMessage:="A collection of numbers")>
+
+      Public Property Array As IList(Of Object)
+  overload: NumSharp.PowerShell.NewNDArray.Array*
+  attributes:
+  - type: System.Management.Automation.ValidateNotNullAttribute
+    ctor: System.Management.Automation.ValidateNotNullAttribute.#ctor
+    arguments: []
+  - type: System.Management.Automation.ParameterAttribute
+    ctor: System.Management.Automation.ParameterAttribute.#ctor
+    arguments: []
+    namedArguments:
+    - name: Position
+      type: System.Int32
+      value: 0
+    - name: HelpMessage
+      type: System.String
+      value: A collection of numbers
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+- uid: NumSharp.PowerShell.NewNDArray.DataType
+  commentId: P:NumSharp.PowerShell.NewNDArray.DataType
+  id: DataType
+  parent: NumSharp.PowerShell.NewNDArray
+  langs:
+  - csharp
+  - vb
+  name: DataType
+  nameWithType: NewNDArray.DataType
+  fullName: NumSharp.PowerShell.NewNDArray.DataType
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp.PowerShell/GetGreeting.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: DataType
+    path: ../src/NumSharp.PowerShell/GetGreeting.cs
+    startLine: 14
+  assemblies:
+  - NumSharp.PowerShell
+  namespace: NumSharp.PowerShell
+  syntax:
+    content: >-
+      [ValidateSet(new string[]{"float", "double", "int32", "int64", "Complex"})]
+
+      [Parameter(Position = 1, HelpMessage = "The data type of NDArray")]
+
+      public string DataType { get; set; }
+    parameters: []
+    return:
+      type: System.String
+    content.vb: >-
+      <ValidateSet(New String() {"float", "double", "int32", "int64", "Complex"})>
+
+      <Parameter(Position:=1, HelpMessage:="The data type of NDArray")>
+
+      Public Property DataType As String
+  overload: NumSharp.PowerShell.NewNDArray.DataType*
+  attributes:
+  - type: System.Management.Automation.ParameterAttribute
+    ctor: System.Management.Automation.ParameterAttribute.#ctor
+    arguments: []
+    namedArguments:
+    - name: Position
+      type: System.Int32
+      value: 1
+    - name: HelpMessage
+      type: System.String
+      value: The data type of NDArray
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+- uid: NumSharp.PowerShell.NewNDArray.ProcessRecord
+  commentId: M:NumSharp.PowerShell.NewNDArray.ProcessRecord
+  id: ProcessRecord
+  parent: NumSharp.PowerShell.NewNDArray
+  langs:
+  - csharp
+  - vb
+  name: ProcessRecord()
+  nameWithType: NewNDArray.ProcessRecord()
+  fullName: NumSharp.PowerShell.NewNDArray.ProcessRecord()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp.PowerShell/GetGreeting.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: ProcessRecord
+    path: ../src/NumSharp.PowerShell/GetGreeting.cs
+    startLine: 17
+  assemblies:
+  - NumSharp.PowerShell
+  namespace: NumSharp.PowerShell
+  syntax:
+    content: protected override void ProcessRecord()
+    content.vb: Protected Overrides Sub ProcessRecord
+  overridden: System.Management.Automation.Cmdlet.ProcessRecord
+  overload: NumSharp.PowerShell.NewNDArray.ProcessRecord*
+  modifiers.csharp:
+  - protected
+  - override
+  modifiers.vb:
+  - Protected
+  - Overrides
+references:
+- uid: NumSharp.PowerShell
+  commentId: N:NumSharp.PowerShell
+  name: NumSharp.PowerShell
+  nameWithType: NumSharp.PowerShell
+  fullName: NumSharp.PowerShell
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Management.Automation.Internal.InternalCommand
+  commentId: T:System.Management.Automation.Internal.InternalCommand
+  parent: System.Management.Automation.Internal
+  isExternal: true
+  name: InternalCommand
+  nameWithType: InternalCommand
+  fullName: System.Management.Automation.Internal.InternalCommand
+- uid: System.Management.Automation.Cmdlet
+  commentId: T:System.Management.Automation.Cmdlet
+  parent: System.Management.Automation
+  isExternal: true
+  name: Cmdlet
+  nameWithType: Cmdlet
+  fullName: System.Management.Automation.Cmdlet
+- uid: System.Management.Automation.Cmdlet.GetResourceString(System.String,System.String)
+  commentId: M:System.Management.Automation.Cmdlet.GetResourceString(System.String,System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: GetResourceString(String, String)
+  nameWithType: Cmdlet.GetResourceString(String, String)
+  fullName: System.Management.Automation.Cmdlet.GetResourceString(System.String, System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.GetResourceString(System.String,System.String)
+    name: GetResourceString
+    nameWithType: Cmdlet.GetResourceString
+    fullName: System.Management.Automation.Cmdlet.GetResourceString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.GetResourceString(System.String,System.String)
+    name: GetResourceString
+    nameWithType: Cmdlet.GetResourceString
+    fullName: System.Management.Automation.Cmdlet.GetResourceString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+  commentId: M:System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteError(ErrorRecord)
+  nameWithType: Cmdlet.WriteError(ErrorRecord)
+  fullName: System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+    name: WriteError
+    nameWithType: Cmdlet.WriteError
+    fullName: System.Management.Automation.Cmdlet.WriteError
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ErrorRecord
+    name: ErrorRecord
+    nameWithType: ErrorRecord
+    fullName: System.Management.Automation.ErrorRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteError(System.Management.Automation.ErrorRecord)
+    name: WriteError
+    nameWithType: Cmdlet.WriteError
+    fullName: System.Management.Automation.Cmdlet.WriteError
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ErrorRecord
+    name: ErrorRecord
+    nameWithType: ErrorRecord
+    fullName: System.Management.Automation.ErrorRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteObject(System.Object)
+  commentId: M:System.Management.Automation.Cmdlet.WriteObject(System.Object)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteObject(Object)
+  nameWithType: Cmdlet.WriteObject(Object)
+  fullName: System.Management.Automation.Cmdlet.WriteObject(System.Object)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteObject(System.Object)
+    name: WriteObject
+    nameWithType: Cmdlet.WriteObject
+    fullName: System.Management.Automation.Cmdlet.WriteObject
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteObject(System.Object)
+    name: WriteObject
+    nameWithType: Cmdlet.WriteObject
+    fullName: System.Management.Automation.Cmdlet.WriteObject
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteObject(System.Object,System.Boolean)
+  commentId: M:System.Management.Automation.Cmdlet.WriteObject(System.Object,System.Boolean)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteObject(Object, Boolean)
+  nameWithType: Cmdlet.WriteObject(Object, Boolean)
+  fullName: System.Management.Automation.Cmdlet.WriteObject(System.Object, System.Boolean)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteObject(System.Object,System.Boolean)
+    name: WriteObject
+    nameWithType: Cmdlet.WriteObject
+    fullName: System.Management.Automation.Cmdlet.WriteObject
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteObject(System.Object,System.Boolean)
+    name: WriteObject
+    nameWithType: Cmdlet.WriteObject
+    fullName: System.Management.Automation.Cmdlet.WriteObject
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+  commentId: M:System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteVerbose(String)
+  nameWithType: Cmdlet.WriteVerbose(String)
+  fullName: System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+    name: WriteVerbose
+    nameWithType: Cmdlet.WriteVerbose
+    fullName: System.Management.Automation.Cmdlet.WriteVerbose
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteVerbose(System.String)
+    name: WriteVerbose
+    nameWithType: Cmdlet.WriteVerbose
+    fullName: System.Management.Automation.Cmdlet.WriteVerbose
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteWarning(System.String)
+  commentId: M:System.Management.Automation.Cmdlet.WriteWarning(System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteWarning(String)
+  nameWithType: Cmdlet.WriteWarning(String)
+  fullName: System.Management.Automation.Cmdlet.WriteWarning(System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteWarning(System.String)
+    name: WriteWarning
+    nameWithType: Cmdlet.WriteWarning
+    fullName: System.Management.Automation.Cmdlet.WriteWarning
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteWarning(System.String)
+    name: WriteWarning
+    nameWithType: Cmdlet.WriteWarning
+    fullName: System.Management.Automation.Cmdlet.WriteWarning
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+  commentId: M:System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteCommandDetail(String)
+  nameWithType: Cmdlet.WriteCommandDetail(String)
+  fullName: System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+    name: WriteCommandDetail
+    nameWithType: Cmdlet.WriteCommandDetail
+    fullName: System.Management.Automation.Cmdlet.WriteCommandDetail
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteCommandDetail(System.String)
+    name: WriteCommandDetail
+    nameWithType: Cmdlet.WriteCommandDetail
+    fullName: System.Management.Automation.Cmdlet.WriteCommandDetail
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+  commentId: M:System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteProgress(ProgressRecord)
+  nameWithType: Cmdlet.WriteProgress(ProgressRecord)
+  fullName: System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+    name: WriteProgress
+    nameWithType: Cmdlet.WriteProgress
+    fullName: System.Management.Automation.Cmdlet.WriteProgress
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ProgressRecord
+    name: ProgressRecord
+    nameWithType: ProgressRecord
+    fullName: System.Management.Automation.ProgressRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteProgress(System.Management.Automation.ProgressRecord)
+    name: WriteProgress
+    nameWithType: Cmdlet.WriteProgress
+    fullName: System.Management.Automation.Cmdlet.WriteProgress
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ProgressRecord
+    name: ProgressRecord
+    nameWithType: ProgressRecord
+    fullName: System.Management.Automation.ProgressRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteDebug(System.String)
+  commentId: M:System.Management.Automation.Cmdlet.WriteDebug(System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteDebug(String)
+  nameWithType: Cmdlet.WriteDebug(String)
+  fullName: System.Management.Automation.Cmdlet.WriteDebug(System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteDebug(System.String)
+    name: WriteDebug
+    nameWithType: Cmdlet.WriteDebug
+    fullName: System.Management.Automation.Cmdlet.WriteDebug
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteDebug(System.String)
+    name: WriteDebug
+    nameWithType: Cmdlet.WriteDebug
+    fullName: System.Management.Automation.Cmdlet.WriteDebug
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteInformation(System.Object,System.String[])
+  commentId: M:System.Management.Automation.Cmdlet.WriteInformation(System.Object,System.String[])
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteInformation(Object, String[])
+  nameWithType: Cmdlet.WriteInformation(Object, String[])
+  fullName: System.Management.Automation.Cmdlet.WriteInformation(System.Object, System.String[])
+  nameWithType.vb: Cmdlet.WriteInformation(Object, String())
+  fullName.vb: System.Management.Automation.Cmdlet.WriteInformation(System.Object, System.String())
+  name.vb: WriteInformation(Object, String())
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteInformation(System.Object,System.String[])
+    name: WriteInformation
+    nameWithType: Cmdlet.WriteInformation
+    fullName: System.Management.Automation.Cmdlet.WriteInformation
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteInformation(System.Object,System.String[])
+    name: WriteInformation
+    nameWithType: Cmdlet.WriteInformation
+    fullName: System.Management.Automation.Cmdlet.WriteInformation
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+  commentId: M:System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: WriteInformation(InformationRecord)
+  nameWithType: Cmdlet.WriteInformation(InformationRecord)
+  fullName: System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+    name: WriteInformation
+    nameWithType: Cmdlet.WriteInformation
+    fullName: System.Management.Automation.Cmdlet.WriteInformation
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.InformationRecord
+    name: InformationRecord
+    nameWithType: InformationRecord
+    fullName: System.Management.Automation.InformationRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.WriteInformation(System.Management.Automation.InformationRecord)
+    name: WriteInformation
+    nameWithType: Cmdlet.WriteInformation
+    fullName: System.Management.Automation.Cmdlet.WriteInformation
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.InformationRecord
+    name: InformationRecord
+    nameWithType: InformationRecord
+    fullName: System.Management.Automation.InformationRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldProcess(String)
+  nameWithType: Cmdlet.ShouldProcess(String)
+  fullName: System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldProcess(String, String)
+  nameWithType: Cmdlet.ShouldProcess(String, String)
+  fullName: System.Management.Automation.Cmdlet.ShouldProcess(System.String, System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldProcess(String, String, String)
+  nameWithType: Cmdlet.ShouldProcess(String, String, String)
+  fullName: System.Management.Automation.Cmdlet.ShouldProcess(System.String, System.String, System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String,System.Management.Automation.ShouldProcessReason@)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String,System.Management.Automation.ShouldProcessReason@)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldProcess(String, String, String, ShouldProcessReason)
+  nameWithType: Cmdlet.ShouldProcess(String, String, String, ShouldProcessReason)
+  fullName: System.Management.Automation.Cmdlet.ShouldProcess(System.String, System.String, System.String, System.Management.Automation.ShouldProcessReason)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String,System.Management.Automation.ShouldProcessReason@)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Management.Automation.ShouldProcessReason
+    name: ShouldProcessReason
+    nameWithType: ShouldProcessReason
+    fullName: System.Management.Automation.ShouldProcessReason
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldProcess(System.String,System.String,System.String,System.Management.Automation.ShouldProcessReason@)
+    name: ShouldProcess
+    nameWithType: Cmdlet.ShouldProcess
+    fullName: System.Management.Automation.Cmdlet.ShouldProcess
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Management.Automation.ShouldProcessReason
+    name: ShouldProcessReason
+    nameWithType: ShouldProcessReason
+    fullName: System.Management.Automation.ShouldProcessReason
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldContinue(String, String)
+  nameWithType: Cmdlet.ShouldContinue(String, String)
+  fullName: System.Management.Automation.Cmdlet.ShouldContinue(System.String, System.String)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean@,System.Boolean@)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean@,System.Boolean@)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldContinue(String, String, Boolean, Boolean)
+  nameWithType: Cmdlet.ShouldContinue(String, String, Boolean, Boolean)
+  fullName: System.Management.Automation.Cmdlet.ShouldContinue(System.String, System.String, System.Boolean, System.Boolean)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean@,System.Boolean@)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean@,System.Boolean@)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean,System.Boolean@,System.Boolean@)
+  commentId: M:System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean,System.Boolean@,System.Boolean@)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ShouldContinue(String, String, Boolean, Boolean, Boolean)
+  nameWithType: Cmdlet.ShouldContinue(String, String, Boolean, Boolean, Boolean)
+  fullName: System.Management.Automation.Cmdlet.ShouldContinue(System.String, System.String, System.Boolean, System.Boolean, System.Boolean)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean,System.Boolean@,System.Boolean@)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ShouldContinue(System.String,System.String,System.Boolean,System.Boolean@,System.Boolean@)
+    name: ShouldContinue
+    nameWithType: Cmdlet.ShouldContinue
+    fullName: System.Management.Automation.Cmdlet.ShouldContinue
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.String
+    name: String
+    nameWithType: String
+    fullName: System.String
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Boolean
+    name: Boolean
+    nameWithType: Boolean
+    fullName: System.Boolean
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.Invoke
+  commentId: M:System.Management.Automation.Cmdlet.Invoke
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: Invoke()
+  nameWithType: Cmdlet.Invoke()
+  fullName: System.Management.Automation.Cmdlet.Invoke()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.Invoke
+    name: Invoke
+    nameWithType: Cmdlet.Invoke
+    fullName: System.Management.Automation.Cmdlet.Invoke
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.Invoke
+    name: Invoke
+    nameWithType: Cmdlet.Invoke
+    fullName: System.Management.Automation.Cmdlet.Invoke
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.Invoke``1
+  commentId: M:System.Management.Automation.Cmdlet.Invoke``1
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: Invoke<T>()
+  nameWithType: Cmdlet.Invoke<T>()
+  fullName: System.Management.Automation.Cmdlet.Invoke<T>()
+  nameWithType.vb: Cmdlet.Invoke(Of T)()
+  fullName.vb: System.Management.Automation.Cmdlet.Invoke(Of T)()
+  name.vb: Invoke(Of T)()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.Invoke``1
+    name: Invoke<T>
+    nameWithType: Cmdlet.Invoke<T>
+    fullName: System.Management.Automation.Cmdlet.Invoke<T>
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.Invoke``1
+    name: Invoke(Of T)
+    nameWithType: Cmdlet.Invoke(Of T)
+    fullName: System.Management.Automation.Cmdlet.Invoke(Of T)
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.TransactionAvailable
+  commentId: M:System.Management.Automation.Cmdlet.TransactionAvailable
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: TransactionAvailable()
+  nameWithType: Cmdlet.TransactionAvailable()
+  fullName: System.Management.Automation.Cmdlet.TransactionAvailable()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.TransactionAvailable
+    name: TransactionAvailable
+    nameWithType: Cmdlet.TransactionAvailable
+    fullName: System.Management.Automation.Cmdlet.TransactionAvailable
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.TransactionAvailable
+    name: TransactionAvailable
+    nameWithType: Cmdlet.TransactionAvailable
+    fullName: System.Management.Automation.Cmdlet.TransactionAvailable
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+  commentId: M:System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ThrowTerminatingError(ErrorRecord)
+  nameWithType: Cmdlet.ThrowTerminatingError(ErrorRecord)
+  fullName: System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+    name: ThrowTerminatingError
+    nameWithType: Cmdlet.ThrowTerminatingError
+    fullName: System.Management.Automation.Cmdlet.ThrowTerminatingError
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ErrorRecord
+    name: ErrorRecord
+    nameWithType: ErrorRecord
+    fullName: System.Management.Automation.ErrorRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ThrowTerminatingError(System.Management.Automation.ErrorRecord)
+    name: ThrowTerminatingError
+    nameWithType: Cmdlet.ThrowTerminatingError
+    fullName: System.Management.Automation.Cmdlet.ThrowTerminatingError
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Management.Automation.ErrorRecord
+    name: ErrorRecord
+    nameWithType: ErrorRecord
+    fullName: System.Management.Automation.ErrorRecord
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.BeginProcessing
+  commentId: M:System.Management.Automation.Cmdlet.BeginProcessing
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: BeginProcessing()
+  nameWithType: Cmdlet.BeginProcessing()
+  fullName: System.Management.Automation.Cmdlet.BeginProcessing()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.BeginProcessing
+    name: BeginProcessing
+    nameWithType: Cmdlet.BeginProcessing
+    fullName: System.Management.Automation.Cmdlet.BeginProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.BeginProcessing
+    name: BeginProcessing
+    nameWithType: Cmdlet.BeginProcessing
+    fullName: System.Management.Automation.Cmdlet.BeginProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.EndProcessing
+  commentId: M:System.Management.Automation.Cmdlet.EndProcessing
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: EndProcessing()
+  nameWithType: Cmdlet.EndProcessing()
+  fullName: System.Management.Automation.Cmdlet.EndProcessing()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.EndProcessing
+    name: EndProcessing
+    nameWithType: Cmdlet.EndProcessing
+    fullName: System.Management.Automation.Cmdlet.EndProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.EndProcessing
+    name: EndProcessing
+    nameWithType: Cmdlet.EndProcessing
+    fullName: System.Management.Automation.Cmdlet.EndProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.StopProcessing
+  commentId: M:System.Management.Automation.Cmdlet.StopProcessing
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: StopProcessing()
+  nameWithType: Cmdlet.StopProcessing()
+  fullName: System.Management.Automation.Cmdlet.StopProcessing()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.StopProcessing
+    name: StopProcessing
+    nameWithType: Cmdlet.StopProcessing
+    fullName: System.Management.Automation.Cmdlet.StopProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.StopProcessing
+    name: StopProcessing
+    nameWithType: Cmdlet.StopProcessing
+    fullName: System.Management.Automation.Cmdlet.StopProcessing
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Management.Automation.Cmdlet.CommonParameters
+  commentId: P:System.Management.Automation.Cmdlet.CommonParameters
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: CommonParameters
+  nameWithType: Cmdlet.CommonParameters
+  fullName: System.Management.Automation.Cmdlet.CommonParameters
+- uid: System.Management.Automation.Cmdlet.OptionalCommonParameters
+  commentId: P:System.Management.Automation.Cmdlet.OptionalCommonParameters
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: OptionalCommonParameters
+  nameWithType: Cmdlet.OptionalCommonParameters
+  fullName: System.Management.Automation.Cmdlet.OptionalCommonParameters
+- uid: System.Management.Automation.Cmdlet.Stopping
+  commentId: P:System.Management.Automation.Cmdlet.Stopping
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: Stopping
+  nameWithType: Cmdlet.Stopping
+  fullName: System.Management.Automation.Cmdlet.Stopping
+- uid: System.Management.Automation.Cmdlet.CommandRuntime
+  commentId: P:System.Management.Automation.Cmdlet.CommandRuntime
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: CommandRuntime
+  nameWithType: Cmdlet.CommandRuntime
+  fullName: System.Management.Automation.Cmdlet.CommandRuntime
+- uid: System.Management.Automation.Cmdlet.CurrentPSTransaction
+  commentId: P:System.Management.Automation.Cmdlet.CurrentPSTransaction
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: CurrentPSTransaction
+  nameWithType: Cmdlet.CurrentPSTransaction
+  fullName: System.Management.Automation.Cmdlet.CurrentPSTransaction
+- uid: System.Management.Automation.Internal.InternalCommand.CommandOrigin
+  commentId: P:System.Management.Automation.Internal.InternalCommand.CommandOrigin
+  parent: System.Management.Automation.Internal.InternalCommand
+  isExternal: true
+  name: CommandOrigin
+  nameWithType: InternalCommand.CommandOrigin
+  fullName: System.Management.Automation.Internal.InternalCommand.CommandOrigin
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: System.Management.Automation.Internal
+  commentId: N:System.Management.Automation.Internal
+  isExternal: true
+  name: System.Management.Automation.Internal
+  nameWithType: System.Management.Automation.Internal
+  fullName: System.Management.Automation.Internal
+- uid: System.Management.Automation
+  commentId: N:System.Management.Automation
+  isExternal: true
+  name: System.Management.Automation
+  nameWithType: System.Management.Automation
+  fullName: System.Management.Automation
+- uid: NumSharp.PowerShell.NewNDArray.Array*
+  commentId: Overload:NumSharp.PowerShell.NewNDArray.Array
+  name: Array
+  nameWithType: NewNDArray.Array
+  fullName: NumSharp.PowerShell.NewNDArray.Array
+- uid: System.Collections.Generic.IList{System.Object}
+  commentId: T:System.Collections.Generic.IList{System.Object}
+  parent: System.Collections.Generic
+  definition: System.Collections.Generic.IList`1
+  name: IList<Object>
+  nameWithType: IList<Object>
+  fullName: System.Collections.Generic.IList<System.Object>
+  nameWithType.vb: IList(Of Object)
+  fullName.vb: System.Collections.Generic.IList(Of System.Object)
+  name.vb: IList(Of Object)
+  spec.csharp:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic.IList`1
+  commentId: T:System.Collections.Generic.IList`1
+  isExternal: true
+  name: IList<T>
+  nameWithType: IList<T>
+  fullName: System.Collections.Generic.IList<T>
+  nameWithType.vb: IList(Of T)
+  fullName.vb: System.Collections.Generic.IList(Of T)
+  name.vb: IList(Of T)
+  spec.csharp:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic
+  commentId: N:System.Collections.Generic
+  isExternal: true
+  name: System.Collections.Generic
+  nameWithType: System.Collections.Generic
+  fullName: System.Collections.Generic
+- uid: NumSharp.PowerShell.NewNDArray.DataType*
+  commentId: Overload:NumSharp.PowerShell.NewNDArray.DataType
+  name: DataType
+  nameWithType: NewNDArray.DataType
+  fullName: NumSharp.PowerShell.NewNDArray.DataType
+- uid: System.String
+  commentId: T:System.String
+  parent: System
+  isExternal: true
+  name: String
+  nameWithType: String
+  fullName: System.String
+- uid: System.Management.Automation.Cmdlet.ProcessRecord
+  commentId: M:System.Management.Automation.Cmdlet.ProcessRecord
+  parent: System.Management.Automation.Cmdlet
+  isExternal: true
+  name: ProcessRecord()
+  nameWithType: Cmdlet.ProcessRecord()
+  fullName: System.Management.Automation.Cmdlet.ProcessRecord()
+  spec.csharp:
+  - uid: System.Management.Automation.Cmdlet.ProcessRecord
+    name: ProcessRecord
+    nameWithType: Cmdlet.ProcessRecord
+    fullName: System.Management.Automation.Cmdlet.ProcessRecord
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Management.Automation.Cmdlet.ProcessRecord
+    name: ProcessRecord
+    nameWithType: Cmdlet.ProcessRecord
+    fullName: System.Management.Automation.Cmdlet.ProcessRecord
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.PowerShell.NewNDArray.ProcessRecord*
+  commentId: Overload:NumSharp.PowerShell.NewNDArray.ProcessRecord
+  name: ProcessRecord
+  nameWithType: NewNDArray.ProcessRecord
+  fullName: NumSharp.PowerShell.NewNDArray.ProcessRecord

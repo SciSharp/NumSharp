@@ -1,0 +1,40 @@
+### YamlMime:TableOfContent
+- uid: NumSharp
+  name: NumSharp
+  items:
+  - uid: NumSharp.Matrix`1
+    name: Matrix<TData>
+    name.vb: Matrix(Of TData)
+  - uid: NumSharp.NDArray_Legacy`1
+    name: NDArray_Legacy<TData>
+    name.vb: NDArray_Legacy(Of TData)
+  - uid: NumSharp.NDArray`1
+    name: NDArray<T>
+    name.vb: NDArray(Of T)
+  - uid: NumSharp.NDArrayRandom
+    name: NDArrayRandom
+  - uid: NumSharp.NumPy`1
+    name: NumPy<T>
+    name.vb: NumPy(Of T)
+  - uid: NumSharp.NumPyExtensions
+    name: NumPyExtensions
+  - uid: NumSharp.Shape
+    name: Shape
+  - uid: NumSharp.Slice
+    name: Slice
+- uid: NumSharp.Extensions
+  name: NumSharp.Extensions
+  items:
+  - uid: NumSharp.Extensions.NDArrayExtensions
+    name: NDArrayExtensions
+  - uid: NumSharp.Extensions.NDArrayRandomExtensions
+    name: NDArrayRandomExtensions
+  - uid: NumSharp.Extensions.NumPyExtensions
+    name: NumPyExtensions
+- uid: NumSharp.PowerShell
+  name: NumSharp.PowerShell
+  items:
+  - uid: NumSharp.PowerShell.GetGreeting
+    name: GetGreeting
+  - uid: NumSharp.PowerShell.NewNDArray
+    name: NewNDArray
