@@ -47,7 +47,7 @@ namespace NumSharp
                     
                     for (int idx = 0; idx < prod.Data.Length;idx++)
                     {
-                        int puffer1 = idx / dim0;
+                        int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
                         int puffer3 = puffer1 * iterator;
                         for (int kdx = 0; kdx < iterator;kdx++)
@@ -62,7 +62,7 @@ namespace NumSharp
 
                     for (int idx = 0; idx < prod.Data.Length;idx++)
                     {
-                        int puffer1 = idx / dim0;
+                        int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
                         int puffer3 = puffer1 * iterator;
                         for (int kdx = 0; kdx < iterator;kdx++)
@@ -78,7 +78,7 @@ namespace NumSharp
 
                     for (int idx = 0; idx < prod.Data.Length;idx++)
                     {
-                        int puffer1 = idx / dim0;
+                        int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
                         int puffer3 = puffer1 * iterator;
                         for (int kdx = 0; kdx < iterator;kdx++)
@@ -93,7 +93,7 @@ namespace NumSharp
 
                     for (int idx = 0; idx < prod.Data.Length;idx++)
                     {
-                        int puffer1 = idx / dim0;
+                        int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
                         int puffer3 = puffer1 * iterator;
                         for (int kdx = 0; kdx < iterator;kdx++)

@@ -10,6 +10,8 @@ Is it difficult to translate python machine learning code into C#? Because too m
 
 ![comparision](docfx_project/images/python-csharp-comparision.png)
 
+If you want to read some more informations, we start a doc on https://scisharp.github.io/NumSharp/.
+
 NumSharp has implemented the arange, array, max, min, reshape, normalize, unique interfaces. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.
 
 ### Implemented APIs
@@ -67,12 +69,8 @@ PM> Install-Package NumSharp
 ```
 
 ### How to make docs
-```
-$ pip install sphinx
-$ pip install recommonmark
-$ cd docs
-$ make html
-```
+- Download docfx and put on PATH &rarr; https://github.com/dotnet/docfx/releases
+- ```docfx ./docfx_project/docfx.json -o ./docs```
 
 ### How to run benchmark
 ```

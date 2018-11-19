@@ -1,0 +1,586 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.Slice
+  commentId: T:NumSharp.Slice
+  id: Slice
+  parent: NumSharp
+  children:
+  - NumSharp.Slice.#ctor(System.Int32[])
+  - NumSharp.Slice.Length
+  - NumSharp.Slice.Start
+  - NumSharp.Slice.Step
+  - NumSharp.Slice.Stop
+  langs:
+  - csharp
+  - vb
+  name: Slice
+  nameWithType: Slice
+  fullName: NumSharp.Slice
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Slice
+    path: ../src/NumSharp/Slice.cs
+    startLine: 10
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nndarray can be indexed using slicing\nslice is constructed by start:stop:step notation\n"
+  example: []
+  syntax:
+    content: public class Slice
+    content.vb: Public Class Slice
+  inheritance:
+  - System.Object
+  inheritedMembers:
+  - System.Object.Equals(System.Object)
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetHashCode
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  - System.Object.ToString
+  modifiers.csharp:
+  - public
+  - class
+  modifiers.vb:
+  - Public
+  - Class
+- uid: NumSharp.Slice.Start
+  commentId: P:NumSharp.Slice.Start
+  id: Start
+  parent: NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: Start
+  nameWithType: Slice.Start
+  fullName: NumSharp.Slice.Start
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Start
+    path: ../src/NumSharp/Slice.cs
+    startLine: 12
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Start { get; set; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public Property Start As Integer
+  overload: NumSharp.Slice.Start*
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+- uid: NumSharp.Slice.Stop
+  commentId: P:NumSharp.Slice.Stop
+  id: Stop
+  parent: NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: Stop
+  nameWithType: Slice.Stop
+  fullName: NumSharp.Slice.Stop
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Stop
+    path: ../src/NumSharp/Slice.cs
+    startLine: 13
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Stop { get; set; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public Property Stop As Integer
+  overload: NumSharp.Slice.Stop*
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+- uid: NumSharp.Slice.Step
+  commentId: P:NumSharp.Slice.Step
+  id: Step
+  parent: NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: Step
+  nameWithType: Slice.Step
+  fullName: NumSharp.Slice.Step
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Step
+    path: ../src/NumSharp/Slice.cs
+    startLine: 14
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Step { get; set; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public Property Step As Integer
+  overload: NumSharp.Slice.Step*
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+- uid: NumSharp.Slice.Length
+  commentId: P:NumSharp.Slice.Length
+  id: Length
+  parent: NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: Length
+  nameWithType: Slice.Length
+  fullName: NumSharp.Slice.Length
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Length
+    path: ../src/NumSharp/Slice.cs
+    startLine: 16
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Length { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property Length As Integer
+  overload: NumSharp.Slice.Length*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Slice.#ctor(System.Int32[])
+  commentId: M:NumSharp.Slice.#ctor(System.Int32[])
+  id: '#ctor(System.Int32[])'
+  parent: NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: Slice(Int32[])
+  nameWithType: Slice.Slice(Int32[])
+  fullName: NumSharp.Slice.Slice(System.Int32[])
+  type: Constructor
+  source:
+    remote:
+      path: src/NumSharp/Slice.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: .ctor
+    path: ../src/NumSharp/Slice.cs
+    startLine: 22
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nstart, stop, step\n"
+  example: []
+  syntax:
+    content: public Slice(params int[] p)
+    parameters:
+    - id: p
+      type: System.Int32[]
+      description: ''
+    content.vb: Public Sub New(ParamArray p As Integer())
+  overload: NumSharp.Slice.#ctor*
+  nameWithType.vb: Slice.Slice(Int32())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.Slice.Slice(System.Int32())
+  name.vb: Slice(Int32())
+references:
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: NumSharp.Slice.Start*
+  commentId: Overload:NumSharp.Slice.Start
+  name: Start
+  nameWithType: Slice.Start
+  fullName: NumSharp.Slice.Start
+- uid: System.Int32
+  commentId: T:System.Int32
+  parent: System
+  isExternal: true
+  name: Int32
+  nameWithType: Int32
+  fullName: System.Int32
+- uid: NumSharp.Slice.Stop*
+  commentId: Overload:NumSharp.Slice.Stop
+  name: Stop
+  nameWithType: Slice.Stop
+  fullName: NumSharp.Slice.Stop
+- uid: NumSharp.Slice.Step*
+  commentId: Overload:NumSharp.Slice.Step
+  name: Step
+  nameWithType: Slice.Step
+  fullName: NumSharp.Slice.Step
+- uid: NumSharp.Slice.Length*
+  commentId: Overload:NumSharp.Slice.Length
+  name: Length
+  nameWithType: Slice.Length
+  fullName: NumSharp.Slice.Length
+- uid: NumSharp.Slice.#ctor*
+  commentId: Overload:NumSharp.Slice.#ctor
+  name: Slice
+  nameWithType: Slice.Slice
+  fullName: NumSharp.Slice.Slice
+- uid: System.Int32[]
+  isExternal: true
+  name: Int32[]
+  nameWithType: Int32[]
+  fullName: System.Int32[]
+  nameWithType.vb: Int32()
+  fullName.vb: System.Int32()
+  name.vb: Int32()
+  spec.csharp:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ()
+    nameWithType: ()
+    fullName: ()

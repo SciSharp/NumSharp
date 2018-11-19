@@ -1,0 +1,198 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp
+  commentId: N:NumSharp
+  id: NumSharp
+  children:
+  - NumSharp.Matrix`1
+  - NumSharp.NDArray_Legacy`1
+  - NumSharp.NDArray`1
+  - NumSharp.NDArrayRandom
+  - NumSharp.NumPy`1
+  - NumSharp.NumPyExtensions
+  - NumSharp.Shape
+  - NumSharp.Slice
+  langs:
+  - csharp
+  - vb
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+  type: Namespace
+  assemblies:
+  - NumSharp
+references:
+- uid: NumSharp.NDArray`1
+  commentId: T:NumSharp.NDArray`1
+  parent: NumSharp
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NumPyExtensions
+  commentId: T:NumSharp.NumPyExtensions
+  parent: NumSharp
+  name: NumPyExtensions
+  nameWithType: NumPyExtensions
+  fullName: NumSharp.NumPyExtensions
+- uid: NumSharp.NDArray_Legacy`1
+  commentId: T:NumSharp.NDArray_Legacy`1
+  name: NDArray_Legacy<TData>
+  nameWithType: NDArray_Legacy<TData>
+  fullName: NumSharp.NDArray_Legacy<TData>
+  nameWithType.vb: NDArray_Legacy(Of TData)
+  fullName.vb: NumSharp.NDArray_Legacy(Of TData)
+  name.vb: NDArray_Legacy(Of TData)
+  spec.csharp:
+  - uid: NumSharp.NDArray_Legacy`1
+    name: NDArray_Legacy
+    nameWithType: NDArray_Legacy
+    fullName: NumSharp.NDArray_Legacy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray_Legacy`1
+    name: NDArray_Legacy
+    nameWithType: NDArray_Legacy
+    fullName: NumSharp.NDArray_Legacy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Matrix`1
+  commentId: T:NumSharp.Matrix`1
+  name: Matrix<TData>
+  nameWithType: Matrix<TData>
+  fullName: NumSharp.Matrix<TData>
+  nameWithType.vb: Matrix(Of TData)
+  fullName.vb: NumSharp.Matrix(Of TData)
+  name.vb: Matrix(Of TData)
+  spec.csharp:
+  - uid: NumSharp.Matrix`1
+    name: Matrix
+    nameWithType: Matrix
+    fullName: NumSharp.Matrix
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.Matrix`1
+    name: Matrix
+    nameWithType: Matrix
+    fullName: NumSharp.Matrix
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArrayRandom
+  commentId: T:NumSharp.NDArrayRandom
+  parent: NumSharp
+  name: NDArrayRandom
+  nameWithType: NDArrayRandom
+  fullName: NumSharp.NDArrayRandom
+- uid: NumSharp.NumPy`1
+  commentId: T:NumSharp.NumPy`1
+  name: NumPy<T>
+  nameWithType: NumPy<T>
+  fullName: NumSharp.NumPy<T>
+  nameWithType.vb: NumPy(Of T)
+  fullName.vb: NumSharp.NumPy(Of T)
+  name.vb: NumPy(Of T)
+  spec.csharp:
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NumPy`1
+    name: NumPy
+    nameWithType: NumPy
+    fullName: NumSharp.NumPy
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape
+  commentId: T:NumSharp.Shape
+  parent: NumSharp
+  name: Shape
+  nameWithType: Shape
+  fullName: NumSharp.Shape
+- uid: NumSharp.Slice
+  commentId: T:NumSharp.Slice
+  parent: NumSharp
+  name: Slice
+  nameWithType: Slice
+  fullName: NumSharp.Slice
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp

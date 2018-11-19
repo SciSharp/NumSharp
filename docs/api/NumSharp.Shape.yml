@@ -1,0 +1,1245 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.Shape
+  commentId: T:NumSharp.Shape
+  id: Shape
+  parent: NumSharp
+  children:
+  - NumSharp.Shape.#ctor(System.Collections.Generic.IReadOnlyList{System.Int32})
+  - NumSharp.Shape.#ctor(System.Int32[])
+  - NumSharp.Shape.BiShape
+  - NumSharp.Shape.DimOffset
+  - NumSharp.Shape.Equals(System.Object)
+  - NumSharp.Shape.GetHashCode
+  - NumSharp.Shape.Item(System.Int32)
+  - NumSharp.Shape.Length
+  - NumSharp.Shape.op_Equality(NumSharp.Shape,NumSharp.Shape)
+  - NumSharp.Shape.op_Inequality(NumSharp.Shape,NumSharp.Shape)
+  - NumSharp.Shape.Shapes
+  - NumSharp.Shape.Size
+  - NumSharp.Shape.ToString
+  - NumSharp.Shape.TriShape
+  - NumSharp.Shape.UniShape
+  langs:
+  - csharp
+  - vb
+  name: Shape
+  nameWithType: Shape
+  fullName: NumSharp.Shape
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Shape
+    path: ../src/NumSharp/Shape.cs
+    startLine: 6
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public class Shape
+    content.vb: Public Class Shape
+  inheritance:
+  - System.Object
+  inheritedMembers:
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  modifiers.csharp:
+  - public
+  - class
+  modifiers.vb:
+  - Public
+  - Class
+- uid: NumSharp.Shape.op_Equality(NumSharp.Shape,NumSharp.Shape)
+  commentId: M:NumSharp.Shape.op_Equality(NumSharp.Shape,NumSharp.Shape)
+  id: op_Equality(NumSharp.Shape,NumSharp.Shape)
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Equality(Shape, Shape)
+  nameWithType: Shape.Equality(Shape, Shape)
+  fullName: NumSharp.Shape.Equality(NumSharp.Shape, NumSharp.Shape)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/Shape.Equals.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Equality
+    path: ../src/NumSharp/Operations/Shape.Equals.cs
+    startLine: 9
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static bool operator ==(Shape a, Shape b)
+    parameters:
+    - id: a
+      type: NumSharp.Shape
+    - id: b
+      type: NumSharp.Shape
+    return:
+      type: System.Boolean
+    content.vb: Public Shared Operator =(a As Shape, b As Shape) As Boolean
+  overload: NumSharp.Shape.op_Equality*
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+- uid: NumSharp.Shape.op_Inequality(NumSharp.Shape,NumSharp.Shape)
+  commentId: M:NumSharp.Shape.op_Inequality(NumSharp.Shape,NumSharp.Shape)
+  id: op_Inequality(NumSharp.Shape,NumSharp.Shape)
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Inequality(Shape, Shape)
+  nameWithType: Shape.Inequality(Shape, Shape)
+  fullName: NumSharp.Shape.Inequality(NumSharp.Shape, NumSharp.Shape)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/Shape.Equals.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Inequality
+    path: ../src/NumSharp/Operations/Shape.Equals.cs
+    startLine: 14
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static bool operator !=(Shape a, Shape b)
+    parameters:
+    - id: a
+      type: NumSharp.Shape
+    - id: b
+      type: NumSharp.Shape
+    return:
+      type: System.Boolean
+    content.vb: Public Shared Operator <>(a As Shape, b As Shape) As Boolean
+  overload: NumSharp.Shape.op_Inequality*
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+- uid: NumSharp.Shape.Equals(System.Object)
+  commentId: M:NumSharp.Shape.Equals(System.Object)
+  id: Equals(System.Object)
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Equals(Object)
+  nameWithType: Shape.Equals(Object)
+  fullName: NumSharp.Shape.Equals(System.Object)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Operations/Shape.Equals.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Equals
+    path: ../src/NumSharp/Operations/Shape.Equals.cs
+    startLine: 19
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override bool Equals(object obj)
+    parameters:
+    - id: obj
+      type: System.Object
+    return:
+      type: System.Boolean
+    content.vb: Public Overrides Function Equals(obj As Object) As Boolean
+  overridden: System.Object.Equals(System.Object)
+  overload: NumSharp.Shape.Equals*
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+- uid: NumSharp.Shape.GetHashCode
+  commentId: M:NumSharp.Shape.GetHashCode
+  id: GetHashCode
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: GetHashCode()
+  nameWithType: Shape.GetHashCode()
+  fullName: NumSharp.Shape.GetHashCode()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Operations/Shape.Equals.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: GetHashCode
+    path: ../src/NumSharp/Operations/Shape.Equals.cs
+    startLine: 26
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override int GetHashCode()
+    return:
+      type: System.Int32
+    content.vb: Public Overrides Function GetHashCode As Integer
+  overridden: System.Object.GetHashCode
+  overload: NumSharp.Shape.GetHashCode*
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+- uid: NumSharp.Shape.ToString
+  commentId: M:NumSharp.Shape.ToString
+  id: ToString
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: ToString()
+  nameWithType: Shape.ToString()
+  fullName: NumSharp.Shape.ToString()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Operations/Shape.Equals.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: ToString
+    path: ../src/NumSharp/Operations/Shape.Equals.cs
+    startLine: 31
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override string ToString()
+    return:
+      type: System.String
+    content.vb: Public Overrides Function ToString As String
+  overridden: System.Object.ToString
+  overload: NumSharp.Shape.ToString*
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+- uid: NumSharp.Shape.Size
+  commentId: P:NumSharp.Shape.Size
+  id: Size
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Size
+  nameWithType: Shape.Size
+  fullName: NumSharp.Shape.Size
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Size
+    path: ../src/NumSharp/Shape.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Size { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property Size As Integer
+  overload: NumSharp.Shape.Size*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.Item(System.Int32)
+  commentId: P:NumSharp.Shape.Item(System.Int32)
+  id: Item(System.Int32)
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Item[Int32]
+  nameWithType: Shape.Item[Int32]
+  fullName: NumSharp.Shape.Item[System.Int32]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Shape.cs
+    startLine: 24
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int this[int dim] { get; }
+    parameters:
+    - id: dim
+      type: System.Int32
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property Item(dim As Integer) As Integer
+  overload: NumSharp.Shape.Item*
+  nameWithType.vb: Shape.Item(Int32)
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.Shape.Item(System.Int32)
+  name.vb: Item(Int32)
+- uid: NumSharp.Shape.#ctor(System.Int32[])
+  commentId: M:NumSharp.Shape.#ctor(System.Int32[])
+  id: '#ctor(System.Int32[])'
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Shape(Int32[])
+  nameWithType: Shape.Shape(Int32[])
+  fullName: NumSharp.Shape.Shape(System.Int32[])
+  type: Constructor
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: .ctor
+    path: ../src/NumSharp/Shape.cs
+    startLine: 26
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public Shape(params int[] shape)
+    parameters:
+    - id: shape
+      type: System.Int32[]
+    content.vb: Public Sub New(ParamArray shape As Integer())
+  overload: NumSharp.Shape.#ctor*
+  nameWithType.vb: Shape.Shape(Int32())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.Shape.Shape(System.Int32())
+  name.vb: Shape(Int32())
+- uid: NumSharp.Shape.#ctor(System.Collections.Generic.IReadOnlyList{System.Int32})
+  commentId: M:NumSharp.Shape.#ctor(System.Collections.Generic.IReadOnlyList{System.Int32})
+  id: '#ctor(System.Collections.Generic.IReadOnlyList{System.Int32})'
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Shape(IReadOnlyList<Int32>)
+  nameWithType: Shape.Shape(IReadOnlyList<Int32>)
+  fullName: NumSharp.Shape.Shape(System.Collections.Generic.IReadOnlyList<System.Int32>)
+  type: Constructor
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: .ctor
+    path: ../src/NumSharp/Shape.cs
+    startLine: 40
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public Shape(IReadOnlyList<int> shape)
+    parameters:
+    - id: shape
+      type: System.Collections.Generic.IReadOnlyList{System.Int32}
+    content.vb: Public Sub New(shape As IReadOnlyList(Of Integer))
+  overload: NumSharp.Shape.#ctor*
+  nameWithType.vb: Shape.Shape(IReadOnlyList(Of Int32))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.Shape.Shape(System.Collections.Generic.IReadOnlyList(Of System.Int32))
+  name.vb: Shape(IReadOnlyList(Of Int32))
+- uid: NumSharp.Shape.Length
+  commentId: P:NumSharp.Shape.Length
+  id: Length
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Length
+  nameWithType: Shape.Length
+  fullName: NumSharp.Shape.Length
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Length
+    path: ../src/NumSharp/Shape.cs
+    startLine: 54
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int Length { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property Length As Integer
+  overload: NumSharp.Shape.Length*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.DimOffset
+  commentId: P:NumSharp.Shape.DimOffset
+  id: DimOffset
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: DimOffset
+  nameWithType: Shape.DimOffset
+  fullName: NumSharp.Shape.DimOffset
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: DimOffset
+    path: ../src/NumSharp/Shape.cs
+    startLine: 55
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public IReadOnlyList<int> DimOffset { get; }
+    parameters: []
+    return:
+      type: System.Collections.Generic.IReadOnlyList{System.Int32}
+    content.vb: Public ReadOnly Property DimOffset As IReadOnlyList(Of Integer)
+  overload: NumSharp.Shape.DimOffset*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.Shapes
+  commentId: P:NumSharp.Shape.Shapes
+  id: Shapes
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: Shapes
+  nameWithType: Shape.Shapes
+  fullName: NumSharp.Shape.Shapes
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Shapes
+    path: ../src/NumSharp/Shape.cs
+    startLine: 56
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public IReadOnlyList<int> Shapes { get; }
+    parameters: []
+    return:
+      type: System.Collections.Generic.IReadOnlyList{System.Int32}
+    content.vb: Public ReadOnly Property Shapes As IReadOnlyList(Of Integer)
+  overload: NumSharp.Shape.Shapes*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.UniShape
+  commentId: P:NumSharp.Shape.UniShape
+  id: UniShape
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: UniShape
+  nameWithType: Shape.UniShape
+  fullName: NumSharp.Shape.UniShape
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: UniShape
+    path: ../src/NumSharp/Shape.cs
+    startLine: 58
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public int UniShape { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property UniShape As Integer
+  overload: NumSharp.Shape.UniShape*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.BiShape
+  commentId: P:NumSharp.Shape.BiShape
+  id: BiShape
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: BiShape
+  nameWithType: Shape.BiShape
+  fullName: NumSharp.Shape.BiShape
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: BiShape
+    path: ../src/NumSharp/Shape.cs
+    startLine: 60
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public (int, int)BiShape { get; }
+    parameters: []
+    return:
+      type: System.ValueTuple{System.Int32,System.Int32}
+    content.vb: Public ReadOnly Property BiShape As(Integer, Integer)
+  overload: NumSharp.Shape.BiShape*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+- uid: NumSharp.Shape.TriShape
+  commentId: P:NumSharp.Shape.TriShape
+  id: TriShape
+  parent: NumSharp.Shape
+  langs:
+  - csharp
+  - vb
+  name: TriShape
+  nameWithType: Shape.TriShape
+  fullName: NumSharp.Shape.TriShape
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Shape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: TriShape
+    path: ../src/NumSharp/Shape.cs
+    startLine: 62
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public (int, int, int)TriShape { get; }
+    parameters: []
+    return:
+      type: System.ValueTuple{System.Int32,System.Int32,System.Int32}
+    content.vb: Public ReadOnly Property TriShape As(Integer, Integer, Integer)
+  overload: NumSharp.Shape.TriShape*
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+references:
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: NumSharp.Shape.op_Equality*
+  commentId: Overload:NumSharp.Shape.op_Equality
+  name: Equality
+  nameWithType: Shape.Equality
+  fullName: NumSharp.Shape.Equality
+- uid: NumSharp.Shape
+  commentId: T:NumSharp.Shape
+  parent: NumSharp
+  name: Shape
+  nameWithType: Shape
+  fullName: NumSharp.Shape
+- uid: System.Boolean
+  commentId: T:System.Boolean
+  parent: System
+  isExternal: true
+  name: Boolean
+  nameWithType: Boolean
+  fullName: System.Boolean
+- uid: NumSharp.Shape.op_Inequality*
+  commentId: Overload:NumSharp.Shape.op_Inequality
+  name: Inequality
+  nameWithType: Shape.Inequality
+  fullName: NumSharp.Shape.Inequality
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape.Equals*
+  commentId: Overload:NumSharp.Shape.Equals
+  name: Equals
+  nameWithType: Shape.Equals
+  fullName: NumSharp.Shape.Equals
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape.GetHashCode*
+  commentId: Overload:NumSharp.Shape.GetHashCode
+  name: GetHashCode
+  nameWithType: Shape.GetHashCode
+  fullName: NumSharp.Shape.GetHashCode
+- uid: System.Int32
+  commentId: T:System.Int32
+  parent: System
+  isExternal: true
+  name: Int32
+  nameWithType: Int32
+  fullName: System.Int32
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape.ToString*
+  commentId: Overload:NumSharp.Shape.ToString
+  name: ToString
+  nameWithType: Shape.ToString
+  fullName: NumSharp.Shape.ToString
+- uid: System.String
+  commentId: T:System.String
+  parent: System
+  isExternal: true
+  name: String
+  nameWithType: String
+  fullName: System.String
+- uid: NumSharp.Shape.Size*
+  commentId: Overload:NumSharp.Shape.Size
+  name: Size
+  nameWithType: Shape.Size
+  fullName: NumSharp.Shape.Size
+- uid: NumSharp.Shape.Item*
+  commentId: Overload:NumSharp.Shape.Item
+  name: Item
+  nameWithType: Shape.Item
+  fullName: NumSharp.Shape.Item
+- uid: NumSharp.Shape.#ctor*
+  commentId: Overload:NumSharp.Shape.#ctor
+  name: Shape
+  nameWithType: Shape.Shape
+  fullName: NumSharp.Shape.Shape
+- uid: System.Int32[]
+  isExternal: true
+  name: Int32[]
+  nameWithType: Int32[]
+  fullName: System.Int32[]
+  nameWithType.vb: Int32()
+  fullName.vb: System.Int32()
+  name.vb: Int32()
+  spec.csharp:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: System.Collections.Generic.IReadOnlyList{System.Int32}
+  commentId: T:System.Collections.Generic.IReadOnlyList{System.Int32}
+  parent: System.Collections.Generic
+  definition: System.Collections.Generic.IReadOnlyList`1
+  name: IReadOnlyList<Int32>
+  nameWithType: IReadOnlyList<Int32>
+  fullName: System.Collections.Generic.IReadOnlyList<System.Int32>
+  nameWithType.vb: IReadOnlyList(Of Int32)
+  fullName.vb: System.Collections.Generic.IReadOnlyList(Of System.Int32)
+  name.vb: IReadOnlyList(Of Int32)
+  spec.csharp:
+  - uid: System.Collections.Generic.IReadOnlyList`1
+    name: IReadOnlyList
+    nameWithType: IReadOnlyList
+    fullName: System.Collections.Generic.IReadOnlyList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IReadOnlyList`1
+    name: IReadOnlyList
+    nameWithType: IReadOnlyList
+    fullName: System.Collections.Generic.IReadOnlyList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic.IReadOnlyList`1
+  commentId: T:System.Collections.Generic.IReadOnlyList`1
+  isExternal: true
+  name: IReadOnlyList<T>
+  nameWithType: IReadOnlyList<T>
+  fullName: System.Collections.Generic.IReadOnlyList<T>
+  nameWithType.vb: IReadOnlyList(Of T)
+  fullName.vb: System.Collections.Generic.IReadOnlyList(Of T)
+  name.vb: IReadOnlyList(Of T)
+  spec.csharp:
+  - uid: System.Collections.Generic.IReadOnlyList`1
+    name: IReadOnlyList
+    nameWithType: IReadOnlyList
+    fullName: System.Collections.Generic.IReadOnlyList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IReadOnlyList`1
+    name: IReadOnlyList
+    nameWithType: IReadOnlyList
+    fullName: System.Collections.Generic.IReadOnlyList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic
+  commentId: N:System.Collections.Generic
+  isExternal: true
+  name: System.Collections.Generic
+  nameWithType: System.Collections.Generic
+  fullName: System.Collections.Generic
+- uid: NumSharp.Shape.Length*
+  commentId: Overload:NumSharp.Shape.Length
+  name: Length
+  nameWithType: Shape.Length
+  fullName: NumSharp.Shape.Length
+- uid: NumSharp.Shape.DimOffset*
+  commentId: Overload:NumSharp.Shape.DimOffset
+  name: DimOffset
+  nameWithType: Shape.DimOffset
+  fullName: NumSharp.Shape.DimOffset
+- uid: NumSharp.Shape.Shapes*
+  commentId: Overload:NumSharp.Shape.Shapes
+  name: Shapes
+  nameWithType: Shape.Shapes
+  fullName: NumSharp.Shape.Shapes
+- uid: NumSharp.Shape.UniShape*
+  commentId: Overload:NumSharp.Shape.UniShape
+  name: UniShape
+  nameWithType: Shape.UniShape
+  fullName: NumSharp.Shape.UniShape
+- uid: NumSharp.Shape.BiShape*
+  commentId: Overload:NumSharp.Shape.BiShape
+  name: BiShape
+  nameWithType: Shape.BiShape
+  fullName: NumSharp.Shape.BiShape
+- uid: System.ValueTuple{System.Int32,System.Int32}
+  commentId: T:System.ValueTuple{System.Int32,System.Int32}
+  parent: System
+  isExternal: true
+  name: ValueTuple<Int32, Int32>
+  nameWithType: ValueTuple<Int32, Int32>
+  fullName: System.ValueTuple<System.Int32, System.Int32>
+  nameWithType.vb: ValueTuple(Of Int32, Int32)
+  fullName.vb: System.ValueTuple(Of System.Int32, System.Int32)
+  name.vb: ValueTuple(Of Int32, Int32)
+  spec.csharp:
+  - uid: System.ValueTuple`2
+    name: ValueTuple
+    nameWithType: ValueTuple
+    fullName: System.ValueTuple
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.ValueTuple`2
+    name: ValueTuple
+    nameWithType: ValueTuple
+    fullName: System.ValueTuple
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape.TriShape*
+  commentId: Overload:NumSharp.Shape.TriShape
+  name: TriShape
+  nameWithType: Shape.TriShape
+  fullName: NumSharp.Shape.TriShape
+- uid: System.ValueTuple{System.Int32,System.Int32,System.Int32}
+  commentId: T:System.ValueTuple{System.Int32,System.Int32,System.Int32}
+  parent: System
+  isExternal: true
+  name: ValueTuple<Int32, Int32, Int32>
+  nameWithType: ValueTuple<Int32, Int32, Int32>
+  fullName: System.ValueTuple<System.Int32, System.Int32, System.Int32>
+  nameWithType.vb: ValueTuple(Of Int32, Int32, Int32)
+  fullName.vb: System.ValueTuple(Of System.Int32, System.Int32, System.Int32)
+  name.vb: ValueTuple(Of Int32, Int32, Int32)
+  spec.csharp:
+  - uid: System.ValueTuple`3
+    name: ValueTuple
+    nameWithType: ValueTuple
+    fullName: System.ValueTuple
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.ValueTuple`3
+    name: ValueTuple
+    nameWithType: ValueTuple
+    fullName: System.ValueTuple
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )

@@ -30,6 +30,18 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(innerProduct.Data[0] == 3.5);
         }
         [TestMethod]
+        public void MatrixMutliplyDifferentDataLength()
+        {
+            var A = new NDArray<double>().arange(6).reshape(3,2);
+
+            var B = new NDArray<double>().arange(14).reshape(2,7);
+
+            var C = A.dot(B);
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{7,8,9,10,11,12,13,21,26,31,36,41,46,51,35,44,53,62,71,80,89},C.Data));
+
+        }
+        [TestMethod]
         public void MatrixMultiplyDouble()
         {   
             NDArray<double> matrix1 = new NDArray<double>().arange(7,1,1).reshape(3,2);

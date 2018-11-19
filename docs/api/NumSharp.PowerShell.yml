@@ -1,0 +1,28 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.PowerShell
+  commentId: N:NumSharp.PowerShell
+  id: NumSharp.PowerShell
+  children:
+  - NumSharp.PowerShell.GetGreeting
+  - NumSharp.PowerShell.NewNDArray
+  langs:
+  - csharp
+  - vb
+  name: NumSharp.PowerShell
+  nameWithType: NumSharp.PowerShell
+  fullName: NumSharp.PowerShell
+  type: Namespace
+  assemblies:
+  - NumSharp.PowerShell
+references:
+- uid: NumSharp.PowerShell.NewNDArray
+  commentId: T:NumSharp.PowerShell.NewNDArray
+  name: NewNDArray
+  nameWithType: NewNDArray
+  fullName: NumSharp.PowerShell.NewNDArray
+- uid: NumSharp.PowerShell.GetGreeting
+  commentId: T:NumSharp.PowerShell.GetGreeting
+  name: GetGreeting
+  nameWithType: GetGreeting
+  fullName: NumSharp.PowerShell.GetGreeting

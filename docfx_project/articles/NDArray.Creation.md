@@ -41,6 +41,22 @@ var np = new Numpy<double>();
 // we take the Data / elements from an array 
 // we do not need to define the shape here
 var np1 = np.array(new double[] {1,2,3,4,5,6} );
+```
 
+Ok as we can see, this time the array was created without define the shape. 
 
+This is possible since the method expect that the double[] array shall be transformed into a NDArray directly. 
+
+**Create by given range**
+
+```CSHARP
+var np = new Numpy<double>();
+
+// we simple say "create an array with 10 elements"
+// start is expected to be 0 and step 1
+var np1 = np.arange(10);
+
+// this time start with 1, step 2 
+// and do it as long as smaller than 10
+var np2 = np.arange(1,10,2);
 ```

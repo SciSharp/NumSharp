@@ -20,8 +20,16 @@ namespace NumSharp.UnitTest.Docs
             // the values over t - linear dependence with noice 
             var values = time * 3 + 5 + np.random.randn(time.Data.Length);
 
-            var matrixA = new NumPy<double>().array(new double[2000]);
-         
+            var A = np.vstack(np.ones(new Shape(1000)),time);
+            var A_T = A.transpose(); 
+            var A_T_A = A_T.dot(A);
+
+            var A_PseudoInv = A.transpose().dot(A).inv();
+
+            var param = A_PseudoInv.dot(A.transpose());
+
+            //param = param.dot(param);
+
         }
     }
 }

@@ -1,0 +1,3342 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.NDArray`1
+  commentId: T:NumSharp.NDArray`1
+  id: NDArray`1
+  parent: NumSharp
+  children:
+  - NumSharp.NDArray`1.#ctor
+  - NumSharp.NDArray`1._ParseNumber(`0,System.Int32@,System.Int32@)
+  - NumSharp.NDArray`1._ToMatrixString
+  - NumSharp.NDArray`1._ToVectorString
+  - NumSharp.NDArray`1.arange(System.Int32,System.Int32,System.Int32)
+  - NumSharp.NDArray`1.Current
+  - NumSharp.NDArray`1.Data
+  - NumSharp.NDArray`1.dot(NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.Equals(System.Object)
+  - NumSharp.NDArray`1.GetEnumerator
+  - NumSharp.NDArray`1.GetHashCode
+  - NumSharp.NDArray`1.inv
+  - NumSharp.NDArray`1.Item(NumSharp.NDArray{System.Int32})
+  - NumSharp.NDArray`1.Item(NumSharp.Shape)
+  - NumSharp.NDArray`1.Item(NumSharp.Slice)
+  - NumSharp.NDArray`1.Item(System.Collections.Generic.IList{System.Int32})
+  - NumSharp.NDArray`1.Item(System.Int32[])
+  - NumSharp.NDArray`1.linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  - NumSharp.NDArray`1.log
+  - NumSharp.NDArray`1.MoveNext
+  - NumSharp.NDArray`1.multi_dot(NumSharp.NDArray{`0}[])
+  - NumSharp.NDArray`1.NDim
+  - NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},`0)
+  - NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},`0)
+  - NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.op_Equality(NumSharp.NDArray{`0},System.Object)
+  - NumSharp.NDArray`1.op_Inequality(NumSharp.NDArray{`0},System.Object)
+  - NumSharp.NDArray`1.op_Multiply(`0,NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},`0)
+  - NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},`0)
+  - NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  - NumSharp.NDArray`1.power(`0)
+  - NumSharp.NDArray`1.Reset
+  - NumSharp.NDArray`1.reshape(System.Int32[])
+  - NumSharp.NDArray`1.Set(NumSharp.Shape,`0)
+  - NumSharp.NDArray`1.Shape
+  - NumSharp.NDArray`1.Size
+  - NumSharp.NDArray`1.ToDotNetArray``1
+  - NumSharp.NDArray`1.ToString
+  - NumSharp.NDArray`1.transpose
+  langs:
+  - csharp
+  - vb
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Slicing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: NDArray
+    path: ../src/NumSharp/Selection/NDArray.Slicing.cs
+    startLine: 6
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nA powerful N-dimensional array object\nInspired from https://www.numpy.org/devdocs/user/quickstart.html\n"
+  example: []
+  syntax:
+    content: 'public class NDArray<T> : IEnumerable, IEnumerator'
+    typeParameters:
+    - id: T
+      description: dtype
+    content.vb: >-
+      Public Class NDArray(Of T)
+          Implements IEnumerable, IEnumerator
+  inheritance:
+  - System.Object
+  derivedClasses:
+  - NumSharp.Matrix`1
+  implements:
+  - System.Collections.IEnumerable
+  - System.Collections.IEnumerator
+  inheritedMembers:
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  extensionMethods:
+  - NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{{T}}[])
+  - NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{{T}})
+  - NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.Unique``1
+  - NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{{T}}[])
+  nameWithType.vb: NDArray(Of T)
+  modifiers.csharp:
+  - public
+  - class
+  modifiers.vb:
+  - Public
+  - Class
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+- uid: NumSharp.NDArray`1.arange(System.Int32,System.Int32,System.Int32)
+  commentId: M:NumSharp.NDArray`1.arange(System.Int32,System.Int32,System.Int32)
+  id: arange(System.Int32,System.Int32,System.Int32)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: arange(Int32, Int32, Int32)
+  nameWithType: NDArray<T>.arange(Int32, Int32, Int32)
+  fullName: NumSharp.NDArray<T>.arange(System.Int32, System.Int32, System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Creation/NdArray.ARange.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: arange
+    path: ../src/NumSharp/Creation/NdArray.ARange.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> arange(int stop, int start = 0, int step = 1)
+    parameters:
+    - id: stop
+      type: System.Int32
+    - id: start
+      type: System.Int32
+    - id: step
+      type: System.Int32
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function arange(stop As Integer, start As Integer = 0, step As Integer = 1) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.arange*
+  nameWithType.vb: NDArray(Of T).arange(Int32, Int32, Int32)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).arange(System.Int32, System.Int32, System.Int32)
+- uid: NumSharp.NDArray`1.linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  commentId: M:NumSharp.NDArray`1.linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  id: linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: linspace(Double, Double, Int32, Boolean)
+  nameWithType: NDArray<T>.linspace(Double, Double, Int32, Boolean)
+  fullName: NumSharp.NDArray<T>.linspace(System.Double, System.Double, System.Int32, System.Boolean)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Creation/NdArray.LinSpace.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: linspace
+    path: ../src/NumSharp/Creation/NdArray.LinSpace.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> linspace(double start, double stop, int num, bool entdpoint = true)
+    parameters:
+    - id: start
+      type: System.Double
+    - id: stop
+      type: System.Double
+    - id: num
+      type: System.Int32
+    - id: entdpoint
+      type: System.Boolean
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function linspace(start As Double, stop As Double, num As Integer, entdpoint As Boolean = True) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.linspace*
+  nameWithType.vb: NDArray(Of T).linspace(Double, Double, Int32, Boolean)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).linspace(System.Double, System.Double, System.Int32, System.Boolean)
+- uid: NumSharp.NDArray`1.reshape(System.Int32[])
+  commentId: M:NumSharp.NDArray`1.reshape(System.Int32[])
+  id: reshape(System.Int32[])
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: reshape(Int32[])
+  nameWithType: NDArray<T>.reshape(Int32[])
+  fullName: NumSharp.NDArray<T>.reshape(System.Int32[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Creation/NdArray.ReShape.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: reshape
+    path: ../src/NumSharp/Creation/NdArray.ReShape.cs
+    startLine: 15
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nGives a new shape to an array without changing its data.\n"
+  example: []
+  syntax:
+    content: public NDArray<T> reshape(params int[] shape)
+    parameters:
+    - id: shape
+      type: System.Int32[]
+    return:
+      type: NumSharp.NDArray`1
+      description: ''
+    content.vb: Public Function reshape(ParamArray shape As Integer()) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.reshape*
+  nameWithType.vb: NDArray(Of T).reshape(Int32())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).reshape(System.Int32())
+  name.vb: reshape(Int32())
+- uid: NumSharp.NDArray`1.dot(NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.dot(NumSharp.NDArray{`0})
+  id: dot(NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: dot(NDArray<T>)
+  nameWithType: NDArray<T>.dot(NDArray<T>)
+  fullName: NumSharp.NDArray<T>.dot(NumSharp.NDArray<T>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/LinearAlgebra/NdArray.Dot.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: dot
+    path: ../src/NumSharp/LinearAlgebra/NdArray.Dot.cs
+    startLine: 18
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\n\n"
+  example: []
+  syntax:
+    content: public NDArray<T> dot(NDArray<T> np2)
+    parameters:
+    - id: np2
+      type: NumSharp.NDArray`1
+      description: ''
+    return:
+      type: NumSharp.NDArray`1
+      description: ''
+    content.vb: Public Function dot(np2 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.dot*
+  nameWithType.vb: NDArray(Of T).dot(NDArray(Of T))
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).dot(NumSharp.NDArray(Of T))
+  name.vb: dot(NDArray(Of T))
+- uid: NumSharp.NDArray`1.inv
+  commentId: M:NumSharp.NDArray`1.inv
+  id: inv
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: inv()
+  nameWithType: NDArray<T>.inv()
+  fullName: NumSharp.NDArray<T>.inv()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/LinearAlgebra/NdArray.Inv.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: inv
+    path: ../src/NumSharp/LinearAlgebra/NdArray.Inv.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> inv()
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function inv As NDArray(Of T)
+  overload: NumSharp.NDArray`1.inv*
+  nameWithType.vb: NDArray(Of T).inv()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).inv()
+- uid: NumSharp.NDArray`1.multi_dot(NumSharp.NDArray{`0}[])
+  commentId: M:NumSharp.NDArray`1.multi_dot(NumSharp.NDArray{`0}[])
+  id: multi_dot(NumSharp.NDArray{`0}[])
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: multi_dot(NDArray<T>[])
+  nameWithType: NDArray<T>.multi_dot(NDArray<T>[])
+  fullName: NumSharp.NDArray<T>.multi_dot(NumSharp.NDArray<T>[])
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/LinearAlgebra/NdArray.multi_dot.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: multi_dot
+    path: ../src/NumSharp/LinearAlgebra/NdArray.multi_dot.cs
+    startLine: 18
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\n\n"
+  example: []
+  syntax:
+    content: public NDArray<T> multi_dot(params NDArray<T>[] np2Multi)
+    parameters:
+    - id: np2Multi
+      type: NumSharp.NDArray`1[]
+    return:
+      type: NumSharp.NDArray`1
+      description: ''
+    content.vb: Public Function multi_dot(ParamArray np2Multi As NDArray(Of T)()) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.multi_dot*
+  nameWithType.vb: NDArray(Of T).multi_dot(NDArray(Of T)())
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).multi_dot(NumSharp.NDArray(Of T)())
+  name.vb: multi_dot(NDArray(Of T)())
+- uid: NumSharp.NDArray`1.transpose
+  commentId: M:NumSharp.NDArray`1.transpose
+  id: transpose
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: transpose()
+  nameWithType: NDArray<T>.transpose()
+  fullName: NumSharp.NDArray<T>.transpose()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/LinearAlgebra/NdArray.Transpose.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: transpose
+    path: ../src/NumSharp/LinearAlgebra/NdArray.Transpose.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> transpose()
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function transpose As NDArray(Of T)
+  overload: NumSharp.NDArray`1.transpose*
+  nameWithType.vb: NDArray(Of T).transpose()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).transpose()
+- uid: NumSharp.NDArray`1.log
+  commentId: M:NumSharp.NDArray`1.log
+  id: log
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: log()
+  nameWithType: NDArray<T>.log()
+  fullName: NumSharp.NDArray<T>.log()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Math/NdArray.log.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: log
+    path: ../src/NumSharp/Math/NdArray.log.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> log()
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function log As NDArray(Of T)
+  overload: NumSharp.NDArray`1.log*
+  nameWithType.vb: NDArray(Of T).log()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).log()
+- uid: NumSharp.NDArray`1.power(`0)
+  commentId: M:NumSharp.NDArray`1.power(`0)
+  id: power(`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: power(T)
+  nameWithType: NDArray<T>.power(T)
+  fullName: NumSharp.NDArray<T>.power(T)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Math/NDArray.power.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: power
+    path: ../src/NumSharp/Math/NDArray.power.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> power(T exponent)
+    parameters:
+    - id: exponent
+      type: '{T}'
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Function power(exponent As T) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.power*
+  nameWithType.vb: NDArray(Of T).power(T)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).power(T)
+- uid: NumSharp.NDArray`1.Data
+  commentId: P:NumSharp.NDArray`1.Data
+  id: Data
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Data
+  nameWithType: NDArray<T>.Data
+  fullName: NumSharp.NDArray<T>.Data
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Data
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 38
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\n1 dim array data storage\n"
+  example: []
+  syntax:
+    content: public T[] Data { get; set; }
+    parameters: []
+    return:
+      type: '{T}[]'
+    content.vb: Public Property Data As T()
+  overload: NumSharp.NDArray`1.Data*
+  nameWithType.vb: NDArray(Of T).Data
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).Data
+- uid: NumSharp.NDArray`1.Shape
+  commentId: P:NumSharp.NDArray`1.Shape
+  id: Shape
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Shape
+  nameWithType: NDArray<T>.Shape
+  fullName: NumSharp.NDArray<T>.Shape
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Shape
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 44
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nData length of every dimension\n"
+  example: []
+  syntax:
+    content: public Shape Shape { get; set; }
+    parameters: []
+    return:
+      type: NumSharp.Shape
+    content.vb: Public Property Shape As Shape
+  overload: NumSharp.NDArray`1.Shape*
+  nameWithType.vb: NDArray(Of T).Shape
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).Shape
+- uid: NumSharp.NDArray`1.NDim
+  commentId: P:NumSharp.NDArray`1.NDim
+  id: NDim
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: NDim
+  nameWithType: NDArray<T>.NDim
+  fullName: NumSharp.NDArray<T>.NDim
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: NDim
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 59
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nDimension count\n"
+  example: []
+  syntax:
+    content: public int NDim { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property NDim As Integer
+  overload: NumSharp.NDArray`1.NDim*
+  nameWithType.vb: NDArray(Of T).NDim
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).NDim
+- uid: NumSharp.NDArray`1.Size
+  commentId: P:NumSharp.NDArray`1.Size
+  id: Size
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Size
+  nameWithType: NDArray<T>.Size
+  fullName: NumSharp.NDArray<T>.Size
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Size
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 64
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nTotal of elements\n"
+  example: []
+  syntax:
+    content: public int Size { get; }
+    parameters: []
+    return:
+      type: System.Int32
+    content.vb: Public ReadOnly Property Size As Integer
+  overload: NumSharp.NDArray`1.Size*
+  nameWithType.vb: NDArray(Of T).Size
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Size
+- uid: NumSharp.NDArray`1.#ctor
+  commentId: M:NumSharp.NDArray`1.#ctor
+  id: '#ctor'
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: NDArray()
+  nameWithType: NDArray<T>.NDArray()
+  fullName: NumSharp.NDArray<T>.NDArray()
+  type: Constructor
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: .ctor
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 66
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray()
+    content.vb: Public Sub New
+  overload: NumSharp.NDArray`1.#ctor*
+  nameWithType.vb: NDArray(Of T).NDArray()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).NDArray()
+- uid: NumSharp.NDArray`1.Set(NumSharp.Shape,`0)
+  commentId: M:NumSharp.NDArray`1.Set(NumSharp.Shape,`0)
+  id: Set(NumSharp.Shape,`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Set(Shape, T)
+  nameWithType: NDArray<T>.Set(Shape, T)
+  fullName: NumSharp.NDArray<T>.Set(NumSharp.Shape, T)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Set
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 72
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public void Set(Shape shape, T value)
+    parameters:
+    - id: shape
+      type: NumSharp.Shape
+    - id: value
+      type: '{T}'
+    content.vb: Public Sub Set(shape As Shape, value As T)
+  overload: NumSharp.NDArray`1.Set*
+  nameWithType.vb: NDArray(Of T).Set(Shape, T)
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).Set(NumSharp.Shape, T)
+- uid: NumSharp.NDArray`1.ToString
+  commentId: M:NumSharp.NDArray`1.ToString
+  id: ToString
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: ToString()
+  nameWithType: NDArray<T>.ToString()
+  fullName: NumSharp.NDArray<T>.ToString()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: ToString
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 93
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override string ToString()
+    return:
+      type: System.String
+    content.vb: Public Overrides Function ToString As String
+  overridden: System.Object.ToString
+  overload: NumSharp.NDArray`1.ToString*
+  nameWithType.vb: NDArray(Of T).ToString()
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+  fullName.vb: NumSharp.NDArray(Of T).ToString()
+- uid: NumSharp.NDArray`1.Equals(System.Object)
+  commentId: M:NumSharp.NDArray`1.Equals(System.Object)
+  id: Equals(System.Object)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Equals(Object)
+  nameWithType: NDArray<T>.Equals(Object)
+  fullName: NumSharp.NDArray<T>.Equals(System.Object)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Equals
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 109
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override bool Equals(object obj)
+    parameters:
+    - id: obj
+      type: System.Object
+    return:
+      type: System.Boolean
+    content.vb: Public Overrides Function Equals(obj As Object) As Boolean
+  overridden: System.Object.Equals(System.Object)
+  overload: NumSharp.NDArray`1.Equals*
+  nameWithType.vb: NDArray(Of T).Equals(Object)
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+  fullName.vb: NumSharp.NDArray(Of T).Equals(System.Object)
+- uid: NumSharp.NDArray`1.op_Equality(NumSharp.NDArray{`0},System.Object)
+  commentId: M:NumSharp.NDArray`1.op_Equality(NumSharp.NDArray{`0},System.Object)
+  id: op_Equality(NumSharp.NDArray{`0},System.Object)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Equality(NDArray<T>, Object)
+  nameWithType: NDArray<T>.Equality(NDArray<T>, Object)
+  fullName: NumSharp.NDArray<T>.Equality(NumSharp.NDArray<T>, System.Object)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Equality
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 114
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static bool operator ==(NDArray<T> np, object obj)
+    parameters:
+    - id: np
+      type: NumSharp.NDArray`1
+    - id: obj
+      type: System.Object
+    return:
+      type: System.Boolean
+    content.vb: Public Shared Operator =(np As NDArray(Of T), obj As Object) As Boolean
+  overload: NumSharp.NDArray`1.op_Equality*
+  nameWithType.vb: NDArray(Of T).Equality(NDArray(Of T), Object)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Equality(NumSharp.NDArray(Of T), System.Object)
+  name.vb: Equality(NDArray(Of T), Object)
+- uid: NumSharp.NDArray`1.op_Inequality(NumSharp.NDArray{`0},System.Object)
+  commentId: M:NumSharp.NDArray`1.op_Inequality(NumSharp.NDArray{`0},System.Object)
+  id: op_Inequality(NumSharp.NDArray{`0},System.Object)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Inequality(NDArray<T>, Object)
+  nameWithType: NDArray<T>.Inequality(NDArray<T>, Object)
+  fullName: NumSharp.NDArray<T>.Inequality(NumSharp.NDArray<T>, System.Object)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Inequality
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 119
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static bool operator !=(NDArray<T> np, object obj)
+    parameters:
+    - id: np
+      type: NumSharp.NDArray`1
+    - id: obj
+      type: System.Object
+    return:
+      type: System.Boolean
+    content.vb: Public Shared Operator <>(np As NDArray(Of T), obj As Object) As Boolean
+  overload: NumSharp.NDArray`1.op_Inequality*
+  nameWithType.vb: NDArray(Of T).Inequality(NDArray(Of T), Object)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Inequality(NumSharp.NDArray(Of T), System.Object)
+  name.vb: Inequality(NDArray(Of T), Object)
+- uid: NumSharp.NDArray`1.GetHashCode
+  commentId: M:NumSharp.NDArray`1.GetHashCode
+  id: GetHashCode
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: GetHashCode()
+  nameWithType: NDArray<T>.GetHashCode()
+  fullName: NumSharp.NDArray<T>.GetHashCode()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: GetHashCode
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 124
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public override int GetHashCode()
+    return:
+      type: System.Int32
+    content.vb: Public Overrides Function GetHashCode As Integer
+  overridden: System.Object.GetHashCode
+  overload: NumSharp.NDArray`1.GetHashCode*
+  nameWithType.vb: NDArray(Of T).GetHashCode()
+  modifiers.csharp:
+  - public
+  - override
+  modifiers.vb:
+  - Public
+  - Overrides
+  fullName.vb: NumSharp.NDArray(Of T).GetHashCode()
+- uid: NumSharp.NDArray`1.ToDotNetArray``1
+  commentId: M:NumSharp.NDArray`1.ToDotNetArray``1
+  id: ToDotNetArray``1
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: ToDotNetArray<TCast>()
+  nameWithType: NDArray<T>.ToDotNetArray<TCast>()
+  fullName: NumSharp.NDArray<T>.ToDotNetArray<TCast>()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: ToDotNetArray
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 135
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public TCast ToDotNetArray<TCast>()
+    typeParameters:
+    - id: TCast
+    return:
+      type: '{TCast}'
+    content.vb: Public Function ToDotNetArray(Of TCast) As TCast
+  overload: NumSharp.NDArray`1.ToDotNetArray*
+  nameWithType.vb: NDArray(Of T).ToDotNetArray(Of TCast)()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).ToDotNetArray(Of TCast)()
+  name.vb: ToDotNetArray(Of TCast)()
+- uid: NumSharp.NDArray`1._ToVectorString
+  commentId: M:NumSharp.NDArray`1._ToVectorString
+  id: _ToVectorString
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: _ToVectorString()
+  nameWithType: NDArray<T>._ToVectorString()
+  fullName: NumSharp.NDArray<T>._ToVectorString()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: _ToVectorString
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 181
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: protected string _ToVectorString()
+    return:
+      type: System.String
+    content.vb: Protected Function _ToVectorString As String
+  overload: NumSharp.NDArray`1._ToVectorString*
+  nameWithType.vb: NDArray(Of T)._ToVectorString()
+  modifiers.csharp:
+  - protected
+  modifiers.vb:
+  - Protected
+  fullName.vb: NumSharp.NDArray(Of T)._ToVectorString()
+- uid: NumSharp.NDArray`1._ToMatrixString
+  commentId: M:NumSharp.NDArray`1._ToMatrixString
+  id: _ToMatrixString
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: _ToMatrixString()
+  nameWithType: NDArray<T>._ToMatrixString()
+  fullName: NumSharp.NDArray<T>._ToMatrixString()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: _ToMatrixString
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 217
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: protected string _ToMatrixString()
+    return:
+      type: System.String
+    content.vb: Protected Function _ToMatrixString As String
+  overload: NumSharp.NDArray`1._ToMatrixString*
+  nameWithType.vb: NDArray(Of T)._ToMatrixString()
+  modifiers.csharp:
+  - protected
+  modifiers.vb:
+  - Protected
+  fullName.vb: NumSharp.NDArray(Of T)._ToMatrixString()
+- uid: NumSharp.NDArray`1._ParseNumber(`0,System.Int32@,System.Int32@)
+  commentId: M:NumSharp.NDArray`1._ParseNumber(`0,System.Int32@,System.Int32@)
+  id: _ParseNumber(`0,System.Int32@,System.Int32@)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: _ParseNumber(T, ref Int32, ref Int32)
+  nameWithType: NDArray<T>._ParseNumber(T, ref Int32, ref Int32)
+  fullName: NumSharp.NDArray<T>._ParseNumber(T, ref System.Int32, ref System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/NdArray.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: _ParseNumber
+    path: ../src/NumSharp/NdArray.cs
+    startLine: 261
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: protected string _ParseNumber(T number, ref int noBefore, ref int noAfter)
+    parameters:
+    - id: number
+      type: '{T}'
+    - id: noBefore
+      type: System.Int32
+    - id: noAfter
+      type: System.Int32
+    return:
+      type: System.String
+    content.vb: Protected Function _ParseNumber(number As T, ByRef noBefore As Integer, ByRef noAfter As Integer) As String
+  overload: NumSharp.NDArray`1._ParseNumber*
+  nameWithType.vb: NDArray(Of T)._ParseNumber(T, ByRef Int32, ByRef Int32)
+  modifiers.csharp:
+  - protected
+  modifiers.vb:
+  - Protected
+  fullName.vb: NumSharp.NDArray(Of T)._ParseNumber(T, ByRef System.Int32, ByRef System.Int32)
+  name.vb: _ParseNumber(T, ByRef Int32, ByRef Int32)
+- uid: NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  id: op_Addition(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Addition(NDArray<T>, NDArray<T>)
+  nameWithType: NDArray<T>.Addition(NDArray<T>, NDArray<T>)
+  fullName: NumSharp.NDArray<T>.Addition(NumSharp.NDArray<T>, NumSharp.NDArray<T>)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Addition.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Addition
+    path: ../src/NumSharp/Operations/NdArray.Addition.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator +(NDArray<T> np1, NDArray<T> np2)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: np2
+      type: NumSharp.NDArray`1
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator +(np1 As NDArray(Of T), np2 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Addition*
+  nameWithType.vb: NDArray(Of T).Addition(NDArray(Of T), NDArray(Of T))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Addition(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T))
+  name.vb: Addition(NDArray(Of T), NDArray(Of T))
+- uid: NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},`0)
+  commentId: M:NumSharp.NDArray`1.op_Addition(NumSharp.NDArray{`0},`0)
+  id: op_Addition(NumSharp.NDArray{`0},`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Addition(NDArray<T>, T)
+  nameWithType: NDArray<T>.Addition(NDArray<T>, T)
+  fullName: NumSharp.NDArray<T>.Addition(NumSharp.NDArray<T>, T)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Addition.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Addition
+    path: ../src/NumSharp/Operations/NdArray.Addition.cs
+    startLine: 63
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator +(NDArray<T> np1, T scalar)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: scalar
+      type: '{T}'
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator +(np1 As NDArray(Of T), scalar As T) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Addition*
+  nameWithType.vb: NDArray(Of T).Addition(NDArray(Of T), T)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Addition(NumSharp.NDArray(Of T), T)
+  name.vb: Addition(NDArray(Of T), T)
+- uid: NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  id: op_Division(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Division(NDArray<T>, NDArray<T>)
+  nameWithType: NDArray<T>.Division(NDArray<T>, NDArray<T>)
+  fullName: NumSharp.NDArray<T>.Division(NumSharp.NDArray<T>, NumSharp.NDArray<T>)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Division.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Division
+    path: ../src/NumSharp/Operations/NdArray.Division.cs
+    startLine: 12
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator /(NDArray<T> np1, NDArray<T> np2)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: np2
+      type: NumSharp.NDArray`1
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator /(np1 As NDArray(Of T), np2 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Division*
+  nameWithType.vb: NDArray(Of T).Division(NDArray(Of T), NDArray(Of T))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Division(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T))
+  name.vb: Division(NDArray(Of T), NDArray(Of T))
+- uid: NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},`0)
+  commentId: M:NumSharp.NDArray`1.op_Division(NumSharp.NDArray{`0},`0)
+  id: op_Division(NumSharp.NDArray{`0},`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Division(NDArray<T>, T)
+  nameWithType: NDArray<T>.Division(NDArray<T>, T)
+  fullName: NumSharp.NDArray<T>.Division(NumSharp.NDArray<T>, T)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Division.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Division
+    path: ../src/NumSharp/Operations/NdArray.Division.cs
+    startLine: 64
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator /(NDArray<T> np1, T scalar)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: scalar
+      type: '{T}'
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator /(np1 As NDArray(Of T), scalar As T) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Division*
+  nameWithType.vb: NDArray(Of T).Division(NDArray(Of T), T)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Division(NumSharp.NDArray(Of T), T)
+  name.vb: Division(NDArray(Of T), T)
+- uid: NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  id: op_Multiply(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Multiply(NDArray<T>, NDArray<T>)
+  nameWithType: NDArray<T>.Multiply(NDArray<T>, NDArray<T>)
+  fullName: NumSharp.NDArray<T>.Multiply(NumSharp.NDArray<T>, NumSharp.NDArray<T>)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Multiplication.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Multiply
+    path: ../src/NumSharp/Operations/NdArray.Multiplication.cs
+    startLine: 12
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator *(NDArray<T> np1, NDArray<T> np2)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: np2
+      type: NumSharp.NDArray`1
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator *(np1 As NDArray(Of T), np2 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Multiply*
+  nameWithType.vb: NDArray(Of T).Multiply(NDArray(Of T), NDArray(Of T))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Multiply(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T))
+  name.vb: Multiply(NDArray(Of T), NDArray(Of T))
+- uid: NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},`0)
+  commentId: M:NumSharp.NDArray`1.op_Multiply(NumSharp.NDArray{`0},`0)
+  id: op_Multiply(NumSharp.NDArray{`0},`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Multiply(NDArray<T>, T)
+  nameWithType: NDArray<T>.Multiply(NDArray<T>, T)
+  fullName: NumSharp.NDArray<T>.Multiply(NumSharp.NDArray<T>, T)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Multiplication.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Multiply
+    path: ../src/NumSharp/Operations/NdArray.Multiplication.cs
+    startLine: 64
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator *(NDArray<T> np1, T scalar)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: scalar
+      type: '{T}'
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator *(np1 As NDArray(Of T), scalar As T) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Multiply*
+  nameWithType.vb: NDArray(Of T).Multiply(NDArray(Of T), T)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Multiply(NumSharp.NDArray(Of T), T)
+  name.vb: Multiply(NDArray(Of T), T)
+- uid: NumSharp.NDArray`1.op_Multiply(`0,NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.op_Multiply(`0,NumSharp.NDArray{`0})
+  id: op_Multiply(`0,NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Multiply(T, NDArray<T>)
+  nameWithType: NDArray<T>.Multiply(T, NDArray<T>)
+  fullName: NumSharp.NDArray<T>.Multiply(T, NumSharp.NDArray<T>)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Multiplication.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Multiply
+    path: ../src/NumSharp/Operations/NdArray.Multiplication.cs
+    startLine: 117
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator *(T scalar, NDArray<T> np1)
+    parameters:
+    - id: scalar
+      type: '{T}'
+    - id: np1
+      type: NumSharp.NDArray`1
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator *(scalar As T, np1 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Multiply*
+  nameWithType.vb: NDArray(Of T).Multiply(T, NDArray(Of T))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Multiply(T, NumSharp.NDArray(Of T))
+  name.vb: Multiply(T, NDArray(Of T))
+- uid: NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  commentId: M:NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  id: op_Subtraction(NumSharp.NDArray{`0},NumSharp.NDArray{`0})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Subtraction(NDArray<T>, NDArray<T>)
+  nameWithType: NDArray<T>.Subtraction(NDArray<T>, NDArray<T>)
+  fullName: NumSharp.NDArray<T>.Subtraction(NumSharp.NDArray<T>, NumSharp.NDArray<T>)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Substraction.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Subtraction
+    path: ../src/NumSharp/Operations/NdArray.Substraction.cs
+    startLine: 11
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator -(NDArray<T> np1, NDArray<T> np2)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: np2
+      type: NumSharp.NDArray`1
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator -(np1 As NDArray(Of T), np2 As NDArray(Of T)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Subtraction*
+  nameWithType.vb: NDArray(Of T).Subtraction(NDArray(Of T), NDArray(Of T))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Subtraction(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T))
+  name.vb: Subtraction(NDArray(Of T), NDArray(Of T))
+- uid: NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},`0)
+  commentId: M:NumSharp.NDArray`1.op_Subtraction(NumSharp.NDArray{`0},`0)
+  id: op_Subtraction(NumSharp.NDArray{`0},`0)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Subtraction(NDArray<T>, T)
+  nameWithType: NDArray<T>.Subtraction(NDArray<T>, T)
+  fullName: NumSharp.NDArray<T>.Subtraction(NumSharp.NDArray<T>, T)
+  type: Operator
+  source:
+    remote:
+      path: src/NumSharp/Operations/NdArray.Substraction.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: op_Subtraction
+    path: ../src/NumSharp/Operations/NdArray.Substraction.cs
+    startLine: 63
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public static NDArray<T> operator -(NDArray<T> np1, T scalar)
+    parameters:
+    - id: np1
+      type: NumSharp.NDArray`1
+    - id: scalar
+      type: '{T}'
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public Shared Operator -(np1 As NDArray(Of T), scalar As T) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.op_Subtraction*
+  nameWithType.vb: NDArray(Of T).Subtraction(NDArray(Of T), T)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.NDArray(Of T).Subtraction(NumSharp.NDArray(Of T), T)
+  name.vb: Subtraction(NDArray(Of T), T)
+- uid: NumSharp.NDArray`1.Current
+  commentId: P:NumSharp.NDArray`1.Current
+  id: Current
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Current
+  nameWithType: NDArray<T>.Current
+  fullName: NumSharp.NDArray<T>.Current
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Enumerator.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Current
+    path: ../src/NumSharp/Selection/NDArray.Enumerator.cs
+    startLine: 10
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public object Current { get; }
+    parameters: []
+    return:
+      type: System.Object
+    content.vb: Public ReadOnly Property Current As Object
+  overload: NumSharp.NDArray`1.Current*
+  implements:
+  - System.Collections.IEnumerator.Current
+  nameWithType.vb: NDArray(Of T).Current
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Current
+- uid: NumSharp.NDArray`1.GetEnumerator
+  commentId: M:NumSharp.NDArray`1.GetEnumerator
+  id: GetEnumerator
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: GetEnumerator()
+  nameWithType: NDArray<T>.GetEnumerator()
+  fullName: NumSharp.NDArray<T>.GetEnumerator()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Enumerator.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: GetEnumerator
+    path: ../src/NumSharp/Selection/NDArray.Enumerator.cs
+    startLine: 25
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public IEnumerator GetEnumerator()
+    return:
+      type: System.Collections.IEnumerator
+    content.vb: Public Function GetEnumerator As IEnumerator
+  overload: NumSharp.NDArray`1.GetEnumerator*
+  implements:
+  - System.Collections.IEnumerable.GetEnumerator
+  nameWithType.vb: NDArray(Of T).GetEnumerator()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).GetEnumerator()
+- uid: NumSharp.NDArray`1.MoveNext
+  commentId: M:NumSharp.NDArray`1.MoveNext
+  id: MoveNext
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: MoveNext()
+  nameWithType: NDArray<T>.MoveNext()
+  fullName: NumSharp.NDArray<T>.MoveNext()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Enumerator.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: MoveNext
+    path: ../src/NumSharp/Selection/NDArray.Enumerator.cs
+    startLine: 30
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public bool MoveNext()
+    return:
+      type: System.Boolean
+    content.vb: Public Function MoveNext As Boolean
+  overload: NumSharp.NDArray`1.MoveNext*
+  implements:
+  - System.Collections.IEnumerator.MoveNext
+  nameWithType.vb: NDArray(Of T).MoveNext()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).MoveNext()
+- uid: NumSharp.NDArray`1.Reset
+  commentId: M:NumSharp.NDArray`1.Reset
+  id: Reset
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Reset()
+  nameWithType: NDArray<T>.Reset()
+  fullName: NumSharp.NDArray<T>.Reset()
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Enumerator.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Reset
+    path: ../src/NumSharp/Selection/NDArray.Enumerator.cs
+    startLine: 36
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public void Reset()
+    content.vb: Public Sub Reset
+  overload: NumSharp.NDArray`1.Reset*
+  implements:
+  - System.Collections.IEnumerator.Reset
+  nameWithType.vb: NDArray(Of T).Reset()
+  modifiers.csharp:
+  - public
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).Reset()
+- uid: NumSharp.NDArray`1.Item(System.Int32[])
+  commentId: P:NumSharp.NDArray`1.Item(System.Int32[])
+  id: Item(System.Int32[])
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Item[Int32[]]
+  nameWithType: NDArray<T>.Item[Int32[]]
+  fullName: NumSharp.NDArray<T>.Item[System.Int32[]]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Indexing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Selection/NDArray.Indexing.cs
+    startLine: 14
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nIndex accessor\n"
+  example: []
+  syntax:
+    content: public T this[params int[] select] { get; set; }
+    parameters:
+    - id: select
+      type: System.Int32[]
+      description: ''
+    return:
+      type: '{T}'
+      description: ''
+    content.vb: Public Property Item(ParamArray select As Integer()) As T
+  overload: NumSharp.NDArray`1.Item*
+  nameWithType.vb: NDArray(Of T).Item(Int32())
+  modifiers.csharp:
+  - public
+  - get
+  - set
+  modifiers.vb:
+  - Public
+  fullName.vb: NumSharp.NDArray(Of T).Item(System.Int32())
+  name.vb: Item(Int32())
+- uid: NumSharp.NDArray`1.Item(NumSharp.Shape)
+  commentId: P:NumSharp.NDArray`1.Item(NumSharp.Shape)
+  id: Item(NumSharp.Shape)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Item[Shape]
+  nameWithType: NDArray<T>.Item[Shape]
+  fullName: NumSharp.NDArray<T>.Item[NumSharp.Shape]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Indexing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Selection/NDArray.Indexing.cs
+    startLine: 27
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<T> this[Shape select] { get; }
+    parameters:
+    - id: select
+      type: NumSharp.Shape
+    return:
+      type: NumSharp.NDArray`1
+    content.vb: Public ReadOnly Property Item(select As Shape) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.Item*
+  nameWithType.vb: NDArray(Of T).Item(Shape)
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Item(NumSharp.Shape)
+  name.vb: Item(Shape)
+- uid: NumSharp.NDArray`1.Item(System.Collections.Generic.IList{System.Int32})
+  commentId: P:NumSharp.NDArray`1.Item(System.Collections.Generic.IList{System.Int32})
+  id: Item(System.Collections.Generic.IList{System.Int32})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Item[IList<Int32>]
+  nameWithType: NDArray<T>.Item[IList<Int32>]
+  fullName: NumSharp.NDArray<T>.Item[System.Collections.Generic.IList<System.Int32>]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Indexing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Selection/NDArray.Indexing.cs
+    startLine: 60
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nFilter specific elements through select.\n"
+  example: []
+  syntax:
+    content: public NDArray<T> this[IList<int> select] { get; }
+    parameters:
+    - id: select
+      type: System.Collections.Generic.IList{System.Int32}
+      description: ''
+    return:
+      type: NumSharp.NDArray`1
+      description: Return a new NDArray with filterd elements.
+    content.vb: Public ReadOnly Property Item(select As IList(Of Integer)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.Item*
+  nameWithType.vb: NDArray(Of T).Item(IList(Of Int32))
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Item(System.Collections.Generic.IList(Of System.Int32))
+  name.vb: Item(IList(Of Int32))
+- uid: NumSharp.NDArray`1.Item(NumSharp.NDArray{System.Int32})
+  commentId: P:NumSharp.NDArray`1.Item(NumSharp.NDArray{System.Int32})
+  id: Item(NumSharp.NDArray{System.Int32})
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Item[NDArray<Int32>]
+  nameWithType: NDArray<T>.Item[NDArray<Int32>]
+  fullName: NumSharp.NDArray<T>.Item[NumSharp.NDArray<System.Int32>]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Indexing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Selection/NDArray.Indexing.cs
+    startLine: 100
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  summary: "\nOverload\n"
+  example: []
+  syntax:
+    content: public NDArray<T> this[NDArray<int> select] { get; }
+    parameters:
+    - id: select
+      type: NumSharp.NDArray{System.Int32}
+      description: ''
+    return:
+      type: NumSharp.NDArray`1
+      description: ''
+    content.vb: Public ReadOnly Property Item(select As NDArray(Of Integer)) As NDArray(Of T)
+  overload: NumSharp.NDArray`1.Item*
+  nameWithType.vb: NDArray(Of T).Item(NDArray(Of Int32))
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Item(NumSharp.NDArray(Of System.Int32))
+  name.vb: Item(NDArray(Of Int32))
+- uid: NumSharp.NDArray`1.Item(NumSharp.Slice)
+  commentId: P:NumSharp.NDArray`1.Item(NumSharp.Slice)
+  id: Item(NumSharp.Slice)
+  parent: NumSharp.NDArray`1
+  langs:
+  - csharp
+  - vb
+  name: Item[Slice]
+  nameWithType: NDArray<T>.Item[Slice]
+  fullName: NumSharp.NDArray<T>.Item[NumSharp.Slice]
+  type: Property
+  source:
+    remote:
+      path: src/NumSharp/Selection/NDArray.Slicing.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: this[]
+    path: ../src/NumSharp/Selection/NDArray.Slicing.cs
+    startLine: 8
+  assemblies:
+  - NumSharp
+  namespace: NumSharp
+  syntax:
+    content: public NDArray<NDArray<T>> this[Slice select] { get; }
+    parameters:
+    - id: select
+      type: NumSharp.Slice
+    return:
+      type: NumSharp.NDArray{NumSharp.NDArray`1}
+    content.vb: Public ReadOnly Property Item(select As Slice) As NDArray(Of NDArray(Of T))
+  overload: NumSharp.NDArray`1.Item*
+  nameWithType.vb: NDArray(Of T).Item(Slice)
+  modifiers.csharp:
+  - public
+  - get
+  modifiers.vb:
+  - Public
+  - ReadOnly
+  fullName.vb: NumSharp.NDArray(Of T).Item(NumSharp.Slice)
+  name.vb: Item(Slice)
+references:
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Collections.IEnumerable
+  commentId: T:System.Collections.IEnumerable
+  parent: System.Collections
+  isExternal: true
+  name: IEnumerable
+  nameWithType: IEnumerable
+  fullName: System.Collections.IEnumerable
+- uid: System.Collections.IEnumerator
+  commentId: T:System.Collections.IEnumerator
+  parent: System.Collections
+  isExternal: true
+  name: IEnumerator
+  nameWithType: IEnumerator
+  fullName: System.Collections.IEnumerator
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{{T}}[])
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  parent: NumSharp.Extensions.NDArrayExtensions
+  definition: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  name: HStack<T>(NDArray<T>[])
+  nameWithType: NDArrayExtensions.HStack<T>(NDArray<T>[])
+  fullName: NumSharp.Extensions.NDArrayExtensions.HStack<T>(NumSharp.NDArray<T>[])
+  nameWithType.vb: NDArrayExtensions.HStack(Of T)(NDArray(Of T)())
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.HStack(Of T)(NumSharp.NDArray(Of T)())
+  name.vb: HStack(Of T)(NDArray(Of T)())
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0}[])
+    name: HStack<T>
+    nameWithType: NDArrayExtensions.HStack<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.HStack<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0}[])
+    name: HStack(Of T)
+    nameWithType: NDArrayExtensions.HStack(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.HStack(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{{T}})
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+  parent: NumSharp.Extensions.NDArrayExtensions
+  definition: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+  name: Sum<T>(NDArray<T>)
+  nameWithType: NDArrayExtensions.Sum<T>(NDArray<T>)
+  fullName: NumSharp.Extensions.NDArrayExtensions.Sum<T>(NumSharp.NDArray<T>)
+  nameWithType.vb: NDArrayExtensions.Sum(Of T)(NDArray(Of T))
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.Sum(Of T)(NumSharp.NDArray(Of T))
+  name.vb: Sum(Of T)(NDArray(Of T))
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0})
+    name: Sum<T>
+    nameWithType: NDArrayExtensions.Sum<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.Sum<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0})
+    name: Sum(Of T)
+    nameWithType: NDArrayExtensions.Sum(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.Sum(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.Unique``1
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+  parent: NumSharp.Extensions.NDArrayExtensions
+  definition: NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+  name: Unique<T>()
+  nameWithType: NDArrayExtensions.Unique<T>()
+  fullName: NumSharp.Extensions.NDArrayExtensions.Unique<T>()
+  nameWithType.vb: NDArrayExtensions.Unique(Of T)()
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.Unique(Of T)()
+  name.vb: Unique(Of T)()
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Unique``1
+    name: Unique<T>
+    nameWithType: NDArrayExtensions.Unique<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.Unique<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Unique``1
+    name: Unique(Of T)
+    nameWithType: NDArrayExtensions.Unique(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.Unique(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{{T}}[])
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  parent: NumSharp.Extensions.NDArrayExtensions
+  definition: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  name: VStack<T>(NDArray<T>[])
+  nameWithType: NDArrayExtensions.VStack<T>(NDArray<T>[])
+  fullName: NumSharp.Extensions.NDArrayExtensions.VStack<T>(NumSharp.NDArray<T>[])
+  nameWithType.vb: NDArrayExtensions.VStack(Of T)(NDArray(Of T)())
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.VStack(Of T)(NumSharp.NDArray(Of T)())
+  name.vb: VStack(Of T)(NDArray(Of T)())
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0}[])
+    name: VStack<T>
+    nameWithType: NDArrayExtensions.VStack<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.VStack<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0}[])
+    name: VStack(Of T)
+    nameWithType: NDArrayExtensions.VStack(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.VStack(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: System.Collections
+  commentId: N:System.Collections
+  isExternal: true
+  name: System.Collections
+  nameWithType: System.Collections
+  fullName: System.Collections
+- uid: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  name: HStack<T>(NDArray<T>, NDArray<T>[])
+  nameWithType: NDArrayExtensions.HStack<T>(NDArray<T>, NDArray<T>[])
+  fullName: NumSharp.Extensions.NDArrayExtensions.HStack<T>(NumSharp.NDArray<T>, NumSharp.NDArray<T>[])
+  nameWithType.vb: NDArrayExtensions.HStack(Of T)(NDArray(Of T), NDArray(Of T)())
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.HStack(Of T)(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T)())
+  name.vb: HStack(Of T)(NDArray(Of T), NDArray(Of T)())
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+    name: HStack<T>
+    nameWithType: NDArrayExtensions.HStack<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.HStack<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.HStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+    name: HStack(Of T)
+    nameWithType: NDArrayExtensions.HStack(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.HStack(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NDArrayExtensions
+  commentId: T:NumSharp.Extensions.NDArrayExtensions
+  parent: NumSharp.Extensions
+  name: NDArrayExtensions
+  nameWithType: NDArrayExtensions
+  fullName: NumSharp.Extensions.NDArrayExtensions
+- uid: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+  name: Sum<TData>(NDArray<TData>, NDArray<TData>)
+  nameWithType: NDArrayExtensions.Sum<TData>(NDArray<TData>, NDArray<TData>)
+  fullName: NumSharp.Extensions.NDArrayExtensions.Sum<TData>(NumSharp.NDArray<TData>, NumSharp.NDArray<TData>)
+  nameWithType.vb: NDArrayExtensions.Sum(Of TData)(NDArray(Of TData), NDArray(Of TData))
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.Sum(Of TData)(NumSharp.NDArray(Of TData), NumSharp.NDArray(Of TData))
+  name.vb: Sum(Of TData)(NDArray(Of TData), NDArray(Of TData))
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+    name: Sum<TData>
+    nameWithType: NDArrayExtensions.Sum<TData>
+    fullName: NumSharp.Extensions.NDArrayExtensions.Sum<TData>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Sum``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0})
+    name: Sum(Of TData)
+    nameWithType: NDArrayExtensions.Sum(Of TData)
+    fullName: NumSharp.Extensions.NDArrayExtensions.Sum(Of TData)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: TData
+    nameWithType: TData
+    fullName: TData
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+  name: Unique<T>(NDArray<T>)
+  nameWithType: NDArrayExtensions.Unique<T>(NDArray<T>)
+  fullName: NumSharp.Extensions.NDArrayExtensions.Unique<T>(NumSharp.NDArray<T>)
+  nameWithType.vb: NDArrayExtensions.Unique(Of T)(NDArray(Of T))
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.Unique(Of T)(NumSharp.NDArray(Of T))
+  name.vb: Unique(Of T)(NDArray(Of T))
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+    name: Unique<T>
+    nameWithType: NDArrayExtensions.Unique<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.Unique<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.Unique``1(NumSharp.NDArray{``0})
+    name: Unique(Of T)
+    nameWithType: NDArrayExtensions.Unique(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.Unique(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  commentId: M:NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+  name: VStack<T>(NDArray<T>, NDArray<T>[])
+  nameWithType: NDArrayExtensions.VStack<T>(NDArray<T>, NDArray<T>[])
+  fullName: NumSharp.Extensions.NDArrayExtensions.VStack<T>(NumSharp.NDArray<T>, NumSharp.NDArray<T>[])
+  nameWithType.vb: NDArrayExtensions.VStack(Of T)(NDArray(Of T), NDArray(Of T)())
+  fullName.vb: NumSharp.Extensions.NDArrayExtensions.VStack(Of T)(NumSharp.NDArray(Of T), NumSharp.NDArray(Of T)())
+  name.vb: VStack(Of T)(NDArray(Of T), NDArray(Of T)())
+  spec.csharp:
+  - uid: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+    name: VStack<T>
+    nameWithType: NDArrayExtensions.VStack<T>
+    fullName: NumSharp.Extensions.NDArrayExtensions.VStack<T>
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: NumSharp.Extensions.NDArrayExtensions.VStack``1(NumSharp.NDArray{``0},NumSharp.NDArray{``0}[])
+    name: VStack(Of T)
+    nameWithType: NDArrayExtensions.VStack(Of T)
+    fullName: NumSharp.Extensions.NDArrayExtensions.VStack(Of T)
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions
+  commentId: N:NumSharp.Extensions
+  name: NumSharp.Extensions
+  nameWithType: NumSharp.Extensions
+  fullName: NumSharp.Extensions
+- uid: NumSharp.NDArray`1.arange*
+  commentId: Overload:NumSharp.NDArray`1.arange
+  name: arange
+  nameWithType: NDArray<T>.arange
+  fullName: NumSharp.NDArray<T>.arange
+  nameWithType.vb: NDArray(Of T).arange
+  fullName.vb: NumSharp.NDArray(Of T).arange
+- uid: System.Int32
+  commentId: T:System.Int32
+  parent: System
+  isExternal: true
+  name: Int32
+  nameWithType: Int32
+  fullName: System.Int32
+- uid: NumSharp.NDArray`1
+  commentId: T:NumSharp.NDArray`1
+  parent: NumSharp
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.linspace*
+  commentId: Overload:NumSharp.NDArray`1.linspace
+  name: linspace
+  nameWithType: NDArray<T>.linspace
+  fullName: NumSharp.NDArray<T>.linspace
+  nameWithType.vb: NDArray(Of T).linspace
+  fullName.vb: NumSharp.NDArray(Of T).linspace
+- uid: System.Double
+  commentId: T:System.Double
+  parent: System
+  isExternal: true
+  name: Double
+  nameWithType: Double
+  fullName: System.Double
+- uid: System.Boolean
+  commentId: T:System.Boolean
+  parent: System
+  isExternal: true
+  name: Boolean
+  nameWithType: Boolean
+  fullName: System.Boolean
+- uid: NumSharp.NDArray`1.reshape*
+  commentId: Overload:NumSharp.NDArray`1.reshape
+  name: reshape
+  nameWithType: NDArray<T>.reshape
+  fullName: NumSharp.NDArray<T>.reshape
+  nameWithType.vb: NDArray(Of T).reshape
+  fullName.vb: NumSharp.NDArray(Of T).reshape
+- uid: System.Int32[]
+  isExternal: true
+  name: Int32[]
+  nameWithType: Int32[]
+  fullName: System.Int32[]
+  nameWithType.vb: Int32()
+  fullName.vb: System.Int32()
+  name.vb: Int32()
+  spec.csharp:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NDArray`1.dot*
+  commentId: Overload:NumSharp.NDArray`1.dot
+  name: dot
+  nameWithType: NDArray<T>.dot
+  fullName: NumSharp.NDArray<T>.dot
+  nameWithType.vb: NDArray(Of T).dot
+  fullName.vb: NumSharp.NDArray(Of T).dot
+- uid: NumSharp.NDArray`1.inv*
+  commentId: Overload:NumSharp.NDArray`1.inv
+  name: inv
+  nameWithType: NDArray<T>.inv
+  fullName: NumSharp.NDArray<T>.inv
+  nameWithType.vb: NDArray(Of T).inv
+  fullName.vb: NumSharp.NDArray(Of T).inv
+- uid: NumSharp.NDArray`1.multi_dot*
+  commentId: Overload:NumSharp.NDArray`1.multi_dot
+  name: multi_dot
+  nameWithType: NDArray<T>.multi_dot
+  fullName: NumSharp.NDArray<T>.multi_dot
+  nameWithType.vb: NDArray(Of T).multi_dot
+  fullName.vb: NumSharp.NDArray(Of T).multi_dot
+- uid: NumSharp.NDArray`1[]
+  isExternal: true
+  name: NDArray<T>[]
+  nameWithType: NDArray<T>[]
+  fullName: NumSharp.NDArray<T>[]
+  nameWithType.vb: NDArray(Of T)()
+  fullName.vb: NumSharp.NDArray(Of T)()
+  name.vb: NDArray(Of T)()
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NDArray`1.transpose*
+  commentId: Overload:NumSharp.NDArray`1.transpose
+  name: transpose
+  nameWithType: NDArray<T>.transpose
+  fullName: NumSharp.NDArray<T>.transpose
+  nameWithType.vb: NDArray(Of T).transpose
+  fullName.vb: NumSharp.NDArray(Of T).transpose
+- uid: NumSharp.NDArray`1.log*
+  commentId: Overload:NumSharp.NDArray`1.log
+  name: log
+  nameWithType: NDArray<T>.log
+  fullName: NumSharp.NDArray<T>.log
+  nameWithType.vb: NDArray(Of T).log
+  fullName.vb: NumSharp.NDArray(Of T).log
+- uid: NumSharp.NDArray`1.power*
+  commentId: Overload:NumSharp.NDArray`1.power
+  name: power
+  nameWithType: NDArray<T>.power
+  fullName: NumSharp.NDArray<T>.power
+  nameWithType.vb: NDArray(Of T).power
+  fullName.vb: NumSharp.NDArray(Of T).power
+- uid: '{T}'
+  commentId: '!:T'
+  definition: T
+  name: T
+  nameWithType: T
+  fullName: T
+- uid: T
+  name: T
+  nameWithType: T
+  fullName: T
+- uid: NumSharp.NDArray`1.Data*
+  commentId: Overload:NumSharp.NDArray`1.Data
+  name: Data
+  nameWithType: NDArray<T>.Data
+  fullName: NumSharp.NDArray<T>.Data
+  nameWithType.vb: NDArray(Of T).Data
+  fullName.vb: NumSharp.NDArray(Of T).Data
+- uid: '{T}[]'
+  isExternal: true
+  name: T[]
+  nameWithType: T[]
+  fullName: T[]
+  nameWithType.vb: T()
+  fullName.vb: T()
+  name.vb: T()
+  spec.csharp:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '[]'
+    nameWithType: '[]'
+    fullName: '[]'
+  spec.vb:
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: ()
+    nameWithType: ()
+    fullName: ()
+- uid: NumSharp.NDArray`1.Shape*
+  commentId: Overload:NumSharp.NDArray`1.Shape
+  name: Shape
+  nameWithType: NDArray<T>.Shape
+  fullName: NumSharp.NDArray<T>.Shape
+  nameWithType.vb: NDArray(Of T).Shape
+  fullName.vb: NumSharp.NDArray(Of T).Shape
+- uid: NumSharp.Shape
+  commentId: T:NumSharp.Shape
+  parent: NumSharp
+  name: Shape
+  nameWithType: Shape
+  fullName: NumSharp.Shape
+- uid: NumSharp.NDArray`1.NDim*
+  commentId: Overload:NumSharp.NDArray`1.NDim
+  name: NDim
+  nameWithType: NDArray<T>.NDim
+  fullName: NumSharp.NDArray<T>.NDim
+  nameWithType.vb: NDArray(Of T).NDim
+  fullName.vb: NumSharp.NDArray(Of T).NDim
+- uid: NumSharp.NDArray`1.Size*
+  commentId: Overload:NumSharp.NDArray`1.Size
+  name: Size
+  nameWithType: NDArray<T>.Size
+  fullName: NumSharp.NDArray<T>.Size
+  nameWithType.vb: NDArray(Of T).Size
+  fullName.vb: NumSharp.NDArray(Of T).Size
+- uid: NumSharp.NDArray`1.#ctor*
+  commentId: Overload:NumSharp.NDArray`1.#ctor
+  name: NDArray
+  nameWithType: NDArray<T>.NDArray
+  fullName: NumSharp.NDArray<T>.NDArray
+  nameWithType.vb: NDArray(Of T).NDArray
+  fullName.vb: NumSharp.NDArray(Of T).NDArray
+- uid: NumSharp.NDArray`1.Set*
+  commentId: Overload:NumSharp.NDArray`1.Set
+  name: Set
+  nameWithType: NDArray<T>.Set
+  fullName: NumSharp.NDArray<T>.Set
+  nameWithType.vb: NDArray(Of T).Set
+  fullName.vb: NumSharp.NDArray(Of T).Set
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.ToString*
+  commentId: Overload:NumSharp.NDArray`1.ToString
+  name: ToString
+  nameWithType: NDArray<T>.ToString
+  fullName: NumSharp.NDArray<T>.ToString
+  nameWithType.vb: NDArray(Of T).ToString
+  fullName.vb: NumSharp.NDArray(Of T).ToString
+- uid: System.String
+  commentId: T:System.String
+  parent: System
+  isExternal: true
+  name: String
+  nameWithType: String
+  fullName: System.String
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.Equals*
+  commentId: Overload:NumSharp.NDArray`1.Equals
+  name: Equals
+  nameWithType: NDArray<T>.Equals
+  fullName: NumSharp.NDArray<T>.Equals
+  nameWithType.vb: NDArray(Of T).Equals
+  fullName.vb: NumSharp.NDArray(Of T).Equals
+- uid: NumSharp.NDArray`1.op_Equality*
+  commentId: Overload:NumSharp.NDArray`1.op_Equality
+  name: Equality
+  nameWithType: NDArray<T>.Equality
+  fullName: NumSharp.NDArray<T>.Equality
+  nameWithType.vb: NDArray(Of T).Equality
+  fullName.vb: NumSharp.NDArray(Of T).Equality
+- uid: NumSharp.NDArray`1.op_Inequality*
+  commentId: Overload:NumSharp.NDArray`1.op_Inequality
+  name: Inequality
+  nameWithType: NDArray<T>.Inequality
+  fullName: NumSharp.NDArray<T>.Inequality
+  nameWithType.vb: NDArray(Of T).Inequality
+  fullName.vb: NumSharp.NDArray(Of T).Inequality
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.GetHashCode*
+  commentId: Overload:NumSharp.NDArray`1.GetHashCode
+  name: GetHashCode
+  nameWithType: NDArray<T>.GetHashCode
+  fullName: NumSharp.NDArray<T>.GetHashCode
+  nameWithType.vb: NDArray(Of T).GetHashCode
+  fullName.vb: NumSharp.NDArray(Of T).GetHashCode
+- uid: NumSharp.NDArray`1.ToDotNetArray*
+  commentId: Overload:NumSharp.NDArray`1.ToDotNetArray
+  name: ToDotNetArray
+  nameWithType: NDArray<T>.ToDotNetArray
+  fullName: NumSharp.NDArray<T>.ToDotNetArray
+  nameWithType.vb: NDArray(Of T).ToDotNetArray
+  fullName.vb: NumSharp.NDArray(Of T).ToDotNetArray
+- uid: '{TCast}'
+  commentId: '!:TCast'
+  definition: TCast
+  name: TCast
+  nameWithType: TCast
+  fullName: TCast
+- uid: TCast
+  commentId: '!:TCast'
+  name: TCast
+  nameWithType: TCast
+  fullName: TCast
+- uid: NumSharp.NDArray`1._ToVectorString*
+  commentId: Overload:NumSharp.NDArray`1._ToVectorString
+  name: _ToVectorString
+  nameWithType: NDArray<T>._ToVectorString
+  fullName: NumSharp.NDArray<T>._ToVectorString
+  nameWithType.vb: NDArray(Of T)._ToVectorString
+  fullName.vb: NumSharp.NDArray(Of T)._ToVectorString
+- uid: NumSharp.NDArray`1._ToMatrixString*
+  commentId: Overload:NumSharp.NDArray`1._ToMatrixString
+  name: _ToMatrixString
+  nameWithType: NDArray<T>._ToMatrixString
+  fullName: NumSharp.NDArray<T>._ToMatrixString
+  nameWithType.vb: NDArray(Of T)._ToMatrixString
+  fullName.vb: NumSharp.NDArray(Of T)._ToMatrixString
+- uid: NumSharp.NDArray`1._ParseNumber*
+  commentId: Overload:NumSharp.NDArray`1._ParseNumber
+  name: _ParseNumber
+  nameWithType: NDArray<T>._ParseNumber
+  fullName: NumSharp.NDArray<T>._ParseNumber
+  nameWithType.vb: NDArray(Of T)._ParseNumber
+  fullName.vb: NumSharp.NDArray(Of T)._ParseNumber
+- uid: NumSharp.NDArray`1.op_Addition*
+  commentId: Overload:NumSharp.NDArray`1.op_Addition
+  name: Addition
+  nameWithType: NDArray<T>.Addition
+  fullName: NumSharp.NDArray<T>.Addition
+  nameWithType.vb: NDArray(Of T).Addition
+  fullName.vb: NumSharp.NDArray(Of T).Addition
+- uid: NumSharp.NDArray`1.op_Division*
+  commentId: Overload:NumSharp.NDArray`1.op_Division
+  name: Division
+  nameWithType: NDArray<T>.Division
+  fullName: NumSharp.NDArray<T>.Division
+  nameWithType.vb: NDArray(Of T).Division
+  fullName.vb: NumSharp.NDArray(Of T).Division
+- uid: NumSharp.NDArray`1.op_Multiply*
+  commentId: Overload:NumSharp.NDArray`1.op_Multiply
+  name: Multiply
+  nameWithType: NDArray<T>.Multiply
+  fullName: NumSharp.NDArray<T>.Multiply
+  nameWithType.vb: NDArray(Of T).Multiply
+  fullName.vb: NumSharp.NDArray(Of T).Multiply
+- uid: NumSharp.NDArray`1.op_Subtraction*
+  commentId: Overload:NumSharp.NDArray`1.op_Subtraction
+  name: Subtraction
+  nameWithType: NDArray<T>.Subtraction
+  fullName: NumSharp.NDArray<T>.Subtraction
+  nameWithType.vb: NDArray(Of T).Subtraction
+  fullName.vb: NumSharp.NDArray(Of T).Subtraction
+- uid: NumSharp.NDArray`1.Current*
+  commentId: Overload:NumSharp.NDArray`1.Current
+  name: Current
+  nameWithType: NDArray<T>.Current
+  fullName: NumSharp.NDArray<T>.Current
+  nameWithType.vb: NDArray(Of T).Current
+  fullName.vb: NumSharp.NDArray(Of T).Current
+- uid: System.Collections.IEnumerator.Current
+  commentId: P:System.Collections.IEnumerator.Current
+  parent: System.Collections.IEnumerator
+  isExternal: true
+  name: Current
+  nameWithType: IEnumerator.Current
+  fullName: System.Collections.IEnumerator.Current
+- uid: NumSharp.NDArray`1.GetEnumerator*
+  commentId: Overload:NumSharp.NDArray`1.GetEnumerator
+  name: GetEnumerator
+  nameWithType: NDArray<T>.GetEnumerator
+  fullName: NumSharp.NDArray<T>.GetEnumerator
+  nameWithType.vb: NDArray(Of T).GetEnumerator
+  fullName.vb: NumSharp.NDArray(Of T).GetEnumerator
+- uid: System.Collections.IEnumerable.GetEnumerator
+  commentId: M:System.Collections.IEnumerable.GetEnumerator
+  parent: System.Collections.IEnumerable
+  isExternal: true
+  name: GetEnumerator()
+  nameWithType: IEnumerable.GetEnumerator()
+  fullName: System.Collections.IEnumerable.GetEnumerator()
+  spec.csharp:
+  - uid: System.Collections.IEnumerable.GetEnumerator
+    name: GetEnumerator
+    nameWithType: IEnumerable.GetEnumerator
+    fullName: System.Collections.IEnumerable.GetEnumerator
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Collections.IEnumerable.GetEnumerator
+    name: GetEnumerator
+    nameWithType: IEnumerable.GetEnumerator
+    fullName: System.Collections.IEnumerable.GetEnumerator
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.MoveNext*
+  commentId: Overload:NumSharp.NDArray`1.MoveNext
+  name: MoveNext
+  nameWithType: NDArray<T>.MoveNext
+  fullName: NumSharp.NDArray<T>.MoveNext
+  nameWithType.vb: NDArray(Of T).MoveNext
+  fullName.vb: NumSharp.NDArray(Of T).MoveNext
+- uid: System.Collections.IEnumerator.MoveNext
+  commentId: M:System.Collections.IEnumerator.MoveNext
+  parent: System.Collections.IEnumerator
+  isExternal: true
+  name: MoveNext()
+  nameWithType: IEnumerator.MoveNext()
+  fullName: System.Collections.IEnumerator.MoveNext()
+  spec.csharp:
+  - uid: System.Collections.IEnumerator.MoveNext
+    name: MoveNext
+    nameWithType: IEnumerator.MoveNext
+    fullName: System.Collections.IEnumerator.MoveNext
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Collections.IEnumerator.MoveNext
+    name: MoveNext
+    nameWithType: IEnumerator.MoveNext
+    fullName: System.Collections.IEnumerator.MoveNext
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.Reset*
+  commentId: Overload:NumSharp.NDArray`1.Reset
+  name: Reset
+  nameWithType: NDArray<T>.Reset
+  fullName: NumSharp.NDArray<T>.Reset
+  nameWithType.vb: NDArray(Of T).Reset
+  fullName.vb: NumSharp.NDArray(Of T).Reset
+- uid: System.Collections.IEnumerator.Reset
+  commentId: M:System.Collections.IEnumerator.Reset
+  parent: System.Collections.IEnumerator
+  isExternal: true
+  name: Reset()
+  nameWithType: IEnumerator.Reset()
+  fullName: System.Collections.IEnumerator.Reset()
+  spec.csharp:
+  - uid: System.Collections.IEnumerator.Reset
+    name: Reset
+    nameWithType: IEnumerator.Reset
+    fullName: System.Collections.IEnumerator.Reset
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Collections.IEnumerator.Reset
+    name: Reset
+    nameWithType: IEnumerator.Reset
+    fullName: System.Collections.IEnumerator.Reset
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.NDArray`1.Item*
+  commentId: Overload:NumSharp.NDArray`1.Item
+  name: Item
+  nameWithType: NDArray<T>.Item
+  fullName: NumSharp.NDArray<T>.Item
+  nameWithType.vb: NDArray(Of T).Item
+  fullName.vb: NumSharp.NDArray(Of T).Item
+- uid: System.Collections.Generic.IList{System.Int32}
+  commentId: T:System.Collections.Generic.IList{System.Int32}
+  parent: System.Collections.Generic
+  definition: System.Collections.Generic.IList`1
+  name: IList<Int32>
+  nameWithType: IList<Int32>
+  fullName: System.Collections.Generic.IList<System.Int32>
+  nameWithType.vb: IList(Of Int32)
+  fullName.vb: System.Collections.Generic.IList(Of System.Int32)
+  name.vb: IList(Of Int32)
+  spec.csharp:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic.IList`1
+  commentId: T:System.Collections.Generic.IList`1
+  isExternal: true
+  name: IList<T>
+  nameWithType: IList<T>
+  fullName: System.Collections.Generic.IList<T>
+  nameWithType.vb: IList(Of T)
+  fullName.vb: System.Collections.Generic.IList(Of T)
+  name.vb: IList(Of T)
+  spec.csharp:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Collections.Generic.IList`1
+    name: IList
+    nameWithType: IList
+    fullName: System.Collections.Generic.IList
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Collections.Generic
+  commentId: N:System.Collections.Generic
+  isExternal: true
+  name: System.Collections.Generic
+  nameWithType: System.Collections.Generic
+  fullName: System.Collections.Generic
+- uid: NumSharp.NDArray{System.Int32}
+  commentId: T:NumSharp.NDArray{System.Int32}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<Int32>
+  nameWithType: NDArray<Int32>
+  fullName: NumSharp.NDArray<System.Int32>
+  nameWithType.vb: NDArray(Of Int32)
+  fullName.vb: NumSharp.NDArray(Of System.Int32)
+  name.vb: NDArray(Of Int32)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Slice
+  commentId: T:NumSharp.Slice
+  parent: NumSharp
+  name: Slice
+  nameWithType: Slice
+  fullName: NumSharp.Slice
+- uid: NumSharp.NDArray{NumSharp.NDArray`1}
+  commentId: T:NumSharp.NDArray{NumSharp.NDArray`1}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<NDArray<T>>
+  nameWithType: NDArray<NDArray<T>>
+  fullName: NumSharp.NDArray<NumSharp.NDArray<T>>
+  nameWithType.vb: NDArray(Of NDArray(Of T))
+  fullName.vb: NumSharp.NDArray(Of NumSharp.NDArray(Of T))
+  name.vb: NDArray(Of NDArray(Of T))
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+  - name: )
+    nameWithType: )
+    fullName: )

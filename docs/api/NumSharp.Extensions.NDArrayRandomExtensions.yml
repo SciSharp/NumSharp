@@ -1,0 +1,726 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.Extensions.NDArrayRandomExtensions
+  commentId: T:NumSharp.Extensions.NDArrayRandomExtensions
+  id: NDArrayRandomExtensions
+  parent: NumSharp.Extensions
+  children:
+  - NumSharp.Extensions.NDArrayRandomExtensions.Permutation(NumSharp.NDArrayRandom,System.Int32)
+  - NumSharp.Extensions.NDArrayRandomExtensions.randint(NumSharp.NDArrayRandom,System.Int32,System.Nullable{System.Int32},NumSharp.Shape)
+  - NumSharp.Extensions.NDArrayRandomExtensions.Shuffle(NumSharp.NDArrayRandom,NumSharp.NDArray{System.Double})
+  langs:
+  - csharp
+  - vb
+  name: NDArrayRandomExtensions
+  nameWithType: NDArrayRandomExtensions
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions
+  type: Class
+  source:
+    remote:
+      path: src/NumSharp/Extensions/NDArrayRandom.Shuffle.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: NDArrayRandomExtensions
+    path: ../src/NumSharp/Extensions/NDArrayRandom.Shuffle.cs
+    startLine: 8
+  assemblies:
+  - NumSharp
+  namespace: NumSharp.Extensions
+  syntax:
+    content: public static class NDArrayRandomExtensions
+    content.vb: Public Module NDArrayRandomExtensions
+  inheritance:
+  - System.Object
+  inheritedMembers:
+  - System.Object.Equals(System.Object)
+  - System.Object.Equals(System.Object,System.Object)
+  - System.Object.GetHashCode
+  - System.Object.GetType
+  - System.Object.MemberwiseClone
+  - System.Object.ReferenceEquals(System.Object,System.Object)
+  - System.Object.ToString
+  modifiers.csharp:
+  - public
+  - static
+  - class
+  modifiers.vb:
+  - Public
+  - Module
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.Permutation(NumSharp.NDArrayRandom,System.Int32)
+  commentId: M:NumSharp.Extensions.NDArrayRandomExtensions.Permutation(NumSharp.NDArrayRandom,System.Int32)
+  id: Permutation(NumSharp.NDArrayRandom,System.Int32)
+  isExtensionMethod: true
+  parent: NumSharp.Extensions.NDArrayRandomExtensions
+  langs:
+  - csharp
+  - vb
+  name: Permutation(NDArrayRandom, Int32)
+  nameWithType: NDArrayRandomExtensions.Permutation(NDArrayRandom, Int32)
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.Permutation(NumSharp.NDArrayRandom, System.Int32)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Extensions/NdArrayRandom.Permutation.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Permutation
+    path: ../src/NumSharp/Extensions/NdArrayRandom.Permutation.cs
+    startLine: 9
+  assemblies:
+  - NumSharp
+  namespace: NumSharp.Extensions
+  syntax:
+    content: public static NDArray<int> Permutation(this NDArrayRandom rand, int max)
+    parameters:
+    - id: rand
+      type: NumSharp.NDArrayRandom
+    - id: max
+      type: System.Int32
+    return:
+      type: NumSharp.NDArray{System.Int32}
+    content.vb: >-
+      <ExtensionAttribute>
+
+      Public Shared Function Permutation(rand As NDArrayRandom, max As Integer) As NDArray(Of Integer)
+  overload: NumSharp.Extensions.NDArrayRandomExtensions.Permutation*
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.randint(NumSharp.NDArrayRandom,System.Int32,System.Nullable{System.Int32},NumSharp.Shape)
+  commentId: M:NumSharp.Extensions.NDArrayRandomExtensions.randint(NumSharp.NDArrayRandom,System.Int32,System.Nullable{System.Int32},NumSharp.Shape)
+  id: randint(NumSharp.NDArrayRandom,System.Int32,System.Nullable{System.Int32},NumSharp.Shape)
+  isExtensionMethod: true
+  parent: NumSharp.Extensions.NDArrayRandomExtensions
+  langs:
+  - csharp
+  - vb
+  name: randint(NDArrayRandom, Int32, Nullable<Int32>, Shape)
+  nameWithType: NDArrayRandomExtensions.randint(NDArrayRandom, Int32, Nullable<Int32>, Shape)
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.randint(NumSharp.NDArrayRandom, System.Int32, System.Nullable<System.Int32>, NumSharp.Shape)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Extensions/NDArrayRandom.randint.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: randint
+    path: ../src/NumSharp/Extensions/NDArrayRandom.randint.cs
+    startLine: 10
+  assemblies:
+  - NumSharp
+  namespace: NumSharp.Extensions
+  syntax:
+    content: public static NDArray<int> randint(this NDArrayRandom rand, int low, int? high = default(int? ), Shape size = null)
+    parameters:
+    - id: rand
+      type: NumSharp.NDArrayRandom
+    - id: low
+      type: System.Int32
+    - id: high
+      type: System.Nullable{System.Int32}
+    - id: size
+      type: NumSharp.Shape
+    return:
+      type: NumSharp.NDArray{System.Int32}
+    content.vb: >-
+      <ExtensionAttribute>
+
+      Public Shared Function randint(rand As NDArrayRandom, low As Integer, high As Integer? = Nothing, size As Shape = Nothing) As NDArray(Of Integer)
+  overload: NumSharp.Extensions.NDArrayRandomExtensions.randint*
+  nameWithType.vb: NDArrayRandomExtensions.randint(NDArrayRandom, Int32, Nullable(Of Int32), Shape)
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.Extensions.NDArrayRandomExtensions.randint(NumSharp.NDArrayRandom, System.Int32, System.Nullable(Of System.Int32), NumSharp.Shape)
+  name.vb: randint(NDArrayRandom, Int32, Nullable(Of Int32), Shape)
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle(NumSharp.NDArrayRandom,NumSharp.NDArray{System.Double})
+  commentId: M:NumSharp.Extensions.NDArrayRandomExtensions.Shuffle(NumSharp.NDArrayRandom,NumSharp.NDArray{System.Double})
+  id: Shuffle(NumSharp.NDArrayRandom,NumSharp.NDArray{System.Double})
+  isExtensionMethod: true
+  parent: NumSharp.Extensions.NDArrayRandomExtensions
+  langs:
+  - csharp
+  - vb
+  name: Shuffle(NDArrayRandom, NDArray<Double>)
+  nameWithType: NDArrayRandomExtensions.Shuffle(NDArrayRandom, NDArray<Double>)
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle(NumSharp.NDArrayRandom, NumSharp.NDArray<System.Double>)
+  type: Method
+  source:
+    remote:
+      path: src/NumSharp/Extensions/NDArrayRandom.Shuffle.cs
+      branch: master
+      repo: https://github.com/dotChris90/NumSharp.git
+    id: Shuffle
+    path: ../src/NumSharp/Extensions/NDArrayRandom.Shuffle.cs
+    startLine: 10
+  assemblies:
+  - NumSharp
+  namespace: NumSharp.Extensions
+  syntax:
+    content: public static void Shuffle(this NDArrayRandom rand, NDArray<double> list)
+    parameters:
+    - id: rand
+      type: NumSharp.NDArrayRandom
+    - id: list
+      type: NumSharp.NDArray{System.Double}
+    content.vb: >-
+      <ExtensionAttribute>
+
+      Public Shared Sub Shuffle(rand As NDArrayRandom, list As NDArray(Of Double))
+  overload: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle*
+  nameWithType.vb: NDArrayRandomExtensions.Shuffle(NDArrayRandom, NDArray(Of Double))
+  modifiers.csharp:
+  - public
+  - static
+  modifiers.vb:
+  - Public
+  - Shared
+  fullName.vb: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle(NumSharp.NDArrayRandom, NumSharp.NDArray(Of System.Double))
+  name.vb: Shuffle(NDArrayRandom, NDArray(Of Double))
+references:
+- uid: NumSharp.Extensions
+  commentId: N:NumSharp.Extensions
+  name: NumSharp.Extensions
+  nameWithType: NumSharp.Extensions
+  fullName: NumSharp.Extensions
+- uid: System.Object
+  commentId: T:System.Object
+  parent: System
+  isExternal: true
+  name: Object
+  nameWithType: Object
+  fullName: System.Object
+- uid: System.Object.Equals(System.Object)
+  commentId: M:System.Object.Equals(System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object)
+  nameWithType: Object.Equals(Object)
+  fullName: System.Object.Equals(System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.Equals(System.Object,System.Object)
+  commentId: M:System.Object.Equals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: Equals(Object, Object)
+  nameWithType: Object.Equals(Object, Object)
+  fullName: System.Object.Equals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.Equals(System.Object,System.Object)
+    name: Equals
+    nameWithType: Object.Equals
+    fullName: System.Object.Equals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetHashCode
+  commentId: M:System.Object.GetHashCode
+  parent: System.Object
+  isExternal: true
+  name: GetHashCode()
+  nameWithType: Object.GetHashCode()
+  fullName: System.Object.GetHashCode()
+  spec.csharp:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetHashCode
+    name: GetHashCode
+    nameWithType: Object.GetHashCode
+    fullName: System.Object.GetHashCode
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.GetType
+  commentId: M:System.Object.GetType
+  parent: System.Object
+  isExternal: true
+  name: GetType()
+  nameWithType: Object.GetType()
+  fullName: System.Object.GetType()
+  spec.csharp:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.GetType
+    name: GetType
+    nameWithType: Object.GetType
+    fullName: System.Object.GetType
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.MemberwiseClone
+  commentId: M:System.Object.MemberwiseClone
+  parent: System.Object
+  isExternal: true
+  name: MemberwiseClone()
+  nameWithType: Object.MemberwiseClone()
+  fullName: System.Object.MemberwiseClone()
+  spec.csharp:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.MemberwiseClone
+    name: MemberwiseClone
+    nameWithType: Object.MemberwiseClone
+    fullName: System.Object.MemberwiseClone
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ReferenceEquals(System.Object,System.Object)
+  commentId: M:System.Object.ReferenceEquals(System.Object,System.Object)
+  parent: System.Object
+  isExternal: true
+  name: ReferenceEquals(Object, Object)
+  nameWithType: Object.ReferenceEquals(Object, Object)
+  fullName: System.Object.ReferenceEquals(System.Object, System.Object)
+  spec.csharp:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ReferenceEquals(System.Object,System.Object)
+    name: ReferenceEquals
+    nameWithType: Object.ReferenceEquals
+    fullName: System.Object.ReferenceEquals
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: ', '
+    nameWithType: ', '
+    fullName: ', '
+  - uid: System.Object
+    name: Object
+    nameWithType: Object
+    fullName: System.Object
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System.Object.ToString
+  commentId: M:System.Object.ToString
+  parent: System.Object
+  isExternal: true
+  name: ToString()
+  nameWithType: Object.ToString()
+  fullName: System.Object.ToString()
+  spec.csharp:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+  spec.vb:
+  - uid: System.Object.ToString
+    name: ToString
+    nameWithType: Object.ToString
+    fullName: System.Object.ToString
+    isExternal: true
+  - name: (
+    nameWithType: (
+    fullName: (
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: System
+  commentId: N:System
+  isExternal: true
+  name: System
+  nameWithType: System
+  fullName: System
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.Permutation*
+  commentId: Overload:NumSharp.Extensions.NDArrayRandomExtensions.Permutation
+  name: Permutation
+  nameWithType: NDArrayRandomExtensions.Permutation
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.Permutation
+- uid: NumSharp.NDArrayRandom
+  commentId: T:NumSharp.NDArrayRandom
+  parent: NumSharp
+  name: NDArrayRandom
+  nameWithType: NDArrayRandom
+  fullName: NumSharp.NDArrayRandom
+- uid: System.Int32
+  commentId: T:System.Int32
+  parent: System
+  isExternal: true
+  name: Int32
+  nameWithType: Int32
+  fullName: System.Int32
+- uid: NumSharp.NDArray{System.Int32}
+  commentId: T:NumSharp.NDArray{System.Int32}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<Int32>
+  nameWithType: NDArray<Int32>
+  fullName: NumSharp.NDArray<System.Int32>
+  nameWithType.vb: NDArray(Of Int32)
+  fullName.vb: NumSharp.NDArray(Of System.Int32)
+  name.vb: NDArray(Of Int32)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp
+  commentId: N:NumSharp
+  name: NumSharp
+  nameWithType: NumSharp
+  fullName: NumSharp
+- uid: NumSharp.NDArray`1
+  commentId: T:NumSharp.NDArray`1
+  parent: NumSharp
+  name: NDArray<T>
+  nameWithType: NDArray<T>
+  fullName: NumSharp.NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+  fullName.vb: NumSharp.NDArray(Of T)
+  name.vb: NDArray(Of T)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.randint*
+  commentId: Overload:NumSharp.Extensions.NDArrayRandomExtensions.randint
+  name: randint
+  nameWithType: NDArrayRandomExtensions.randint
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.randint
+- uid: System.Nullable{System.Int32}
+  commentId: T:System.Nullable{System.Int32}
+  parent: System
+  definition: System.Nullable`1
+  name: Nullable<Int32>
+  nameWithType: Nullable<Int32>
+  fullName: System.Nullable<System.Int32>
+  nameWithType.vb: Nullable(Of Int32)
+  fullName.vb: System.Nullable(Of System.Int32)
+  name.vb: Nullable(Of Int32)
+  spec.csharp:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Int32
+    name: Int32
+    nameWithType: Int32
+    fullName: System.Int32
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Shape
+  commentId: T:NumSharp.Shape
+  parent: NumSharp
+  name: Shape
+  nameWithType: Shape
+  fullName: NumSharp.Shape
+- uid: System.Nullable`1
+  commentId: T:System.Nullable`1
+  isExternal: true
+  name: Nullable<T>
+  nameWithType: Nullable<T>
+  fullName: System.Nullable<T>
+  nameWithType.vb: Nullable(Of T)
+  fullName.vb: System.Nullable(Of T)
+  name.vb: Nullable(Of T)
+  spec.csharp:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: <
+    nameWithType: <
+    fullName: <
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: System.Nullable`1
+    name: Nullable
+    nameWithType: Nullable
+    fullName: System.Nullable
+    isExternal: true
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - name: T
+    nameWithType: T
+    fullName: T
+  - name: )
+    nameWithType: )
+    fullName: )
+- uid: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle*
+  commentId: Overload:NumSharp.Extensions.NDArrayRandomExtensions.Shuffle
+  name: Shuffle
+  nameWithType: NDArrayRandomExtensions.Shuffle
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions.Shuffle
+- uid: NumSharp.NDArray{System.Double}
+  commentId: T:NumSharp.NDArray{System.Double}
+  parent: NumSharp
+  definition: NumSharp.NDArray`1
+  name: NDArray<Double>
+  nameWithType: NDArray<Double>
+  fullName: NumSharp.NDArray<System.Double>
+  nameWithType.vb: NDArray(Of Double)
+  fullName.vb: NumSharp.NDArray(Of System.Double)
+  name.vb: NDArray(Of Double)
+  spec.csharp:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: <
+    nameWithType: <
+    fullName: <
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: '>'
+    nameWithType: '>'
+    fullName: '>'
+  spec.vb:
+  - uid: NumSharp.NDArray`1
+    name: NDArray
+    nameWithType: NDArray
+    fullName: NumSharp.NDArray
+  - name: '(Of '
+    nameWithType: '(Of '
+    fullName: '(Of '
+  - uid: System.Double
+    name: Double
+    nameWithType: Double
+    fullName: System.Double
+    isExternal: true
+  - name: )
+    nameWithType: )
+    fullName: )

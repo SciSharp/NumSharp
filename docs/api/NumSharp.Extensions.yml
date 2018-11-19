@@ -1,0 +1,42 @@
+### YamlMime:ManagedReference
+items:
+- uid: NumSharp.Extensions
+  commentId: N:NumSharp.Extensions
+  id: NumSharp.Extensions
+  children:
+  - NumSharp.Extensions.NDArrayExtensions
+  - NumSharp.Extensions.NDArrayRandomExtensions
+  - NumSharp.Extensions.NumPyExtensions
+  langs:
+  - csharp
+  - vb
+  name: NumSharp.Extensions
+  nameWithType: NumSharp.Extensions
+  fullName: NumSharp.Extensions
+  type: Namespace
+  assemblies:
+  - NumSharp
+references:
+- uid: NumSharp.Extensions.NumPyExtensions
+  commentId: T:NumSharp.Extensions.NumPyExtensions
+  parent: NumSharp.Extensions
+  name: NumPyExtensions
+  nameWithType: NumPyExtensions
+  fullName: NumSharp.Extensions.NumPyExtensions
+- uid: NumSharp.Extensions.NDArrayExtensions
+  commentId: T:NumSharp.Extensions.NDArrayExtensions
+  parent: NumSharp.Extensions
+  name: NDArrayExtensions
+  nameWithType: NDArrayExtensions
+  fullName: NumSharp.Extensions.NDArrayExtensions
+- uid: NumSharp.Extensions.NDArrayRandomExtensions
+  commentId: T:NumSharp.Extensions.NDArrayRandomExtensions
+  parent: NumSharp.Extensions
+  name: NDArrayRandomExtensions
+  nameWithType: NDArrayRandomExtensions
+  fullName: NumSharp.Extensions.NDArrayRandomExtensions
+- uid: NumSharp.Extensions
+  commentId: N:NumSharp.Extensions
+  name: NumSharp.Extensions
+  nameWithType: NumSharp.Extensions
+  fullName: NumSharp.Extensions
