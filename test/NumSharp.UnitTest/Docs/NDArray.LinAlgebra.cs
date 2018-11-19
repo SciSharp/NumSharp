@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Docs
 
             var param = A_PseudoInv.dot(A.transpose());
 
-            param = param.dot(param);
+            //param = param.dot(param);
 
         }
     }
