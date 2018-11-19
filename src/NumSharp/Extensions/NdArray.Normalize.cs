@@ -9,7 +9,7 @@ namespace NumSharp.Extensions
     {
         public static void Normalize(this NDArray<double> np)
         {
-            var min = np.Min();
+            var min = np.min();
             var max = np.Max();
 
             if (np.NDim == 2)
