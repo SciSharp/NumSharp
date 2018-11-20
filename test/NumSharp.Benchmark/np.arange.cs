@@ -8,7 +8,7 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 100)]
+    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class nparange
     {
@@ -38,7 +38,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarraywithdtype()
         {
-            var nd2 = new NDArrayWithDType();
+            var nd2 = new NDArrayWithDType(NDArrayWithDType.int16);
             var nd3 = nd2.arange(length, start, step);
         }
 

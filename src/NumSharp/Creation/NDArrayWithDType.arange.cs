@@ -9,31 +9,35 @@ namespace NumSharp
 {
     public partial class NDArrayWithDType
     {
-        public NDArrayWithDType arange(int stop, int start = 0, int step = 1, Type dtype = null)
+        public NDArrayWithDType arange(int stop, int start = 0, int step = 1)
         {
             var list = new int[(int)Math.Ceiling((stop - start + 0.0) / step)];
             int index = 0;
 
-            if(dtype == null)
+            if (dtype == null)
             {
                 dtype = typeof(int);
+            }
+            else
+            {
+                this.dtype = dtype;
             }
 
             switch (dtype.Name)
             {
                 case "Int32": 
-                    storageForInt32 = new int[list.Length];
+                    Storage.Int32 = new int[list.Length];
                     for (int i = start; i < stop; i += step)
-                        storageForInt32[index++] = i;
+                        Storage.Int32[index++] = i;
                     break;
 
-                    /*case "double": 
+                case "Double":
+                    Storage.Double8 = new double[list.Length];
+                    for (int i = start; i < stop; i += step)
+                        Storage.Double8[index++] = i;
+                    break;
 
-                        for (int i = start; i < stop; i += step)
-                                storageForInt32[index++] = i + 0.0;
-                        break;
-
-                    case double[] dataArray : 
+                /*    case double[] dataArray : 
                     {
                         for(int idx = 0; idx < dataArray.Length;idx++)
                             dataArray[idx] = list[idx];

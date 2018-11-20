@@ -8,7 +8,7 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 5)]
+    [SimpleJob(RunStrategy.ColdStart, targetCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class npamin
     {
@@ -31,7 +31,17 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void amin0axis()
         {
-            np.amin(nd, 0);
+            var nd2 = new NDArray<double>();
+            nd2 = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
+            var nd3 = nd2.AMin(0);
+        }
+
+        [Benchmark]
+        public void amin0axisWithDType()
+        {
+            var nd2 = new NDArrayWithDType(NDArrayWithDType.double8);
+            nd2 = nd2.arange(1000 * 8 * 8 * 8, 0, 1).reshape(1000, 8, 8, 8);
+            var nd3 = nd2.AMin(0);
         }
 
         [Benchmark]

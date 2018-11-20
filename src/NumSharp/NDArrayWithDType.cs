@@ -32,12 +32,13 @@ namespace NumSharp
     /// </summary>
     public partial class NDArrayWithDType
     {
-        public Type int16 = typeof(short);
-        
-        /// <summary>
-        /// storage by data type
-        /// </summary>
-        public int[] storageForInt32 { get; set; }
+        public static Type int16 = typeof(short);
+        public static Type double8 = typeof(double);
+        public static Type decimal16 = typeof(decimal);
+
+        public Type dtype { get; set; }
+
+        public NDStorage Storage { get; set; }
 
         private Shape shape;
         /// <summary>
@@ -65,10 +66,13 @@ namespace NumSharp
         /// </summary>
         public int Size => Shape.Size;
 
-        public NDArrayWithDType()
+        public NDArrayWithDType(Type dtype)
         {
+            this.dtype = dtype;
+
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
+            Storage = new NDStorage(this.dtype);
         }
 
         public override string ToString()
@@ -89,17 +93,17 @@ namespace NumSharp
 
         public override bool Equals(object obj)
         {
-            return storageForInt32[0].Equals(obj);
+            return Storage.Int32[0].Equals(obj);
         }
 
         public static bool operator ==(NDArrayWithDType np, object obj)
         {
-            return np.storageForInt32[0].Equals(obj);
+            return np.Storage.Int32[0].Equals(obj);
         }
 
         public static bool operator !=(NDArrayWithDType np, object obj)
         {
-            return np.storageForInt32[0].Equals(obj);
+            return np.Storage.Int32[0].Equals(obj);
         }
 
         public override int GetHashCode()
@@ -120,7 +124,7 @@ namespace NumSharp
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed = storageForInt32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed = Storage.Int32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             
@@ -133,19 +137,19 @@ namespace NumSharp
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < (storageForInt32.Length-1);idx++)
+            for (int idx = 0; idx < (Storage.Int32.Length-1);idx++)
             {   
                 missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, storageForInt32[idx]) + ", ");
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + ", ");
             }
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, storageForInt32.Last()) + "])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32.Last()) + "])");
 
             return returnValue;
         }
@@ -156,7 +160,7 @@ namespace NumSharp
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed = storageForInt32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed = Storage.Int32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             
@@ -169,7 +173,7 @@ namespace NumSharp
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < (storageForInt32.Length-1);idx++)
+            for (int idx = 0; idx < (Storage.Int32.Length-1);idx++)
             {   
                 missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
                 
@@ -177,11 +181,11 @@ namespace NumSharp
 
                 if( ((idx+1) % Shape.Shapes[1] ) == 0 )
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, storageForInt32[idx]) + "],   \n       [");    
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + "],   \n       [");    
                 }
                 else 
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, storageForInt32[idx]) + ", ");
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + ", ");
                 }
                 
             }
@@ -189,7 +193,7 @@ namespace NumSharp
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, storageForInt32.Last()) + "]])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32.Last()) + "]])");
 
             return returnValue;    
         }
