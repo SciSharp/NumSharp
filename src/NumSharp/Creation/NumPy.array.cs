@@ -29,7 +29,7 @@ namespace NumSharp
             System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, imageArray.Data, 0, imageArray.Data.Length);
             image.UnlockBits(bmpd);
 
-            imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, 3 });
+            imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });
     
             return imageArray;  
         }
