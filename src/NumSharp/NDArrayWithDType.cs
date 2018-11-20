@@ -32,10 +32,6 @@ namespace NumSharp
     /// </summary>
     public partial class NDArrayWithDType
     {
-        public static Type int16 = typeof(short);
-        public static Type double8 = typeof(double);
-        public static Type decimal16 = typeof(decimal);
-
         public Type dtype { get; set; }
 
         public NDStorage Storage { get; set; }

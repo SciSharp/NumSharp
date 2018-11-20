@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n1[1, 2, 1] == 22);
 
             var np2 = new NumPyWithDType();
-            var nd2 = np2.arange(0, 4, 1, NDArrayWithDType.double8).reshape(2, 2);
+            var nd2 = np2.arange(0, 4, 1, NumPyWithDType.double8).reshape(2, 2);
             nd2 = nd2.AMin(0);
         }
     }

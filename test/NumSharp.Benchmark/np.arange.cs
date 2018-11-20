@@ -38,7 +38,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarraywithdtype()
         {
-            var nd2 = new NDArrayWithDType(NDArrayWithDType.int16);
+            var nd2 = new NDArrayWithDType(NumPyWithDType.int16);
             var nd3 = nd2.arange(length, start, step);
         }
 

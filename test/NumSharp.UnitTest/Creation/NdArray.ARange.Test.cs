@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.Extensions
             n = np.arange(0, 11, 3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 3, 6, 9 }));
 
-            var nd2 = new NDArrayWithDType(NDArrayWithDType.int16);
+            var nd2 = new NDArrayWithDType(NumPyWithDType.int16);
             var nd3 = nd2.arange(3);
         }
     }

@@ -6,11 +6,15 @@ namespace NumSharp
 {
     public class NumPyWithDType
     {
+        public static Type int16 = typeof(short);
+        public static Type double8 = typeof(double);
+        public static Type decimal16 = typeof(decimal);
+
         public NDArrayWithDType arange(int stop, Type dtype = null)
         {
             if(dtype == null)
             {
-                dtype = NDArrayWithDType.int16;
+                dtype = NumPyWithDType.int16;
             }
 
             return arange(0, stop, 1, dtype);
@@ -27,14 +31,14 @@ namespace NumSharp
             {
                 case "Int32":
                     {
-                        var n = new NDArrayWithDType(NDArrayWithDType.int16);
+                        var n = new NDArrayWithDType(NumPyWithDType.int16);
                         n.arange(stop, start, step);
                         return n;
                     }
 
                 case "Double":
                     {
-                        var n = new NDArrayWithDType(NDArrayWithDType.double8);
+                        var n = new NDArrayWithDType(NumPyWithDType.double8);
                         n.arange(stop, start, step);
                         return n;
                     }
