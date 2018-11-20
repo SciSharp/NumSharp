@@ -8,12 +8,13 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Benchmark
 {
-    [SimpleJob(RunStrategy.ColdStart, targetCount: 5)]
+    [SimpleJob(RunStrategy.ColdStart, targetCount: 100)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
-    public class nparrange
+    public class nparange
     {
         private NumPy<int> np;
         private NDArray<int> nd;
+
         private int start;
         private int step;
         private int length;
@@ -35,10 +36,17 @@ namespace NumSharp.Benchmark
         }
 
         [Benchmark]
+        public void arange_ndarraywithdtype()
+        {
+            var nd2 = new NDArrayWithDType();
+            var nd3 = nd2.arange(length, start, step);
+        }
+
+        [Benchmark]
         public void arange_ndarray()
         {
-            var n = new NDArray<int>();
-            n.arange(length, start, step);
+            var nd2 = new NDArray<int>();
+            var nd3 = nd2.arange(length, start, step);
         }
 
         [Benchmark]

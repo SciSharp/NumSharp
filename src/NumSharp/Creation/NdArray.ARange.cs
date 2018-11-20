@@ -14,22 +14,19 @@ namespace NumSharp
             var list = new int[(int)Math.Ceiling((stop - start + 0.0) / step)];
             int index = 0;
             Data = new T[list.Length];
-
-            for (int i = start; i < stop; i += step)
-                list[index++] = i;
             
             switch (Data)
             {
                 case int[] dataArray : 
                 {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = list[idx];
+                    for (int i = start; i < stop; i += step)
+                        dataArray[index++] = i;
                     break;
                 }
                 case long[] dataArray : 
                 {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = list[idx];
+                    for (int i = start; i < stop; i += step)
+                        dataArray[index++] = i;
                     break;
                 }
                 case double[] dataArray : 
