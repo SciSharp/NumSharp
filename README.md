@@ -74,7 +74,7 @@ PM> Install-Package NumSharp
 
 ### How to run benchmark
 ```
-C: \> dotnet NumSharp.Benchmark.dll
+C: \> dotnet NumSharp.Benchmark.dll nparange
 ```
 Reference the online [documents](https://numsharp.readthedocs.io).
 
