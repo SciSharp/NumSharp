@@ -17,6 +17,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
@@ -25,7 +26,7 @@ namespace NumSharp.Core
     /// <summary>
     /// Numerical dynamic storage
     /// </summary>
-    public class NDStorage //: IComparable, IComparable<Double>, IConvertible, IEquatable<Double>, IFormattable
+    public class NDStorage : IEnumerable, IEnumerator//IComparable, IComparable<Double>, IConvertible, IEquatable<Double>, IFormattable
     {
         /// <summary>
         /// storage for Int32
@@ -37,11 +38,44 @@ namespace NumSharp.Core
         /// </summary>
         public double[] Double8 { get; set; }
 
+        /// <summary>
+        /// storage for string
+        /// </summary>
+        public string[] StringN { get; set; }
+
+        /// <summary>
+        /// storage for bytes
+        /// </summary>
+        public byte[] Bytes { get; set; }
+
         private Type dtype;
+
+        public Shape Shape { get; set; }
 
         public NDStorage(Type dtype)
         {
             this.dtype = dtype;
+        }
+
+        /// <summary>
+        /// It's convenint but not recommended due to low performance
+        /// recommend to use NDStorage.Int32 directly
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public T[] Data<T>()
+        {
+            switch (dtype.Name)
+            {
+                case "Int32":
+                    return Int32 as T[];
+                case "Double":
+                    return Double8 as T[];
+                case "String":
+                    return StringN as T[];
+            }
+
+            return null;
         }
 
         public void Set<T>(T[] value)
@@ -72,6 +106,46 @@ namespace NumSharp.Core
                     Double8 = new double[size];
                     break;
             }
+        }
+
+        private int pos = -1;
+        public object Current
+        {
+            get
+            {
+                if (Shape.Length == 1)
+                {
+                    switch (dtype.Name)
+                    {
+                        case "Int32":
+                            return Int32[pos];
+                        case "Double":
+                            return Double8[pos];
+                    }
+
+                    return null;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+        }
+
+        public IEnumerator GetEnumerator()
+        {
+            return this;
+        }
+
+        public bool MoveNext()
+        {
+            pos++;
+            return pos < Shape[0];
+        }
+
+        public void Reset()
+        {
+            pos = -1;
         }
     }
 }

@@ -36,6 +36,11 @@ namespace NumSharp.Core
 
         public NDStorage Storage { get; set; }
 
+        public T[] Data<T>()
+        {
+            return Storage.Data<T>();
+        }
+
         private Shape shape;
         /// <summary>
         /// Data length of every dimension

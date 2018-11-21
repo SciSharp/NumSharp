@@ -36,13 +36,6 @@ namespace NumSharp.Benchmark
         }
 
         [Benchmark]
-        public void arange_ndarraywithdtype()
-        {
-            var nd2 = new NDArray(Core.NumPy.int16);
-            var nd3 = nd2.arange(length, start, step);
-        }
-
-        [Benchmark]
         public void arange_ndarray()
         {
             var nd2 = new NDArrayGeneric<int>();

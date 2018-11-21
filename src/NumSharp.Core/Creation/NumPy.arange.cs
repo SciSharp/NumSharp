@@ -7,10 +7,20 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray
+    public partial class NumPy
     {
-        public NDArray arange(int stop, int start = 0, int step = 1)
+        public NDArray arange(int stop, Type dtype = null)
         {
+            return arange(0, stop, 1, dtype);
+        }
+
+        public NDArray arange(int start, int stop, int step = 1, Type dtype = null)
+        {
+            if (start > stop)
+            {
+                throw new Exception("parameters invalid, start is greater than stop.");
+            }
+
             var list = new int[(int)Math.Ceiling((stop - start + 0.0) / step)];
             int index = 0;
 
@@ -18,23 +28,24 @@ namespace NumSharp.Core
             {
                 dtype = typeof(int);
             }
-            else
+
+            var nd = new NDArray(dtype)
             {
-                this.dtype = dtype;
-            }
+                Shape = new Shape(list.Length)
+            };
+
+            nd.Storage.Allocate(list.Length);
 
             switch (dtype.Name)
             {
-                case "Int32": 
-                    Storage.Int32 = new int[list.Length];
+                case "Int32":
                     for (int i = start; i < stop; i += step)
-                        Storage.Int32[index++] = i;
+                        nd.Storage.Int32[index++] = i;
                     break;
 
                 case "Double":
-                    Storage.Double8 = new double[list.Length];
                     for (int i = start; i < stop; i += step)
-                        Storage.Double8[index++] = i;
+                        nd.Storage.Double8[index++] = i;
                     break;
 
                 /*    case double[] dataArray : 
@@ -67,9 +78,7 @@ namespace NumSharp.Core
                     }*/
             }
 
-            this.Shape = new Shape(list.Length);
-
-            return this;
+            return nd;
         }
     }
 }

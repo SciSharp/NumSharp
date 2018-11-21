@@ -37,14 +37,6 @@ namespace NumSharp.Benchmark
         }
 
         [Benchmark]
-        public void amin0axisWithDType()
-        {
-            var nd2 = new NDArray(Core.NumPy.double8);
-            nd2 = nd2.arange(1000 * 8 * 8 * 8, 0, 1).reshape(1000, 8, 8, 8);
-            var nd3 = nd2.AMin(0);
-        }
-
-        [Benchmark]
         public void amin2axis()
         {
             np.amin(nd, 2);
