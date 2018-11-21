@@ -29,25 +29,7 @@ namespace NumSharp.Core
     /// </summary>
     public class NDStorage : IEnumerable, IEnumerator//IComparable, IComparable<Double>, IConvertible, IEquatable<Double>, IFormattable
     {
-        /// <summary>
-        /// storage for Int32
-        /// </summary>
-        public int[] Int32 { get; set; }
-
-        /// <summary>
-        /// storage for double
-        /// </summary>
-        public double[] Double8 { get; set; }
-
-        /// <summary>
-        /// storage for string
-        /// </summary>
-        public string[] StringN { get; set; }
-
-        /// <summary>
-        /// storage for bytes
-        /// </summary>
-        public byte[] Bytes { get; set; }
+        public Array values { get; set; }
 
         private Type dtype;
 
@@ -58,6 +40,35 @@ namespace NumSharp.Core
             this.dtype = dtype;
         }
 
+        public object this[int idx]
+        {
+            get
+            {
+                switch (values)
+                {
+                    case int[] v:
+                        return v[idx];
+                    case double[] v:
+                        return v[idx];
+                }
+
+                return null;
+            }
+
+            set
+            {
+                switch (values)
+                {
+                    case int[] v:
+                        v[idx] = (int)value;
+                        break;
+                    case double[] v:
+                        v[idx] = (double)value;
+                        break;
+                }
+            }
+        }
+
         /// <summary>
         /// It's convenint but not recommended due to low performance
         /// recommend to use NDStorage.Int32 directly
@@ -66,35 +77,7 @@ namespace NumSharp.Core
         /// <returns></returns>
         public T[] Data<T>()
         {
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    return Int32 as T[];
-                case "Double":
-                    return Double8 as T[];
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// It's convenint but not recommended due to low performance
-        /// recommend to use NDStorage.Int32 directly
-        /// </summary>
-        public object[] Values
-        {
-            get
-            {
-                switch (dtype.Name)
-                {
-                    case "Int32":
-                        return Int32.Cast<object>().ToArray();
-                    case "Double":
-                        return Double8.Cast<object>().ToArray();
-                }
-
-                return null;
-            }
+            return values as T[];
         }
 
         public void Set<T>(T[] value)
@@ -102,10 +85,10 @@ namespace NumSharp.Core
             switch (value)
             {
                 case int[] v:
-                    Int32 = v;
+                    values = v;
                     break;
                 case double[] v:
-                    Double8 = v;
+                    values = v;
                     break;
             }
         }
@@ -119,10 +102,10 @@ namespace NumSharp.Core
             switch (dtype.Name)
             {
                 case "Int32":
-                    Int32 = new int[size];
+                    values = new int[size];
                     break;
                 case "Double":
-                    Double8 = new double[size];
+                    values = new double[size];
                     break;
             }
         }
@@ -134,12 +117,12 @@ namespace NumSharp.Core
             {
                 if (Shape.Length == 1)
                 {
-                    switch (dtype.Name)
+                    switch (values)
                     {
-                        case "Int32":
-                            return Int32[pos];
-                        case "Double":
-                            return Double8[pos];
+                        case int[] a:
+                            return a[pos];
+                        case double[] a:
+                            return a[pos];
                     }
 
                     return null;

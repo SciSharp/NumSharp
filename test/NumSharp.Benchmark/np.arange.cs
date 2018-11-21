@@ -19,6 +19,8 @@ namespace NumSharp.Benchmark
         private int step;
         private int length;
 
+        private NumPy np2;
+
         [GlobalSetup]
         public void Setup()
         {
@@ -27,6 +29,8 @@ namespace NumSharp.Benchmark
             start = 0;
             step = 1;
             length = 100 * 100;
+
+            np2 = new NumPy();
         }
 
         [Benchmark]
@@ -38,8 +42,13 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarray()
         {
-            var nd2 = new NDArrayGeneric<int>();
-            var nd3 = nd2.arange(length, start, step);
+            var nd3 = nd.arange(length, start, step);
+        }
+
+        [Benchmark]
+        public void arange_ndarray2()
+        {
+            var nd3 = np2.arange(start, length, step);
         }
 
         [Benchmark]

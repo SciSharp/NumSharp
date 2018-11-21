@@ -35,7 +35,7 @@ namespace NumSharp.Core
             var dataSize = bmpd.Stride * bmpd.Height;
 
             imageArray.Set(new byte[dataSize]);
-            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, imageArray.Storage.Bytes, 0, imageArray.Size);
+            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, (imageArray.Storage.values as byte[]), 0, imageArray.Size);
             image.UnlockBits(bmpd);
 
             imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });

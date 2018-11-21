@@ -20,9 +20,6 @@ namespace NumSharp.Benchmark
                 Type type = Type.GetType(method);
                 BenchmarkRunner.Run(type);
             }
-
-            Console.WriteLine("Please press any key to continue.");
-            Console.ReadKey();
         }
     }
 }

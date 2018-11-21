@@ -15,7 +15,7 @@ namespace NumSharp.Core
                 switch (dtype.Name)
                 {
                     case "Double":
-                        res.Storage.Set(new double[1] { Storage.Double8.Min() });
+                        //res.Storage.Set(new double[1] { Storage.Double8.Min() });
                         break;
                 }
                 
@@ -60,13 +60,14 @@ namespace NumSharp.Core
                     for (int j = i; j < i + post; j++)
                     {
                         start = j;
+                        /*
                         min = Storage.Double8[start];
                         for (int k = 0; k < cur; k++)
                         {
                             min = Math.Min(min, Storage.Double8[start]);
                             start += sameSetOffset;
                         }
-                        res.Storage.Double8[index++] = min;
+                        res.Storage.Double8[index++] = min;*/
                     }
                 }
             }

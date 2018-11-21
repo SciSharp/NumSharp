@@ -43,15 +43,15 @@ namespace NumSharp.UnitTest
             var nd = np.arange(9.0).reshape(3,3);
 
             var random = new Random();
-            nd.Storage.Double8 = nd.Storage.Double8.Select(x => x + random.NextDouble()).ToArray();
-            nd.Storage.Double8[1] = 1;
-            nd.Storage.Double8[2] -= 4;
-            nd.Storage.Double8[3] -= 20;
-            nd.Storage.Double8[8] += 23;
+            nd.Set(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
+            nd.Storage[1] = 1.0;
+            /*nd.Storage[2] -= 4;
+            nd.Storage[3] -= 20;
+            nd.Storage[8] += 23;*/
 
             var stringOfNp = nd.ToString();
 
-            Assert.IsTrue(stringOfNp.Contains("[[  0."));
+            Assert.IsTrue(stringOfNp.Contains("[[ 0."));
 
             nd = np.arange(9).reshape(3,3);
 
