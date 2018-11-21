@@ -21,7 +21,7 @@ namespace NumSharp.Core
                 throw new Exception("parameters invalid, start is greater than stop.");
             }
 
-            var list = new int[(int)Math.Ceiling((stop - start + 0.0) / step)];
+            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
             int index = 0;
 
             if (dtype == null)
@@ -31,10 +31,10 @@ namespace NumSharp.Core
 
             var nd = new NDArray(dtype)
             {
-                Shape = new Shape(list.Length)
+                Shape = new Shape(length)
             };
 
-            nd.Storage.Allocate(list.Length);
+            nd.Storage.Allocate(length);
 
             switch (dtype.Name)
             {

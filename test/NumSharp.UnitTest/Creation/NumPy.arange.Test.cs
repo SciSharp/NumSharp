@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.Extensions
             n = np.arange(3, 7, 2, np.double8);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<double>(), new double[] { 3, 5 }));
 
-            n = np.arange(0, 11, 3, np.int16);
+            n = np.arange(0, 11, 3, np.int32);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 0, 3, 6, 9 }));
         }
     }

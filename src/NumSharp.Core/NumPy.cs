@@ -7,6 +7,7 @@ namespace NumSharp.Core
     public partial class NumPy
     {
         public Type int16 => typeof(short);
+        public Type int32 => typeof(int);
         public Type double8 => typeof(double);
         public Type decimal16 => typeof(decimal);
 
