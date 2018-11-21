@@ -14,21 +14,21 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void SimpleInt1D()
         {
-            var np = new NumPy<int>().ones(new Shape(5));
+            var np = new NumPyGeneric<int>().ones(new Shape(5));
 
             Assert.IsTrue(np.Data.Where(x => x==1).ToArray().Length == 5);
         }
         [TestMethod]
         public void SimpleInt2D()
         {
-            var np = new NumPy<int>().ones(new Shape(5,5));
+            var np = new NumPyGeneric<int>().ones(new Shape(5,5));
 
             Assert.IsTrue(np.Data.Where(x => x==1).ToArray().Length == 25);
         }
         [TestMethod]
         public void SimpleDouble3D()
         {
-            var np = new NumPy<double>().ones(new Shape(5,5,5));
+            var np = new NumPyGeneric<double>().ones(new Shape(5,5,5));
 
             Assert.IsTrue(np.Data.Where(x => x==1).ToArray().Length == 125);
         }

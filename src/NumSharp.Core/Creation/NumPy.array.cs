@@ -9,7 +9,7 @@ namespace NumSharp.Core
 {
 	public static partial class NumPyExtensions
 	{
-        public static NDArrayGeneric<T> array<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
+        public static NDArrayGeneric<T> array<T>(this NumPyGeneric<T> np, IEnumerable<T> array, int ndim = 1)
         {
 			var nd = new NDArrayGeneric<T>();
 			nd.Data = array.ToArray();
@@ -18,7 +18,7 @@ namespace NumSharp.Core
             return nd;
         }
         
-        public static NDArrayGeneric<Byte> array<T>(this NumPy<T> np, System.Drawing.Bitmap image )
+        public static NDArrayGeneric<Byte> array<T>(this NumPyGeneric<T> np, System.Drawing.Bitmap image )
         {
             NDArrayGeneric<Byte> imageArray = new NDArrayGeneric<Byte>();
 
@@ -34,7 +34,7 @@ namespace NumSharp.Core
             return imageArray;  
         }
 
-		public static NDArrayGeneric<T> array<T>(this NumPy<T> np, T[][] data)
+		public static NDArrayGeneric<T> array<T>(this NumPyGeneric<T> np, T[][] data)
 		{
 			int size = data.Length * data[0].Length;
 			var all = new T[size];

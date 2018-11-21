@@ -9,7 +9,7 @@ namespace NumSharp.Core
 {
     public static partial class NumPyExtensions
     {
-        public static NDArrayGeneric<T> sin<T>(this NumPy<T> np, NDArrayGeneric<T> nd)
+        public static NDArrayGeneric<T> sin<T>(this NumPyGeneric<T> np, NDArrayGeneric<T> nd)
         {
             NDArrayGeneric<T> sinArray = new NDArrayGeneric<T>();
             sinArray.Data = new T[nd.Size];
@@ -35,7 +35,7 @@ namespace NumSharp.Core
             return sinArray;
         }
 
-        public static NDArrayGeneric<NDArrayGeneric<T>> sin<T>(this NumPy<T> np, NDArrayGeneric<NDArrayGeneric<T>> nd)
+        public static NDArrayGeneric<NDArrayGeneric<T>> sin<T>(this NumPyGeneric<T> np, NDArrayGeneric<NDArrayGeneric<T>> nd)
         {
             var sinArray = new NDArrayGeneric<NDArrayGeneric<T>>();
             sinArray.Data = new NDArrayGeneric<T>[nd.Size];

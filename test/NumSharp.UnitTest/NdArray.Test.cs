@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void IndexAccessorGetter()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var n = np.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[1, 1] == 5);
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void IndexAccessorSetter()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var n = np.reshape(np.arange(12), 3, 4);
 
             Assert.IsTrue(n[0, 3] == 3);

@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Zeros1Dim()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var n = np.zeros(3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 0, 0 }));
         }
@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Zeros2Dim()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var n = np.zeros(3, 2);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 0, 0, 0, 0, 0 }));
         }

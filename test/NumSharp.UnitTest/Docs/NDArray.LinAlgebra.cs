@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Docs
         [TestMethod]
         public void LinearRegression()
         {
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
 
             // the time array 
             var time = np.linspace(0,10,1000);

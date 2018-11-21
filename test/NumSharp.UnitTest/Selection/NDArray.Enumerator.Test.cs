@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Enumerate()
         {
-            var np = new NumPy<int>().arange(12).reshape(2, 3, 2);
+            var np = new NumPyGeneric<int>().arange(12).reshape(2, 3, 2);
 
             int i = 0;
             

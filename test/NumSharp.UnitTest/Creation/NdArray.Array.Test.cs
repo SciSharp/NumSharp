@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Array1Dim()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var list = new int[] { 1, 2, 3 };
             var n = np.array(list);
 
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Array2Dim()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var list = new int[][]
             {
                 new int[] { 1, 2 },
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Extensions
             if (System.IO.File.Exists(imagePath))
             {
                 var image = new System.Drawing.Bitmap(imagePath);
-                var imageNDArray = new NumPy<byte>().array(image);
+                var imageNDArray = new NumPyGeneric<byte>().array(image);
 
                 Assert.IsTrue(imageNDArray[0, 0, 0] == 255);
                 Assert.IsTrue(imageNDArray[0, 0, 1] == 253);

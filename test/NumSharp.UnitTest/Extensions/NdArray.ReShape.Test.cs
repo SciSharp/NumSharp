@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReShape()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
             var n = np.reshape(np.arange(6), 3, 2);
 
             Assert.IsTrue(n[0, 0] == 0);

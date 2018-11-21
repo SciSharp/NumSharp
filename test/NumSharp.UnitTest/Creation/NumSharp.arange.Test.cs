@@ -9,12 +9,12 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
-    public class NdArrayARangeTest
+    public class NumSharpArangeTest
     {
         [TestMethod]
         public void arange()
         {
-            var np = new NumPy<int>();
+            var np = new NumPyGeneric<int>();
 
             var n = np.arange(3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 1, 2 }));
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Extensions
             n = np.arange(0, 11, 3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 0, 3, 6, 9 }));
 
-            var nd2 = new NDArray(Core.NumSharp.int16);
+            var nd2 = new NDArray(Core.NumPy.int16);
             var nd3 = nd2.arange(3);
         }
     }

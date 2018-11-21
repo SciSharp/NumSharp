@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void amax()
         {
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
 
             //no axis
             var n = np.arange(4).reshape(2, 2);

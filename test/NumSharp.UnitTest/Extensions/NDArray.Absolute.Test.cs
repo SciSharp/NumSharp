@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void absolute()
         {
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
 
             //2D
             var n = np.arange(-2,2).reshape(2, 2);

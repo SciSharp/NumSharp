@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Extensions
         public void VStackNDArrays()
         {
             //1D
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
             var n1 = np.array(new double[] { 1, 2, 3 });
             var n2 = np.array(new double[] { 2, 3, 4 });
 

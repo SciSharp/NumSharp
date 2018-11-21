@@ -12,7 +12,7 @@ namespace NumSharp.Benchmark
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class nparange
     {
-        private NumPy<int> np;
+        private NumPyGeneric<int> np;
         private NDArrayGeneric<int> nd;
 
         private int start;
@@ -22,7 +22,7 @@ namespace NumSharp.Benchmark
         [GlobalSetup]
         public void Setup()
         {
-            np = new NumPy<int>();
+            np = new NumPyGeneric<int>();
             nd = new NDArrayGeneric<int>();
             start = 0;
             step = 1;
@@ -38,7 +38,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarraywithdtype()
         {
-            var nd2 = new NDArray(Core.NumSharp.int16);
+            var nd2 = new NDArray(Core.NumPy.int16);
             var nd3 = nd2.arange(length, start, step);
         }
 

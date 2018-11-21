@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void PowerWithSingleValue()
         {
-            var np = new NumPy<double>().arange(3);
+            var np = new NumPyGeneric<double>().arange(3);
             
             np = np.power(2);
             

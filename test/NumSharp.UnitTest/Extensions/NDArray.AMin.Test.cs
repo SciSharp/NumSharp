@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void amin()
         {
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
 
             //no axis
             var n = np.arange(4).reshape(2, 2);
@@ -49,8 +49,8 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n1[1, 1, 1] == 18);
             Assert.IsTrue(n1[1, 2, 1] == 22);
 
-            var np2 = new Core.NumSharp();
-            var nd2 = np2.arange(0, 4, 1, Core.NumSharp.double8).reshape(2, 2);
+            var np2 = new Core.NumPy();
+            var nd2 = np2.arange(0, 4, 1, Core.NumPy.double8).reshape(2, 2);
             nd2 = nd2.AMin(0);
         }
     }

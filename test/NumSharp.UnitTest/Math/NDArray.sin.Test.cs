@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var np = new NumPy<double>();
+            var np = new NumPyGeneric<double>();
             var nd = np.array(new double[] {0, 30, 45, 60, 90}) * (Math.PI / 180);
             
             var nd2 = np.sin(nd);
