@@ -30,7 +30,7 @@ namespace NumSharp.Core.Extensions
             //Enumerable.Range(0, total)
             //                    .Select(x =>
             //                    {
-            //                        foreach (NDArray<T> ele in nps)
+            //                        foreach (NDArrayGeneric<T> ele in nps)
             //                        {
             //                            for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
             //                                list.Add(ele.Data[j]);

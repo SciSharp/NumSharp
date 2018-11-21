@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public class NumPyWithDType
+    public class NumSharp
     {
         public static Type int16 = typeof(short);
         public static Type double8 = typeof(double);
@@ -14,7 +14,7 @@ namespace NumSharp.Core
         {
             if(dtype == null)
             {
-                dtype = NumPyWithDType.int16;
+                dtype = NumSharp.int16;
             }
 
             return arange(0, stop, 1, dtype);
@@ -31,14 +31,14 @@ namespace NumSharp.Core
             {
                 case "Int32":
                     {
-                        var n = new NDArrayWithDType(NumPyWithDType.int16);
+                        var n = new NDArrayWithDType(NumSharp.int16);
                         n.arange(stop, start, step);
                         return n;
                     }
 
                 case "Double":
                     {
-                        var n = new NDArrayWithDType(NumPyWithDType.double8);
+                        var n = new NDArrayWithDType(NumSharp.double8);
                         n.arange(stop, start, step);
                         return n;
                     }

@@ -20,7 +20,7 @@ namespace NumSharp.Core
         
         public static NDArray<Byte> array<T>(this NumPy<T> np, System.Drawing.Bitmap image )
         {
-            NDArray<Byte> imageArray = new NDArray<byte>();
+            NDArray<Byte> imageArray = new NDArray<Byte>();
 
             var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
             var dataSize = bmpd.Stride * bmpd.Height;
