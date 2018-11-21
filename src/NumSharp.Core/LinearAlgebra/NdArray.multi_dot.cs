@@ -7,7 +7,7 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> 
+    public partial class NDArrayGeneric<T> 
     {
         /// <summary>
         /// 
@@ -16,7 +16,7 @@ namespace NumSharp.Core
         /// <param name="np2"></param>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArray<T> multi_dot(params NDArray<T>[] np2Multi)
+        public NDArrayGeneric<T> multi_dot(params NDArrayGeneric<T>[] np2Multi)
         {
             var np2 = np2Multi.Last(); 
 

@@ -3,7 +3,7 @@ using System.Linq;
 
 namespace NumSharp.Core
 {
-    public partial class Matrix<TData> : NDArray<TData>
+    public partial class Matrix<TData> : NDArrayGeneric<TData>
     {
         public Matrix()
         {

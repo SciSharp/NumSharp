@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            var np = new NDArray<double>().arange(9).reshape(3,3);
+            var np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
 
             var random = new Random();
             np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(stringOfNp.Contains("[[  0."));
 
-            np = new NDArray<double>().arange(9).reshape(3,3);
+            np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
 
             stringOfNp = np.ToString();        
 
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CheckVectorString()
         {
-            var np = new NDArray<double>().arange(9);
+            var np = new NDArrayGeneric<double>().arange(9);
 
             var random = new Random();
             np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void DimOrder()
         {
-            NDArray<double> np1 = new NDArray<double>().Zeros(2,2);
+            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().Zeros(2,2);
 
             np1[0,0] = 0;
             np1[1,0] = 10;
@@ -101,7 +101,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray1D()
         {
-            var np1 = new NDArray<double>().arange(9);
+            var np1 = new NDArrayGeneric<double>().arange(9);
 
             double[] np1_ = np1.ToDotNetArray<double[]>();
 
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray2D()
         {
-            var np1 = new NDArray<double>().arange(9).reshape(3,3);
+            var np1 = new NDArrayGeneric<double>().arange(9).reshape(3,3);
 
             double[][] np1_ = np1.ToDotNetArray<double[][]>();
 
@@ -127,7 +127,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray3D()
         {
-            var np1 = new NDArray<double>().arange(27).reshape(3,3,3);
+            var np1 = new NDArrayGeneric<double>().arange(27).reshape(3,3,3);
 
             double[][][] np1_ = np1.ToDotNetArray<double[][][]>();
 

@@ -8,7 +8,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static NDArray<int> randint(this NDArrayRandom rand, int low, int? high = null, Shape size = null)
+        public static NDArrayGeneric<int> randint(this NDArrayRandom rand, int low, int? high = null, Shape size = null)
         {
             var rng = new Random();
             var data = new int[size.Size];
@@ -17,7 +17,7 @@ namespace NumSharp.Core.Extensions
                 data[i] = rng.Next(low, high.HasValue ? high.Value : int.MaxValue);
             }
 
-            var np = new NDArray<int>();
+            var np = new NDArrayGeneric<int>();
             np.Shape = new Shape(size.Shapes);
             np.Data = data;
 

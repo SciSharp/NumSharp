@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()
         {
-            var np = new NDArray<double>().arange(9).reshape(3,3);
+            var np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
 
             var npAsMatrix = np.AsMatrix();
 

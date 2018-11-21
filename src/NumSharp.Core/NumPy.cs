@@ -8,29 +8,30 @@ namespace NumSharp.Core
     /// <summary>
     /// API bridge between NumSharp and Python NumPy  
     /// </summary>
+    [Obsolete("please use NumSharp")]
     public class NumPy<T>
     {
-        public NDArray<double> absolute(NDArray<double> np)
+        public NDArrayGeneric<double> absolute(NDArrayGeneric<double> np)
         {
             return np.Absolute();
         }
 
-        public NDArray<double> amax(NDArray<double> np, int? axis = null)
+        public NDArrayGeneric<double> amax(NDArrayGeneric<double> np, int? axis = null)
         {
             return np.AMax(axis);
         }
 
-        public NDArray<double> amin(NDArray<double> np, int? axis = null)
+        public NDArrayGeneric<double> amin(NDArrayGeneric<double> np, int? axis = null)
         {
             return np.AMin(axis);
         }
 
-        public NDArray<T> arange(int stop)
+        public NDArrayGeneric<T> arange(int stop)
         {
             return arange(0, stop);
         }
 
-        public NDArray<T> arange(int start, int stop, int step = 1)
+        public NDArrayGeneric<T> arange(int start, int stop, int step = 1)
         {
             if(start > stop)
             {
@@ -41,32 +42,32 @@ namespace NumSharp.Core
             {
                 case "Int32":
                     {
-                        var n = new NDArray<int>();
+                        var n = new NDArrayGeneric<int>();
                         n.arange(stop, start, step);
-                        return n as NDArray<T>;
+                        return n as NDArrayGeneric<T>;
                     }
 
                 case "Double":
                     {
-                        var n = new NDArray<double>();
+                        var n = new NDArrayGeneric<double>();
                         n.arange(stop, start, step);
-                        return n as NDArray<T>;
+                        return n as NDArrayGeneric<T>;
                     }
                 default:
                     throw new NotImplementedException();
             }
         }
 
-        public NDArray<T> array(T[] data)
+        public NDArrayGeneric<T> array(T[] data)
         {
-            var n = new NDArray<T>();
+            var n = new NDArrayGeneric<T>();
             n.Data = data;
             n.Shape = new Shape(new int[] { data.Length });
 
             return n;
         }
 
-        public NDArray<T> array(T[][] data)
+        public NDArrayGeneric<T> array(T[][] data)
         {
             int size = data.Length * data[0].Length;
             var all = new T[size];
@@ -81,16 +82,16 @@ namespace NumSharp.Core
                 }
             }
 
-            var n = new NDArray<T>();
+            var n = new NDArrayGeneric<T>();
             n.Data = all;
             n.Shape = new Shape(new int[] { data.Length, data[0].Length });
 
             return n;
         }
 
-        public NDArray<double> hstack(params NDArray<double>[] nps)
+        public NDArrayGeneric<double> hstack(params NDArrayGeneric<double>[] nps)
         {
-            var n = new NDArray<double>();
+            var n = new NDArrayGeneric<double>();
             return n.HStack(nps);
         }
 
@@ -101,17 +102,17 @@ namespace NumSharp.Core
         /// <param name="stop"></param>
         /// <param name="num"></param>
         /// <returns></returns>
-        public NDArray<double> linspace(double start, double stop, int num = 50)
+        public NDArrayGeneric<double> linspace(double start, double stop, int num = 50)
         {
-            return new NDArray<double>().linspace(start, stop, num);
+            return new NDArrayGeneric<double>().linspace(start, stop, num);
         }
 
-        public NDArray<double> max(NDArray<double> nd)
+        public NDArrayGeneric<double> max(NDArrayGeneric<double> nd)
         {
             return nd.Max();
         }
 
-        public NDArray<double> power(NDArray<double> nd, double exponent)
+        public NDArrayGeneric<double> power(NDArrayGeneric<double> nd, double exponent)
         {
             return nd.power(exponent);
         }
@@ -124,35 +125,35 @@ namespace NumSharp.Core
             }
         }
 
-        public NDArray<int> reshape(NDArray<int> np, params int[] shape)
+        public NDArrayGeneric<int> reshape(NDArrayGeneric<int> np, params int[] shape)
         {
             np.Shape = new Shape(shape);
 
             return np;
         }
 
-        public NDArray<double> vstack(params NDArray<double>[] nps)
+        public NDArrayGeneric<double> vstack(params NDArrayGeneric<double>[] nps)
         {
-            var n = new NDArray<double>();
+            var n = new NDArrayGeneric<double>();
             return n.VStack(nps);
         }
 
-        public NDArray<T> zeros(params int[] shape)
+        public NDArrayGeneric<T> zeros(params int[] shape)
         {
             switch (typeof(T).Name)
             {
                 case "Int32":
                     {
-                        var n = new NDArray<int>();
+                        var n = new NDArrayGeneric<int>();
                         n.Zeros(shape);
-                        return n as NDArray<T>;
+                        return n as NDArrayGeneric<T>;
                     }
 
                 case "Double":
                     {
-                        var n = new NDArray<double>();
+                        var n = new NDArrayGeneric<double>();
                         n.Zeros(shape);
-                        return n as NDArray<T>;
+                        return n as NDArrayGeneric<T>;
                     }
                 default:
                     throw new NotImplementedException();

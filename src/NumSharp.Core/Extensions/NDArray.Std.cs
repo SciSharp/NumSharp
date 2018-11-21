@@ -7,9 +7,9 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Std(this NDArray<double> np, int axis = -1)
+        public static NDArrayGeneric<double> Std(this NDArrayGeneric<double> np, int axis = -1)
         {
-            var std = new NDArray<double>();
+            var std = new NDArrayGeneric<double>();
 
             var mean = np.Mean(axis);
 

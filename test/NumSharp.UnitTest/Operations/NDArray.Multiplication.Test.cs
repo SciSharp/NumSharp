@@ -14,8 +14,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void DoubleTwo1D_NDArrayMultiplication()
         {
-            var np1 = new NDArray<double>().arange(4, 1, 1).reshape(1, 3);
-            var np2 = new NDArray<double>().arange(5, 2, 1).reshape(1, 3);
+            var np1 = new NDArrayGeneric<double>().arange(4, 1, 1).reshape(1, 3);
+            var np2 = new NDArrayGeneric<double>().arange(5, 2, 1).reshape(1, 3);
 
             var np3 = np1 * np2;
 
@@ -25,10 +25,10 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void ComplexTwo1D_NDArrayMultiplication()
         {
-            var np1 = new NDArray<Complex>();
+            var np1 = new NDArrayGeneric<Complex>();
             np1.Data = new Complex[] { new Complex(1, 2), new Complex(3, 4) };
 
-            var np2 = new NDArray<Complex>();
+            var np2 = new NDArrayGeneric<Complex>();
             np2.Data = new Complex[] { new Complex(5, 6), new Complex(7, 8) };
 
             var np3 = np1 * np2;
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double1DPlusOffset_NDArrayMultiplication()
         {
-            var np1 = new NDArray<double>();
+            var np1 = new NDArrayGeneric<double>();
             np1.Data = new double[] { 1, 2, 3 };
 
             var np3 = np1 * 2;
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Complex1DPlusOffset_NDArrayMultiplication()
         {
-            var np1 = new NDArray<Complex>();
+            var np1 = new NDArrayGeneric<Complex>();
             np1.Data = new Complex[] { new Complex(1, 2), new Complex(3, 4) };
 
             var np2 = np1 * new Complex(1, 2);

@@ -7,19 +7,19 @@ using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
-        public NDArray<T> inv()
+        public NDArrayGeneric<T> inv()
         {
-            NDArray<T> npInv = new NDArray<T>();
+            NDArrayGeneric<T> npInv = new NDArrayGeneric<T>();
             npInv.Shape = new Shape(this.Shape.Shapes);
             npInv.Data = new T[this.Data.Length];
 
             switch (this)
             {
-                case NDArray<double> np :
+                case NDArrayGeneric<double> np :
                 {
-                    NDArray<double> npInvDouble = npInv as NDArray<double>;
+                    NDArrayGeneric<double> npInvDouble = npInv as NDArrayGeneric<double>;
                     double[][] matrix = np.ToDotNetArray<double[][]>();
 
                     double[][] matrixInv = MatrixInv.InverseMatrix(matrix);

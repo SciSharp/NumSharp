@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> : IEnumerable, IEnumerator
+    public partial class NDArrayGeneric<T> : IEnumerable, IEnumerator
     {
         private int pos = -1;
         public object Current

@@ -30,13 +30,11 @@ namespace NumSharp.Core
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    /// <typeparam name="T">dtype</typeparam>
-    public partial class NDArray<T>
+    public partial class NDArray
     {
-        /// <summary>
-        /// 1 dim array data storage
-        /// </summary>
-        public T[] Data { get; set; }
+        public Type dtype { get; set; }
+
+        public NDStorage Storage { get; set; }
 
         private Shape shape;
         /// <summary>
@@ -64,31 +62,13 @@ namespace NumSharp.Core
         /// </summary>
         public int Size => Shape.Size;
 
-        public NDArray()
+        public NDArray(Type dtype)
         {
+            this.dtype = dtype;
+
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
-        }
-
-        public void Set(Shape shape, T value)
-        {
-            if (shape.Length == NDim)
-            {
-                throw new Exception("Please use NDArray[m, n] to access element.");
-            }
-            else
-            {
-                int start = GetIndexInShape(shape.Shapes.ToArray());
-                int length = Shape.DimOffset[shape.Length - 1];
-
-                Span<T> data = Data;
-                var elements = data.Slice(start, length);
-
-                for (int i = 0; i < elements.Length; i++)
-                {
-                    elements[i] = value;
-                }
-            }
+            Storage = new NDStorage(this.dtype);
         }
 
         public override string ToString()
@@ -109,17 +89,17 @@ namespace NumSharp.Core
 
         public override bool Equals(object obj)
         {
-            return Data[0].Equals(obj);
+            return Storage.Int32[0].Equals(obj);
         }
 
-        public static bool operator ==(NDArray<T> np, object obj)
+        public static bool operator ==(NDArray np, object obj)
         {
-            return np.Data[0].Equals(obj);
+            return np.Storage.Int32[0].Equals(obj);
         }
 
-        public static bool operator !=(NDArray<T> np, object obj)
+        public static bool operator !=(NDArray np, object obj)
         {
-            return np.Data[0].Equals(obj);
+            return np.Storage.Int32[0].Equals(obj);
         }
 
         public override int GetHashCode()
@@ -133,52 +113,6 @@ namespace NumSharp.Core
             }
         }
 
-        public TCast ToDotNetArray<TCast>()
-        {
-            dynamic dotNetArray = null;
-            switch (this.NDim)
-            {
-                case 1 : dotNetArray = new T[this.Shape.Shapes[0]].ToArray();break;
-                case 2 : dotNetArray = new T[this.Shape.Shapes[0]][].Select(x => new T[this.Shape.Shapes[1]].ToArray()).ToArray();break;
-                case 3 : dotNetArray = new T[this.Shape.Shapes[0]][][].Select(x => new T[this.Shape.Shapes[1]][].Select(y => new T[this.Shape.Shapes[2]].ToArray().ToArray()).ToArray()).ToArray();break;
-            }
-
-            switch (this.NDim)
-            {
-                case 1 : 
-                {
-                    dotNetArray = this.Data.ToArray();
-                    break;
-                }
-                case 2 : 
-                {
-                    for(int idx = 0; idx < this.Shape.Shapes[0];idx++)
-                    {
-                        for(int jdx = 0; jdx < this.Shape.Shapes[1];jdx++)
-                        {
-                            dotNetArray[idx][jdx] = this[idx,jdx];
-                        }
-                    }
-                    break;
-                }
-                case 3 : 
-                {
-                    for(int idx = 0; idx < this.Shape.Shapes[0];idx++)
-                    {
-                        for(int jdx = 0; jdx < this.Shape.Shapes[1];jdx++)
-                        {
-                            for(int kdx = 0; kdx < this.Shape.Shapes[2];kdx++)
-                            {
-                                dotNetArray[idx][jdx][kdx] = this[idx,jdx,kdx];
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-            TCast castedDotNetArray = (TCast)dotNetArray;
-            return castedDotNetArray;
-        }
         protected string _ToVectorString()
         {
             string returnValue = "array([";
@@ -186,7 +120,7 @@ namespace NumSharp.Core
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed = Storage.Int32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             
@@ -199,19 +133,19 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < (Data.Length-1);idx++)
+            for (int idx = 0; idx < (Storage.Int32.Length-1);idx++)
             {   
                 missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + ", ");
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + ", ");
             }
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data.Last()) + "])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32.Last()) + "])");
 
             return returnValue;
         }
@@ -222,7 +156,7 @@ namespace NumSharp.Core
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed =  Data.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed = Storage.Int32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             
@@ -235,7 +169,7 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < (Data.Length-1);idx++)
+            for (int idx = 0; idx < (Storage.Int32.Length-1);idx++)
             {   
                 missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
                 
@@ -243,11 +177,11 @@ namespace NumSharp.Core
 
                 if( ((idx+1) % Shape.Shapes[1] ) == 0 )
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + "],   \n       [");    
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + "],   \n       [");    
                 }
                 else 
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data[idx]) + ", ");
+                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + ", ");
                 }
                 
             }
@@ -255,11 +189,11 @@ namespace NumSharp.Core
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Data.Last()) + "]])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32.Last()) + "]])");
 
             return returnValue;    
         }
-        protected string _ParseNumber(T number, ref int  noBefore,ref int noAfter)
+        protected string _ParseNumber(object number, ref int  noBefore,ref int noAfter)
         {
             string parsed = string.Format(new CultureInfo("en-us"),"{0:0.00000000}",number);
             

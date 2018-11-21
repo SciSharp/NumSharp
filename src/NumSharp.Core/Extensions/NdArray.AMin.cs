@@ -7,9 +7,9 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> AMin(this NDArray<double> np, int? axis = null)
+        public static NDArrayGeneric<double> AMin(this NDArrayGeneric<double> np, int? axis = null)
         {
-            NDArray<double> res = new NDArray<double>();
+            NDArrayGeneric<double> res = new NDArrayGeneric<double>();
             if (axis == null)
             {
                 res.Data = new double[1] { np.Data.Min() };

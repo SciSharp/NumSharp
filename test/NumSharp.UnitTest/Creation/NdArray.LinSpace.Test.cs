@@ -13,11 +13,11 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void FromNumpyDocs()
         {
-            var np1 = new NDArray<double>().linspace(2.0, 3.0,5);
+            var np1 = new NDArrayGeneric<double>().linspace(2.0, 3.0,5);
 
             Assert.IsTrue(Enumerable.SequenceEqual(np1.Data,new double[]{2.0,2.25,2.5,2.75,3.0}));
 
-            var np2 = new NDArray<double>().linspace(2.0, 3.0,5,false);
+            var np2 = new NDArrayGeneric<double>().linspace(2.0, 3.0,5,false);
 
             Assert.IsTrue(Enumerable.SequenceEqual(np2.Data,new double[]{2.0,2.20,2.4,2.6,2.8}));
 

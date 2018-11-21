@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
         /// <summary>
         /// Index accessor
@@ -25,7 +25,7 @@ namespace NumSharp.Core
             }
         }
 
-        public NDArray<T> this[Shape select]
+        public NDArrayGeneric<T> this[Shape select]
         {
             get
             {
@@ -38,7 +38,7 @@ namespace NumSharp.Core
                     int start = GetIndexInShape(select.Shapes.ToArray());
                     int length = Shape.DimOffset[select.Length - 1];
 
-                    var n = new NDArray<T>();
+                    var n = new NDArrayGeneric<T>();
                     Span<T> data = Data;
                     n.Data = data.Slice(start, length).ToArray();
                     int[] shape = new int[Shape.Length - select.Length];
@@ -58,11 +58,11 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="select"></param>
         /// <returns>Return a new NDArray with filterd elements.</returns>
-        public NDArray<T> this[IList<int> select]
+        public NDArrayGeneric<T> this[IList<int> select]
         {
             get
             {
-                var n = new NDArray<T>();
+                var n = new NDArrayGeneric<T>();
                 if (NDim == 1)
                 {
                     n.Data = new T[select.Count];
@@ -98,7 +98,7 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
-        public NDArray<T> this[NDArray<int> select] => this[select.Data.ToList()];
+        public NDArrayGeneric<T> this[NDArrayGeneric<int> select] => this[select.Data.ToList()];
 
         private int GetIndexInShape(params int[] select)
         {

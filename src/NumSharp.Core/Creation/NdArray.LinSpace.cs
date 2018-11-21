@@ -7,9 +7,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
-        public NDArray<T> linspace(double start, double stop,int num, bool entdpoint = true)
+        public NDArrayGeneric<T> linspace(double start, double stop,int num, bool entdpoint = true)
         {
             double steps = (stop - start)/((entdpoint) ? (double) num - 1.0 : (double) num);
 

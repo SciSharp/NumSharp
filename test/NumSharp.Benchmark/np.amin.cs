@@ -13,7 +13,7 @@ namespace NumSharp.Benchmark
     public class npamin
     {
         private NumPy<double> np;
-        private NDArray<double> nd;
+        private NDArrayGeneric<double> nd;
 
         [GlobalSetup]
         public void Setup()
@@ -31,7 +31,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void amin0axis()
         {
-            var nd2 = new NDArray<double>();
+            var nd2 = new NDArrayGeneric<double>();
             nd2 = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
             //var nd3 = nd2.AMin(0);
         }
@@ -39,7 +39,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void amin0axisWithDType()
         {
-            var nd2 = new NDArrayWithDType(Core.NumSharp.double8);
+            var nd2 = new NDArray(Core.NumSharp.double8);
             nd2 = nd2.arange(1000 * 8 * 8 * 8, 0, 1).reshape(1000, 8, 8, 8);
             var nd3 = nd2.AMin(0);
         }

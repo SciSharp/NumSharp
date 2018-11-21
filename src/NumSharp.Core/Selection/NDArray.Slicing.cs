@@ -4,14 +4,14 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
-        public NDArray<NDArray<T>> this[Slice select]
+        public NDArrayGeneric<NDArrayGeneric<T>> this[Slice select]
         {
             get
             {
-                var result = new NDArray<NDArray<T>>();
-                result.Data = new NDArray<T>[select.Length];
+                var result = new NDArrayGeneric<NDArrayGeneric<T>>();
+                result.Data = new NDArrayGeneric<T>[select.Length];
                 result.shape = new Shape(select.Length);
 
                 int[] shape = new int[Shape.Length];
@@ -28,10 +28,10 @@ namespace NumSharp.Core
                 }
 
                 int index = 0;
-                var list = new NDArray<T>();
+                var list = new NDArrayGeneric<T>();
                 for (int s = select.Start; s< select.Stop; s+= select.Step)
                 {
-                    var n = new NDArray<T>();
+                    var n = new NDArrayGeneric<T>();
                     Span<T> data = Data;
                     n.Data = data.Slice(s, select.Step).ToArray();
                     n.Shape = new Shape(shape);

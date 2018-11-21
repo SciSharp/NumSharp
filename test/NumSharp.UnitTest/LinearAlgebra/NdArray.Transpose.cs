@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void TwoxThree()
         {
-            NDArray<double> np1 = new NumPy<double>().arange(6).reshape(3,2);
+            NDArrayGeneric<double> np1 = new NumPy<double>().arange(6).reshape(3,2);
             
             var np1Transposed = np1.transpose();
 

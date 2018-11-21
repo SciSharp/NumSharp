@@ -20,7 +20,7 @@ public static partial class numpy
                 int stopCast = (int) stop;
                 int stepCast = (int) step;
 
-                returnValue = new NumSharp.Core.NDArray<int>().arange(stopCast,startCast,stepCast);
+                returnValue = new NumSharp.Core.NDArrayGeneric<int>().arange(stopCast,startCast,stepCast);
 
                 break;
             }
@@ -30,7 +30,7 @@ public static partial class numpy
                 int stopCast = (int) stop;
                 int stepCast = (int) step;
 
-                returnValue = new NumSharp.Core.NDArray<float>().arange(stopCast,startCast,stepCast);
+                returnValue = new NumSharp.Core.NDArrayGeneric<float>().arange(stopCast,startCast,stepCast);
 
                 break;
             }

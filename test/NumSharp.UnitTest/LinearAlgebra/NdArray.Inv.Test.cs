@@ -14,9 +14,9 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Simple2x2()
         {
-            NDArray<double> np1 = new NDArray<double>().arange(4).reshape(2,2);
+            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().arange(4).reshape(2,2);
 
-            NDArray<double> np1Inv = np1.inv();
+            NDArrayGeneric<double> np1Inv = np1.inv();
 
             var OncesMatrix = np1.dot(np1Inv);
 
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Simple3x3()
         {
-            NDArray<double> np1 = new NDArray<double>().Zeros(3,3);
+            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().Zeros(3,3);
 
             np1[0,0] = 5;
             np1[0,1] = 1;
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.Extensions
             np1[2,1] = 1;
             np1[2,2] = 0;
 
-            NDArray<double> np1Inv = np1.inv();
+            NDArrayGeneric<double> np1Inv = np1.inv();
 
             var OncesMatrix = np1.dot(np1Inv);
 

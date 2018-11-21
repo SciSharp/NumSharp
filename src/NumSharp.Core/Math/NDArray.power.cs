@@ -7,11 +7,11 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> 
+    public partial class NDArrayGeneric<T> 
     {
-        public NDArray<T> power(T exponent)
+        public NDArrayGeneric<T> power(T exponent)
         {
-            NDArray<T> sinArray = new NDArray<T>();
+            NDArrayGeneric<T> sinArray = new NDArrayGeneric<T>();
             sinArray.Data = new T[this.Size];
             sinArray.Shape = new Shape(this.Shape.Shapes);
 

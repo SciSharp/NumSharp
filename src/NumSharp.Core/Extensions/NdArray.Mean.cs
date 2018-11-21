@@ -7,9 +7,9 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Mean(this NDArray<double> np, int axis = -1)
+        public static NDArrayGeneric<double> Mean(this NDArrayGeneric<double> np, int axis = -1)
         {
-            var mean = new NDArray<double>();
+            var mean = new NDArrayGeneric<double>();
             mean.Data = new double[0];
 
             // axis == -1: DEFAULT; to compute the mean of the flattened array.

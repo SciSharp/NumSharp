@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void PerformaceBitmapSimulation()
         {
-            var npRealWorldBitmap = new NDArray<byte>();
+            var npRealWorldBitmap = new NDArrayGeneric<byte>();
             //npRealWorldBitmap.ARange(2081 * 2531);
             npRealWorldBitmap.reshape(2531, 2081);
         }
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReshapeNegative()
         {
-            var np = new NDArray<int>();
+            var np = new NDArrayGeneric<int>();
             np.arange(12);
             np.reshape(-1, 2);
             Assert.IsTrue(np.Shape.Shapes[0] == 6);

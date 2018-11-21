@@ -19,17 +19,17 @@ namespace NumSharp.UnitTest.Selection
             
             foreach (var nd1 in np)
             {
-                Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i)].Data, ((NDArray<int>)nd1).Data));
+                Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i)].Data, ((NDArrayGeneric<int>)nd1).Data));
                 Console.WriteLine(nd1.ToString());
 
                 int j = 0;
-                foreach (var nd2 in (NDArray<int>)nd1)
+                foreach (var nd2 in (NDArrayGeneric<int>)nd1)
                 {
-                    Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i, j)].Data, ((NDArray<int>)nd2).Data));
+                    Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i, j)].Data, ((NDArrayGeneric<int>)nd2).Data));
                     Console.WriteLine(nd2.ToString());
 
                     int k = 0;
-                    foreach(var nd3 in (NDArray<int>)nd2)
+                    foreach(var nd3 in (NDArrayGeneric<int>)nd2)
                     {
                         Assert.IsTrue(np[i, j, k] == (int)nd3);
                         Console.WriteLine(nd3.ToString());

@@ -14,7 +14,7 @@ namespace NumSharp.Core.Extensions
         /// <param name="np"></param>
         /// <param name="shape"></param>
         /// <returns></returns>
-        public static NDArray<int> Zeros(this NDArray<int> np, params int[] shape)
+        public static NDArrayGeneric<int> Zeros(this NDArrayGeneric<int> np, params int[] shape)
         {
             int length = 1;
 
@@ -29,7 +29,7 @@ namespace NumSharp.Core.Extensions
             return np;
         }
 
-        public static NDArray<double> Zeros(this NDArray<double> np, params int[] shape)
+        public static NDArrayGeneric<double> Zeros(this NDArrayGeneric<double> np, params int[] shape)
         {
             int length = 1;
 

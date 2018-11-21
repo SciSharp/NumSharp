@@ -7,11 +7,11 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Max(this NDArray<double> np)
+        public static NDArrayGeneric<double> Max(this NDArrayGeneric<double> np)
         {
             if (np.NDim == 1)
             {
-                var max = new NDArray<double>().Zeros(np.Size);
+                var max = new NDArrayGeneric<double>().Zeros(np.Size);
                 max.Shape = new Shape(1);
                 max.Data = new double[] { np.Data.Max() };
 
@@ -19,7 +19,7 @@ namespace NumSharp.Core.Extensions
             }
             else if (np.NDim == 2)
             {
-                var max = new NDArray<double>().Zeros(np.Shape.Shapes[1]);
+                var max = new NDArrayGeneric<double>().Zeros(np.Shape.Shapes[1]);
 
                 for (int col = 0; col < np.Shape.Shapes[1]; col++)
                 {

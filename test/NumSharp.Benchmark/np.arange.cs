@@ -13,7 +13,7 @@ namespace NumSharp.Benchmark
     public class nparange
     {
         private NumPy<int> np;
-        private NDArray<int> nd;
+        private NDArrayGeneric<int> nd;
 
         private int start;
         private int step;
@@ -23,7 +23,7 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             np = new NumPy<int>();
-            nd = new NDArray<int>();
+            nd = new NDArrayGeneric<int>();
             start = 0;
             step = 1;
             length = 100 * 100;
@@ -38,14 +38,14 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarraywithdtype()
         {
-            var nd2 = new NDArrayWithDType(Core.NumSharp.int16);
+            var nd2 = new NDArray(Core.NumSharp.int16);
             var nd3 = nd2.arange(length, start, step);
         }
 
         [Benchmark]
         public void arange_ndarray()
         {
-            var nd2 = new NDArray<int>();
+            var nd2 = new NDArrayGeneric<int>();
             var nd3 = nd2.arange(length, start, step);
         }
 

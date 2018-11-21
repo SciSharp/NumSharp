@@ -7,7 +7,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NumPyExtensions
     {
-        public static NDArray<double> min(this NDArray<double> np)
+        public static NDArrayGeneric<double> min(this NDArrayGeneric<double> np)
         {
             return np.AMin();
         }

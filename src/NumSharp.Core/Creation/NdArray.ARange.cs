@@ -7,9 +7,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
-        public NDArray<T> arange(int stop, int start = 0, int step = 1)
+        public NDArrayGeneric<T> arange(int stop, int start = 0, int step = 1)
         {
             var list = new int[(int)Math.Ceiling((stop - start + 0.0) / step)];
             int index = 0;

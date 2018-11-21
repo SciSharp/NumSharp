@@ -18,11 +18,11 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvoleFull()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArrayGeneric<double>();
             series1.Data = new double[]{1, 2, 3};
             series1.Shape = new Shape(3);
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArrayGeneric<double>();
             series2.Data = new double[]{0, 1, 0.5};
             series2.Shape = new Shape(3);
 
@@ -35,11 +35,11 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvoleValid()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArrayGeneric<double>();
             series1.Data = new double[]{1, 2, 3};
             series1.Shape = new Shape(3);
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArrayGeneric<double>();
             series2.Data = new double[]{0, 1, 0.5};
             series2.Shape = new Shape(3);
 
@@ -52,11 +52,11 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ConvoleSame()
         {
-            var series1 = new NDArray<double>();
+            var series1 = new NDArrayGeneric<double>();
             series1.Data = new double[]{1, 2, 3};
             series1.Shape = new Shape(3);
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArrayGeneric<double>();
             series2.Data = new double[]{0, 1, 0.5};
             series2.Shape = new Shape(3);
             var series3 = series1.Convolve(series2, "same");

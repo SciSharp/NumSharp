@@ -10,7 +10,7 @@ namespace NumSharp.Core
         public static Type double8 = typeof(double);
         public static Type decimal16 = typeof(decimal);
 
-        public NDArrayWithDType arange(int stop, Type dtype = null)
+        public NDArray arange(int stop, Type dtype = null)
         {
             if(dtype == null)
             {
@@ -20,7 +20,7 @@ namespace NumSharp.Core
             return arange(0, stop, 1, dtype);
         }
 
-        public NDArrayWithDType arange(int start, int stop, int step = 1, Type dtype = null)
+        public NDArray arange(int start, int stop, int step = 1, Type dtype = null)
         {
             if (start > stop)
             {
@@ -31,14 +31,14 @@ namespace NumSharp.Core
             {
                 case "Int32":
                     {
-                        var n = new NDArrayWithDType(NumSharp.int16);
+                        var n = new NDArray(NumSharp.int16);
                         n.arange(stop, start, step);
                         return n;
                     }
 
                 case "Double":
                     {
-                        var n = new NDArrayWithDType(NumSharp.double8);
+                        var n = new NDArray(NumSharp.double8);
                         n.arange(stop, start, step);
                         return n;
                     }
@@ -47,7 +47,7 @@ namespace NumSharp.Core
             }
         }
 
-        public NDArrayWithDType reshape(NDArrayWithDType nd, params int[] shape)
+        public NDArray reshape(NDArray nd, params int[] shape)
         {
             nd.Shape = new Shape(shape);
 

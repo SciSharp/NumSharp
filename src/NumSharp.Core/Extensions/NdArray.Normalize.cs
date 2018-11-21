@@ -7,7 +7,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static void Normalize(this NDArray<double> np)
+        public static void Normalize(this NDArrayGeneric<double> np)
         {
             var min = np.min();
             var max = np.Max();

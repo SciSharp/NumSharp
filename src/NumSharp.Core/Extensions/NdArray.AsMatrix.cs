@@ -8,7 +8,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static Matrix<double> AsMatrix(this NDArray<double> np)
+        public static Matrix<double> AsMatrix(this NDArrayGeneric<double> np)
         {
             Matrix<double> npAsMatrix = new Matrix<double>();
 

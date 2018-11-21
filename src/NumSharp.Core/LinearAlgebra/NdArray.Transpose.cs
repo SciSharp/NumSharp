@@ -7,11 +7,11 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> 
+    public partial class NDArrayGeneric<T> 
     {
-        public NDArray<T> transpose()
+        public NDArrayGeneric<T> transpose()
         {
-            var np = new NDArray<T>();
+            var np = new NDArrayGeneric<T>();
             np.Data = new T[this.Data.Length];
 
             if (NDim == 1)

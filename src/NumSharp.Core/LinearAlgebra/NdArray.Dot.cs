@@ -7,7 +7,7 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> 
+    public partial class NDArrayGeneric<T> 
     {
         /// <summary>
         /// 
@@ -16,7 +16,7 @@ namespace NumSharp.Core
         /// <param name="np2"></param>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArray<T> dot(NDArray<T> np2)
+        public NDArrayGeneric<T> dot(NDArrayGeneric<T> np2)
         {
             if ((this.Shape.Length == 1 ) & (np2.Shape.Length == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
@@ -34,7 +34,7 @@ namespace NumSharp.Core
             int dim0 = this.Shape.Shapes[0];
             int dim1 = np2.Shape.Shapes[1];
             
-            NDArray<T> prod = new NDArray<T>();
+            NDArrayGeneric<T> prod = new NDArrayGeneric<T>();
             prod.Shape = new Shape(dim0,dim1);
             prod.Data = new T[prod.Shape.Size];
 

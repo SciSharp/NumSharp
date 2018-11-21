@@ -12,13 +12,13 @@ namespace NumSharp.Core.Extensions
         /// </summary>
         /// <param name="nps"></param>
         /// <returns></returns>
-        public static NDArray<T> HStack<T>(this NDArray<T> np1, params NDArray<T>[] nps)
+        public static NDArrayGeneric<T> HStack<T>(this NDArrayGeneric<T> np1, params NDArrayGeneric<T>[] nps)
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");
             List<T> list = new List<T>();
-            NDArray<T> np = new NDArray<T>();
-            foreach (NDArray<T> ele in nps)
+            NDArrayGeneric<T> np = new NDArrayGeneric<T>();
+            foreach (NDArrayGeneric<T> ele in nps)
             {
                 if (nps[0].Shape != ele.Shape)
                     throw new Exception("Arrays mush have same shapes");

@@ -13,9 +13,9 @@ namespace NumSharp.Core.Extensions
         /// <param name="np"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        public static NDArray<double> AMax(this NDArray<double> np, int? axis = null)
+        public static NDArrayGeneric<double> AMax(this NDArrayGeneric<double> np, int? axis = null)
         {
-            NDArray<double> res = new NDArray<double>();
+            NDArrayGeneric<double> res = new NDArrayGeneric<double>();
             if (axis == null)
             {
                 double min = np.Data[0];

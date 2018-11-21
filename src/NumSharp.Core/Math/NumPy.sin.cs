@@ -9,9 +9,9 @@ namespace NumSharp.Core
 {
     public static partial class NumPyExtensions
     {
-        public static NDArray<T> sin<T>(this NumPy<T> np, NDArray<T> nd)
+        public static NDArrayGeneric<T> sin<T>(this NumPy<T> np, NDArrayGeneric<T> nd)
         {
-            NDArray<T> sinArray = new NDArray<T>();
+            NDArrayGeneric<T> sinArray = new NDArrayGeneric<T>();
             sinArray.Data = new T[nd.Size];
             sinArray.Shape = new Shape(nd.Shape.Shapes);
 
@@ -35,10 +35,10 @@ namespace NumSharp.Core
             return sinArray;
         }
 
-        public static NDArray<NDArray<T>> sin<T>(this NumPy<T> np, NDArray<NDArray<T>> nd)
+        public static NDArrayGeneric<NDArrayGeneric<T>> sin<T>(this NumPy<T> np, NDArrayGeneric<NDArrayGeneric<T>> nd)
         {
-            var sinArray = new NDArray<NDArray<T>>();
-            sinArray.Data = new NDArray<T>[nd.Size];
+            var sinArray = new NDArrayGeneric<NDArrayGeneric<T>>();
+            sinArray.Data = new NDArrayGeneric<T>[nd.Size];
             sinArray.Shape = new Shape(nd.Shape.Shapes);
 
             for (int idx = 0; idx < nd.Size; idx++)
@@ -46,7 +46,7 @@ namespace NumSharp.Core
                 switch (default(T))
                 {
                     case double d:
-                        sinArray[idx] = new NDArray<T>
+                        sinArray[idx] = new NDArrayGeneric<T>
                         {
                             Data = new T[] { (T)(object)Math.Sin(d) },
                             Shape = new Shape(1)

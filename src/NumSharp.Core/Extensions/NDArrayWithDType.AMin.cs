@@ -5,11 +5,11 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NDArrayWithDType
+    public partial class NDArray
     {
-        public NDArrayWithDType AMin(int? axis = null)
+        public NDArray AMin(int? axis = null)
         {
-            NDArrayWithDType res = new NDArrayWithDType(dtype);
+            NDArray res = new NDArray(dtype);
             if (axis == null)
             {
                 switch (dtype.Name)

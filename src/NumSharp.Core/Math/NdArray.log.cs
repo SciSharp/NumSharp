@@ -7,11 +7,11 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T> 
+    public partial class NDArrayGeneric<T> 
     {
-        public NDArray<T> log()
+        public NDArrayGeneric<T> log()
         {
-            NDArray<T> logArray = new NDArray<T>();
+            NDArrayGeneric<T> logArray = new NDArrayGeneric<T>();
             logArray.Data = new T[this.Data.Length];
             logArray.Shape = new Shape(this.Shape.Shapes);
 

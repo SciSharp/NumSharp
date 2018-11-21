@@ -8,11 +8,11 @@ using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
-        public static NDArray<T> operator *(NDArray<T> np1, NDArray<T> np2)
+        public static NDArrayGeneric<T> operator *(NDArrayGeneric<T> np1, NDArrayGeneric<T> np2)
         {
-            NDArray<T> sum = new NDArray<T>();
+            NDArrayGeneric<T> sum = new NDArrayGeneric<T>();
             sum.Shape = np1.Shape;
             sum.Data = new T[np1.Data.Length];
             
@@ -60,11 +60,11 @@ namespace NumSharp.Core
                 }
             }
 
-            return (NDArray<T>) sum;
+            return (NDArrayGeneric<T>) sum;
         }
-        public static NDArray<T> operator *(NDArray<T> np1, T scalar)
+        public static NDArrayGeneric<T> operator *(NDArrayGeneric<T> np1, T scalar)
         {
-            NDArray<T> sum = new NDArray<T>();
+            NDArrayGeneric<T> sum = new NDArrayGeneric<T>();
             sum.Shape = np1.Shape;
             sum.Data = new T[np1.Data.Length];
             
@@ -112,10 +112,10 @@ namespace NumSharp.Core
                 }
             }
 
-            return (NDArray<T>) sum;
+            return (NDArrayGeneric<T>) sum;
         }
 
-        public static NDArray<T> operator *(T scalar, NDArray<T> np1)
+        public static NDArrayGeneric<T> operator *(T scalar, NDArrayGeneric<T> np1)
         {
             return np1 * scalar;
         }

@@ -8,7 +8,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static void Shuffle(this NDArrayRandom rand, NDArray<double> list)
+        public static void Shuffle(this NDArrayRandom rand, NDArrayGeneric<double> list)
         {
             var rng = new Random();
             var count = list.Shape.Shapes[0];

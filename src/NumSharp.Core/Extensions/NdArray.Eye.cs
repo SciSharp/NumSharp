@@ -8,7 +8,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<int> Eye(this NDArray<int> np,int dim, int diagonalIndex = 0)
+        public static NDArrayGeneric<int> Eye(this NDArrayGeneric<int> np,int dim, int diagonalIndex = 0)
         {
             int noOfDiagElement = dim - Math.Abs(diagonalIndex);
 
@@ -30,7 +30,7 @@ namespace NumSharp.Core.Extensions
             
             return np;
         }
-        public static NDArray<double> Eye(this NDArray<double> np,int dim, int diagonalIndex = 0)
+        public static NDArrayGeneric<double> Eye(this NDArrayGeneric<double> np,int dim, int diagonalIndex = 0)
         {
             int noOfDiagElement = dim - Math.Abs(diagonalIndex);
 

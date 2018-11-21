@@ -7,9 +7,9 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Absolute(this NDArray<double> np)
+        public static NDArrayGeneric<double> Absolute(this NDArrayGeneric<double> np)
         {
-            NDArray<double> res = new NDArray<double>
+            NDArrayGeneric<double> res = new NDArrayGeneric<double>
             {
                 Shape = np.Shape,
                 Data = new double[np.Size]

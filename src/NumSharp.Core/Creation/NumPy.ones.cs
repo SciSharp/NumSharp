@@ -16,9 +16,9 @@ namespace NumSharp.Core.Extensions
         /// <param name="np"></param>
         /// <param name="shape"></param>
         /// <returns></returns>
-        public static NDArray<T> ones<T>(this NumPy<T> np, Shape shape)
+        public static NDArrayGeneric<T> ones<T>(this NumPy<T> np, Shape shape)
         {
-            var nd = new NDArray<T>();
+            var nd = new NDArrayGeneric<T>();
             nd.Shape = shape;
 
             switch (default(T))

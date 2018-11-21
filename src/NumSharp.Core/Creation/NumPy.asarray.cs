@@ -9,7 +9,7 @@ namespace NumSharp.Core
 {
 	public static partial class NumPyExtensions
 	{
-        public static NDArray<T> asarray<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
+        public static NDArrayGeneric<T> asarray<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
         {
             return np.array(array);
         }

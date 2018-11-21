@@ -16,12 +16,12 @@ namespace NumSharp.Core.Extensions
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public static NDArray<double> Convolve(this NDArray<double> numSharpArray1, NDArray<double> numSharpArray2, string mode = "full" )
+        public static NDArrayGeneric<double> Convolve(this NDArrayGeneric<double> numSharpArray1, NDArrayGeneric<double> numSharpArray2, string mode = "full" )
         {
             int nf = numSharpArray1.Shape.Shapes[0];
             int ng = numSharpArray2.Shape.Shapes[0];
 
-            var numSharpReturn = new NDArray<double>();
+            var numSharpReturn = new NDArrayGeneric<double>();
 
             switch (mode)
             {

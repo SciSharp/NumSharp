@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Docs
         [TestMethod]
         public void Dump()
         {
-            var np = new NDArray<double>();
+            var np = new NDArrayGeneric<double>();
             np.Data = new double[] {1,2,3,4,5};
             np.Shape = new Shape(np.Data.Length);
 

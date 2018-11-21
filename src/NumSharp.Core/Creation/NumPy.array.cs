@@ -9,18 +9,18 @@ namespace NumSharp.Core
 {
 	public static partial class NumPyExtensions
 	{
-        public static NDArray<T> array<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
+        public static NDArrayGeneric<T> array<T>(this NumPy<T> np, IEnumerable<T> array, int ndim = 1)
         {
-			var nd = new NDArray<T>();
+			var nd = new NDArrayGeneric<T>();
 			nd.Data = array.ToArray();
             nd.Shape = new Shape(new int[] { nd.Data.Length });
 
             return nd;
         }
         
-        public static NDArray<Byte> array<T>(this NumPy<T> np, System.Drawing.Bitmap image )
+        public static NDArrayGeneric<Byte> array<T>(this NumPy<T> np, System.Drawing.Bitmap image )
         {
-            NDArray<Byte> imageArray = new NDArray<Byte>();
+            NDArrayGeneric<Byte> imageArray = new NDArrayGeneric<Byte>();
 
             var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
             var dataSize = bmpd.Stride * bmpd.Height;
@@ -34,7 +34,7 @@ namespace NumSharp.Core
             return imageArray;  
         }
 
-		public static NDArray<T> array<T>(this NumPy<T> np, T[][] data)
+		public static NDArrayGeneric<T> array<T>(this NumPy<T> np, T[][] data)
 		{
 			int size = data.Length * data[0].Length;
 			var all = new T[size];
@@ -49,7 +49,7 @@ namespace NumSharp.Core
 				}
 			}
 
-			var n = new NDArray<T>();
+			var n = new NDArrayGeneric<T>();
 			n.Data = all;
 			n.Shape = new Shape(new int[] { data.Length, data[0].Length });
 

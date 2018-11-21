@@ -21,9 +21,9 @@ namespace NumSharp.UnitTest.Extensions
         public void DotTwo1DDouble()
         {
             
-            var series1 = new NDArray<double>().arange(4,1,1) ;
+            var series1 = new NDArrayGeneric<double>().arange(4,1,1) ;
             
-            var series2 = new NDArray<double>();
+            var series2 = new NDArrayGeneric<double>();
             series2.Data = new double[]{0, 1, 0.5};
             series2.Shape = new Shape(3);
 
@@ -33,9 +33,9 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMutliplyDifferentDataLength()
         {
-            var A = new NDArray<double>().arange(6).reshape(3,2);
+            var A = new NDArrayGeneric<double>().arange(6).reshape(3,2);
 
-            var B = new NDArray<double>().arange(14).reshape(2,7);
+            var B = new NDArrayGeneric<double>().arange(14).reshape(2,7);
 
             var C = A.dot(B);
 
@@ -45,14 +45,14 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyDouble()
         {   
-            NDArray<double> matrix1 = new NDArray<double>().arange(7,1,1).reshape(3,2);
+            NDArrayGeneric<double> matrix1 = new NDArrayGeneric<double>().arange(7,1,1).reshape(3,2);
             
             Assert.IsTrue(matrix1[0,0] == 1);
             Assert.IsTrue(matrix1[0,1] == 2);
             Assert.IsTrue(matrix1[1,0] == 3);
             Assert.IsTrue(matrix1[2,0] == 5);
 
-            NDArray<double> matrix2 = new NDArray<double>().arange(13,7,1).reshape(2,3) ;
+            NDArrayGeneric<double> matrix2 = new NDArrayGeneric<double>().arange(13,7,1).reshape(2,3) ;
         
             Assert.IsTrue(matrix2[0,0] == 7);
             Assert.IsTrue(matrix2[0,1] == 8);
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.Extensions
 
             var matrix3 = matrix1.dot(matrix2);
 
-            var matrix4 = new NDArray<double>().Zeros(3,3);
+            var matrix4 = new NDArrayGeneric<double>().Zeros(3,3);
 
             for (int idx = 0; idx < 3; idx++)
             {
@@ -90,11 +90,11 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MatrixMultiplyComplex()
         {   
-            NDArray<Complex> matrix1 = new NDArray<Complex>();
+            NDArrayGeneric<Complex> matrix1 = new NDArrayGeneric<Complex>();
             matrix1.Data = new Complex[] {new Complex(1,-1),new Complex(2,-2), new Complex(3,0),new Complex(4,0), 5, 6}; 
             matrix1.Shape = new Shape(new int[] { 3, 2 });
 
-            NDArray<Complex> matrix2 = new NDArray<Complex>();
+            NDArrayGeneric<Complex> matrix2 = new NDArrayGeneric<Complex>();
             matrix2.Data = new Complex[] {7,8,9,new Complex(10,-10),11, new Complex(12,-12)};
             matrix2.Shape = new Shape(new int[] { 2, 3 });
 

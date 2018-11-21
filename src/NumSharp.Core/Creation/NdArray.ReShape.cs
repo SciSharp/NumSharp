@@ -6,14 +6,14 @@ using System.Linq;
 
 namespace NumSharp.Core
 {
-    public partial class NDArray<T>
+    public partial class NDArrayGeneric<T>
     {
         /// <summary>
         /// Gives a new shape to an array without changing its data.
         /// </summary>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArray<T> reshape(params int[] shape)
+        public NDArrayGeneric<T> reshape(params int[] shape)
         {
             var count = shape.Length;
             var idx = FindNegativeIndex(shape);

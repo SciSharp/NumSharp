@@ -14,7 +14,7 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray<double> randn(params int[] size)
+        public NDArrayGeneric<double> randn(params int[] size)
         {
             return this.stardard_normal(size);
         }
@@ -26,11 +26,11 @@ namespace NumSharp.Core
         /// <param name="scale">Standard deviation of the distribution</param>
         /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray<double> normal(double loc, double scale, params int[] size)
+        public NDArrayGeneric<double> normal(double loc, double scale, params int[] size)
         {
             if (size.Length == 0)
                 throw new Exception("d cannot be empty.");
-            NDArray<double> array = new NDArray<double>();
+            NDArrayGeneric<double> array = new NDArrayGeneric<double>();
             Random rand = new Random(); //reuse this if you are generating many
             array.Shape = new Shape(size);
             array.Data = new double[array.Shape.Size];
@@ -52,7 +52,7 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray<double> stardard_normal(params int[] size)
+        public NDArrayGeneric<double> stardard_normal(params int[] size)
         {
             return this.normal(0, 1.0, size);
         }

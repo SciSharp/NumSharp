@@ -15,9 +15,9 @@ namespace NumSharp.Benchmark
     [HtmlExporter]
     public class NDArrayTester1D
     {
-        public NDArray<double> np1;
-        public NDArray<double> np2;
-        public NDArray<double> np3;
+        public NDArrayGeneric<double> np1;
+        public NDArrayGeneric<double> np2;
+        public NDArrayGeneric<double> np3;
         public double[] np1Double;
         public double[] np2Double;
         public double[] np3Double;
@@ -25,27 +25,27 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             // first array
-            np1 = new NDArray<double>();
+            np1 = new NDArrayGeneric<double>();
             np1.Data = new double[100000].Select((x,idx) => x + idx ).ToArray();
             np1.Shape = new Shape(np1.Data.Length);
 
             np1Double = np1.Data;
             
             // second array
-            np2 = new NDArray<double>();
+            np2 = new NDArrayGeneric<double>();
             np2.Data = new double[100000].Select((x,idx) => x + idx  ).ToArray();
             np2.Shape = new Shape(np2.Data.Length);
 
             np2Double = np2.Data;
 
             // result array
-            np3 = new NDArray<double>();
+            np3 = new NDArrayGeneric<double>();
             np3.Data = new double[100000];
 
             np3Double = np3.Data;
 
             // result array
-            np3 = new NDArray<double>();
+            np3 = new NDArrayGeneric<double>();
             np3.Data = new double[100000];
 
             np3Double = np3.Data;

@@ -14,9 +14,9 @@ namespace NumSharp.Benchmark
     [HtmlExporter]
     public class NDArrayTester2D
     {
-        public NDArray<double> np1Matrix;
-        public NDArray<double> np2Matrix;
-        public NDArray<double> np3Matrix;
+        public NDArrayGeneric<double> np1Matrix;
+        public NDArrayGeneric<double> np2Matrix;
+        public NDArrayGeneric<double> np3Matrix;
         public double[][] np1DoubleMatrix;
         public double[][] np2DoubleMatrix;
         public double[][] np3DoubleMatrix;
@@ -24,12 +24,12 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             // first array
-            np1Matrix = new NDArray<double>().arange(100 * 100+2,2).reshape(100,100);
+            np1Matrix = new NDArrayGeneric<double>().arange(100 * 100+2,2).reshape(100,100);
 
             np1DoubleMatrix = np1Matrix.ToDotNetArray<double[][]>();
 
             // second array
-            np2Matrix = new NDArray<double>().arange(100*100+1,1).reshape(100,100);;
+            np2Matrix = new NDArrayGeneric<double>().arange(100*100+1,1).reshape(100,100);;
             
             np2DoubleMatrix = np2Matrix.ToDotNetArray<double[][]>();
         }

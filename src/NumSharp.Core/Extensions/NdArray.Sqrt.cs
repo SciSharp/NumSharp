@@ -7,7 +7,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static NDArray<double> Sqrt(this NDArray<double> np)
+        public static NDArrayGeneric<double> Sqrt(this NDArrayGeneric<double> np)
         {
             for (int i = 0; i < np.Data.Length; i++)
             {
@@ -17,7 +17,7 @@ namespace NumSharp.Core.Extensions
             return np;
         }
 
-        public static NDArray<Complex> Sqrt(this NDArray<Complex> np)
+        public static NDArrayGeneric<Complex> Sqrt(this NDArrayGeneric<Complex> np)
         {
             for (int i = 0; i < np.Data.Length; i++)
             {

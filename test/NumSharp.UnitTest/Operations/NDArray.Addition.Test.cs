@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void DoubleTwo1D_NDArrayAddition()
         {
-            var np1 = new NDArray<double>().arange(4, 1);
-            var np2 = new NDArray<double>().arange(5, 2);
+            var np1 = new NDArrayGeneric<double>().arange(4, 1);
+            var np2 = new NDArrayGeneric<double>().arange(5, 2);
 
             var np3 = np1 + np2;
 
@@ -29,11 +29,11 @@ namespace NumSharp.UnitTest.Operations
             var data1 = new Complex[] { new Complex(1, 2), new Complex(3, 4) };
             var data2 = new Complex[] { new Complex(5, 6), new Complex(7, 8) };
 
-            var np1 = new NDArray<Complex>();
+            var np1 = new NDArrayGeneric<Complex>();
             np1.Shape = new Shape(new int[] { 2 });
             np1.Data = data1;
 
-            var np2 = new NDArray<Complex>();
+            var np2 = new NDArrayGeneric<Complex>();
             np2.Shape = new Shape(new int[] { 2 });
             np2.Data = data2;
 
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double1DPlusOffset_NDArrayAddition()
         {
-            var np1 = new NDArray<double>().arange(4, 1);
+            var np1 = new NDArrayGeneric<double>().arange(4, 1);
 
             var np3 = np1 + 2;
 
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Complex1DPlusOffset_NDArrayAddition()
         {
-            var np1 = new NDArray<Complex>();
+            var np1 = new NDArrayGeneric<Complex>();
             np1.Data = new Complex[] { new Complex(1, 2), new Complex(3, 4) };
             np1.Shape = new Shape(new int[] { 2 });
 
@@ -68,11 +68,11 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Complex2DArray_NDArrayAddition()
         {
-            var np1 = new NDArray<Complex>();
+            var np1 = new NDArrayGeneric<Complex>();
             np1.Data = new Complex[] { new Complex(4, 1), new Complex(3, 5), new Complex(0, -2), new Complex(-3, 2) };
             np1.Shape = new Shape(new int[] { 2, 2 });
 
-            var np2 = new NDArray<Complex>();
+            var np2 = new NDArrayGeneric<Complex>();
             np2.Data = new Complex[] { new Complex(1, 2), new Complex(3, 4), new Complex(1, 2), new Complex(3, 4) };
             np2.Shape = new Shape(new int[] { 2, 2 });
 
@@ -87,11 +87,11 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double2DArray_NDArrayAddition()
         {
-            var np1 = new NDArray<double>();
+            var np1 = new NDArrayGeneric<double>();
             np1.Data = new double[] { 1, 2, 3, 4, 5, 6 };
             np1.Shape = new Shape(new int[] { 2, 3 });
 
-            var np2 = new NDArray<double>();
+            var np2 = new NDArrayGeneric<double>();
             np2.Data = new double[] { 9, 8, 7, 6, 5, 4 };
             np2.Shape = new Shape(new int[] { 2, 3 });
 
