@@ -22,10 +22,10 @@ namespace NumSharp.UnitTest.Extensions
             n = np.arange(3, 7);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 3, 4, 5, 6 }));
 
-            n = np.arange(3, 7, 2, np.double8);
+            n = np.arange(3.0, 7.0, 2.0);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<double>(), new double[] { 3, 5 }));
 
-            n = np.arange(0, 11, 3, np.int32);
+            n = np.arange(0, 11, 3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 0, 3, 6, 9 }));
         }
     }

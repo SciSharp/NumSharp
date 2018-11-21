@@ -11,20 +11,20 @@ namespace NumSharp.UnitTest.Extensions
     [TestClass]
     public class NdArrayArrayTest
     {
+        NumPy np = new NumPy();
+
         [TestMethod]
         public void Array1Dim()
         {
-            var np = new NumPyGeneric<int>();
             var list = new int[] { 1, 2, 3 };
             var n = np.array(list);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Data, new int[] { 1, 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 1, 2, 3 }));
         }
 
         [TestMethod]
         public void Array2Dim()
         {
-            var np = new NumPyGeneric<int>();
             var list = new int[][]
             {
                 new int[] { 1, 2 },
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Extensions
 
             var n = np.array(list);
 
-            Assert.IsTrue(n[1, 0] == 3);
+            Assert.IsTrue(n.Data<int>(1, 0) == 3);
         }
 
         [TestMethod]
@@ -52,11 +52,11 @@ namespace NumSharp.UnitTest.Extensions
             if (System.IO.File.Exists(imagePath))
             {
                 var image = new System.Drawing.Bitmap(imagePath);
-                var imageNDArray = new NumPyGeneric<byte>().array(image);
+                var imageNDArray = np.array<byte>(image);
 
-                Assert.IsTrue(imageNDArray[0, 0, 0] == 255);
-                Assert.IsTrue(imageNDArray[0, 0, 1] == 253);
-                Assert.IsTrue(imageNDArray[0, 0, 2] == 252);
+                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 0) == 255);
+                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 1) == 253);
+                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 2) == 252);
             }
         }
     }

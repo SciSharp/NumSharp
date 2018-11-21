@@ -40,22 +40,22 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            var np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
+            var nd = np.arange(9.0).reshape(3,3);
 
             var random = new Random();
-            np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
-            np.Data[1] = 1;
-            np.Data[2] -= 4;
-            np.Data[3] -= 20;
-            np.Data[8] += 23;
+            nd.Storage.Double8 = nd.Storage.Double8.Select(x => x + random.NextDouble()).ToArray();
+            nd.Storage.Double8[1] = 1;
+            nd.Storage.Double8[2] -= 4;
+            nd.Storage.Double8[3] -= 20;
+            nd.Storage.Double8[8] += 23;
 
-            var stringOfNp = np.ToString();
+            var stringOfNp = nd.ToString();
 
             Assert.IsTrue(stringOfNp.Contains("[[  0."));
 
-            np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
+            nd = np.arange(9).reshape(3,3);
 
-            stringOfNp = np.ToString();        
+            stringOfNp = nd.ToString();        
 
             Assert.IsTrue(stringOfNp.Contains("([[ 0,"));
         }

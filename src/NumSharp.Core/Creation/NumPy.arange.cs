@@ -9,12 +9,12 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public NDArray arange(int stop, Type dtype = null)
+        public NDArray arange(double stop)
         {
-            return arange(0, stop, 1, dtype);
+            return arange(0, stop, 1);
         }
 
-        public NDArray arange(int start, int stop, int step = 1, Type dtype = null)
+        public NDArray arange(double start, double stop, double step = 1)
         {
             if (start > stop)
             {
@@ -24,59 +24,41 @@ namespace NumSharp.Core
             int length = (int)Math.Ceiling((stop - start + 0.0) / step);
             int index = 0;
 
-            if (dtype == null)
-            {
-                dtype = typeof(int);
-            }
-
-            var nd = new NDArray(dtype)
+            var nd = new NDArray(double8)
             {
                 Shape = new Shape(length)
             };
 
             nd.Storage.Allocate(length);
+            for (double i = start; i < stop; i += step)
+                nd.Storage.Double8[index++] = i;
 
-            switch (dtype.Name)
+            return nd;
+        }
+
+        public NDArray arange(int stop)
+        {
+            return arange(0, stop, 1);
+        }
+
+        public NDArray arange(int start, int stop, int step = 1)
+        {
+            if (start > stop)
             {
-                case "Int32":
-                    for (int i = start; i < stop; i += step)
-                        nd.Storage.Int32[index++] = i;
-                    break;
-
-                case "Double":
-                    for (int i = start; i < stop; i += step)
-                        nd.Storage.Double8[index++] = i;
-                    break;
-
-                /*    case double[] dataArray : 
-                    {
-                        for(int idx = 0; idx < dataArray.Length;idx++)
-                            dataArray[idx] = list[idx];
-                        break;
-                    }
-                    case float[] dataArray : 
-                    {
-                        for(int idx = 0; idx < dataArray.Length;idx++)
-                            dataArray[idx] = list[idx];
-                        break;
-                    }
-                    case Complex[] dataArray : 
-                    {
-                        // no performance critial operation
-                        dataArray = list.Select(x => (Complex) x ).ToArray();
-                        break;
-                    }
-                    case Quaternion[] dataArray : 
-                    {
-                        // no performance critial operation
-                        dataArray = list.Select(x => new Quaternion(new Vector3(0,0,0),x) ).ToArray();
-                        break;
-                    }
-                    default : 
-                    {
-                        throw new Exception("This method was not yet implemented for this type" + typeof(T).Name);
-                    }*/
+                throw new Exception("parameters invalid, start is greater than stop.");
             }
+
+            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            int index = 0;
+
+            var nd = new NDArray(int32)
+            {
+                Shape = new Shape(length)
+            };
+
+            nd.Storage.Allocate(length);
+            for (int i = start; i < stop; i += step)
+                nd.Storage.Int32[index++] = i;
 
             return nd;
         }

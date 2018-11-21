@@ -19,6 +19,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace NumSharp.Core
@@ -71,11 +72,29 @@ namespace NumSharp.Core
                     return Int32 as T[];
                 case "Double":
                     return Double8 as T[];
-                case "String":
-                    return StringN as T[];
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// It's convenint but not recommended due to low performance
+        /// recommend to use NDStorage.Int32 directly
+        /// </summary>
+        public object[] Values
+        {
+            get
+            {
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        return Int32.Cast<object>().ToArray();
+                    case "Double":
+                        return Double8.Cast<object>().ToArray();
+                }
+
+                return null;
+            }
         }
 
         public void Set<T>(T[] value)

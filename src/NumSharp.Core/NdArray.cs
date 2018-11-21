@@ -36,31 +36,16 @@ namespace NumSharp.Core
 
         public NDStorage Storage { get; set; }
 
-        public T[] Data<T>()
-        {
-            return Storage.Data<T>();
-        }
+        public object[] Values => Storage.Values;
 
-        public T Data<T>(params int[] shape)
-        {
-            return Storage.Data<T>()[Shape.GetIndexInShape(shape)];
-        }
+        public T[] Data<T>() => Storage.Data<T>();
 
-        private Shape shape;
+        public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
+
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public Shape Shape
-        {
-            get
-            {
-                return shape;
-            }
-            set
-            {
-                shape = value;
-            }
-        }
+        public Shape Shape { get; set; }
 
         /// <summary>
         /// Dimension count
@@ -79,6 +64,22 @@ namespace NumSharp.Core
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
             Storage = new NDStorage(this.dtype);
+        }
+
+        public void Set<T>(T[] data)
+        {
+            switch (data)
+            {
+                case int[] values:
+                    Storage.Int32 = values;
+                    break;
+                case double[] values:
+                    Storage.Double8 = values;
+                    break;
+                case byte[] values:
+                    Storage.Bytes = values;
+                    break;
+            }
         }
 
         public void Set<T>(Shape shape, T value)
@@ -187,7 +188,7 @@ namespace NumSharp.Core
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed = Storage.Int32.Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            string[] dataParsed = Values.Select(x => _ParseNumber(x, ref digitBefore, ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             
@@ -200,27 +201,27 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < (Storage.Int32.Length-1);idx++)
-            {   
-                missingDigits =  digitBefore - dataParsed[idx].Replace(" ","").Split('.')[0].Length;
-                
-                elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
+            for (int idx = 0; idx < Shape.Length - 1; idx++)
+            {
+                missingDigits = digitBefore - dataParsed[idx].Replace(" ", "").Split('.')[0].Length;
 
-                if( ((idx+1) % Shape.Shapes[1] ) == 0 )
+                elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ', missingDigits).ToArray()) + "0." + elementFormatEnd;
+
+                if (((idx + 1) % Shape.Shapes[1]) == 0)
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + "],   \n       [");    
+                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Values[idx]) + "],   \n       [");
                 }
-                else 
+                else
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32[idx]) + ", ");
+                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Values[idx]) + ", ");
                 }
-                
             }
+
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.Int32.Last()) + "]])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Values.Last()) + "]])");
 
             return returnValue;    
         }
