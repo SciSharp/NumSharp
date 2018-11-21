@@ -5,6 +5,22 @@ using System.Text;
 
 namespace NumSharp.Core
 {
+    public partial class NDArray
+    {
+        public object this[params int[] select]
+        {
+            get
+            {
+                return Storage[Shape.GetIndexInShape(select)];
+            }
+
+            set
+            {
+                Storage[Shape.GetIndexInShape(select)] = value;
+            }
+        }
+    }
+
     public partial class NDArrayGeneric<T>
     {
         /// <summary>
