@@ -56,6 +56,17 @@ namespace NumSharp.Core
         public IReadOnlyList<int> DimOffset => dimOffset;
         public IReadOnlyList<int> Shapes => shape;
 
+        public int GetIndexInShape(params int[] select)
+        {
+            int idx = 0;
+            for (int i = 0; i < select.Length; i++)
+            {
+                idx += dimOffset[i] * select[i];
+            }
+
+            return idx;
+        }
+
         public int UniShape => shape[0];
 
         public (int, int) BiShape => shape.Count == 2 ? (shape[0], shape[1]) : (0, 0);

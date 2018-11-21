@@ -41,6 +41,11 @@ namespace NumSharp.Core
             return Storage.Data<T>();
         }
 
+        public T Data<T>(params int[] shape)
+        {
+            return Storage.Data<T>()[Shape.GetIndexInShape(shape)];
+        }
+
         private Shape shape;
         /// <summary>
         /// Data length of every dimension
@@ -74,6 +79,27 @@ namespace NumSharp.Core
             // set default shape as 1 dim and 0 elements.
             Shape = new Shape(new int[] { 0 });
             Storage = new NDStorage(this.dtype);
+        }
+
+        public void Set<T>(Shape shape, T value)
+        {
+            if (shape.Length == NDim)
+            {
+                throw new Exception("Please use NDArray[m, n] to access element.");
+            }
+            else
+            {
+                int start = Shape.GetIndexInShape(shape.Shapes.ToArray());
+                int length = Shape.DimOffset[shape.Length - 1];
+
+                Span<T> data = Data<T>();
+                var elements = data.Slice(start, length);
+
+                for (int i = 0; i < elements.Length; i++)
+                {
+                    elements[i] = value;
+                }
+            }
         }
 
         public override string ToString()

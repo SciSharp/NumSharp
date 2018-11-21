@@ -11,41 +11,30 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NDArrayTest
     {
+        private NumPy np = new NumPy();
+
         [TestMethod]
         public void IndexAccessorGetter()
         {
-            var np = new NumPyGeneric<int>();
-            var n = np.reshape(np.arange(12), 3, 4);
+            var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(n[1, 1] == 5);
-            Assert.IsTrue(n[2, 0] == 8);
-
-            n = np.reshape(np.arange(12), 2, 3, 2);
-            var n1 = n[new Shape(1)];
-
-            Assert.IsTrue(n1[1, 1] == 9);
-            Assert.IsTrue(n1[2, 1] == 11);
-
-            var n2 = n[new Shape(1, 2)];
-
-            Assert.IsTrue(n2[0] == 10);
-            Assert.IsTrue(n2[1] == 11);
+            Assert.IsTrue(nd.Data<int>(1, 1) == 5);
+            Assert.IsTrue(nd.Data<int>(2, 0) == 8);
         }
 
         [TestMethod]
         public void IndexAccessorSetter()
         {
-            var np = new NumPyGeneric<int>();
-            var n = np.reshape(np.arange(12), 3, 4);
+            var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(n[0, 3] == 3);
-            Assert.IsTrue(n[1, 3] == 7);
+            Assert.IsTrue(nd.Data<int>(0, 3) == 3);
+            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
 
             // set value
-            n.Set(new Shape(0), 10);
-            Assert.IsTrue(n[0, 0] == 10);
-            Assert.IsTrue(n[0, 3] == 10);
-            Assert.IsTrue(n[1, 3] == 7);
+            nd.Set(new Shape(0), 10);
+            Assert.IsTrue(nd.Data<int>(0, 0) == 10);
+            Assert.IsTrue(nd.Data<int>(0, 3) == 10);
+            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
         }
 
         [TestMethod]
