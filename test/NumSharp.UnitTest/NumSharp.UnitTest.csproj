@@ -62,7 +62,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\NumSharp\NumSharp.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 
 </Project>

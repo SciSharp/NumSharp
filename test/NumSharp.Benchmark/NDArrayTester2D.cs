@@ -4,8 +4,7 @@ using System.Numerics;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using BenchmarkDotNet.Running;
-using NumSharp.Extensions;
+using NumSharp.Core;
 
 namespace NumSharp.Benchmark
 {

@@ -2,9 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Extensions;
+using NumSharp.Core.Extensions;
 using System.Linq;
 using System.Numerics;
+using NumSharp.Core;
 
 namespace NumSharp.UnitTest.Extensions
 {

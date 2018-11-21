@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Extensions;
+using NumSharp.Core;
+using NumSharp.Core.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;

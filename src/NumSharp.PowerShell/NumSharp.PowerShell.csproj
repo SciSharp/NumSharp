@@ -14,6 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NumSharp\NumSharp.csproj" />
+    <ProjectReference Include="..\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 </Project>

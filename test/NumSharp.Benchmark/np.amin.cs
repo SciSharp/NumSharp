@@ -1,10 +1,10 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using NumSharp.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using NumSharp.Extensions;
 
 namespace NumSharp.Benchmark
 {
@@ -33,7 +33,7 @@ namespace NumSharp.Benchmark
         {
             var nd2 = new NDArray<double>();
             nd2 = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
-            var nd3 = nd2.AMin(0);
+            //var nd3 = nd2.AMin(0);
         }
 
         [Benchmark]

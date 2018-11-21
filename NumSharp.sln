@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28010.2003
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp", "src\NumSharp\NumSharp.csproj", "{816B0D1D-C0C5-4471-8E98-24A193158A3D}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\NumSharp.UnitTest\NumSharp.UnitTest.csproj", "{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\NumSharp.Benchmark\NumSharp.Benchmark.csproj", "{2D475706-0F69-4C9B-83B9-03AB1AE38186}"
@@ -15,16 +13,14 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E2079C90-B89
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{381613F6-A794-4255-B50E-D2315F8A8CEC}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSharp.Core\NumSharp.Core.csproj", "{190A2514-31CD-4738-AF20-3492DD47DE8C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{816B0D1D-C0C5-4471-8E98-24A193158A3D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{816B0D1D-C0C5-4471-8E98-24A193158A3D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{816B0D1D-C0C5-4471-8E98-24A193158A3D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{816B0D1D-C0C5-4471-8E98-24A193158A3D}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -41,6 +37,10 @@ Global
 		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
