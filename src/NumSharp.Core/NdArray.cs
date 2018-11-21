@@ -166,7 +166,7 @@ namespace NumSharp.Core
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed = Storage.values.Cast<T>().Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            var dataParsed = Data<T>().Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
 
             string elementFormatStart = "{0:";
             

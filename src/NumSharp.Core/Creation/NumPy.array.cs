@@ -34,10 +34,11 @@ namespace NumSharp.Core
             var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
             var dataSize = bmpd.Stride * bmpd.Height;
 
-            imageArray.Set(new byte[dataSize]);
-            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, (imageArray.Storage.values as byte[]), 0, imageArray.Size);
+            var bytes = new byte[dataSize];
+            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, bytes, 0, dataSize);
             image.UnlockBits(bmpd);
 
+            imageArray.Set(bytes);
             imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });
 
             return imageArray;

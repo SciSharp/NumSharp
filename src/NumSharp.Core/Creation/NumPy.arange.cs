@@ -31,7 +31,7 @@ namespace NumSharp.Core
 
             nd.Storage.Allocate(length);
             for (double i = start; i < stop; i += step)
-                (nd.Storage.values as double[])[index++] = i;
+                nd.Data<double>()[index++] = i;
 
             return nd;
         }
@@ -57,7 +57,7 @@ namespace NumSharp.Core
             };
 
             nd.Storage.Allocate(length);
-            if(nd.Storage.values is int[] a)
+            if(nd.Data<int>() is int[] a)
             {
                 for (int i = start; i < stop; i += step)
                     a[index++] = i;
