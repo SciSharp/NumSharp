@@ -7,7 +7,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static NDArrayGeneric<int> Permutation(this NDArrayRandom rand, int max)
+        public static NDArrayGeneric<int> Permutation(this NumPyRandom rand, int max)
         {
             var random = new Random();
             int[] orders = new int[max];

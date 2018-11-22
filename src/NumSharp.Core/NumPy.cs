@@ -13,5 +13,7 @@ namespace NumSharp.Core
         public Type int32 => typeof(int);
         public Type double8 => typeof(double);
         public Type decimal16 => typeof(decimal);
+
+        public NumPyRandom random => new NumPyRandom();
     }
 }

@@ -7,9 +7,9 @@ namespace NumSharp.Core
 {
     public partial class NDArray_Legacy<TData>
     {
-        public NDArrayRandom Random()
+        public NumPyRandom Random()
         {
-            var rand = new NDArrayRandom();
+            var rand = new NumPyRandom();
             return rand;
         }
     }

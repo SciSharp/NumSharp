@@ -40,10 +40,26 @@ namespace NumSharp.Core
 
         public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
 
+        private Shape _shape;
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public Shape Shape { get; set; }
+        public Shape Shape
+        {
+            get
+            {
+                return _shape;
+            }
+            set
+            {
+                _shape = value;
+                // allocate memory
+                if(Storage.Values == null)
+                {
+                    Storage.Allocate(_shape.Size);
+                }
+            }
+        }
 
         /// <summary>
         /// Dimension count
@@ -58,10 +74,9 @@ namespace NumSharp.Core
         public NDArray(Type dtype)
         {
             this.dtype = dtype;
-
-            // set default shape as 1 dim and 0 elements.
-            Shape = new Shape(new int[] { 0 });
             Storage = new NDStorage(dtype);
+            // set default shape as 1 dim and 0 elements.
+            // Shape = new Shape(new int[] { 0 });
         }
 
         public void Set<T>(T[] data)

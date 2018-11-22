@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest
             var random = new Random();
             nd.Set(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             nd[1] = 1.0;
-            nd[2] = (double)nd[2] - 4;
+            nd[2] = (double)(nd[2] as NDArray)[1] - 4;
             //nd.Storage[3] -= 20;
             //nd.Storage[8] += 23;
 
