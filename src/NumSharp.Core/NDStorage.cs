@@ -48,6 +48,8 @@ namespace NumSharp.Core
                 {
                     case int[] v:
                         return v[idx];
+                    case float[] v:
+                        return v[idx];
                     case double[] v:
                         return v[idx];
                 }
@@ -61,6 +63,9 @@ namespace NumSharp.Core
                 {
                     case int[] v:
                         v[idx] = (int)value;
+                        break;
+                    case float[] v:
+                        v[idx] = (float)value;
                         break;
                     case double[] v:
                         v[idx] = (double)value;
@@ -87,6 +92,9 @@ namespace NumSharp.Core
                 case int[] v:
                     values = v;
                     break;
+                case float[] v:
+                    values = v;
+                    break;
                 case double[] v:
                     values = v;
                     break;
@@ -104,6 +112,9 @@ namespace NumSharp.Core
                 case "Int32":
                     values = new int[size];
                     break;
+                case "Single":
+                    values = new float[size];
+                    break;
                 case "Double":
                     values = new double[size];
                     break;
@@ -120,6 +131,8 @@ namespace NumSharp.Core
                     switch (values)
                     {
                         case int[] a:
+                            return a[pos];
+                        case float[] a:
                             return a[pos];
                         case double[] a:
                             return a[pos];
