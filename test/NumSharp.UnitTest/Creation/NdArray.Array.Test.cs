@@ -14,6 +14,27 @@ namespace NumSharp.UnitTest.Extensions
         NumPy np = new NumPy();
 
         [TestMethod]
+        public void TestGeneric()
+        {
+            double start = 0;
+            double stop = 10;
+            double step = 1;
+            
+            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            int index = 0;
+
+            var np1 = new NumSharp.Generic.NDArray<double>();
+            np1.Shape = new Shape(length);
+
+            np1.Storage.Allocate(length);
+            for (double i = start; i < stop; i += step)
+                np1.Data<double>()[index++] = i;
+
+            var value = np1[2];
+            
+        }
+
+        [TestMethod]
         public void Array1Dim()
         {
             var list = new int[] { 1, 2, 3 };
