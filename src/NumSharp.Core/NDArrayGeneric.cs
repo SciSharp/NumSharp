@@ -24,6 +24,38 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 
+namespace NumSharp.Generic
+{
+    public class NDArray<T> : NumSharp.Core.NDArray where T : struct
+    {
+        public NDArray()
+        {
+            this.dtype = typeof(T);
+            Shape = new NumSharp.Core.Shape(new int[] { 0 });
+            Storage = new NumSharp.Core.NDStorage(dtype);
+        }
+        public T this[params int[] select]
+        {
+            get
+            {
+                return (T)Storage[Shape.GetIndexInShape(select)];
+            }
+            set
+            {
+                if (select.Length == NDim)
+                {
+                    Storage[Shape.GetIndexInShape(select)] = value;
+                }
+                else
+                {
+
+                }
+            }
+        }
+    }
+}
+ 
+
 namespace NumSharp.Core
 {
     /// <summary>
