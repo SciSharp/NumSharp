@@ -29,7 +29,7 @@ namespace NumSharp.Core
     /// </summary>
     public class NDStorage : IEnumerable, IEnumerator//IComparable, IComparable<Double>, IConvertible, IEquatable<Double>, IFormattable
     {
-        public Array values { get; set; }
+        public Array Values { get; set; }
 
         private Type dtype;
 
@@ -44,7 +44,7 @@ namespace NumSharp.Core
         {
             get
             {
-                switch (values)
+                switch (Values)
                 {
                     case int[] v:
                         return v[idx];
@@ -59,7 +59,7 @@ namespace NumSharp.Core
 
             set
             {
-                switch (values)
+                switch (Values)
                 {
                     case int[] v:
                         v[idx] = (int)value;
@@ -82,7 +82,7 @@ namespace NumSharp.Core
         /// <returns></returns>
         public T[] Data<T>()
         {
-            return values as T[];
+            return Values as T[];
         }
 
         public void Set<T>(T[] value)
@@ -90,13 +90,13 @@ namespace NumSharp.Core
             switch (value)
             {
                 case int[] v:
-                    values = v;
+                    Values = v;
                     break;
                 case float[] v:
-                    values = v;
+                    Values = v;
                     break;
                 case double[] v:
-                    values = v;
+                    Values = v;
                     break;
             }
         }
@@ -110,13 +110,13 @@ namespace NumSharp.Core
             switch (dtype.Name)
             {
                 case "Int32":
-                    values = new int[size];
+                    Values = new int[size];
                     break;
                 case "Single":
-                    values = new float[size];
+                    Values = new float[size];
                     break;
                 case "Double":
-                    values = new double[size];
+                    Values = new double[size];
                     break;
             }
         }
@@ -128,7 +128,7 @@ namespace NumSharp.Core
             {
                 if (Shape.Length == 1)
                 {
-                    switch (values)
+                    switch (Values)
                     {
                         case int[] a:
                             return a[pos];

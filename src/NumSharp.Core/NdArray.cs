@@ -66,7 +66,7 @@ namespace NumSharp.Core
 
         public void Set<T>(T[] data)
         {
-            Storage.values = data;
+            Storage.Values = data;
         }
 
         public void Set<T>(Shape shape, T value)
