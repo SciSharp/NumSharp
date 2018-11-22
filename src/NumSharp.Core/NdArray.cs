@@ -70,7 +70,10 @@ namespace NumSharp.Core
         /// Total of elements
         /// </summary>
         public int Size => Shape.Size;
+        public NDArray()
+        {
 
+        }
         public NDArray(Type dtype)
         {
             this.dtype = dtype;
