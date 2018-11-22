@@ -8,6 +8,64 @@ using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
+    public partial class NDArray
+    {
+        public static NDArray operator *(NDArray np1, double scalar)
+        {
+            var sum = new NDArray(typeof(double))
+            {
+                Shape = np1.Shape
+            };
+
+            switch (scalar)
+            {
+                case double scalarDouble:
+                    {
+                        double[] np1Array = np1.Data<double>();
+                        double[] sumArray = sum.Data<double>();
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] * scalarDouble;
+                        break;
+                    }
+                /*case float scalarFloat:
+                    {
+                        float[] np1Array = np1.Data as float[];
+                        float[] sumArray = sum.Data as float[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] * scalarFloat;
+                        break;
+                    }
+                case Complex scalarComplex:
+                    {
+                        Complex[] np1Array = np1.Data as Complex[];
+                        Complex[] sumArray = sum.Data as Complex[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] * scalarComplex;
+                        break;
+                    }
+                case Quaternion scalarQuaternion:
+                    {
+                        Quaternion[] np1Array = np1.Data as Quaternion[];
+                        Quaternion[] sumArray = sum.Data as Quaternion[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] * scalarQuaternion;
+                        break;
+                    }*/
+            }
+
+            return sum;
+        }
+
+        public static NDArray operator *(double scalar, NDArray np1)
+        {
+            return np1 * scalar;
+        }
+    }
+
     public partial class NDArrayGeneric<T>
     {
         public static NDArrayGeneric<T> operator *(NDArrayGeneric<T> np1, NDArrayGeneric<T> np2)

@@ -19,8 +19,6 @@ namespace NumSharp.Core
                 Shape = new Shape(shape)
             };
 
-            nd.Storage.Allocate(nd.Size);
-
             return nd;
         }
 
@@ -30,8 +28,6 @@ namespace NumSharp.Core
             {
                 Shape = new Shape(shape)
             };
-
-            nd.Storage.Allocate(nd.Size);
 
             return nd;
         }

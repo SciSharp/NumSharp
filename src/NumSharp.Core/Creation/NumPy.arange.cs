@@ -29,7 +29,6 @@ namespace NumSharp.Core
                 Shape = new Shape(length)
             };
 
-            nd.Storage.Allocate(length);
             for (double i = start; i < stop; i += step)
                 nd.Data<double>()[index++] = i;
 
@@ -56,7 +55,6 @@ namespace NumSharp.Core
                 Shape = new Shape(length)
             };
 
-            nd.Storage.Allocate(length);
             if(nd.Data<int>() is int[] a)
             {
                 for (int i = start; i < stop; i += step)

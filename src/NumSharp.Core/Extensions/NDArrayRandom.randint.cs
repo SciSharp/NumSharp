@@ -8,7 +8,7 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static NDArrayGeneric<int> randint(this NDArrayRandom rand, int low, int? high = null, Shape size = null)
+        public static NDArrayGeneric<int> randint(this NumPyRandom rand, int low, int? high = null, Shape size = null)
         {
             var rng = new Random();
             var data = new int[size.Size];

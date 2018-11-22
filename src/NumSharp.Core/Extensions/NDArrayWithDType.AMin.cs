@@ -52,7 +52,6 @@ namespace NumSharp.Core
                 index = 0; //index for result data set
                 int sameSetOffset = Shape.DimOffset[axis.Value];
                 int increments = cur * post;
-                res.Storage.Allocate(size);
                 int start = 0;
                 double min;
                 for (int i = 0; i < Size; i += increments)

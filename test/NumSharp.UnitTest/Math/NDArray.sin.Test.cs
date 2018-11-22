@@ -15,19 +15,19 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var np = new NumPyGeneric<double>();
-            var nd = np.array(new double[] {0, 30, 45, 60, 90}) * (Math.PI / 180);
+            var np = new NumPy();
+            var nd = np.array(new double[] { 0, 30, 45, 60, 90 }) * (Math.PI / 180);
             
             var nd2 = np.sin(nd);
             
-            Assert.IsTrue(nd2[0] == 0);
-            Assert.IsTrue(nd2[1] < 0.501);
-            Assert.IsTrue(nd2[1] > 0.498);
-            Assert.IsTrue(nd2[2] < 0.708);
-            Assert.IsTrue(nd2[2] > 0.7069);
-            Assert.IsTrue(nd2[3] < 0.867);
-            Assert.IsTrue(nd2[3] > 0.8659);
-            Assert.IsTrue(nd2[4] == 1);
+            Assert.IsTrue(nd2.Data<double>(0) == 0);
+            Assert.IsTrue(nd2.Data<double>(1) < 0.501);
+            Assert.IsTrue(nd2.Data<double>(1) > 0.498);
+            Assert.IsTrue(nd2.Data<double>(2) < 0.708);
+            Assert.IsTrue(nd2.Data<double>(2) > 0.7069);
+            Assert.IsTrue(nd2.Data<double>(3) < 0.867);
+            Assert.IsTrue(nd2.Data<double>(3) > 0.8659);
+            Assert.IsTrue(nd2.Data<double>(4) == 1);
             
         }
     }

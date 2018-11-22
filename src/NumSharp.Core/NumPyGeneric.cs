@@ -117,11 +117,11 @@ namespace NumSharp.Core
             return nd.power(exponent);
         }
 
-        public NDArrayRandom random 
+        public NumPyRandom random 
         {
             get
             {
-                return new NDArrayRandom();
+                return new NumPyRandom();
             }
         }
 

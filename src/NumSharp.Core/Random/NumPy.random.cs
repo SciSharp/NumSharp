@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public class NDArrayRandom
+    public partial class NumPyRandom
     {
         public static int Seed { get; set; }
 
