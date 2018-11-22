@@ -7,6 +7,35 @@ using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
+    public partial class NDArray
+    {
+        public NDArray inv<T>()
+        {
+            var npInv = new NDArray(typeof(T), Shape);
+
+            switch (npInv[0])
+            {
+                case double np:
+                    {
+                        double[][] matrix = null;// np.ToDotNetArray<double[][]>();
+
+                        double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
+
+                        for (int idx = 0; idx < npInv.Shape.Shapes[0]; idx++)
+                            for (int jdx = 0; jdx < npInv.Shape.Shapes[1]; jdx++)
+                                npInv[idx, jdx] = matrixInv[idx][jdx];
+                        break;
+                    }
+                default:
+                    {
+                        throw new Exception("This method was not implemented for this Type : " + typeof(T).Name);
+                    }
+            }
+
+            return npInv;
+        }
+    }
+
     public partial class NDArrayGeneric<T>
     {
         public NDArrayGeneric<T> inv()

@@ -23,6 +23,7 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
+using NumSharp.Core;
 
 namespace NumSharp.Generic
 {
@@ -31,8 +32,7 @@ namespace NumSharp.Generic
         public NDArray()
         {
             this.dtype = typeof(T);
-            Shape = new NumSharp.Core.Shape(new int[] { 0 });
-            Storage = new NumSharp.Core.NDStorage(dtype);
+            Storage = new NDStorage(this.dtype);
         }
         public T this[params int[] select]
         {

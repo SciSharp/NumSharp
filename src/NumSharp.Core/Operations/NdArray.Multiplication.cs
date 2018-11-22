@@ -12,20 +12,15 @@ namespace NumSharp.Core
     {
         public static NDArray operator *(NDArray np1, double scalar)
         {
-            var sum = new NDArray(typeof(double))
-            {
-                Shape = np1.Shape
-            };
+            var sum = new NDArray(typeof(double), np1.Shape);
 
-            switch (scalar)
+            switch (np1.dtype.Name)
             {
-                case double scalarDouble:
+                case "Double":
                     {
-                        double[] np1Array = np1.Data<double>();
-                        double[] sumArray = sum.Data<double>();
                         // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] * scalarDouble;
+                        for (int idx = 0; idx < np1.Size; idx++)
+                            sum[idx] = (double)np1[idx] * scalar;
                         break;
                     }
                 /*case float scalarFloat:

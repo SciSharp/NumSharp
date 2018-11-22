@@ -105,7 +105,7 @@ namespace NumSharp.Core
         /// Allocate memory of size
         /// </summary>
         /// <param name="size"></param>
-        public void Allocate(int size)
+        internal void Allocate(int size)
         {
             switch (dtype.Name)
             {

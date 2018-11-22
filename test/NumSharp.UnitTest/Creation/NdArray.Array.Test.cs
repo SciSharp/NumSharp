@@ -26,7 +26,6 @@ namespace NumSharp.UnitTest.Extensions
             var np1 = new NumSharp.Generic.NDArray<double>();
             np1.Shape = new Shape(length);
 
-            np1.Storage.Allocate(length);
             for (double i = start; i < stop; i += step)
                 np1.Data<double>()[index++] = i;
 

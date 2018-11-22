@@ -74,12 +74,25 @@ namespace NumSharp.Core
         {
 
         }
+
         public NDArray(Type dtype)
         {
             this.dtype = dtype;
             Storage = new NDStorage(dtype);
-            // set default shape as 1 dim and 0 elements.
-            // Shape = new Shape(new int[] { 0 });
+        }
+
+        public NDArray(Type dtype, Shape shape)
+        {
+            this.dtype = dtype;
+            Storage = new NDStorage(dtype);
+            Shape = new Shape(shape.Shapes.ToArray());
+        }
+
+        public NDArray(Type dtype, params int[] shapes)
+        {
+            this.dtype = dtype;
+            Storage = new NDStorage(dtype);
+            Shape = new Shape(shapes);
         }
 
         public void Set<T>(T[] data)
@@ -128,11 +141,11 @@ namespace NumSharp.Core
             {
                 if (dtype == typeof(int))
                 {
-                    output = this._ToVectorString<int>();
+                    //output = this._ToVectorString<int>();
                 }
                 else if (dtype == typeof(double))
                 {
-                    output = this._ToVectorString<double>();
+                    //output = this._ToVectorString<double>();
                 }
             }
 
