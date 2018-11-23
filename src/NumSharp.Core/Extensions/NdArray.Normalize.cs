@@ -7,7 +7,7 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public void Normalize()
+        public void normalize()
         {
             var np = new NumPy();
             var min = this.min();
