@@ -8,20 +8,18 @@ using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
-    public partial class NDArrayGeneric<T>
+    public partial class NDArray
     {
-        public static NDArrayGeneric<T> operator /(NDArrayGeneric<T> np1, NDArrayGeneric<T> np2)
+        public static NDArray operator /(NDArray np1, NDArray np2)
         {
-            NDArrayGeneric<T> sum = new NDArrayGeneric<T>();
-            sum.Shape = np1.Shape;
-            sum.Data = new T[np1.Data.Length];
+            var sum = new NDArray(np1.dtype, np1.Shape);
             
-            switch (sum.Data)
+            switch (sum.Data())
             {
                 case double[] sumArray : 
                 {
-                    double[] np1Array = np1.Data as double[];
-                    double[] np2Array = np2.Data as double[];
+                    double[] np1Array = np1.Data<double>();
+                    double[] np2Array = np2.Data<double>();
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
                         sumArray[idx] = np1Array[idx] / np2Array[idx];
@@ -29,8 +27,8 @@ namespace NumSharp.Core
                 }
                 case float[] sumArray : 
                 {
-                    float[] np1Array = np1.Data as float[];
-                    float[] np2Array = np2.Data as float[];
+                    float[] np1Array = np1.Data<float>();
+                    float[] np2Array = np2.Data<float>();
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
                         sumArray[idx] = np1Array[idx] / np2Array[idx];
@@ -38,8 +36,8 @@ namespace NumSharp.Core
                 }
                 case Complex[] sumArray : 
                 {
-                    Complex[] np1Array = np1.Data as Complex[];
-                    Complex[] np2Array = np2.Data as Complex[];
+                    Complex[] np1Array = np1.Data<Complex>();
+                    Complex[] np2Array = np2.Data<Complex>();
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
                         sumArray[idx] = np1Array[idx] / np2Array[idx];
@@ -47,8 +45,8 @@ namespace NumSharp.Core
                 }
                 case Quaternion[] sumArray : 
                 {
-                    Quaternion[] np1Array = np1.Data as Quaternion[];
-                    Quaternion[] np2Array = np2.Data as Quaternion[];
+                    Quaternion[] np1Array = np1.Data<Quaternion>();
+                    Quaternion[] np2Array = np2.Data<Quaternion>();
                     // for is faster than linq 
                     for (int idx = 0; idx < sumArray.Length;idx++)
                         sumArray[idx] = np1Array[idx] / np2Array[idx];
@@ -56,63 +54,54 @@ namespace NumSharp.Core
                 }
                 default : 
                 {
-                    throw new Exception("The operation is not implemented for the "  + typeof(T).Name);
+                    throw new Exception("The operation is not implemented for the "  + np1.dtype.Name);
                 }
             }
 
-            return (NDArrayGeneric<T>) sum;
+            return sum;
         }
-        public static NDArrayGeneric<T> operator /(NDArrayGeneric<T> np1, T scalar)
+
+        public static NDArray operator /(NDArray np1, double scalar)
         {
-            NDArrayGeneric<T> sum = new NDArrayGeneric<T>();
-            sum.Shape = np1.Shape;
-            sum.Data = new T[np1.Data.Length];
+            var sum = new NDArray(np1.dtype, np1.Shape);
             
-            switch (scalar)
+            switch (np1.Data())
             {
-                case double scalarDouble : 
+                case double[] np1Array: 
                 {
-                    double[] np1Array = np1.Data as double[];
-                    double[] sumArray = sum.Data as double[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / scalarDouble;
+                    for (int idx = 0; idx < sum.Size;idx++)
+                        sum[idx] = np1Array[idx] / scalar;
                     break;
                 }
-                case float scalarFloat : 
+                case float[] np1Array: 
                 {
-                    float[] np1Array = np1.Data as float[];
-                    float[] sumArray = sum.Data as float[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / scalarFloat;
+                    for (int idx = 0; idx < sum.Size;idx++)
+                        sum[idx] = np1Array[idx] / scalar;
                     break; 
                 }
-                case Complex scalarComplex : 
+                case Complex[] np1Array: 
                 {
-                    Complex[] np1Array = np1.Data as Complex[];
-                    Complex[] sumArray = sum.Data as Complex[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / scalarComplex;
+                    for (int idx = 0; idx < sum.Size;idx++)
+                        sum[idx] = np1Array[idx] / scalar;
                     break; 
                 }
-                case Quaternion scalarQuaternion : 
+                /*case Quaternion[] np1Array: 
                 {
-                    Quaternion[] np1Array = np1.Data as Quaternion[];
-                    Quaternion[] sumArray = sum.Data as Quaternion[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / scalarQuaternion;
+                    for (int idx = 0; idx < sum.Size;idx++)
+                        sum[idx] = np1Array[idx] / scalar;
                     break; 
-                }
+                }*/
                 default : 
                 {
-                    throw new Exception("The operation is not implemented for the "  + typeof(T).Name);
+                    throw new Exception("The operation is not implemented for the "  + np1.dtype.Name);
                 }
             }
 
-            return (NDArrayGeneric<T>) sum;
+            return sum;
         }
         
     }

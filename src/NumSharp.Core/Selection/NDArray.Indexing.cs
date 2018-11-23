@@ -22,15 +22,15 @@ namespace NumSharp.Core
 
                     var n = new NDArray(dtype);
 
-                    switch (Storage.Values)
+                    switch (Storage.Data())
                     {
                         case double[] values:
-                            Span<double> double8 = Storage.Values as double[];
-                            n.Storage.Values = double8.Slice(start, length).ToArray();
+                            Span<double> double8 = Storage.Data<double>();
+                            n.Storage.Set(double8.Slice(start, length).ToArray());
                             break;
                         case int[] values:
-                            Span<int> int32 = Storage.Values as int[];
-                            n.Storage.Values = int32.Slice(start, length).ToArray();
+                            Span<int> int32 = Storage.Data<int>();
+                            n.Storage.Set(int32.Slice(start, length).ToArray());
                             break;
                     }
 

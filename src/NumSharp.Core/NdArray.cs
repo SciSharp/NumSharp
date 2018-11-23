@@ -36,6 +36,7 @@ namespace NumSharp.Core
 
         public NDStorage Storage { get; set; }
 
+        public object Data() => Storage.Data();
         public T[] Data<T>() => Storage.Data<T>();
 
         public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
@@ -54,7 +55,7 @@ namespace NumSharp.Core
             {
                 _shape = value;
                 // allocate memory
-                if(Storage.Values == null)
+                if(Storage.Data() == null)
                 {
                     Storage.Allocate(_shape.Size);
                 }
@@ -97,7 +98,7 @@ namespace NumSharp.Core
 
         public void Set<T>(T[] data)
         {
-            Storage.Values = data;
+            Storage.Set(data);
         }
 
         public void Set<T>(Shape shape, T value)
