@@ -3,23 +3,24 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core.Extensions
+namespace NumSharp.Core
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray
     {
-        public static void Normalize(this NDArrayGeneric<double> np)
+        public void Normalize()
         {
-            var min = np.min();
-            var max = np.Max();
+            var np = new NumPy();
+            var min = this.min();
+            var max = this.max();
 
-            if (np.NDim == 2)
+            if (NDim == 2)
             {
-                for (int col = 0; col < np.Shape.Shapes[1]; col++)
+                for (int col = 0; col < Shape.Shapes[1]; col++)
                 {
-                    double der = max[col] - min[col];
-                    for (int row = 0; row < np.Shape.Shapes[0]; row++)
+                    double der = max.Data<double>(col) - min.Data<double>(col);
+                    for (int row = 0; row < Shape.Shapes[0]; row++)
                     {
-                        np[row, col] = (np[row, col] - min[col]) / der;
+                        this[row, col] = (Data<double>(row, col) - min.Data<double>(col)) / der;
                     }
                 }
             }

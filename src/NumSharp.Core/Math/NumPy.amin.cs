@@ -7,13 +7,13 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public NDArray amax(NDArray nd, int? axis = null)
+        public NDArray amin<T>(NDArray nd, int? axis = null)
         {
-            var res = new NDArray(nd.dtype, nd.Shape);
+            var res = new NDArray(typeof(T), nd.Shape);
 
             if (axis == null)
             {
-                res.Set(new double[1] { nd.Data<double>().Max() });
+                res.Set(new T[1] { nd.Data<T>().Min() });
                 res.Shape = new Shape(new int[] { 1 });
             }
             else
