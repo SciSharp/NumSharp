@@ -14,8 +14,8 @@ namespace NumSharp.Core
                 result.Data = new NDArrayGeneric<T>[select.Length];
                 result.shape = new Shape(select.Length);
 
-                int[] shape = new int[Shape.Length];
-                for (int i = 0; i < Shape.Length; i++)
+                int[] shape = new int[Shape.NDim];
+                for (int i = 0; i < Shape.NDim; i++)
                 {
                     if (i == 0)
                     {

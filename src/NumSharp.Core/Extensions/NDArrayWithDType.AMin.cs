@@ -23,7 +23,7 @@ namespace NumSharp.Core
             }
             else
             {
-                if (axis < 0 || axis >= Shape.Length)
+                if (axis < 0 || axis >= Shape.NDim)
                     throw new Exception("Invalid input: axis");
                 int[] resShapes = new int[Shape.Shapes.Count - 1];
                 int index = 0; //index for result shape set

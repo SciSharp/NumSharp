@@ -90,7 +90,7 @@ namespace NumSharp.Core
         /// <summary>
         /// Dimension count
         /// </summary>
-        public int NDim => Shape.Length;
+        public int NDim => Shape.NDim;
 
         /// <summary>
         /// Total of elements
@@ -105,14 +105,14 @@ namespace NumSharp.Core
 
         public void Set(Shape shape, T value)
         {
-            if (shape.Length == NDim)
+            if (shape.NDim == NDim)
             {
                 throw new Exception("Please use NDArray[m, n] to access element.");
             }
             else
             {
                 int start = GetIndexInShape(shape.Shapes.ToArray());
-                int length = Shape.DimOffset[shape.Length - 1];
+                int length = Shape.DimOffset[shape.NDim - 1];
 
                 Span<T> data = Data;
                 var elements = data.Slice(start, length);

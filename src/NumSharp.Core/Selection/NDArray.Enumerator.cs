@@ -12,7 +12,7 @@ namespace NumSharp.Core
         {
             get
             {
-                if (shape.Length == 1)
+                if (shape.NDim == 1)
                 {
                     return Data[pos];
                 }

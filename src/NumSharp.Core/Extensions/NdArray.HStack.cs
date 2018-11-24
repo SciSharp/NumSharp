@@ -23,8 +23,8 @@ namespace NumSharp.Core.Extensions
                 if (nps[0].Shape != ele.Shape)
                     throw new Exception("Arrays mush have same shapes");
             }
-            int total = nps[0].Shape.Length == 1 ? 1 : nps[0].Shape.Shapes[0];
-            int pageSize = nps[0].Shape.Length == 1 ? nps[0].Shape.Shapes[0] : nps[0].Shape.DimOffset[0];
+            int total = nps[0].NDim == 1 ? 1 : nps[0].Shape.Shapes[0];
+            int pageSize = nps[0].NDim == 1 ? nps[0].Shape.Shapes[0] : nps[0].Shape.DimOffset[0];
 
             //int i = 0;
             //Enumerable.Range(0, total)

@@ -18,7 +18,7 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArray dot<T>(NDArray np2)
         {
-            if ((this.Shape.Length == 1) & (np2.Shape.Length == 1))
+            if ((this.Shape.NDim == 1) & (np2.Shape.NDim == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
                     throw new Exception("The Dot method does not work with this shape or was not already implemented.");
                 else
@@ -104,7 +104,7 @@ namespace NumSharp.Core
                         throw new Exception("The Dot method is not implemented for the " + typeof(T).Name);
                     }
             }
-            if ((this.Shape.Length == 1) & (np2.Shape.Length == 1))
+            if ((this.Shape.NDim == 1) & (np2.Shape.NDim == 1))
             {
                 this.Shape = new Shape(Size);
                 np2.Shape = new Shape(np2.Size);
@@ -126,7 +126,7 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArrayGeneric<T> dot(NDArrayGeneric<T> np2)
         {
-            if ((this.Shape.Length == 1 ) & (np2.Shape.Length == 1))
+            if ((this.Shape.NDim == 1 ) & (np2.Shape.NDim == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
                     throw new Exception("The Dot method does not work with this shape or was not already implemented."); 
                 else 
@@ -214,7 +214,7 @@ namespace NumSharp.Core
                     throw new Exception("The Dot method is not implemented for the "  + typeof(T).Name);
                 }
             }
-            if ((this.Shape.Length == 1 ) & (np2.Shape.Length == 1))
+            if ((this.Shape.NDim == 1 ) & (np2.Shape.NDim == 1))
             {
                 this.Shape = new Shape(this.Data.Length);
                 np2.Shape = new Shape(np2.Data.Length);

@@ -54,7 +54,6 @@ namespace NumSharp.Core
             dimOffset = temp;
         }
 
-        public int Length => shape.Count;
         public IReadOnlyList<int> DimOffset => dimOffset;
         public IReadOnlyList<int> Shapes => shape;
 

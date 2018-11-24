@@ -123,7 +123,7 @@ namespace NumSharp.Core
         {
             get
             {
-                if (Shape.Length == 1)
+                if (Shape.NDim == 1)
                 {
                     switch (values)
                     {

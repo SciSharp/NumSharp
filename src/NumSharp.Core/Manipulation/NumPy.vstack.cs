@@ -25,7 +25,7 @@ namespace NumSharp.Core
                 list.AddRange(ele.Data<T>());
             }
             np.Set(list.ToArray());
-            if (nps[0].Shape.Length == 1)
+            if (nps[0].NDim == 1)
             {
                 np.Shape = new Shape(new int[] { nps.Length, nps[0].Shape.Shapes[0] });
             }

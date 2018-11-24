@@ -91,3 +91,4 @@ NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) whic
 Welcome to fork and pull request to add more APIs, and make reference list longer.
 
 <img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
+Star me on [Github](https://github.com/SciSharp/NumSharp) if you like it.

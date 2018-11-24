@@ -20,7 +20,7 @@ namespace NumSharp.Core
         {
             var np2 = np2Multi.Last(); 
 
-            if ((this.Shape.Length == 1 ) & (np2.Shape.Length == 1))
+            if ((this.Shape.NDim == 1 ) & (np2.Shape.NDim == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
                     throw new Exception("The Dot method does not work with this shape or was not already implemented."); 
                 else 

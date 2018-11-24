@@ -34,8 +34,8 @@ namespace NumSharp.Core
                             break;
                     }
 
-                    int[] shape = new int[Shape.Length - select.Length];
-                    for (int i = select.Length; i < Shape.Length; i++)
+                    int[] shape = new int[Shape.NDim - select.Length];
+                    for (int i = select.Length; i < Shape.NDim; i++)
                     {
                         shape[i - select.Length] = Shape[i];
                     }
@@ -123,22 +123,22 @@ namespace NumSharp.Core
         {
             get
             {
-                if (select.Length == NDim)
+                if (select.NDim == NDim)
                 {
                     throw new Exception("Please use NDArray[m, n] to access element.");
                 }
                 else
                 {
                     int start = GetIndexInShape(select.Shapes.ToArray());
-                    int length = Shape.DimOffset[select.Length - 1];
+                    int length = Shape.DimOffset[select.NDim - 1];
 
                     var n = new NDArrayGeneric<T>();
                     Span<T> data = Data;
                     n.Data = data.Slice(start, length).ToArray();
-                    int[] shape = new int[Shape.Length - select.Length];
-                    for (int i = select.Length; i < Shape.Length; i++)
+                    int[] shape = new int[Shape.NDim - select.NDim];
+                    for (int i = select.NDim; i < Shape.NDim; i++)
                     {
-                        shape[i - select.Length] = Shape[i];
+                        shape[i - select.NDim] = Shape[i];
                     }
                     n.Shape = new Shape(shape);
                     // n.Shape = new Shape(Shape.Shapes.ToArray().AsSpan().Slice(select.Length).ToArray());
