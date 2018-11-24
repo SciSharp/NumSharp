@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NDArrayRandomTest
     {
-        NumPyGeneric<double> np = new NumPyGeneric<double>();
+        NumPy np = new NumPy();
 
         [TestMethod]
         public void randn()

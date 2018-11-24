@@ -7,54 +7,22 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        /// <summary>
+        /// Retrieve element
+        /// low performance, use generic Data<T> method for performance sensitive invoke
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public object this[params int[] select]
         {
             get
             {
-                if (select.Length == NDim)
-                {
-                    return Storage[Shape.GetIndexInShape(select)];
-                }
-                else
-                {
-                    int start = Shape.GetIndexInShape(select);
-                    int length = Shape.DimOffset[select.Length - 1];
-
-                    var n = new NDArray(dtype);
-
-                    switch (Storage.Data())
-                    {
-                        case double[] values:
-                            Span<double> double8 = Storage.Data<double>();
-                            n.Storage.Set(double8.Slice(start, length).ToArray());
-                            break;
-                        case int[] values:
-                            Span<int> int32 = Storage.Data<int>();
-                            n.Storage.Set(int32.Slice(start, length).ToArray());
-                            break;
-                    }
-
-                    int[] shape = new int[Shape.NDim - select.Length];
-                    for (int i = select.Length; i < Shape.NDim; i++)
-                    {
-                        shape[i - select.Length] = Shape[i];
-                    }
-                    n.Shape = new Shape(shape);
-
-                    return n;
-                }
+                return Storage[select];
             }
 
             set
             {
-                if (select.Length == NDim)
-                {
-                    Storage[Shape.GetIndexInShape(select)] = value;
-                }
-                else
-                {
-
-                }
+                Storage[select] = value;
             }
         }
 
@@ -97,6 +65,24 @@ namespace NumSharp.Core
         }
 
         public NDArray this[NDArray select] => this[select.Data<int>().ToList()];
+
+        public T[] Data<T>() => Storage.Data<T>();
+
+        public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
+
+        /// <summary>
+        /// shortcut for Double data type, 8 bytes
+        /// </summary>
+        public double[] Double => Storage.Data<double>();
+
+        /// <summary>
+        /// shortcut for Int32 data type
+        /// </summary>
+        public int[] Int32 => Storage.Data<int>();
+
+        public void Set<T>(T[] data) => Storage.Set(data);
+
+        public void Set<T>(Shape shape, T value) => Storage.Set(shape, value);
     }
 
     public partial class NDArrayGeneric<T>

@@ -63,7 +63,7 @@ namespace NumSharp.Core
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
     /// <typeparam name="T">dtype</typeparam>
-    [Obsolete("please use NDArray")]
+    [Obsolete("please use NDArray<T>")]
     public partial class NDArrayGeneric<T>
     {
         /// <summary>

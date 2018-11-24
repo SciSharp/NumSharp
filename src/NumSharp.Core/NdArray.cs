@@ -36,11 +36,6 @@ namespace NumSharp.Core
 
         public NDStorage Storage { get; set; }
 
-        public object Data() => Storage.Data();
-        public T[] Data<T>() => Storage.Data<T>();
-
-        public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
-
         private Shape _shape;
         /// <summary>
         /// Data length of every dimension
@@ -54,6 +49,7 @@ namespace NumSharp.Core
             set
             {
                 _shape = value;
+                Storage.Shape = _shape;
                 // allocate memory
                 if(Storage.Data() == null)
                 {
@@ -94,32 +90,6 @@ namespace NumSharp.Core
             this.dtype = dtype;
             Storage = new NDStorage(dtype);
             Shape = new Shape(shapes);
-        }
-
-        public void Set<T>(T[] data)
-        {
-            Storage.Set(data);
-        }
-
-        public void Set<T>(Shape shape, T value)
-        {
-            if (shape.NDim == NDim)
-            {
-                throw new Exception("Please use NDArray[m, n] to access element.");
-            }
-            else
-            {
-                int start = Shape.GetIndexInShape(shape.Shapes.ToArray());
-                int length = Shape.DimOffset[shape.NDim - 1];
-
-                Span<T> data = Data<T>();
-                var elements = data.Slice(start, length);
-
-                for (int i = 0; i < elements.Length; i++)
-                {
-                    elements[i] = value;
-                }
-            }
         }
 
         public override string ToString()

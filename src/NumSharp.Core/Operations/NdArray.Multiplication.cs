@@ -20,7 +20,7 @@ namespace NumSharp.Core
                     {
                         // for is faster than linq 
                         for (int idx = 0; idx < np1.Size; idx++)
-                            sum[idx] = (double)np1[idx] * scalar;
+                            sum[idx] = np1.Double[idx] * scalar;
                         break;
                     }
                 /*case float scalarFloat:

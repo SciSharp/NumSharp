@@ -43,36 +43,102 @@ namespace NumSharp.Core
             this.dtype = dtype;
         }
 
-        public object this[int idx]
+        /// <summary>
+        /// Retrieve element
+        /// low performance, use generic Data<T> method for performance sensitive invoke
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
+        public object this[params int[] select]
         {
             get
             {
-                switch (values)
+                if (select.Length == Shape.NDim)
                 {
-                    case int[] v:
-                        return v[idx];
-                    case float[] v:
-                        return v[idx];
-                    case double[] v:
-                        return v[idx];
-                }
+                    switch (values)
+                    {
+                        case double[] values:
+                            return values[Shape.GetIndexInShape(select)];
+                        case int[] values:
+                            return values[Shape.GetIndexInShape(select)];
+                    }
 
-                return null;
+                    return null;
+                }
+                else
+                {
+                    int start = Shape.GetIndexInShape(select);
+                    int length = Shape.DimOffset[select.Length - 1];
+
+                    var nd = new NDArray(dtype);
+
+                    switch (values)
+                    {
+                        case double[] values:
+                            Span<double> double8 = Data<double>();
+                            nd.Storage.Set(double8.Slice(start, length).ToArray());
+                            break;
+                        case int[] values:
+                            Span<int> int32 = Data<int>();
+                            nd.Storage.Set(int32.Slice(start, length).ToArray());
+                            break;
+                    }
+
+                    int[] shape = new int[Shape.NDim - select.Length];
+                    for (int i = select.Length; i < Shape.NDim; i++)
+                    {
+                        shape[i - select.Length] = Shape[i];
+                    }
+                    nd.Shape = new Shape(shape);
+
+                    return nd;
+                }
             }
 
             set
             {
-                switch (values)
+                if (select.Length == Shape.NDim)
                 {
-                    case int[] v:
-                        v[idx] = (int)value;
-                        break;
-                    case float[] v:
-                        v[idx] = (float)value;
-                        break;
-                    case double[] v:
-                        v[idx] = (double)value;
-                        break;
+                    switch (values)
+                    {
+                        case double[] values:
+                            values[Shape.GetIndexInShape(select)] = (double)value;
+                            break;
+                        case int[] values:
+                            values[Shape.GetIndexInShape(select)] = (int)value;
+                            break;
+                    }
+                }
+                else
+                {
+                    int start = Shape.GetIndexInShape(select);
+                    int length = Shape.DimOffset[Shape.NDim - 1];
+
+                    switch (value)
+                    {
+                        case double v:
+                            Span<double> data1 = Data<double>();
+                            var elements1 = data1.Slice(start, length);
+
+                            for (int i = 0; i < elements1.Length; i++)
+                            {
+                                elements1[i] = v;
+                            }
+
+                            break;
+                        case int v:
+                            Span<int> data2 = Data<int>();
+                            var elements2 = data2.Slice(start, length);
+
+                            for (int i = 0; i < elements2.Length; i++)
+                            {
+                                elements2[i] = v;
+                            }
+
+                            break;
+                    }
+
+
                 }
             }
         }
@@ -96,6 +162,27 @@ namespace NumSharp.Core
         public void Set<T>(T[] value)
         {
             values = value;
+        }
+
+        public void Set<T>(Shape shape, T value)
+        {
+            if (shape.NDim == Shape.NDim)
+            {
+                throw new Exception("Please use NDArray[m, n] to access element.");
+            }
+            else
+            {
+                int start = Shape.GetIndexInShape(shape.Shapes.ToArray());
+                int length = Shape.DimOffset[shape.NDim - 1];
+
+                Span<T> data = Data<T>();
+                var elements = data.Slice(start, length);
+
+                for (int i = 0; i < elements.Length; i++)
+                {
+                    elements[i] = value;
+                }
+            }
         }
 
         /// <summary>

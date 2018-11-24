@@ -27,10 +27,10 @@ namespace NumSharp.Core
         {
             if (size.Length == 0)
                 throw new Exception("d cannot be empty.");
-            var array = new NDArray(typeof(double), size);
+            var array = new NDArray(typeof(double), new Shape(size).Size);
             Random rand = new Random(); //reuse this if you are generating many
 
-            for (int i = 0; i < array.Shape.Size; i++)
+            for (int i = 0; i < array.Size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
                 double u2 = 1.0 - rand.NextDouble();
@@ -39,6 +39,9 @@ namespace NumSharp.Core
                 double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
                 array[i] = randNormal;
             }
+
+            array.Shape = new Shape(size);
+
             return array;
         }
 

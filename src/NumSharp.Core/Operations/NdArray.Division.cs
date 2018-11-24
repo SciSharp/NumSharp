@@ -14,18 +14,18 @@ namespace NumSharp.Core
         {
             var sum = new NDArray(np1.dtype, np1.Shape);
             
-            switch (sum.Data())
+            switch (sum.dtype.Name)
             {
-                case double[] sumArray : 
+                case "Double": 
                 {
                     double[] np1Array = np1.Data<double>();
                     double[] np2Array = np2.Data<double>();
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / np2Array[idx];
+                    for (int idx = 0; idx < sum.Size;idx++)
+                        sum[idx] = np1Array[idx] / np2Array[idx];
                     break;
                 }
-                case float[] sumArray : 
+                /*case float[] sumArray : 
                 {
                     float[] np1Array = np1.Data<float>();
                     float[] np2Array = np2.Data<float>();
@@ -51,7 +51,7 @@ namespace NumSharp.Core
                     for (int idx = 0; idx < sumArray.Length;idx++)
                         sumArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
-                }
+                }*/
                 default : 
                 {
                     throw new Exception("The operation is not implemented for the "  + np1.dtype.Name);
@@ -65,16 +65,16 @@ namespace NumSharp.Core
         {
             var sum = new NDArray(np1.dtype, np1.Shape);
             
-            switch (np1.Data())
+            switch (sum.dtype.Name)
             {
-                case double[] np1Array: 
+                case "Double": 
                 {
                     // for is faster than linq 
                     for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = np1Array[idx] / scalar;
+                        sum[idx] = sum.Double[idx] / scalar;
                     break;
                 }
-                case float[] np1Array: 
+                /*case float[] np1Array: 
                 {
                     // for is faster than linq 
                     for (int idx = 0; idx < sum.Size;idx++)
@@ -88,7 +88,7 @@ namespace NumSharp.Core
                         sum[idx] = np1Array[idx] / scalar;
                     break; 
                 }
-                /*case Quaternion[] np1Array: 
+                case Quaternion[] np1Array: 
                 {
                     // for is faster than linq 
                     for (int idx = 0; idx < sum.Size;idx++)
