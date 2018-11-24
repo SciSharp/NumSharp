@@ -12,9 +12,15 @@ namespace NumSharp.Core
             switch (dtype.Name)
             {
                 case "Int32":
-                    var max = Data<int>().Max();
-                    return Data<int>().ToList().IndexOf(max);
-
+                    {
+                        var max = Data<int>().Max();
+                        return Data<int>().ToList().IndexOf(max);
+                    }
+                case "Double":
+                    {
+                        var max = Data<double>().Max();
+                        return Data<double>().ToList().IndexOf(max);
+                    }
             }
 
             return -1;

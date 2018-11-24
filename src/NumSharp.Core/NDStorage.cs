@@ -38,6 +38,8 @@ namespace NumSharp.Core
 
         public Shape Shape { get; set; }
 
+        public int Length => values.Length;
+
         public NDStorage(Type dtype)
         {
             this.dtype = dtype;

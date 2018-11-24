@@ -16,11 +16,22 @@ namespace NumSharp.Core
         public NDArray reshape(params int[] shape)
         {
             var count = shape.Length;
-            var idx = FindNegativeIndex(shape);
-            if (idx == -1)
-                this.Shape = new Shape(shape);
+            if (count == 0)
+            {
+                Shape = new Shape(Storage.Length);
+            }
             else
-                this.Shape = new Shape(CalculateNegativeShape(idx, this.Shape.Shapes.ToList(), shape));
+            {
+                var idx = FindNegativeIndex(shape);
+                if (idx == -1)
+                {
+                    Shape = new Shape(shape);
+                }
+                else
+                {
+                    Shape = new Shape(CalculateNegativeShape(idx, Shape.Shapes.ToList(), shape));
+                }
+            }
 
             return this;
         }

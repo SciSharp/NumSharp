@@ -4,11 +4,11 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace NumSharp.Core.Extensions
+namespace NumSharp.Core
 {
-    public static partial class NDArrayRandomExtensions
+    public partial class NumPyRandom
     {
-        public static NDArrayGeneric<int> randint(this NumPyRandom rand, int low, int? high = null, Shape size = null)
+        public NDArray randint(int low, int? high = null, Shape size = null)
         {
             var rng = new Random();
             var data = new int[size.Size];
@@ -17,9 +17,8 @@ namespace NumSharp.Core.Extensions
                 data[i] = rng.Next(low, high.HasValue ? high.Value : int.MaxValue);
             }
 
-            var np = new NDArrayGeneric<int>();
-            np.Shape = new Shape(size.Shapes);
-            np.Data = data;
+            var np = new NDArray(typeof(int), size.Shapes.ToArray());
+            np.Set(data);
 
             return np;
         }
