@@ -10,19 +10,20 @@ namespace NumSharp.Core
         public void normalize()
         {
             var np = new NumPy();
-            var min = this.min();
-            var max = this.max();
+            var min = this.min(0);
+            var max = this.max(0);
 
             if (NDim == 2)
             {
                 for (int col = 0; col < Shape.Shapes[1]; col++)
                 {
+
                     double der = max.Data<double>(col) - min.Data<double>(col);
                     for (int row = 0; row < Shape.Shapes[0]; row++)
                     {
                         this[row, col] = (Data<double>(row, col) - min.Data<double>(col)) / der;
                     }
-                }
+                }   
             }
             else
             {

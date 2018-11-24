@@ -57,6 +57,46 @@ namespace NumSharp.Core
                 }
             }
         }
+
+        /// <summary>
+        /// Filter specific elements through select.
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns>Return a new NDArray with filterd elements.</returns>
+        public NDArray this[IList<int> select]
+        {
+            get
+            {
+                var n = new NDArray(dtype);
+                if (NDim == 1)
+                {
+                    n.Shape = new Shape(select.Count);
+                    for (int i = 0; i < select.Count; i++)
+                    {
+                        n[i] = this[select[i]];
+                    }
+                }
+                else if (NDim == 2)
+                {
+                    n.Shape = new Shape(select.Count, Shape[1]);
+                    for (int i = 0; i < select.Count; i++)
+                    {
+                        for (int j = 0; j < Shape[1]; j++)
+                        {
+                            n[i, j] = this[select[i], j];
+                        }
+                    }
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
+
+                return n;
+            }
+        }
+
+        public NDArray this[NDArray select] => this[select.Data<int>().ToList()];
     }
 
     public partial class NDArrayGeneric<T>

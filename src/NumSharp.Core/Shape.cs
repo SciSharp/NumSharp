@@ -22,6 +22,8 @@ namespace NumSharp.Core
             }
         }
 
+        public int NDim => shape.Count;
+
         public int this[int dim] => shape[dim];
 
         public Shape(params int[] shape)

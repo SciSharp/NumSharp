@@ -20,7 +20,7 @@ namespace NumSharp.Core
             {
                 if (axis < 0 || axis >= nd.Shape.Length)
                     throw new Exception("Invalid input: axis");
-                int[] resShapes = new int[nd.Shape.Shapes.Count - 1];
+                int[] resShapes = new int[nd.NDim - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
                 int prev = 1;
@@ -28,7 +28,7 @@ namespace NumSharp.Core
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape
-                for (int i = 0; i < nd.Shape.Shapes.Count; i++)
+                for (int i = 0; i < nd.NDim; i++)
                 {
                     if (i == axis)
                         cur = nd.Shape.Shapes[i];
@@ -54,10 +54,10 @@ namespace NumSharp.Core
                     for (int j = i; j < i + post; j++)
                     {
                         start = j;
-                        min = nd.Data<double>(start);
+                        min = nd.Data<double>()[start];
                         for (int k = 0; k < cur; k++)
                         {
-                            min = Math.Max(min, nd.Data<double>(start));
+                            min = Math.Max(min, nd.Data<double>()[start]);
                             start += sameSetOffset;
                         }
                         res[index++] = min;
