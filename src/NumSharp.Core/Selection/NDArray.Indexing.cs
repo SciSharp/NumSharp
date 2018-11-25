@@ -80,6 +80,11 @@ namespace NumSharp.Core
         /// </summary>
         public int[] Int32 => Storage.Data<int>();
 
+        // <summary>
+        /// shortcut for string data type
+        /// </summary>
+        public string[] Chars => Storage.Data<string>();
+
         public void Set<T>(T[] data) => Storage.Set(data);
 
         public void Set<T>(Shape shape, T value) => Storage.Set(shape, value);
