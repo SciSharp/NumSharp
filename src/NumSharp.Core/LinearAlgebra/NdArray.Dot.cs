@@ -13,26 +13,47 @@ namespace NumSharp.Core
         /// 
         /// </summary>
         /// <param name="np1"></param>
-        /// <param name="np2"></param>
+        /// <param name="nd2"></param>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArray dot<T>(NDArray np2)
+        public NDArray dot<T>(NDArray nd2)
         {
-            if ((this.Shape.NDim == 1) & (np2.Shape.NDim == 1))
-                if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
+            if(NDim == 2 & nd2.NDim == 1)
+            {
+                var nd = new NDArray(typeof(T), Shape[0]);
+
+                for(int i = 0; i < nd.Size; i++)
+                {
+                    for(int j = 0; j < nd2.Size; j++)
+                    {
+                        switch (dtype.Name)
+                        {
+                            case "Int32":
+                                nd[i] = nd.Data<int>(i) + Data<int>(i, j) * nd2.Int32[j];
+                                break;
+                        }
+                        
+                    }
+                }
+
+                return nd;
+            } 
+
+            if ((this.Shape.NDim == 1) & (nd2.Shape.NDim == 1))
+                if (this.Shape.Shapes[0] != nd2.Shape.Shapes[0])
                     throw new Exception("The Dot method does not work with this shape or was not already implemented.");
                 else
                 {
-                    np2.Shape = new Shape(np2.Size, 1);
+                    nd2.Shape = new Shape(nd2.Size, 1);
                     this.Shape = new Shape(1, Size);
                 }
             else
-                if (this.Shape.Shapes[1] != np2.Shape.Shapes[0])
+                if (this.Shape.Shapes[1] != nd2.Shape.Shapes[0])
                 throw new Exception("The Dot method does not work with this shape or was not already implemented.");
 
             int iterator = this.Shape.Shapes[1];
             int dim0 = this.Shape.Shapes[0];
-            int dim1 = np2.Shape.Shapes[1];
+            int dim1 = nd2.Shape.Shapes[1];
 
             var prod = new NDArray(typeof(T), dim0, dim1);
 
@@ -41,7 +62,7 @@ namespace NumSharp.Core
                 case double[] np1Array:
                     {
                         double[] result = prod.Data<double>();
-                        double[] np2Array = np2.Data<double>();
+                        double[] np2Array = nd2.Data<double>();
 
                         for (int idx = 0; idx < prod.Size; idx++)
                         {
@@ -56,7 +77,7 @@ namespace NumSharp.Core
                 case float[] np1Array:
                     {
                         float[] result = prod.Data<float>();
-                        float[] np2Array = np2.Data<float>();
+                        float[] np2Array = nd2.Data<float>();
 
                         for (int idx = 0; idx < prod.Size; idx++)
                         {
@@ -72,7 +93,7 @@ namespace NumSharp.Core
                 case Complex[] np1Array:
                     {
                         Complex[] result = prod.Data<Complex>();
-                        Complex[] np2Array = np2.Data<Complex>();
+                        Complex[] np2Array = nd2.Data<Complex>();
 
                         for (int idx = 0; idx < prod.Size; idx++)
                         {
@@ -87,7 +108,7 @@ namespace NumSharp.Core
                 case Quaternion[] np1Array:
                     {
                         Quaternion[] result = prod.Data<Quaternion>();
-                        Quaternion[] np2Array = np2.Data<Quaternion>();
+                        Quaternion[] np2Array = nd2.Data<Quaternion>();
 
                         for (int idx = 0; idx < prod.Size; idx++)
                         {
@@ -104,10 +125,10 @@ namespace NumSharp.Core
                         throw new Exception("The Dot method is not implemented for the " + typeof(T).Name);
                     }
             }
-            if ((this.Shape.NDim == 1) & (np2.Shape.NDim == 1))
+            if ((this.Shape.NDim == 1) & (nd2.Shape.NDim == 1))
             {
                 this.Shape = new Shape(Size);
-                np2.Shape = new Shape(np2.Size);
+                nd2.Shape = new Shape(nd2.Size);
                 prod.Shape = new Shape(1);
             }
 

@@ -15,8 +15,27 @@ namespace NumSharp.UnitTest.Extensions
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
     [TestClass]
-    public class NdArrayDotTest
+    public class NdArrayDotTest : TestBase
     {
+        [TestMethod]
+        public void DotTwo1Int()
+        {
+            var X = np.array(new int[][]
+            {
+                new int[] { 1, 1 },
+                new int[] { 1, 2 },
+                new int[] { 2, 2 },
+                new int[] { 2, 3 }
+            });
+
+            var y = np.dot(X, np.array(new int[] { 2, 3 }));
+
+            Assert.AreEqual(y[0], 5);
+            Assert.AreEqual(y[1], 8);
+            Assert.AreEqual(y[2], 10);
+            Assert.AreEqual(y[3], 13);
+        }
+
         [TestMethod]
         public void DotTwo1DDouble()
         {
