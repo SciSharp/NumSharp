@@ -5,54 +5,69 @@ using System.Linq;
 using System.Text;
 using System.Numerics;
 using NumSharp.Core.Shared;
-
+ 
 namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public static NDArray operator *(NDArray np1, double scalar)
+        public static NDArray operator *(NDArray np1, ValueType scalar)
         {
-            var sum = new NDArray(typeof(double), np1.Shape);
+            NDArray product = new NDArray(np1.dtype,np1.Shape);
 
-            switch (np1.dtype.Name)
+            Array np1Array = np1.Storage.GetData();
+            Array productArray = Array.CreateInstance(product.dtype,np1Array.Length);
+
+            switch (np1Array) 
             {
-                case "Double":
-                    {
-                        // for is faster than linq 
-                        for (int idx = 0; idx < np1.Size; idx++)
-                            sum[idx] = np1.Double[idx] * scalar;
-                        break;
-                    }
-                /*case float scalarFloat:
-                    {
-                        float[] np1Array = np1.Data as float[];
-                        float[] sumArray = sum.Data as float[];
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] * scalarFloat;
-                        break;
-                    }
-                case Complex scalarComplex:
-                    {
-                        Complex[] np1Array = np1.Data as Complex[];
-                        Complex[] sumArray = sum.Data as Complex[];
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] * scalarComplex;
-                        break;
-                    }
-                case Quaternion scalarQuaternion:
-                    {
-                        Quaternion[] np1Array = np1.Data as Quaternion[];
-                        Quaternion[] sumArray = sum.Data as Quaternion[];
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] * scalarQuaternion;
-                        break;
-                    }*/
+                case double[] runTimeArray : 
+                {
+                    double runTimeScalar = (double) scalar;
+                    double[] runtimeProduct = productArray as double[];
+                    
+                    for(int idx = 0; idx < runtimeProduct.Length;idx++)
+                        runtimeProduct[idx] = runTimeArray[idx] * runTimeScalar;
+
+                    break;
+                }
+                case float[] runTimeArray : 
+                {
+                    float runTimeScalar = (float) scalar;
+                    float[] runtimeProduct = productArray as float[];
+                    
+                    for(int idx = 0; idx < runtimeProduct.Length;idx++)
+                        runtimeProduct[idx] = runTimeArray[idx] * runTimeScalar;
+
+                    break;
+                }
+                case Complex[] runTimeArray : 
+                {
+                    Complex runTimeScalar = (Complex) scalar;
+                    Complex[] runtimeProduct = productArray as Complex[];
+                    
+                    for(int idx = 0; idx < runtimeProduct.Length;idx++)
+                        runtimeProduct[idx] = runTimeArray[idx] * runTimeScalar;
+
+                    break;
+                }
+                case Quaternion[] runTimeArray : 
+                {
+                    Quaternion runTimeScalar = (Quaternion) scalar;
+                    Quaternion[] runtimeProduct = productArray as Quaternion[];
+                    
+                    for(int idx = 0; idx < runtimeProduct.Length;idx++)
+                        runtimeProduct[idx] = runTimeArray[idx] * runTimeScalar;
+
+                    break;
+                }
+                default :
+                {
+                    throw new NotImplementedException();
+                }
             }
 
-            return sum;
+            product.Storage.SetData(productArray);
+
+            return product;
         }
 
         public static NDArray operator *(double scalar, NDArray np1)

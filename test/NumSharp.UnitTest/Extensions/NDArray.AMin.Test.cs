@@ -57,35 +57,35 @@ namespace NumSharp.UnitTest.Extensions
 
             //no axis
             var n = np.arange(4.0).reshape(2, 2);
-            var n1 = np.amin<double>(n);
+            var n1 = np.amin(n);
             Assert.IsTrue((double)n1[0] == 0);
 
             //2D with axis
-            n1 = np.amin<double>(n, 0);
+            n1 = np.amin(n, 0);
             Assert.IsTrue(n1[0].Equals(0.0));
             Assert.IsTrue(n1[1].Equals(1.0));
-            n1 = np.amin<double>(n, 1);
+            n1 = np.amin(n, 1);
             Assert.IsTrue(n1[0].Equals(0.0));
             Assert.IsTrue(n1[1].Equals(2.0));
 
             //3D
             n = np.arange(24.0).reshape(4, 3, 2);
-            n1 = np.amin<double>(n, 0);
+            n1 = np.amin(n, 0);
             Assert.IsTrue(n1[0, 1].Equals(1.0));
             Assert.IsTrue(n1[2, 1].Equals(5.0));
             Assert.IsTrue(n1[1, 1].Equals(3.0));
-            n1 = np.amin<double>(n, 1);
+            n1 = np.amin(n, 1);
             Assert.IsTrue(n1[1, 1].Equals(7.0));
             Assert.IsTrue(n1[2, 1].Equals(13.0));
             Assert.IsTrue(n1[3, 0].Equals(18.0));
 
             //4D
             n = np.arange(24.0).reshape(2, 3, 2, 2);
-            n1 = np.amin<double>(n, 1);
+            n1 = np.amin(n, 1);
             Assert.IsTrue(n1[0, 0, 1].Equals(1.0));
             Assert.IsTrue(n1[1, 0, 1].Equals(13.0));
             Assert.IsTrue(n1[1, 1, 1].Equals(15.0));
-            n1 = np.amin<double>(n, 3);
+            n1 = np.amin(n, 3);
             Assert.IsTrue(n1[0, 1, 1].Equals(6.0));
             Assert.IsTrue(n1[1, 1, 1].Equals(18.0));
             Assert.IsTrue(n1[1, 2, 1].Equals(22.0));

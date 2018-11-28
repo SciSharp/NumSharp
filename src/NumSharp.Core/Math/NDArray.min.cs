@@ -11,7 +11,7 @@ namespace NumSharp.Core
             switch (dtype.Name)
             {
                 case "Double":
-                    return new NumPy().amin<double>(this, axis);
+                    return new NumPy().amin(this, axis);
             }
 
             return null;
@@ -19,7 +19,7 @@ namespace NumSharp.Core
 
         public NDArray min<T>(int? axis = null)
         {
-            return new NumPy().amin<T>(this, axis);
+            return new NumPy().amin(this, axis);
         }
     }
 }

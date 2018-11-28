@@ -7,14 +7,19 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public NDArray amin<T>(NDArray nd, int? axis = null)
+        public NDArray amin(NDArray nd, int? axis = null)
         {
-            var res = new NDArray(typeof(T));
+            NDArray res = null;
 
             if (axis == null)
             {
-                res.Set(new T[1] { nd.Data<T>().Min() });
-                res.Shape = new Shape(new int[] { 1 });
+                res = new NDArray(nd.dtype,new Shape(new int[] { 1 }));
+                
+                Array resArray = Array.CreateInstance(nd.dtype,1);
+                resArray.SetValue(nd.Storage.GetData<double>().Min(),0);
+
+                res.Storage.SetData(resArray);
+                
             }
             else
             {
@@ -42,13 +47,16 @@ namespace NumSharp.Core
                             post *= nd.Shape.Shapes[i];
                     }
                 }
-                res.Shape = new Shape(resShapes);
+                
                 //Fill in data
                 index = 0; //index for result data set
                 int sameSetOffset = nd.Shape.DimOffset[axis.Value];
                 int increments = cur * post;
                 int start = 0;
                 double min = 0;
+                
+                res = new NDArray(nd.dtype,new Shape(resShapes));
+                
                 for (int i = 0; i < nd.Size; i += increments)
                 {
                     for (int j = i; j < i + post; j++)

@@ -18,12 +18,14 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public static NDArray array<T>(this NumPy np, IEnumerable<T> array, int ndim = 1)
+        public static NDArray array(this NumPy np, Array array, Type dtype = null, int ndim = 1)
         {
-			var nd = new NDArray(typeof(T));
-			nd.Set(array.ToArray());
-            nd.Shape = new Shape(new int[] { array.Count() });
-
+            dtype = (dtype == null) ? typeof(double) : dtype;
+            
+			var nd = new NDArray(dtype);
+			
+            nd.Storage = NDStorage.CreateByShapeAndType	(dtype, new Shape(new int[] { array.Length }));
+            nd.Storage.SetData(array); 
             return nd;
         }
 
@@ -39,7 +41,7 @@ namespace NumSharp.Core
             image.UnlockBits(bmpd);
 
             imageArray.Set(bytes);
-            imageArray.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });
+            imageArray.Storage.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });
 
             return imageArray;
         }
@@ -77,7 +79,7 @@ namespace NumSharp.Core
 
             var nd = new NDArray(typeof(T));
             nd.Set(all.ToArray());
-            nd.Shape = new Shape(new int[] { data.Length, data[0].Length });
+            nd.Storage.Shape = new Shape(new int[] { data.Length, data[0].Length });
 
             return nd;
         }
