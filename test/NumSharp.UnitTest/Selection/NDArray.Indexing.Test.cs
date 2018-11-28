@@ -16,8 +16,6 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.Data<int>(1, 1) == 5);
             Assert.IsTrue(nd.Data<int>(2, 0) == 8);
 
-            var nd1 = nd[1] as NDArray;
-            Assert.IsTrue(nd1[1].Equals(5));
         }
 
         [TestMethod]
