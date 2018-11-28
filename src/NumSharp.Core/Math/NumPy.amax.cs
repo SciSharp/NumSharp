@@ -14,7 +14,7 @@ namespace NumSharp.Core
             if (axis == null)
             {
                 res.Set(new double[1] { nd.Data<double>().Max() });
-                res.Shape = new Shape(new int[] { 1 });
+                res.Storage.Shape = new Shape(new int[] { 1 });
             }
             else
             {
@@ -42,7 +42,7 @@ namespace NumSharp.Core
                             post *= nd.Shape.Shapes[i];
                     }
                 }
-                res.Shape = new Shape(resShapes);
+                res.Storage.Shape = new Shape(resShapes);
                 //Fill in data
                 index = 0; //index for result data set
                 int sameSetOffset = nd.Shape.DimOffset[axis.Value];

@@ -24,13 +24,12 @@ namespace NumSharp.Core
             int length = (int)Math.Ceiling((stop - start + 0.0) / step);
             int index = 0;
 
-            var nd = new NDArray(double8)
-            {
-                Shape = new Shape(length)
-            };
+            var nd = new NDArray(typeof(double), new Shape(length) );
+
+            double[] puffer = nd.Storage.GetData() as double[];
 
             for (double i = start; i < stop; i += step)
-                nd.Data<double>()[index++] = i;
+                puffer[index++] = i;
 
             return nd;
         }
@@ -50,10 +49,7 @@ namespace NumSharp.Core
             int length = (int)Math.Ceiling((stop - start + 0.0) / step);
             int index = 0;
 
-            var nd = new NDArray(int32)
-            {
-                Shape = new Shape(length)
-            };
+            var nd = new NDArray(int32, new Shape(length));
 
             if(nd.Data<int>() is int[] a)
             {

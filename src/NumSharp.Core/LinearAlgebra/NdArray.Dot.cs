@@ -44,8 +44,8 @@ namespace NumSharp.Core
                     throw new Exception("The Dot method does not work with this shape or was not already implemented.");
                 else
                 {
-                    nd2.Shape = new Shape(nd2.Size, 1);
-                    this.Shape = new Shape(1, Size);
+                    nd2.Storage.Shape = new Shape(nd2.Size, 1);
+                    this.Storage.Shape = new Shape(1, Size);
                 }
             else
                 if (this.Shape.Shapes[1] != nd2.Shape.Shapes[0])
@@ -127,9 +127,9 @@ namespace NumSharp.Core
             }
             if ((this.Shape.NDim == 1) & (nd2.Shape.NDim == 1))
             {
-                this.Shape = new Shape(Size);
-                nd2.Shape = new Shape(nd2.Size);
-                prod.Shape = new Shape(1);
+                this.Storage.Shape = new Shape(Size);
+                nd2.Storage.Shape = new Shape(nd2.Size);
+                prod.Storage.Shape = new Shape(1);
             }
 
             return prod;

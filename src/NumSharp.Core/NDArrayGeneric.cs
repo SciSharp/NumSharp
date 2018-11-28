@@ -31,7 +31,7 @@ namespace NumSharp.Generic
     {
         public NDArray()
         {
-            this.dtype = typeof(T);
+            Storage.dtype = typeof(T);
             Storage = new NDStorage(this.dtype);
         }
         public T this[params int[] select]

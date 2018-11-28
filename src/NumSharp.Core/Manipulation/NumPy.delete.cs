@@ -10,8 +10,8 @@ namespace NumSharp.Core
         public NDArray delete<T>(IEnumerable<T> delete)
         {
             var np = new NumPy();
-            var nd1 = np.array(Data<T>().Where(x => !delete.Contains(x)));
-            nd1.Shape = new Shape(nd1.Size);
+            var nd1 = np.array(Data<T>().Where(x => !delete.Contains(x)).ToArray());
+            nd1.Storage.Shape = new Shape(nd1.Size);
 
             return nd1;
         }

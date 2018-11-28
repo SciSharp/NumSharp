@@ -18,18 +18,18 @@ namespace NumSharp.Core
             var count = shape.Length;
             if (count == 0)
             {
-                Shape = new Shape(Storage.Length);
+                Storage.Shape = new Shape(Storage.Length);
             }
             else
             {
                 var idx = FindNegativeIndex(shape);
                 if (idx == -1)
                 {
-                    Shape = new Shape(shape);
+                    Storage.Shape = new Shape(shape);
                 }
                 else
                 {
-                    Shape = new Shape(CalculateNegativeShape(idx, Shape.Shapes.ToList(), shape));
+                    Storage.Shape = new Shape(CalculateNegativeShape(idx, Shape.Shapes.ToList(), shape));
                 }
             }
 

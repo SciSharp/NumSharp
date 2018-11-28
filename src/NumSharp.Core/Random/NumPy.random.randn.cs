@@ -40,7 +40,7 @@ namespace NumSharp.Core
                 array[i] = randNormal;
             }
 
-            array.Shape = new Shape(size);
+            array.Storage.Shape = new Shape(size);
 
             return array;
         }

@@ -9,7 +9,7 @@ namespace NumSharp.Core
     {
         public static NDArray reshape(this NDArray nd, params int[] shape)
         {
-            nd.Shape = new Shape(shape);
+            nd.Storage.Shape = new Shape(shape);
             return nd;
         }
     }

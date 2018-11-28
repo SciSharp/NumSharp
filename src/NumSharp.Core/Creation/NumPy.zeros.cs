@@ -14,20 +14,14 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArray zeros(params int[] shape)
         {
-            var nd = new NDArray(typeof(float))
-            {
-                Shape = new Shape(shape)
-            };
-
+            var nd = new NDArray(typeof(float),new Shape(shape));
             return nd;
         }
 
         public NDArray zeros<T>(params int[] shape)
         {
-            var nd = new NDArray(typeof(T))
-            {
-                Shape = new Shape(shape)
-            };
+            var nd = new NDArray(typeof(T));
+            nd.Storage.Shape = new Shape(shape);
 
             return nd;
         }
