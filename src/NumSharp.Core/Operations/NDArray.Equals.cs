@@ -6,6 +6,15 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        public static bool operator ==(NDArray np, object obj)
+        {
+            switch (obj)
+            {
+                case int o:
+                    return o == np.Data<int>()[0];
+            }
 
+            return false;
+        }
     }
 }
