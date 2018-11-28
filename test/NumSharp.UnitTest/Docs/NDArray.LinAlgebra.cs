@@ -7,6 +7,7 @@ using NumSharp.Core;
 
 namespace NumSharp.UnitTest.Docs
 {
+    /* 
     [TestClass]
     public class LinearAlgebraTester
     {
@@ -32,4 +33,5 @@ namespace NumSharp.UnitTest.Docs
 
         }
     }
+    */
 }
