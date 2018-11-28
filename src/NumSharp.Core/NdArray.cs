@@ -32,67 +32,43 @@ namespace NumSharp.Core
     /// </summary>
     public partial class NDArray
     {
-        public Type dtype { get; set; }
-
-        public NDStorage Storage { get; set; }
-
-        private Shape _shape;
+        /// <summary>
+        /// Data type of NDArray
+        /// </summary>
+        public Type dtype => Storage.dtype;
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public Shape Shape
-        {
-            get
-            {
-                return _shape;
-            }
-            set
-            {
-                _shape = value;
-                Storage.Shape = _shape;
-                // allocate memory
-                if(Storage.Data() == null)
-                {
-                    Storage.Allocate(_shape.Size);
-                }
-            }
-        }
-
+        public Shape Shape => Storage.Shape;
         /// <summary>
         /// Dimension count
         /// </summary>
         public int NDim => Shape.NDim;
-
         /// <summary>
         /// Total of elements
         /// </summary>
         public int Size => Shape.Size;
-
+        /// <summary>
+        /// The internal storage for elements of NDArray
+        /// </summary>
+        /// <value></value>
+        public NDStorage Storage { get; set; }
         public NDArray()
         {
-
+            Storage = NDStorage.CreateByShapeAndType(typeof(double),new Shape(1));
         }
-
         public NDArray(Type dtype)
         {
-            this.dtype = dtype;
-            Storage = new NDStorage(dtype);
+            Storage = NDStorage.CreateByShapeAndType(dtype,new Shape(1));
         }
-
         public NDArray(Type dtype, Shape shape)
         {
-            this.dtype = dtype;
-            Storage = new NDStorage(dtype);
-            Shape = new Shape(shape.Shapes.ToArray());
+            Storage = NDStorage.CreateByShapeAndType(dtype,shape);
         }
-
         public NDArray(Type dtype, params int[] shapes)
         {
-            this.dtype = dtype;
-            Storage = new NDStorage(dtype);
-            Shape = new Shape(shapes);
+            Storage = NDStorage.CreateByShapeAndType(dtype,new Shape(shapes));
         }
-
         public override string ToString()
         {
             string output = "";
@@ -134,23 +110,6 @@ namespace NumSharp.Core
 
             return false;
         }
-
-        public static bool operator ==(NDArray np, object obj)
-        {
-            switch (obj)
-            {
-                case int o:
-                    return o == np.Data<int>()[0];
-            }
-
-            return false;
-        }
-
-        public static bool operator !=(NDArray np, object obj)
-        {
-            return !(np == obj);
-        }
-
         public override int GetHashCode()
         {
             unchecked
@@ -161,7 +120,6 @@ namespace NumSharp.Core
                 return result;
             }
         }
-        
         protected string _ToVectorString<T>()
         {
             string returnValue = "array([";

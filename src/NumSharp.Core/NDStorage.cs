@@ -21,6 +21,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Numerics;
 
 namespace NumSharp.Core
 {
@@ -33,18 +34,48 @@ namespace NumSharp.Core
         /// memory allocation
         /// </summary>
         private Array values { get; set; }
-
-        private Type dtype;
-
+        public Type dtype {get;set;}
         public Shape Shape { get; set; }
-
         public int Length => values.Length;
-
+        public NDStorage()
+        {
+            dtype = typeof(ValueType);
+            Shape = new Shape(1);
+            values = new int[] {0};
+        }
         public NDStorage(Type dtype)
         {
             this.dtype = dtype;
+            Shape = new Shape(1);
+            values = Array.CreateInstance(dtype,1);
         }
+        /// <summary>
+        /// Create a NDStorage by data type and array shape
+        /// </summary>
+        /// <param name="dtype">The type of arrays elements</param>
+        /// <param name="shape">The shape of array/param>
+        /// <returns>The constructed NDStorage</returns>
+        public static NDStorage CreateByShapeAndType(Type dtype,Shape shape)
+        {
+            var storage = new NDStorage(dtype);
+            storage.Shape = shape;
+            storage.Allocate(shape.Size);
+            return storage;
+        }
+        public static NDStorage CreateByArray(Array values)
+        {
+            Type dtype = values.GetType().GetElementType();
+            
+            int[] dims = new int[values.Rank];
 
+            for (int idx = 0; idx < dims.Length;idx++)
+                dims[idx] = values.GetLength(idx);
+
+            var storage = NDStorage.CreateByShapeAndType(dtype,new Shape(dims));
+            storage.values = Array.CreateInstance(dtype,values.Length);
+
+            return storage;
+        }
         /// <summary>
         /// Retrieve element
         /// low performance, use generic Data<T> method for performance sensitive invoke
@@ -77,11 +108,11 @@ namespace NumSharp.Core
                     switch (values)
                     {
                         case double[] values:
-                            Span<double> double8 = Data<double>();
+                            Span<double> double8 = GetData<double>();
                             nd.Storage.Set(double8.Slice(start, length).ToArray());
                             break;
                         case int[] values:
-                            Span<int> int32 = Data<int>();
+                            Span<int> int32 = GetData<int>();
                             nd.Storage.Set(int32.Slice(start, length).ToArray());
                             break;
                     }
@@ -91,7 +122,7 @@ namespace NumSharp.Core
                     {
                         shape[i - select.Length] = Shape[i];
                     }
-                    nd.Shape = new Shape(shape);
+                    nd.Storage.Shape = new Shape(shape);
 
                     return nd;
                 }
@@ -119,7 +150,7 @@ namespace NumSharp.Core
                     switch (value)
                     {
                         case double v:
-                            Span<double> data1 = Data<double>();
+                            Span<double> data1 = GetData<double>();
                             var elements1 = data1.Slice(start, length);
 
                             for (int i = 0; i < elements1.Length; i++)
@@ -129,7 +160,7 @@ namespace NumSharp.Core
 
                             break;
                         case int v:
-                            Span<int> data2 = Data<int>();
+                            Span<int> data2 = GetData<int>();
                             var elements2 = data2.Slice(start, length);
 
                             for (int i = 0; i < elements2.Length; i++)
@@ -144,28 +175,127 @@ namespace NumSharp.Core
                 }
             }
         }
-
-        public object Data()
+        /// <summary>
+        /// Get all elements as one System.Array object without shape
+        /// </summary>
+        /// <returns></returns>
+        public Array GetData()
         {
             return values;
         }
-
-        /// <summary>
-        /// It's convenint but not recommended due to low performance
-        /// recommend to use NDStorage.Int32 directly
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public T[] Data<T>()
+        public void SetData(Array values)
         {
-            return values as T[];
+            this.values = values;
         }
+        /// <summary>
+        /// Get specific element depending on Shape of array
+        /// </summary>
+        /// <param name="indexes">The indexes of dimensions</param>
+        /// <returns></returns>
+        public object GetData(params int[] indexes)
+        {
+            object element = null;
+            if (indexes.Length == Shape.NDim)
+                element = values.GetValue(Shape.GetIndexInShape(indexes));
+            else
+                throw new Exception("indexes must be equal to number of dimension.");
+            return element;
+        }
+        /// <summary>
+        /// Return all elements as one 1D .NET array but cast to specific type.
+        /// </summary>
+        /// <typeparam name="T">Data type of elements</typeparam>
+        /// <returns>casted array</returns>
+        public T[] GetData<T>()
+        {
+            T[] returnArray = null;
 
+            if (values.GetType().GetElementType() == typeof(T))
+                returnArray = values as T[];
+            else 
+            {  
+                returnArray = new T[values.Length];
+                switch (Type.GetTypeCode(typeof(T))) 
+                {
+                    case TypeCode.Double : 
+                    {
+                        var returnArray_ = returnArray as double[];
+                        for(int idx = 0;idx < returnArray.Length;idx++)
+                            returnArray_[idx] =  Convert.ToDouble(values.GetValue(idx));
+                        break;
+                    }
+                    case TypeCode.Single : 
+                    {
+                        var returnArray_ = returnArray as float[];
+                        for(int idx = 0;idx < returnArray.Length;idx++)
+                            returnArray_[idx] =  Convert.ToSingle(values.GetValue(idx));
+                        break;
+                    }
+                    case TypeCode.Decimal : 
+                    {
+                        var returnArray_ = returnArray as decimal[];
+                        for(int idx = 0;idx < returnArray.Length;idx++)
+                            returnArray_[idx] =  Convert.ToDecimal(values.GetValue(idx));
+                        break;    
+                    }
+                    case TypeCode.Int32 : 
+                    {
+                        var returnArray_ = returnArray as int[];
+                        for(int idx = 0;idx < returnArray.Length;idx++)
+                            returnArray_[idx] =  Convert.ToInt32(values.GetValue(idx));
+                        break;
+                    }
+                    case TypeCode.Int64 :
+                    {
+                        var returnArray_ = returnArray as Int64[];
+                        for(int idx = 0;idx < returnArray.Length;idx++)
+                            returnArray_[idx] =  Convert.ToInt64(values.GetValue(idx));
+                        break;
+                    }
+                    case TypeCode.Object : 
+                    {
+                        if( typeof(T) == typeof(Complex) )
+                        {
+                            var returnArray_ = returnArray as Complex[];
+                            for(int idx = 0;idx < returnArray.Length;idx++)
+                                returnArray_[idx] = new Complex((double)values.GetValue(idx),0);
+                        break;
+                        }
+                        else if ( typeof(T) == typeof(Quaternion) )
+                        {
+                            var returnArray_ = returnArray as Quaternion[];
+                            for(int idx = 0;idx < returnArray.Length;idx++)
+                                returnArray_[idx] = new Quaternion(new Vector3(0,0,0),(float)values.GetValue(idx));
+                        break;
+                        }
+                        else 
+                        {
+
+                        }
+                        break;
+                    }
+                    default : 
+                    {
+                        break;
+                    }
+                } 
+            }
+            return returnArray;
+        }
+        public T GetData<T>(params int[] indexes)
+        {
+            T element;
+            T[] elements = values as T[];
+            if (indexes.Length == Shape.NDim)
+                element = elements[Shape.GetIndexInShape(indexes)];
+            else
+                throw new Exception("indexes must be equal to number of dimension.");
+            return element;
+        }
         public void Set<T>(T[] value)
         {
             values = value;
         }
-
         public void Set<T>(Shape shape, T value)
         {
             if (shape.NDim == Shape.NDim)
@@ -186,6 +316,10 @@ namespace NumSharp.Core
                 }
             }
         }
+        public T[] Data<T>()
+        {
+            return values as T[];
+        }
 
         /// <summary>
         /// Allocate memory of size
@@ -193,18 +327,7 @@ namespace NumSharp.Core
         /// <param name="size"></param>
         internal void Allocate(int size)
         {
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    values = new int[size];
-                    break;
-                case "Single":
-                    values = new float[size];
-                    break;
-                case "Double":
-                    values = new double[size];
-                    break;
-            }
+            values = Array.CreateInstance(this.dtype,size);
         }
 
         private int pos = -1;
