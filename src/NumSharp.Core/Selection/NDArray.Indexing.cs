@@ -17,7 +17,7 @@ namespace NumSharp.Core
         {
             get
             {
-                return Storage[select];
+                return Storage.GetData(select);
             }
 
             set
@@ -38,7 +38,7 @@ namespace NumSharp.Core
                 var n = new NDArray(dtype);
                 if (NDim == 1)
                 {
-                    n.Shape = new Shape(select.Count);
+                    n.Storage.Shape = new Shape(select.Count);
                     for (int i = 0; i < select.Count; i++)
                     {
                         n[i] = this[select[i]];
@@ -46,7 +46,7 @@ namespace NumSharp.Core
                 }
                 else if (NDim == 2)
                 {
-                    n.Shape = new Shape(select.Count, Shape[1]);
+                    n.Storage.Shape = new Shape(select.Count, Shape[1]);
                     for (int i = 0; i < select.Count; i++)
                     {
                         for (int j = 0; j < Shape[1]; j++)
