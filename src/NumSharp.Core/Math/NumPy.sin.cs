@@ -11,10 +11,7 @@ namespace NumSharp.Core
     {
         public NDArray sin(NDArray nd)
         {
-            var sinArray = new NDArray(nd.dtype)
-            {
-                Shape = new Shape(nd.Shape.Shapes)
-            };
+            var sinArray = new NDArray(nd.dtype, new Shape(nd.Shape.Shapes));
 
             for (int idx = 0; idx < nd.Size; idx++)
             {

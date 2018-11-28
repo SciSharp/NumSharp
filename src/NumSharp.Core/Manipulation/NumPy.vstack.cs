@@ -27,13 +27,13 @@ namespace NumSharp.Core
             np.Set(list.ToArray());
             if (nps[0].NDim == 1)
             {
-                np.Shape = new Shape(new int[] { nps.Length, nps[0].Shape.Shapes[0] });
+                np.Storage.Shape = new Shape(new int[] { nps.Length, nps[0].Shape.Shapes[0] });
             }
             else
             {
                 int[] shapes = nps[0].Shape.Shapes.ToArray();
                 shapes[0] *= nps.Length;
-                np.Shape = new Shape(shapes);
+                np.Storage.Shape = new Shape(shapes);
             }
             return np;
         }

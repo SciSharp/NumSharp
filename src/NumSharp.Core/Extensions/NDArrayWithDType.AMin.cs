@@ -19,7 +19,7 @@ namespace NumSharp.Core
                         break;
                 }
                 
-                res.Shape = new Shape(new int[] { 1 });
+                res.Storage.Shape = new Shape(new int[] { 1 });
             }
             else
             {
@@ -47,7 +47,7 @@ namespace NumSharp.Core
                             post *= Shape.Shapes[i];
                     }
                 }
-                res.Shape = new Shape(resShapes);
+                res.Storage.Shape = new Shape(resShapes);
                 //Fill in data
                 index = 0; //index for result data set
                 int sameSetOffset = Shape.DimOffset[axis.Value];

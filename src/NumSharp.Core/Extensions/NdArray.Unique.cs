@@ -12,7 +12,7 @@ namespace NumSharp.Core
             var nd = new NDArray(dtype);
             var data = Data<T>().Distinct().ToArray();
             nd.Set(data);
-            nd.Shape = new Shape(data.Length);
+            nd.Storage.Shape = new Shape(data.Length);
 
             return nd;
         }
