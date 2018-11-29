@@ -32,7 +32,11 @@ namespace NumSharp.Generic
         public NDArray()
         {
             Storage.dtype = typeof(T);
-            Storage = new NDStorage(this.dtype);
+            Storage = NDStorage.CreateByShapeAndType(this.dtype,new Shape(1));
+        }
+        public NDArray(Shape shape) : this()
+        {
+            Storage = NDStorage.CreateByShapeAndType(Storage.dtype, shape);
         }
         public T this[params int[] select]
         {
