@@ -9,60 +9,46 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public NDArray inv<T>()
+        public NDArray inv()
         {
-            var npInv = new NDArray(typeof(T), Shape);
+            var npInv = new NDArray(this.Storage.dtype,this.Shape);
 
-            switch (npInv[0])
+            Array matrixStorage = this.Storage.GetData();
+            Array invStorage = Array.CreateInstance(npInv.Storage.dtype,matrixStorage.Length);
+
+            switch (matrixStorage)
             {
-                case double np:
-                    {
-                        double[][] matrix = null;// np.ToDotNetArray<double[][]>();
-
-                        double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
-
-                        for (int idx = 0; idx < npInv.Shape.Shapes[0]; idx++)
-                            for (int jdx = 0; jdx < npInv.Shape.Shapes[1]; jdx++)
-                                npInv[idx, jdx] = matrixInv[idx][jdx];
-                        break;
-                    }
-                default:
-                    {
-                        throw new Exception("This method was not implemented for this Type : " + typeof(T).Name);
-                    }
-            }
-
-            return npInv;
-        }
-    }
-
-    public partial class NDArrayGeneric<T>
-    {
-        public NDArrayGeneric<T> inv()
-        {
-            NDArrayGeneric<T> npInv = new NDArrayGeneric<T>();
-            npInv.Shape = new Shape(this.Shape.Shapes);
-            npInv.Data = new T[this.Data.Length];
-
-            switch (this)
-            {
-                case NDArrayGeneric<double> np :
+                case double[] np :
                 {
-                    NDArrayGeneric<double> npInvDouble = npInv as NDArrayGeneric<double>;
-                    double[][] matrix = np.ToDotNetArray<double[][]>();
+                    
+                    double[][] matrix = new double[this.Storage.Shape[0]][];
+                    for (int idx = 0; idx < matrix.Length;idx++)
+                    {
+                        matrix[idx] = new double[this.Storage.Shape[1]];
+                        for (int jdx = 0; jdx < matrix[idx].Length;jdx++)
+                            matrix[idx][jdx] = np[this.Storage.Shape.GetIndexInShape(idx,jdx)];
+                    }
 
                     double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
+                    double[] invArray = invStorage as double[];
 
                     for (int idx = 0; idx < npInv.Shape.Shapes[0]; idx++)
+                    {
                         for (int jdx = 0; jdx < npInv.Shape.Shapes[1]; jdx++)
-                            npInvDouble[idx, jdx] = matrixInv[idx][jdx];
+                        {
+                            invArray[this.Storage.Shape.GetIndexInShape(idx,jdx)] = matrixInv[idx][jdx];
+                        }
+                    }
+                        
                     break;
                 }
                 default : 
                 {
-                    throw new Exception("This method was not implemented for this Type : " + typeof(T).Name);
+                    throw new IncorrectTypeException();
                 }
             }
+
+            npInv.Storage.SetData(invStorage);
             
             return npInv;
         }
