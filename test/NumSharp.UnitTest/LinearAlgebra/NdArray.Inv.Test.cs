@@ -11,38 +11,39 @@ namespace NumSharp.UnitTest.Extensions
     [TestClass]
     public class NdArrayInvTest
     {
+        public NumPy np = new NumPy();
         [TestMethod]
         public void Simple2x2()
         {
-            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().arange(4).reshape(2,2);
+            var np1 = np.arange(4.0).reshape(2,2);
 
-            NDArrayGeneric<double> np1Inv = np1.inv();
+            var np1Inv = np1.inv();
 
-            //var OncesMatrix = np1.dot(np1Inv);
+            var OncesMatrix = np1.dot(np1Inv);
 
-             //Assert.IsTrue(OncesMatrix[0,0] == 1);
-             //Assert.IsTrue(OncesMatrix[1,1] == 1);
-             //Assert.IsTrue(OncesMatrix[1,0] == 0);
-             //Assert.IsTrue(OncesMatrix[0,1] == 0);
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{1,0,0,1},OncesMatrix.Storage.GetData<double>()));
+
         }
         [TestMethod]
         public void Simple3x3()
         {
-            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().Zeros(3,3);
+            var np1 = new NDArray(typeof(double),3,3);
 
-            np1[0,0] = 5;
-            np1[0,1] = 1;
-            np1[0,2] = 2;
-            np1[1,0] = 1;
-            np1[1,1] = 0;
-            np1[1,2] = 1;
-            np1[2,0] = 1;
-            np1[2,1] = 1;
-            np1[2,2] = 0;
+            var np1Arr = np1.Storage.GetData<double>();
 
-            NDArrayGeneric<double> np1Inv = np1.inv();
+            np1Arr[0] = 5;
+            np1Arr[1] = 1;
+            np1Arr[2] = 2;
+            np1Arr[3] = 1;
+            np1Arr[4] = 0;
+            np1Arr[5] = 1;
+            np1Arr[6] = 1;
+            np1Arr[7] = 1;
+            np1Arr[8] = 0;
 
-            //var OncesMatrix = np1.dot(np1Inv);
+            var np1Inv = np1.inv();
+
+            var OncesMatrix = np1.dot(np1Inv);
 
             //Assert.IsTrue(Math.Abs(OncesMatrix[0,0]) < 1.000001);
             //Assert.IsTrue(Math.Abs(OncesMatrix[1,1]) < 1.000001);
