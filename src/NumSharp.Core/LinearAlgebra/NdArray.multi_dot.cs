@@ -7,7 +7,7 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NDArrayGeneric<T> 
+    public partial class NDArray
     {
         /// <summary>
         /// 
@@ -16,21 +16,21 @@ namespace NumSharp.Core
         /// <param name="np2"></param>
         /// <typeparam name="TData"></typeparam>
         /// <returns></returns>
-        public NDArrayGeneric<T> multi_dot(params NDArrayGeneric<T>[] np2Multi)
+        public NDArray multi_dot(params NDArray[] np2Multi)
         {
             var np2 = np2Multi.Last(); 
 
             if ((this.Shape.NDim == 1 ) & (np2.Shape.NDim == 1))
                 if (this.Shape.Shapes[0] != np2.Shape.Shapes[0])
-                    throw new Exception("The Dot method does not work with this shape or was not already implemented."); 
+                    throw new IncorrectShapeException(); 
                 else 
                 {
-                    np2.Shape = new Shape(np2.Data.Length,1);
-                    this.Shape = new Shape(1,this.Data.Length);
+                    np2.Storage.Shape = new Shape(np2.Storage.GetData().Length,1);
+                    this.Storage.Shape = new Shape(1,this.Storage.GetData().Length);
                 }
             else
                 if (this.Shape.Shapes[1] != np2.Shape.Shapes[0])
-                    throw new Exception("The Dot method does not work with this shape or was not already implemented.");
+                    throw new IncorrectShapeException();
             
             var prod = this.dot(np2Multi[0]);
 
