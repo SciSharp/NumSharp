@@ -8,13 +8,7 @@ namespace NumSharp.Core
     {
         public NDArray dot(NDArray a, NDArray b)
         {
-            switch (a.dtype.Name)
-            {
-                case "Int32":
-                    return a.dot<int>(b);
-            }
-
-            return null;
+            return a.dot(b);
         }
     }
 }

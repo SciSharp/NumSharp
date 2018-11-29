@@ -20,7 +20,7 @@ namespace NumSharp.Core
 
         public static NDArray array(this NumPy np, Array array, Type dtype = null, int ndim = 1)
         {
-            dtype = (dtype == null) ? typeof(double) : dtype;
+            dtype = (dtype == null) ? array.GetType().GetElementType() : dtype;
             
 			var nd = new NDArray(dtype);
 			
