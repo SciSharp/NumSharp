@@ -9,6 +9,10 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
+        public NDArray power(NDArray nd, ValueType exponent)
+        {
+            return nd.power(exponent);
+        }
         public NDArray power<T>(NDArray nd, T exponent)
         {
             var sinArray = new NDArray(nd.dtype);
