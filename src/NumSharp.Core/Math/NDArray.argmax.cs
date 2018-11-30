@@ -9,21 +9,44 @@ namespace NumSharp.Core
     {
         public int argmax()
         {
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    {
-                        var max = Data<int>().Max();
-                        return Data<int>().ToList().IndexOf(max);
-                    }
-                case "Double":
-                    {
-                        var max = Data<double>().Max();
-                        return Data<double>().ToList().IndexOf(max);
-                    }
-            }
+            var data = this.Storage.GetData();
 
-            return -1;
+            int index = -1;
+
+            switch (data)
+            {
+                case double[] castedData : 
+                {
+                    index = castedData.ToList().IndexOf(castedData.Max());
+                    break;
+                }
+                case float[] castedData : 
+                {
+                    index = castedData.ToList().IndexOf(castedData.Max());
+                    break;
+                }
+                case int[] castedData : 
+                {
+                    index = castedData.ToList().IndexOf(castedData.Max());
+                    break;
+                }
+                case Int64[] castedData : 
+                {
+                    index = castedData.ToList().IndexOf(castedData.Max());
+                    break;
+                }
+                case decimal[] castedData : 
+                {
+                    index = castedData.ToList().IndexOf(castedData.Max());
+                    break;
+                }
+                default :
+                {
+                    throw new IncorrectTypeException();
+                }
+            }
+            
+            return index;
         }
 
         public int argmax<T>()
