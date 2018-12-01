@@ -9,6 +9,18 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
+        public NDArray ones(params int[] shapes)
+        {
+            Type dtype = typeof(double);
+
+            return ones(dtype,shapes);
+        }
+        public NDArray ones(Type dtype = null, params int[] shapes)
+        {
+            dtype = (dtype == null ) ? typeof(double) : dtype;
+
+            return new NDArray(dtype).ones(dtype,shapes);
+        }
         /// <summary>
         /// Return a new array of given shape and type, filled with ones.
         /// </summary>

@@ -9,78 +9,160 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public static NDArray operator +(NDArray np1, NDArray np2)
+       public static NDArray operator +(NDArray np1, NDArray np2)
         {
-            var sum = new NDArray(np1.dtype, np1.Shape);
+            NDArray sum = new NDArray(np1.dtype,np1.Storage.Shape);
+            
+            if (!Enumerable.SequenceEqual(np1.Storage.Shape.Shapes,np2.Storage.Shape.Shapes))
+                throw new IncorrectShapeException();
 
-            switch (np1.dtype.Name)
+            Array np1SysArr = np1.Storage.GetData();
+            Array np2SysArr = np2.Storage.GetData();
+            Array np3SysArr = sum.Storage.GetData();
+
+            switch (np3SysArr)
             {
-                case "Double":
-                    {
-                        double[] np1Array = np1.Data<double>();
-                        double[] np2Array = np2.Data<double>();
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sum.Size; idx++)
-                            sum[idx] = np1Array[idx] + np2Array[idx];
-                        break;
-                    }
-                /*case float[] sumArray:
-                    {
-                        float[] np1Array = np1.Data<float>();
-                        float[] np2Array = np2.Data<float>();
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] + np2Array[idx];
-                        break;
-                    }
-                case Complex[] sumArray:
-                    {
-                        Complex[] np1Array = np1.Data<Complex>();
-                        Complex[] np2Array = np2.Data<Complex>();
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] + np2Array[idx];
-                        break;
-                    }
-                case Quaternion[] sumArray:
-                    {
-                        Quaternion[] np1Array = np1.Data<Quaternion>();
-                        Quaternion[] np2Array = np2.Data<Quaternion>();
-                        // for is faster than linq 
-                        for (int idx = 0; idx < sumArray.Length; idx++)
-                            sumArray[idx] = np1Array[idx] + np2Array[idx];
-                        break;
-                    }*/
-                default:
-                    {
-                        throw new Exception("The operation is not implemented for the " + np1.dtype.Name);
-                    }
-            }
-
-            return sum;
-        }
-
-        public static NDArray operator +(NDArray np1, double scalar)
-        {
-            var sum = new NDArray(typeof(double), np1.Shape);
-
-            // for is faster than linq 
-            for (int idx = 0; idx < sum.Size; idx++)
-            {
-                switch (np1[idx])
+                case double[] sumArray : 
                 {
-                    case int d:
-                        sum[idx] = d + scalar;
-                        break;
-                    case double d:
-                        sum[idx] = d + scalar;
-                        break;
+                    double[] np1Array = np1SysArr as double[];
+                    double[] np2Array = np2SysArr as double[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break;
+                }
+                case float[] sumArray : 
+                {
+                    float[] np1Array = np1SysArr as float[];
+                    float[] np2Array = np2SysArr as float[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break; 
+                }
+                case int[] sumArray : 
+                {
+                    int[] np1Array = np1SysArr as int[];
+                    int[] np2Array = np2SysArr as int[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break; 
+                }
+                case Int64[] sumArray : 
+                {
+                    Int64[] np1Array = np1SysArr as Int64[];
+                    Int64[] np2Array = np2SysArr as Int64[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break; 
+                }
+                case Complex[] sumArray : 
+                {
+                    Complex[] np1Array = np1SysArr as Complex[];
+                    Complex[] np2Array = np2SysArr as Complex[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break; 
+                }
+                case Quaternion[] sumArray : 
+                {
+                    Quaternion[] np1Array = np1SysArr as Quaternion[];
+                    Quaternion[] np2Array = np2SysArr as Quaternion[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < sumArray.Length;idx++)
+                        sumArray[idx] = np1Array[idx] + np2Array[idx];
+                    break; 
+                }
+                default : 
+                {
+                    throw new IncorrectTypeException();
                 }
             }
 
             return sum;
         }
+        public static NDArray operator +(NDArray np1, ValueType scalar)
+        {
+            NDArray sum = new NDArray(np1.dtype,np1.Shape);
+            
+            Array np1SysArr = np1.Storage.GetData();
+            Array sumSysArr = sum.Storage.GetData();
 
+            switch (sumSysArr)
+            {
+                case double[] sumArr : 
+                {
+                    double scalar_ = Convert.ToDouble(scalar);
+                    double[] np1Array = np1SysArr as double[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+
+                    break;
+                }
+                case float[] sumArr : 
+                {
+                    float scalar_ = Convert.ToSingle(scalar);
+                    float[] np1Array = np1SysArr as float[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+                        
+                    break;
+                }
+                case int[] sumArr : 
+                {
+                    int scalar_ = Convert.ToInt32(scalar);
+                    int[] np1Array = np1SysArr as int[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+                        
+                    break;
+                }
+                case Int64[] sumArr : 
+                {
+                    Int64 scalar_ = Convert.ToInt64(scalar);
+                    Int64[] np1Array = np1SysArr as Int64[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+                        
+                    break;
+                }
+                case Complex[] sumArr : 
+                {
+                    Complex scalar_ = (Complex) scalar;
+                    Complex[] np1Array = np1SysArr as Complex[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+                        
+                    break;
+                }
+                case Quaternion[] sumArr : 
+                {
+                    Quaternion scalar_ = (Quaternion) scalar;
+                    Quaternion[] np1Array = np1SysArr as Quaternion[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        sumArr[idx] = np1Array[idx] + scalar_;
+                        
+                    break;
+                }
+                default : 
+                {
+                    throw new IncorrectTypeException();
+                }
+            }
+
+            
+            return sum;
+        }
+        
         public static NDArray operator +(double scalar, NDArray np1)
         {
             return np1 + scalar;
