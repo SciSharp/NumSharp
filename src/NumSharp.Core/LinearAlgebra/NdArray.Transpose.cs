@@ -11,7 +11,7 @@ namespace NumSharp.Core
     {
         public NDArray transpose()
         {
-            var np = new NDArray(dtype);
+            var np = new NDArray(dtype,new Shape(this.Storage.Shape.Shapes.Reverse().ToArray()));
 
             if (NDim == 1)
             {
@@ -19,7 +19,6 @@ namespace NumSharp.Core
             }
             else
             {
-                np.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(Shape.Shapes.Reverse().ToArray()));
                 for (int idx = 0; idx < np.Shape.Shapes[0]; idx++)
                     for (int jdx = 0; jdx < np.Shape.Shapes[1]; jdx++)
                         np[idx, jdx] = this[jdx, idx];
