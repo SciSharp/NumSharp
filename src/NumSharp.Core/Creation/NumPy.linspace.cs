@@ -7,6 +7,12 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
+        public NDArray linspace(double start, double stop, int num, bool entdpoint = true, Type dtype = null)
+        {
+            dtype = (dtype == null) ? typeof(double) : dtype;
+
+            return new NDArray(dtype).linspace(start,stop,num,entdpoint);
+        }
         public NDArray linspace<T>(double start, double stop, int num, bool entdpoint = true)
         {
             double steps = (stop - start) / ((entdpoint) ? (double)num - 1.0 : (double)num);
