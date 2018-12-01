@@ -22,7 +22,7 @@ namespace NumSharp.Core
 
             set
             {
-                Storage[select] = value;
+                Storage.SetData(value, select);
             }
         }
 

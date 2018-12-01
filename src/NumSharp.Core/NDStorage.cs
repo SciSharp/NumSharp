@@ -183,9 +183,25 @@ namespace NumSharp.Core
         {
             return values;
         }
+        /// <summary>
+        /// Get all elements with correct type by parameter instead of generic
+        /// </summary>
+        /// <param name="dtype"></param>
+        /// <returns></returns>
+        public Array GetData(Type dtype)
+        {
+            var methods = this.GetType().GetMethods().Where(x => x.Name.Equals("GetData") && x.IsGenericMethod && x.ReturnType.Name.Equals("T[]"));
+            var genMethods = methods.First().MakeGenericMethod(dtype);
+
+            return (Array) genMethods.Invoke(this,null);
+        }
         public void SetData(Array values)
         {
             this.values = values;
+        }
+        public void SetData(object value, params int[] indexes)
+        {
+            this.values.SetValue(value,Shape.GetIndexInShape(indexes));
         }
         /// <summary>
         /// Get specific element depending on Shape of array
