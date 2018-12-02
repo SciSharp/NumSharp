@@ -20,8 +20,8 @@ namespace NumSharp.Core
         {
             var pufferShape = nd2.Storage.Shape;
 
-            if ((this.Shape.NDim == 1 ) & (nd2.Shape.NDim == 1))
-                if (this.Shape.Shapes[0] != nd2.Shape.Shapes[0])
+            if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
+                if (this.shape.Shapes[0] != nd2.shape.Shapes[0])
                     throw new IncorrectShapeException(); 
                 else 
                 {
@@ -29,19 +29,19 @@ namespace NumSharp.Core
                     this.Storage.Shape = new Shape(1,this.Storage.GetData().Length);
                 }
             else
-                if (this.Shape.Shapes[1] != nd2.Shape.Shapes[0])
+                if (this.shape.Shapes[1] != nd2.shape.Shapes[0])
                     throw new IncorrectShapeException();
             
-            if ((Shape.NDim == 2) & (nd2.Shape.NDim == 1))
+            if ((shape.NDim == 2) & (nd2.shape.NDim == 1))
             {
                 var pufferList = pufferShape.Shapes.ToList();
                 pufferList.Add(1);
                 nd2.Storage.Shape = new Shape(pufferList.ToArray());
             }
             
-            int iterator = this.Shape.Shapes[1];
-            int dim0 = this.Shape.Shapes[0];
-            int dim1 = nd2.Shape.Shapes[1];
+            int iterator = this.shape.Shapes[1];
+            int dim0 = this.shape.Shapes[0];
+            int dim1 = nd2.shape.Shapes[1];
             
             var prod = new NDArray(this.Storage.dtype, dim0, dim1);
 
@@ -54,7 +54,7 @@ namespace NumSharp.Core
                     int[] result = prod.Storage.GetData<int>();
                     int[] nd2Array = nd2.Storage.GetData<int>();
 
-                    for (int idx = 0; idx < prod.Size; idx++)
+                    for (int idx = 0; idx < prod.size; idx++)
                     {
                         int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
@@ -69,7 +69,7 @@ namespace NumSharp.Core
                     double[] result = prod.Storage.GetData<double>();
                     double[] nd2Array = nd2.Storage.GetData<double>();
 
-                    for (int idx = 0; idx < prod.Size; idx++)
+                    for (int idx = 0; idx < prod.size; idx++)
                     {
                         int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
@@ -84,7 +84,7 @@ namespace NumSharp.Core
                     float[] result = prod.Storage.GetData<float>();
                     float[] nd2Array = nd2.Storage.GetData<float>();
 
-                    for (int idx = 0; idx < prod.Size; idx++)
+                    for (int idx = 0; idx < prod.size; idx++)
                     {
                         int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
@@ -99,7 +99,7 @@ namespace NumSharp.Core
                     Complex[] result = prod.Storage.GetData<Complex>();
                     Complex[] nd2Array = nd2.Storage.GetData<Complex>();
 
-                    for (int idx = 0; idx < prod.Size; idx++)
+                    for (int idx = 0; idx < prod.size; idx++)
                     {
                         int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
@@ -114,7 +114,7 @@ namespace NumSharp.Core
                     Quaternion[] result = prod.Storage.GetData<Quaternion>();
                     Quaternion[] nd2Array = nd2.Storage.GetData<Quaternion>();
 
-                    for (int idx = 0; idx < prod.Size; idx++)
+                    for (int idx = 0; idx < prod.size; idx++)
                     {
                         int puffer1 = idx / dim1;
                         int puffer2 = idx % dim1;
@@ -130,7 +130,7 @@ namespace NumSharp.Core
                 }
             }
 
-            if ((this.Shape.NDim == 1 ) & (nd2.Shape.NDim == 1))
+            if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
             {
                 this.Storage.Shape = new Shape(this.Storage.GetData().Length);
                 nd2.Storage.Shape = new Shape(nd2.Storage.GetData().Length);

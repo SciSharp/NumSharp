@@ -86,7 +86,7 @@ namespace NumSharp.Core
         }
         public static NDArray operator -(NDArray np1, ValueType scalar)
         {
-            NDArray sum = new NDArray(np1.dtype,np1.Shape);
+            NDArray sum = new NDArray(np1.dtype,np1.shape);
             
             Array np1SysArr = np1.Storage.GetData();
             Array sumSysArr = sum.Storage.GetData();

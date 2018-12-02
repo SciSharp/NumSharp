@@ -13,14 +13,14 @@ namespace NumSharp.Core
         {
             var np = new NDArray(dtype,new Shape(this.Storage.Shape.Shapes.Reverse().ToArray()));
 
-            if (NDim == 1)
+            if (ndim == 1)
             {
-                np.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(1, Shape.Shapes[0]));
+                np.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(1, shape.Shapes[0]));
             }
             else
             {
-                for (int idx = 0; idx < np.Shape.Shapes[0]; idx++)
-                    for (int jdx = 0; jdx < np.Shape.Shapes[1]; jdx++)
+                for (int idx = 0; idx < np.shape.Shapes[0]; idx++)
+                    for (int jdx = 0; jdx < np.shape.Shapes[1]; jdx++)
                         np[idx, jdx] = this[jdx, idx];
             }
 

@@ -35,11 +35,11 @@ namespace NumSharp.Core
             switch (default(T))
             {
                 case int data:
-                    nd.Set(Enumerable.Range(0, nd.Size).Select(x => 1).ToArray());
+                    nd.Set(Enumerable.Range(0, nd.size).Select(x => 1).ToArray());
                     break;
 
                 case double data:
-                    nd.Set(Enumerable.Range(0, nd.Size).Select(x => 1.0).ToArray());
+                    nd.Set(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
                     break;
             }
 

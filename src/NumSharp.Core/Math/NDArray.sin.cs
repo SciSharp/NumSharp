@@ -9,7 +9,7 @@ namespace NumSharp.Core
     {
         public NDArray sin()
         {
-            var sinArray = new NDArray(this.dtype,this.Shape);
+            var sinArray = new NDArray(this.dtype,this.shape);
 
             Array dataSysArr = this.Storage.GetData();
             Array sinDataSysArr = sinArray.Storage.GetData();

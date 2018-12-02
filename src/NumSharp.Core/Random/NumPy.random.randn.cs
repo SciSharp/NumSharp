@@ -30,7 +30,7 @@ namespace NumSharp.Core
             var array = new NDArray(typeof(double), new Shape(size).Size);
             Random rand = new Random(); //reuse this if you are generating many
 
-            for (int i = 0; i < array.Size; i++)
+            for (int i = 0; i < array.size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
                 double u2 = 1.0 - rand.NextDouble();

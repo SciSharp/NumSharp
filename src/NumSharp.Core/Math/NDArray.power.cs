@@ -11,7 +11,7 @@ namespace NumSharp.Core
     {
         public NDArray power(ValueType exponent)
         {
-            var powerArray = new NDArray(this.dtype,this.Shape);
+            var powerArray = new NDArray(this.dtype,this.shape);
 
             Array dataSysArr = this.Storage.GetData();
             Array powerDataSysArr = powerArray.Storage.GetData();
