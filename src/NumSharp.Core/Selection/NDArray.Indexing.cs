@@ -73,17 +73,17 @@ namespace NumSharp.Core
         /// <summary>
         /// shortcut for Double data type, 8 bytes
         /// </summary>
-        public double[] Double => Storage.Data<double>();
+        public double[] float64 => Storage.Data<double>();
 
         /// <summary>
         /// shortcut for Int32 data type
         /// </summary>
-        public int[] Int32 => Storage.Data<int>();
+        public int[] int32 => Storage.Data<int>();
 
         // <summary>
         /// shortcut for string data type
         /// </summary>
-        public string[] Chars => Storage.Data<string>();
+        public string[] chars => Storage.Data<string>();
 
         public void Set<T>(T[] data) => Storage.Set(data);
 

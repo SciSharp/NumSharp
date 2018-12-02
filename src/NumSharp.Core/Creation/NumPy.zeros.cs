@@ -14,7 +14,7 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArray zeros(params int[] shape)
         {
-            var nd = new NDArray(typeof(float),new Shape(shape));
+            var nd = new NDArray(float64, new Shape(shape));
             return nd;
         }
 
@@ -24,6 +24,11 @@ namespace NumSharp.Core
             nd.Storage.Shape = new Shape(shape);
 
             return nd;
+        }
+
+        public NDArray zeros(Shape shape, Type dtype = null)
+        {
+            return new NDArray(dtype == null? float64 : dtype, shape);
         }
     }
 }

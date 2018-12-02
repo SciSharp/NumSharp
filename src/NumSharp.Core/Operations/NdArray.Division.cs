@@ -71,7 +71,7 @@ namespace NumSharp.Core
                 {
                     // for is faster than linq 
                     for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = sum.Double[idx] / scalar;
+                        sum[idx] = sum.float64[idx] / scalar;
                     break;
                 }
                 /*case float[] np1Array: 
