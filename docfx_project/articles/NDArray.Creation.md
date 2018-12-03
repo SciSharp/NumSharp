@@ -11,15 +11,15 @@ Maybe first of all we should see the dump way – which can be always used but i
 **Dump way**
 
 ```CSHARP
-// first standard constructor
+// first constructor with data type 
 // you also specify the generic type of the NDArray
-var np = new NDArray<double>();
+var np = new NDArray(typeof(double));
 
 // set 9 elements into this array
-np.Data = new double[] {1,2,3,4,5,6,7,8,9};
+np.Storage.SetData(new double[] {1,2,3,4,5,6,7,8,9});
 
 // shape it to a 3x3 matrix 
-np.Shape = new Shape(3,3);
+np.Storage.Shape = new Shape(3,3);
 ```
 
 Ok looks not too difficult. But also not too userfriendly. 

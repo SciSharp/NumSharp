@@ -5,9 +5,9 @@ using System.Linq;
 using System.Text;
 using NumSharp;
 
-namespace NumSharp.Core.Extensions
+namespace NumSharp.Core
 {
-    public static partial class NDArrayExtensions
+    public partial class NDArray
     {
         /// <summary>
         /// Convolution of 2 series  
@@ -16,12 +16,18 @@ namespace NumSharp.Core.Extensions
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public static NDArrayGeneric<double> Convolve(this NDArrayGeneric<double> numSharpArray1, NDArrayGeneric<double> numSharpArray2, string mode = "full" )
+        public NDArray Convolve(NDArray numSharpArray2, string mode = "full" )
         {
-            int nf = numSharpArray1.Shape.Shapes[0];
-            int ng = numSharpArray2.Shape.Shapes[0];
+            int nf = this.shape.Shapes[0];
+            int ng = numSharpArray2.shape.Shapes[0];
 
-            var numSharpReturn = new NDArrayGeneric<double>();
+            if (shape.NDim > 1)
+                throw new IncorrectShapeException();
+
+            var numSharpReturn = new NDArray(this.dtype);
+
+            double[] np1 = this.Storage.GetData<double>();
+            double[] np2 = numSharpArray2.Storage.GetData<double>();
 
             switch (mode)
             {
@@ -38,18 +44,19 @@ namespace NumSharp.Core.Extensions
 
                         for (int jdx = jmn; jdx <= jmx; ++jdx )
                         {
-                            outArray[idx] += ( numSharpArray1[jdx] * numSharpArray2[idx - jdx] );
+                            outArray[idx] += ( np1[jdx] * np2[idx - jdx] );
                         }
                     }
-                
-                    numSharpReturn.Data = outArray;
+
+                    numSharpReturn.Storage = NDStorage.CreateByShapeAndType(numSharpReturn.dtype, new Shape(outArray.Length));
+                    numSharpReturn.Storage.SetData(outArray);
 
                     break;
                 }
                 case "valid":
                 {
-                    var min_v = (nf < ng) ? numSharpArray1 : numSharpArray2;
-                    var max_v = (nf < ng) ? numSharpArray2 : numSharpArray1;
+                    var min_v = (nf < ng) ? np1 : np2;
+                    var max_v = (nf < ng) ? np2 : np1;
             
                     int n  = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
                 
@@ -59,14 +66,15 @@ namespace NumSharp.Core.Extensions
                     {
                         int kdx = idx; 
                     
-                        for(int jdx = (min_v.Shape.Shapes[0] - 1); jdx >= 0; --jdx) 
+                        for(int jdx = (min_v.Length - 1); jdx >= 0; --jdx) 
                         {
                             outArray[idx] += min_v[jdx] * max_v[kdx];
                             ++kdx;
                         }
                     }
 
-                    numSharpReturn.Data = outArray;
+                    numSharpReturn.Storage = NDStorage.CreateByShapeAndType(numSharpReturn.dtype, new Shape(outArray.Length));
+                    numSharpReturn.Storage.SetData(outArray);
                     
                     break;
                 }
@@ -75,38 +83,44 @@ namespace NumSharp.Core.Extensions
                     // followed the discussion on 
                     // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
                     // implemented numpy convolve because we follow numpy
-                    var npad = numSharpArray2.Shape.Shapes[0] - 1;
+                    var npad = numSharpArray2.shape.Shapes[0] - 1;
+
+                    double[] np1New = null;
 
                     if (npad % 2 == 1)
                     {
                         npad = (int) Math.Floor(((double)npad) / 2.0);
+
+                        np1New = (double[]) np1.Clone();
                     
-                        numSharpArray1.Data.ToList().AddRange(new double[npad+1]);
+                        np1New.ToList().AddRange(new double[npad+1]);
                         var puffer = (new double[npad]).ToList();
-                        puffer.AddRange(numSharpArray1.Data);
-                        numSharpArray1.Data = puffer.ToArray(); 
-                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length);
+                        puffer.AddRange(np1New);
+                        np1New = puffer.ToArray(); 
                     }
                     else 
                     {
                         npad = npad / 2;
+
+                        np1New = (double[]) np1.Clone();
                     
-                        var puffer = ((double[]) numSharpArray1.Data).ToList(); 
+                        var puffer = np1New.ToList(); 
                         puffer.AddRange(new double[npad]);
-                        numSharpArray1.Data = puffer.ToArray();
-                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length);
+                        np1New = puffer.ToArray();
                     
                         puffer = (new double[npad]).ToList();
-                        puffer.AddRange(numSharpArray1.Data);
-                        numSharpArray1.Data = puffer.ToArray();
-                        numSharpArray1.Shape = new Shape(numSharpArray1.Data.Length); 
+                        puffer.AddRange(np1New);
+                        np1New = puffer.ToArray();
                     }
 
-                    numSharpReturn = numSharpArray1.Convolve(numSharpArray2,"valid");
+                    var numSharpNew = new NumPy().array(np1New,dtype);
+
+                    numSharpReturn = numSharpNew.Convolve(numSharpArray2,"valid");
                     break;
                 }
+
             }
-            numSharpReturn.Shape = new Shape(numSharpReturn.Data.Length);
+
             return numSharpReturn;
         }
     }
