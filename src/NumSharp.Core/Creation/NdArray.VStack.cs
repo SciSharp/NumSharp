@@ -32,13 +32,13 @@ namespace NumSharp.Core
             
             var check = dataSysArr.GetValue(idxOfLastCopyiedElement-1);
 
-            if (NDim == 1)
+            if (ndim == 1)
             {
-                np.Storage.Shape = new Shape(new int[] { nps.Length+1, Shape.Shapes[0] });
+                np.Storage.Shape = new Shape(new int[] { nps.Length+1, shape.Shapes[0] });
             }
             else
             {
-                int[] shapes = nps[0].Shape.Shapes.ToArray();
+                int[] shapes = nps[0].shape.Shapes.ToArray();
                 shapes[0] *= nps.Length;
                 np.Storage.Shape = new Shape(shapes);
             }

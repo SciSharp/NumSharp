@@ -36,7 +36,7 @@ namespace NumSharp.Core
             get
             {
                 var n = new NDArray(dtype);
-                if (NDim == 1)
+                if (ndim == 1)
                 {
                     n.Storage.Shape = new Shape(select.Count);
                     for (int i = 0; i < select.Count; i++)
@@ -44,12 +44,12 @@ namespace NumSharp.Core
                         n[i] = this[select[i]];
                     }
                 }
-                else if (NDim == 2)
+                else if (ndim == 2)
                 {
-                    n.Storage.Shape = new Shape(select.Count, Shape[1]);
+                    n.Storage.Shape = new Shape(select.Count, shape[1]);
                     for (int i = 0; i < select.Count; i++)
                     {
-                        for (int j = 0; j < Shape[1]; j++)
+                        for (int j = 0; j < shape[1]; j++)
                         {
                             n[i, j] = this[select[i], j];
                         }
@@ -68,22 +68,22 @@ namespace NumSharp.Core
 
         public T[] Data<T>() => Storage.Data<T>();
 
-        public T Data<T>(params int[] shape) => Storage.Data<T>()[Shape.GetIndexInShape(shape)];
+        public T Data<T>(params int[] shape) => Storage.Data<T>()[this.shape.GetIndexInShape(shape)];
 
         /// <summary>
         /// shortcut for Double data type, 8 bytes
         /// </summary>
-        public double[] Double => Storage.Data<double>();
+        public double[] float64 => Storage.Data<double>();
 
         /// <summary>
         /// shortcut for Int32 data type
         /// </summary>
-        public int[] Int32 => Storage.Data<int>();
+        public int[] int32 => Storage.Data<int>();
 
         // <summary>
         /// shortcut for string data type
         /// </summary>
-        public string[] Chars => Storage.Data<string>();
+        public string[] chars => Storage.Data<string>();
 
         public void Set<T>(T[] data) => Storage.Set(data);
 

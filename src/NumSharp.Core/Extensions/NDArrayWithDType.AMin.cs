@@ -23,9 +23,9 @@ namespace NumSharp.Core
             }
             else
             {
-                if (axis < 0 || axis >= Shape.NDim)
+                if (axis < 0 || axis >= shape.NDim)
                     throw new Exception("Invalid input: axis");
-                int[] resShapes = new int[Shape.Shapes.Count - 1];
+                int[] resShapes = new int[shape.Shapes.Count - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
                 int prev = 1; 
@@ -33,28 +33,28 @@ namespace NumSharp.Core
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape
-                for (int i = 0; i < Shape.Shapes.Count; i++)
+                for (int i = 0; i < shape.Shapes.Count; i++)
                 {
                     if (i == axis)
-                        cur = Shape.Shapes[i];
+                        cur = shape.Shapes[i];
                     else
                     {
-                        resShapes[index++] = Shape.Shapes[i];
-                        size *= Shape.Shapes[i];
+                        resShapes[index++] = shape.Shapes[i];
+                        size *= shape.Shapes[i];
                         if (i < axis)
-                            prev *= Shape.Shapes[i];
+                            prev *= shape.Shapes[i];
                         else
-                            post *= Shape.Shapes[i];
+                            post *= shape.Shapes[i];
                     }
                 }
                 res.Storage.Shape = new Shape(resShapes);
                 //Fill in data
                 index = 0; //index for result data set
-                int sameSetOffset = Shape.DimOffset[axis.Value];
+                int sameSetOffset = shape.DimOffset[axis.Value];
                 int increments = cur * post;
                 int start = 0;
                 double min;
-                for (int i = 0; i < Size; i += increments)
+                for (int i = 0; i < this.size; i += increments)
                 {
                     for (int j = i; j < i + post; j++)
                     {

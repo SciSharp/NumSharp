@@ -20,18 +20,18 @@ namespace NumSharp.Core
             var np = new NDArray(typeof(T));
             foreach (NDArray ele in nps)
             {
-                if (nps[0].Shape != ele.Shape)
+                if (nps[0].shape != ele.shape)
                     throw new Exception("Arrays mush have same shapes");
                 list.AddRange(ele.Data<T>());
             }
             np.Set(list.ToArray());
-            if (nps[0].NDim == 1)
+            if (nps[0].ndim == 1)
             {
-                np.Storage.Shape = new Shape(new int[] { nps.Length, nps[0].Shape.Shapes[0] });
+                np.Storage.Shape = new Shape(new int[] { nps.Length, nps[0].shape.Shapes[0] });
             }
             else
             {
-                int[] shapes = nps[0].Shape.Shapes.ToArray();
+                int[] shapes = nps[0].shape.Shapes.ToArray();
                 shapes[0] *= nps.Length;
                 np.Storage.Shape = new Shape(shapes);
             }

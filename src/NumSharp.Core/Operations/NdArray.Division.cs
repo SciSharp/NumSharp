@@ -12,7 +12,7 @@ namespace NumSharp.Core
     {
         public static NDArray operator /(NDArray np1, NDArray np2)
         {
-            var sum = new NDArray(np1.dtype, np1.Shape);
+            var sum = new NDArray(np1.dtype, np1.shape);
             
             switch (sum.dtype.Name)
             {
@@ -21,7 +21,7 @@ namespace NumSharp.Core
                     double[] np1Array = np1.Data<double>();
                     double[] np2Array = np2.Data<double>();
                     // for is faster than linq 
-                    for (int idx = 0; idx < sum.Size;idx++)
+                    for (int idx = 0; idx < sum.size;idx++)
                         sum[idx] = np1Array[idx] / np2Array[idx];
                     break;
                 }
@@ -63,15 +63,15 @@ namespace NumSharp.Core
 
         public static NDArray operator /(NDArray np1, double scalar)
         {
-            var sum = new NDArray(np1.dtype, np1.Shape);
+            var sum = new NDArray(np1.dtype, np1.shape);
             
             switch (sum.dtype.Name)
             {
                 case "Double": 
                 {
                     // for is faster than linq 
-                    for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = sum.Double[idx] / scalar;
+                    for (int idx = 0; idx < sum.size;idx++)
+                        sum[idx] = sum.float64[idx] / scalar;
                     break;
                 }
                 /*case float[] np1Array: 

@@ -39,15 +39,15 @@ namespace NumSharp.Core
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public Shape Shape => Storage.Shape;
+        public Shape shape => Storage.Shape;
         /// <summary>
         /// Dimension count
         /// </summary>
-        public int NDim => Shape.NDim;
+        public int ndim => shape.NDim;
         /// <summary>
         /// Total of elements
         /// </summary>
-        public int Size => Shape.Size;
+        public int size => shape.Size;
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
@@ -73,7 +73,7 @@ namespace NumSharp.Core
         {
             string output = "";
 
-            if (this.NDim == 2)
+            if (this.ndim == 2)
             {
                 if(dtype == typeof(int))
                 {
@@ -115,8 +115,8 @@ namespace NumSharp.Core
             unchecked
             {
                 var result = 1337;
-                result = (result * 397) ^ this.NDim;
-                result = (result * 397) ^ this.Size;
+                result = (result * 397) ^ this.ndim;
+                result = (result * 397) ^ this.size;
                 return result;
             }
         }
@@ -176,13 +176,13 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < Shape.NDim - 1; idx++)
+            for (int idx = 0; idx < shape.NDim - 1; idx++)
             {
                 missingDigits = digitBefore - dataParsed[idx].Replace(" ", "").Split('.')[0].Length;
 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ', missingDigits).ToArray()) + "0." + elementFormatEnd;
 
-                if (((idx + 1) % Shape.Shapes[1]) == 0)
+                if (((idx + 1) % shape.Shapes[1]) == 0)
                 {
                     returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Storage[idx]) + "],   \n       [");
                 }

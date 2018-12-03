@@ -11,7 +11,7 @@ namespace NumSharp.Core
     {
         public NDArray inv()
         {
-            var npInv = new NDArray(this.Storage.dtype,this.Shape);
+            var npInv = new NDArray(this.Storage.dtype,this.shape);
 
             Array matrixStorage = this.Storage.GetData();
             Array invStorage = Array.CreateInstance(npInv.Storage.dtype,matrixStorage.Length);
@@ -32,9 +32,9 @@ namespace NumSharp.Core
                     double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
                     double[] invArray = invStorage as double[];
 
-                    for (int idx = 0; idx < npInv.Shape.Shapes[0]; idx++)
+                    for (int idx = 0; idx < npInv.shape.Shapes[0]; idx++)
                     {
-                        for (int jdx = 0; jdx < npInv.Shape.Shapes[1]; jdx++)
+                        for (int jdx = 0; jdx < npInv.shape.Shapes[1]; jdx++)
                         {
                             invArray[this.Storage.Shape.GetIndexInShape(idx,jdx)] = matrixInv[idx][jdx];
                         }

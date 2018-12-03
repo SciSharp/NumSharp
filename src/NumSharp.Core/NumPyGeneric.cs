@@ -95,28 +95,6 @@ namespace NumSharp.Core
             return n.HStack(nps);
         }
 
-        /// <summary>
-        /// Returns num evenly spaced samples, calculated over the interval [start, stop].
-        /// </summary>
-        /// <param name="start"></param>
-        /// <param name="stop"></param>
-        /// <param name="num"></param>
-        /// <returns></returns>
-        public NDArrayGeneric<double> linspace(double start, double stop, int num = 50)
-        {
-            return new NDArrayGeneric<double>().linspace(start, stop, num);
-        }
-
-        public NDArrayGeneric<double> max(NDArrayGeneric<double> nd)
-        {
-            return nd.Max();
-        }
-
-        public NDArrayGeneric<double> power(NDArrayGeneric<double> nd, double exponent)
-        {
-            return nd.power(exponent);
-        }
-
         public NumPyRandom random 
         {
             get
@@ -136,28 +114,6 @@ namespace NumSharp.Core
         {
             var n = new NDArrayGeneric<double>();
             return n.VStack(nps);
-        }
-
-        public NDArrayGeneric<T> zeros(params int[] shape)
-        {
-            switch (typeof(T).Name)
-            {
-                case "Int32":
-                    {
-                        var n = new NDArrayGeneric<int>();
-                        n.Zeros(shape);
-                        return n as NDArrayGeneric<T>;
-                    }
-
-                case "Double":
-                    {
-                        var n = new NDArrayGeneric<double>();
-                        n.Zeros(shape);
-                        return n as NDArrayGeneric<T>;
-                    }
-                default:
-                    throw new NotImplementedException();
-            }
         }
     }
 }

@@ -9,7 +9,8 @@ namespace NumSharp.Core
     {
         public static bool operator ==(Shape a, Shape b)
         {
-            return Enumerable.SequenceEqual(a.shape, b.shape);
+            if (b is null) return false;
+            return Enumerable.SequenceEqual(a.shape, b?.shape);
         }
 
         public static bool operator !=(Shape a, Shape b)

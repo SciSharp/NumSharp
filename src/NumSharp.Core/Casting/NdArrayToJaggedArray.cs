@@ -33,7 +33,7 @@ namespace NumSharp.Core
         {
             Array dotNetArray = null;
 
-            switch (NDim)
+            switch (ndim)
             {
                 case 1 : 
                 {
@@ -43,12 +43,12 @@ namespace NumSharp.Core
                 case 2 : 
                 {
                     T[] data = Storage.GetData<T>();
-                    T[][] dotNetArrayPuffer = new T[Shape.Shapes[0]][]; 
+                    T[][] dotNetArrayPuffer = new T[shape.Shapes[0]][]; 
                     for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-                        dotNetArrayPuffer[idx] = new T[Shape.Shapes[1]];
+                        dotNetArrayPuffer[idx] = new T[shape.Shapes[1]];
                         
                     for (int idx = 0;idx < data.Length;idx++ )
-                        dotNetArrayPuffer[idx/Shape.Shapes[1]][idx%Shape.Shapes[1]] = data[idx];
+                        dotNetArrayPuffer[idx/shape.Shapes[1]][idx%shape.Shapes[1]] = data[idx];
                     
                     dotNetArray = dotNetArrayPuffer;
                     

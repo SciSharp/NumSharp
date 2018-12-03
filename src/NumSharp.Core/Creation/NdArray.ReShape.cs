@@ -8,6 +8,11 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        public NDArray reshape(Shape shape)
+        {
+            return reshape(shape.Shapes.ToArray());
+        }
+
         public NDArray reshape(params int[] shape)
         {
             var count = shape.Length;
@@ -15,7 +20,7 @@ namespace NumSharp.Core
             if (idx == -1)
                 this.Storage.Shape = new Shape(shape);
             else
-                this.Storage.Shape = new Shape(CalculateNegativeShape(idx, this.Shape.Shapes.ToList(), shape));
+                this.Storage.Shape = new Shape(CalculateNegativeShape(idx, this.shape.Shapes.ToList(), shape));
 
             return this;
         }
