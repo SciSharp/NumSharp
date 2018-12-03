@@ -42,18 +42,12 @@ namespace NumSharp.Generic
         {
             get
             {
-                return (T)Storage[shape.GetIndexInShape(select)];
+                return (T) Storage.GetData(select);
             }
+
             set
             {
-                if (select.Length == ndim)
-                {
-                    Storage[shape.GetIndexInShape(select)] = value;
-                }
-                else
-                {
-
-                }
+                Storage.SetData(value, select);
             }
         }
     }
