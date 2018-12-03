@@ -9,11 +9,11 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-       public static NDArray operator -(NDArray np1, NDArray np2)
+        public static NDArray operator -(NDArray np1, NDArray np2)
         {
-            NDArray sum = new NDArray(np1.dtype,np1.Storage.Shape);
-            
-            if (!Enumerable.SequenceEqual(np1.Storage.Shape.Shapes,np2.Storage.Shape.Shapes))
+            NDArray sum = new NDArray(np1.dtype, np1.Storage.Shape);
+
+            if (!Enumerable.SequenceEqual(np1.Storage.Shape.Shapes, np2.Storage.Shape.Shapes))
                 throw new IncorrectShapeException();
 
             Array np1SysArr = np1.Storage.GetData();
@@ -22,68 +22,69 @@ namespace NumSharp.Core
 
             switch (np3SysArr)
             {
-                case double[] sumArray : 
-                {
-                    double[] np1Array = np1SysArr as double[];
-                    double[] np2Array = np2SysArr as double[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break;
-                }
-                case float[] sumArray : 
-                {
-                    float[] np1Array = np1SysArr as float[];
-                    float[] np2Array = np2SysArr as float[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break; 
-                }
-                case int[] sumArray : 
-                {
-                    int[] np1Array = np1SysArr as int[];
-                    int[] np2Array = np2SysArr as int[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break; 
-                }
-                case Int64[] sumArray : 
-                {
-                    Int64[] np1Array = np1SysArr as Int64[];
-                    Int64[] np2Array = np2SysArr as Int64[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break; 
-                }
-                case Complex[] sumArray : 
-                {
-                    Complex[] np1Array = np1SysArr as Complex[];
-                    Complex[] np2Array = np2SysArr as Complex[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break; 
-                }
-                case Quaternion[] sumArray : 
-                {
-                    Quaternion[] np1Array = np1SysArr as Quaternion[];
-                    Quaternion[] np2Array = np2SysArr as Quaternion[];
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] - np2Array[idx];
-                    break; 
-                }
-                default : 
-                {
-                    throw new IncorrectTypeException();
-                }
+                case double[] sumArray:
+                    {
+                        double[] np1Array = np1SysArr as double[];
+                        double[] np2Array = np2SysArr as double[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                case float[] sumArray:
+                    {
+                        float[] np1Array = np1SysArr as float[];
+                        float[] np2Array = np2SysArr as float[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                case int[] sumArray:
+                    {
+                        int[] np1Array = np1SysArr as int[];
+                        int[] np2Array = np2SysArr as int[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                case Int64[] sumArray:
+                    {
+                        Int64[] np1Array = np1SysArr as Int64[];
+                        Int64[] np2Array = np2SysArr as Int64[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                case Complex[] sumArray:
+                    {
+                        Complex[] np1Array = np1SysArr as Complex[];
+                        Complex[] np2Array = np2SysArr as Complex[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                case Quaternion[] sumArray:
+                    {
+                        Quaternion[] np1Array = np1SysArr as Quaternion[];
+                        Quaternion[] np2Array = np2SysArr as Quaternion[];
+                        // for is faster than linq 
+                        for (int idx = 0; idx < sumArray.Length; idx++)
+                            sumArray[idx] = np1Array[idx] - np2Array[idx];
+                        break;
+                    }
+                default:
+                    {
+                        throw new IncorrectTypeException();
+                    }
             }
 
             return sum;
         }
+
         public static NDArray operator -(NDArray np1, ValueType scalar)
         {
             NDArray sum = new NDArray(np1.dtype,np1.shape);

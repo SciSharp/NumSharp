@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 
 namespace NumSharp.Core
@@ -79,6 +80,11 @@ namespace NumSharp.Core
         /// shortcut for Int32 data type
         /// </summary>
         public int[] int32 => Storage.Data<int>();
+
+        // <summary>
+        /// shortcut for complex data type
+        /// </summary>
+        public Complex[] complex128 => Storage.Data<Complex>();
 
         // <summary>
         /// shortcut for string data type

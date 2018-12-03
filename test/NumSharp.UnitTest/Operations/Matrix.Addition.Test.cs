@@ -9,28 +9,28 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Operations
 {
     [TestClass]
-    public class MatrixAdditionTest
+    public class MatrixAdditionTest : TestBase
     {
         [TestMethod]
         public void DoubleTwo2D_MatrixAddition()
         {
-            var np1 = new Matrix<Double>("1 2 3;4 5 6;7 8 9");
-            var np2 = new Matrix<Double>("1 2 3;4 5 6;7 8 9");
+            var np1 = new Matrix("1 2 3;4 5 6;7 8 9");
+            var np2 = new Matrix("1 2 3;4 5 6;7 8 9");
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Data));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.float64));
         }
 
         [TestMethod]
         public void ComplexTwo2D_MatrixAddition()
         {
-            var np1 = new NumPyGeneric<Complex>().array(new Complex[] { new Complex(1, 2), new Complex(3, 4) });
-            var np2 = new NumPyGeneric<Complex>().array(new Complex[] { new Complex(5, 6), new Complex(7, 8) });
+            var np1 = np.array(new Complex[] { new Complex(1, 2), new Complex(3, 4) });
+            var np2 = np.array(new Complex[] { new Complex(5, 6), new Complex(7, 8) });
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Data));
+            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Data<Complex>()));
         }
     }
 }

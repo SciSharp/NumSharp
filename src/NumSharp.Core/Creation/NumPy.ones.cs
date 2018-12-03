@@ -15,12 +15,14 @@ namespace NumSharp.Core
 
             return ones(dtype,shapes);
         }
+
         public NDArray ones(Type dtype = null, params int[] shapes)
         {
             dtype = (dtype == null ) ? typeof(double) : dtype;
 
             return new NDArray(dtype).ones(dtype,shapes);
         }
+
         /// <summary>
         /// Return a new array of given shape and type, filled with ones.
         /// </summary>
@@ -28,17 +30,22 @@ namespace NumSharp.Core
         /// <param name="np"></param>
         /// <param name="shape"></param>
         /// <returns></returns>
-        public NDArray ones<T>(Shape shape)
+        public NDArray ones(Shape shape, Type dtype = null)
         {
-            var nd = new NDArray(typeof(T), shape);
-
-            switch (default(T))
+            if(dtype == null)
             {
-                case int data:
+                dtype = typeof(double);
+            }
+
+            var nd = new NDArray(dtype, shape);
+
+            switch (dtype.Name)
+            {
+                case "Int32":
                     nd.Set(Enumerable.Range(0, nd.size).Select(x => 1).ToArray());
                     break;
 
-                case double data:
+                case "Double":
                     nd.Set(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
                     break;
             }
@@ -48,7 +55,7 @@ namespace NumSharp.Core
 
         public NDArray ones<T>(params int[] shapes)
         {
-            return ones<T>(new Shape(shapes));
+            return ones(new Shape(shapes), typeof(T));
         }
     }
 

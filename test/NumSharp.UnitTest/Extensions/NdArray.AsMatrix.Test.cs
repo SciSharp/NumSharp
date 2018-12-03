@@ -9,20 +9,20 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
-    public class NdArrayAsMatrixTest
+    public class NdArrayAsMatrixTest : TestBase
     {
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()
         {
-            var np = new NDArrayGeneric<double>().arange(9).reshape(3,3);
+            var nd = np.arange(9).reshape(3,3);
 
-            var npAsMatrix = np.AsMatrix();
+            var npAsMatrix = nd.AsMatrix();
 
             for (int idx = 0; idx < 3;idx++)
             {
-                for(int jdx = 0; jdx < 3; jdx++)
+                for (int jdx = 0; jdx < 3; jdx++)
                 {
-                    Assert.AreEqual(np[idx,jdx],npAsMatrix[idx,jdx]);
+                    Assert.AreEqual(nd[idx, jdx], npAsMatrix[idx, jdx]);
                 }
             }
         }
