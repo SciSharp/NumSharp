@@ -18,10 +18,10 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArray Convolve(NDArray numSharpArray2, string mode = "full" )
         {
-            int nf = this.Shape.Shapes[0];
-            int ng = numSharpArray2.Shape.Shapes[0];
+            int nf = this.shape.Shapes[0];
+            int ng = numSharpArray2.shape.Shapes[0];
 
-            if (Shape.NDim > 1)
+            if (shape.NDim > 1)
                 throw new IncorrectShapeException();
 
             var numSharpReturn = new NDArray(this.dtype);
@@ -83,7 +83,7 @@ namespace NumSharp.Core
                     // followed the discussion on 
                     // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
                     // implemented numpy convolve because we follow numpy
-                    var npad = numSharpArray2.Shape.Shapes[0] - 1;
+                    var npad = numSharpArray2.shape.Shapes[0] - 1;
 
                     double[] np1New = null;
 
