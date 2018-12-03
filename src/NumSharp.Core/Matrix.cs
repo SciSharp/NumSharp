@@ -3,13 +3,33 @@ using System.Linq;
 
 namespace NumSharp.Core
 {
-    public partial class Matrix<TData> : NDArrayGeneric<TData>
+    public partial class Matrix: NDArray
     {
-        public Matrix()
+        public Matrix(NDArray data, Type dtype = null)
         {
+            if (dtype == null)
+            {
+                dtype = data.dtype;
+                this.Storage.dtype = data.dtype;
+            }
 
+            this.Storage.Shape = new Shape(data.shape.Shapes);
+
+            switch (data.dtype.Name)
+            {
+                case "Double":
+                    Set(data.float64);
+                    break;
+                case "Int32":
+                    Set(data.int32);
+                    break;
+                case "Complex":
+                    Set(data.complex128);
+                    break;
+            }
         }
-        public Matrix(string matrixString)
+
+        public Matrix(string matrixString, Type dtype = null)
         {
             string[][] splitted = null;
 
@@ -29,15 +49,19 @@ namespace NumSharp.Core
             int dim0 = splitted.Length;
             int dim1 = splitted[0].Length;
 
-            this.Data = new TData[dim0 * dim1];
-            this.Shape = new Shape(new int[] { dim0, dim1 });
-
-            var dataType = typeof(TData);
-
-            switch (dataType.Name)
+            if (dtype == null)
             {
-                case ("Double"): this.StringToDoubleMatrix(splitted); break;
-                case ("Float"): ; break;
+                dtype = typeof(double);
+                this.Storage.dtype = typeof(double);
+            }
+
+            this.Storage.Shape = new Shape(new int[] { dim0, dim1 });
+            this.Storage.Allocate(shape.Size);
+
+            switch (this.dtype.Name)
+            {
+                case "Double": StringToDoubleMatrix(splitted); break;
+                case "Float": ; break;
             }
             
         }
@@ -48,22 +72,21 @@ namespace NumSharp.Core
         /// <param name="matrix"></param>
         protected void StringToDoubleMatrix(string[][] matrix)
         {
-            dynamic matrixData = this;
             for (int idx = 0; idx< matrix.Length;idx++)
             {
                 for (int jdx = 0; jdx < matrix[0].Length;jdx++)
                 {
-                    matrixData[idx,jdx] = Double.Parse(matrix[idx][jdx]);
+                    this[idx,jdx] = Double.Parse(matrix[idx][jdx]);
                 }
             }
-            this.Data = (TData[])matrixData.Data;
         }
+
         public override string ToString()
         {
             string returnValue = "matrix([[";
 
-            int dim0 = Shape.Shapes[0];
-            int dim1 = Shape.Shapes[1];
+            int dim0 = shape.Shapes[0];
+            int dim1 = shape.Shapes[1];
 
             for (int idx = 0; idx < (dim0-1);idx++)
             {

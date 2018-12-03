@@ -17,11 +17,15 @@ namespace NumSharp.Core
             {
                 np.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(1, shape.Shapes[0]));
             }
-            else
+            else if (ndim == 2)
             {
                 for (int idx = 0; idx < np.shape.Shapes[0]; idx++)
                     for (int jdx = 0; jdx < np.shape.Shapes[1]; jdx++)
                         np[idx, jdx] = this[jdx, idx];
+            }
+            else
+            {
+                throw new NotImplementedException();
             }
 
             return np;
