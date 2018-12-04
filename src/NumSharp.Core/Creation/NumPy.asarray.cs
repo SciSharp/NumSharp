@@ -7,11 +7,13 @@ using System.Drawing;
  
 namespace NumSharp.Core
 {
-	public static partial class NumPyExtensions
-	{
-        public static NDArrayGeneric<T> asarray<T>(this NumPyGeneric<T> np, IEnumerable<T> array, int ndim = 1)
+    public partial class NumPy
+    {
+        public NDArray asarray(Matrix mx, int ndim = 1)
         {
-            return np.array(array);
+            var nd = new NDArray(mx.dtype, mx.shape);
+            nd.Storage = mx.Storage;
+            return nd;
         }
     }
 }
