@@ -1,0 +1,56 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using NumSharp.Core.Extensions;
+using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Core;
+
+namespace NumSharp.UnitTest
+{
+    /// <summary>
+    /// Test concolve with standard example from 
+    /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
+    /// </summary>
+    [TestClass]
+    public class NdArrayConvolveTest
+    {
+        [TestMethod]
+        public void ConvoleFull()
+        {
+            var series1 = new NumPy().array(new double[]{1, 2, 3});
+            var series2 = new NumPy().array(new double[]{0, 1, 0.5});
+            
+            var series3 = series1.Convolve(series2);
+            
+            double[] expectedResult = new double[]{0, 1, 2.5, 4, 1.5};
+
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+        }
+        [TestMethod]
+        public void ConvoleValid()
+        {
+            var series1 = new NumPy().array(new double[]{1, 2, 3});
+            var series2 = new NumPy().array(new double[]{0, 1, 0.5});
+            
+            var series3 = series1.Convolve(series2, "valid");
+            
+            double[] expectedResult = new double[]{2.5};
+
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+        }
+        [TestMethod]
+        public void ConvoleSame()
+        {
+            var series1 = new NumPy().array(new double[]{1, 2, 3});
+            var series2 = new NumPy().array(new double[]{0, 1, 0.5});
+            
+            var series3 = series1.Convolve(series2, "same");
+            
+            double[] expectedResult = new double[]{1, 2.5, 4};
+
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+        }
+        
+    }
+}
