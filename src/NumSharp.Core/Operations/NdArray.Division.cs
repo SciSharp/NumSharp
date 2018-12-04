@@ -103,6 +103,29 @@ namespace NumSharp.Core
 
             return sum;
         }
-        
+
+        public static NDArray operator /(int scalar, NDArray np1)
+        {
+            return (double)scalar / np1;
+        }
+
+        public static NDArray operator /(double scalar, NDArray np1)
+        {
+            var nd = new NDArray(typeof(double), np1.shape);
+
+            switch (np1.dtype.Name)
+            {
+                case "Double":
+                    nd.Set(np1.float64.Select(x => scalar / x).ToArray());
+                    break;
+                case "Int32":
+                    nd.Set(np1.int32.Select(x => scalar / x).ToArray());
+                    break;
+            }
+
+            return nd;
+        }
+
+
     }
 }
