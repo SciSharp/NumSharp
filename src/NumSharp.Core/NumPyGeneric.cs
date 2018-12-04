@@ -11,20 +11,7 @@ namespace NumSharp.Core
     [Obsolete("please use NumPy")]
     public class NumPyGeneric<T>
     {
-        public NDArrayGeneric<double> absolute(NDArrayGeneric<double> np)
-        {
-            return np.Absolute();
-        }
-
-        public NDArrayGeneric<double> amax(NDArrayGeneric<double> np, int? axis = null)
-        {
-            return np.AMax(axis);
-        }
-
-        public NDArrayGeneric<double> amin(NDArrayGeneric<double> np, int? axis = null)
-        {
-            return np.AMin(axis);
-        }
+        
 
         public NDArrayGeneric<T> arange(int stop)
         {
