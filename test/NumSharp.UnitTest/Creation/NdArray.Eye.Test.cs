@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void SimpleIntMatrix()
         {
-            var np = new NDArrayGeneric<int>().Eye(5);
+            var np = new NDArray(typeof(int)).eye(5).MakeGeneric<int>();
 
             Assert.IsTrue(np[0,0] == 1);
             Assert.IsTrue(np[1,1] == 1);
@@ -22,14 +22,14 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(np[3,3] == 1);
             Assert.IsTrue(np[4,4] == 1);
 
-            int[] elementsZero = np.Data.Where((x) => x == 0 ).ToArray();
+            int[] elementsZero = np.Storage.GetData<int>().Where((x) => x == 0 ).ToArray();
 
             Assert.IsTrue(elementsZero.Length == 20);
         }
         [TestMethod]
         public void SimpleDoubleMatrix()
         {
-            var np = new NDArrayGeneric<double>().Eye(5);
+            var np = new NDArray().eye(5).MakeGeneric<double>();
 
             Assert.IsTrue(np[0,0] == 1);
             Assert.IsTrue(np[1,1] == 1);
@@ -37,31 +37,31 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(np[3,3] == 1);
             Assert.IsTrue(np[4,4] == 1);
 
-            double[] elementsZero = np.Data.Where((x) => x == 0.0 ).ToArray();
+            double[] elementsZero = np.Storage.GetData<double>().Where((x) => x == 0.0 ).ToArray();
 
             Assert.IsTrue(elementsZero.Length == 20);
         }
         [TestMethod]
         public void DoubleMatrix2DiagonalLeft()
         {
-            var np = new NDArrayGeneric<double>().Eye(5,-2);
+            var np = new NDArray().eye(5,-2).MakeGeneric<int>();
 
             Assert.IsTrue(np[2,0] == 1);
             Assert.IsTrue(np[3,1] == 1);
             Assert.IsTrue(np[4,2] == 1);
 
-            Assert.IsTrue(np.Data.Where(x => x ==0).ToArray().Length ==22);        
+            Assert.IsTrue(np.Storage.GetData<int>().Where(x => x ==0).ToArray().Length ==22);        
         }
         [TestMethod]
         public void DoubleMatrix2DiagonalRight()
         {
-            var np = new NDArrayGeneric<double>().Eye(5,2);
+            var np = new NDArray().eye(5,2).MakeGeneric<int>();
 
             Assert.IsTrue(np[0,2] == 1);
             Assert.IsTrue(np[1,3] == 1);
             Assert.IsTrue(np[2,4] == 1);
 
-            Assert.IsTrue(np.Data.Where(x => x ==0).ToArray().Length ==22);        
+            Assert.IsTrue(np.Storage.GetData<int>().Where(x => x ==0).ToArray().Length ==22);        
         }
 
     }
