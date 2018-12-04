@@ -24,7 +24,7 @@ namespace NumSharp.Core
             if (shape.NDim > 1)
                 throw new IncorrectShapeException();
 
-            var numSharpReturn = new NDArray(this.dtype);
+            var numSharpReturn = new NDArray(typeof(double));
 
             double[] np1 = this.Storage.GetData<double>();
             double[] np2 = numSharpArray2.Storage.GetData<double>();

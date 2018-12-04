@@ -64,8 +64,13 @@ namespace NumSharp.Core
         }
         public static NDStorage CreateByArray(Array values)
         {
-            Type dtype = values.GetType().GetElementType();
-            
+            Type dtype = null;
+
+            if ( !values.GetType().GetElementType().IsArray  )
+                dtype = values.GetType().GetElementType();
+            else 
+                throw new IncorrectShapeException();
+
             int[] dims = new int[values.Rank];
 
             for (int idx = 0; idx < dims.Length;idx++)
@@ -73,6 +78,8 @@ namespace NumSharp.Core
 
             var storage = NDStorage.CreateByShapeAndType(dtype,new Shape(dims));
             storage.values = Array.CreateInstance(dtype,values.Length);
+
+            storage.SetData(values);
 
             return storage;
         }
