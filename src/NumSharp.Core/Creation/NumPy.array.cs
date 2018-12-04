@@ -7,22 +7,30 @@ using System.Drawing;
  
 namespace NumSharp.Core
 {
-	public static partial class NumPyExtensions
+	public partial class NumPy
 	{
-        public static NDArray array(this NumPy np, Array array, Type dtype = null, int ndim = 1)
+        public NDArray array(Array array, Type dtype = null, int ndim = 1)
         {
             dtype = (dtype == null) ? array.GetType().GetElementType() : dtype;
             
 			var nd = new NDArray(dtype);
-			
-            nd.Storage = NDStorage.CreateByShapeAndType	(dtype, new Shape(new int[] { array.Length }));
-            nd.Storage.SetData(array); 
+
+            if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
+			{
+                nd.Storage = NDStorage.CreateByShapeAndType	(dtype, new Shape(new int[] { array.Length }));
+                nd.Storage.SetData(array); 
+            }
+            else 
+            {
+                throw new Exception("Method is not implemeneted for multidimensional arrays or jagged arrays.");
+            }
+            
             return nd;
         }
 
-        public static NDArray array<T>(this NumPy np, System.Drawing.Bitmap image)
+        public NDArray array(System.Drawing.Bitmap image)
         {
-            var imageArray = new NDArray(typeof(T));
+            var imageArray = new NDArray(typeof(Byte));
 
             var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
             var dataSize = bmpd.Stride * bmpd.Height;
@@ -37,7 +45,7 @@ namespace NumSharp.Core
             return imageArray;
         }
 
-        public static NDArray array<T>(this NumPy np, T[][] data)
+        public NDArray array<T>(T[][] data)
         {
             int size = data.Length * data[0].Length;
             var all = new T[size];
