@@ -8,6 +8,7 @@ namespace NumSharp.Core
     {
         private readonly IReadOnlyList<int> shape;
         private readonly IReadOnlyList<int> dimOffset;
+        private readonly int dimOffsetTotal;
 
         public int Size
         {
@@ -37,6 +38,7 @@ namespace NumSharp.Core
             {
                 temp[i - 1] = temp[i] * shape[i];
             }
+            
             dimOffset = temp;
         }
 
@@ -66,6 +68,30 @@ namespace NumSharp.Core
             }
 
             return idx;
+        }
+        public int[] GetDimIndexOutShape(int select)
+        {
+            int[] dimIndexes = null;
+            if (this.dimOffset.Count == 1)
+                dimIndexes = new int[] {select};
+            else if (this.dimOffset.Count == 2) 
+            {
+                dimIndexes = new int[dimOffset.Count];
+
+                int remaining = select;
+
+                for (int idx = 0;idx < dimOffset.Count;idx++)
+                {
+                    dimIndexes[idx] = remaining / dimOffset[idx];
+                    remaining -= (dimIndexes[idx] * dimOffset[idx] );
+                }    
+            }
+            else 
+            {
+                throw new IncorrectShapeException();
+            }
+
+            return dimIndexes;
         }
 
         public int UniShape => shape[0];
