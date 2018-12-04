@@ -12,13 +12,13 @@ namespace NumSharp.Benchmark
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class npamin
     {
-        private NumPyGeneric<double> np;
-        private NDArrayGeneric<double> nd;
+        private NumPy np;
+        private NDArray nd;
 
         [GlobalSetup]
         public void Setup()
         {
-            np = new NumPyGeneric<double>();
+            np = new NumPy();
             nd = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
         }
 
@@ -31,9 +31,9 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void amin0axis()
         {
-            var nd2 = new NDArrayGeneric<double>();
+            var nd2 = new NDArray(typeof(double));
             nd2 = np.arange(1000 * 8 * 8 * 8).reshape(1000, 8, 8, 8);
-            //var nd3 = nd2.AMin(0);
+            var nd3 = nd2.amin(0);
         }
 
         [Benchmark]
