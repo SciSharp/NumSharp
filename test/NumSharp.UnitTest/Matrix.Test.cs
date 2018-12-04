@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CheckToString()
         {
-            var matrix = new Matrix("1 2 3;4 5 6;7 8 9");
+            var matrix = new matrix("1 2 3;4 5 6;7 8 9");
 
             string matrixAsString = matrix.ToString();
 

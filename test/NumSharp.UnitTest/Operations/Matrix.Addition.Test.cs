@@ -14,8 +14,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void DoubleTwo2D_MatrixAddition()
         {
-            var np1 = new Matrix("1 2 3;4 5 6;7 8 9");
-            var np2 = new Matrix("1 2 3;4 5 6;7 8 9");
+            var np1 = new matrix("1 2 3;4 5 6;7 8 9");
+            var np2 = new matrix("1 2 3;4 5 6;7 8 9");
 
             var np3 = np1 + np2;
 
