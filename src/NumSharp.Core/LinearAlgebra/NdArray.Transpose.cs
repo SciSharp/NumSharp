@@ -11,24 +11,24 @@ namespace NumSharp.Core
     {
         public NDArray transpose()
         {
-            var np = new NDArray(dtype,new Shape(this.Storage.Shape.Shapes.Reverse().ToArray()));
+            var nd = new NDArray(dtype, new Shape(this.Storage.Shape.Shapes.Reverse().ToArray()));
 
             if (ndim == 1)
             {
-                np.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(1, shape.Shapes[0]));
+                nd.Storage = NDStorage.CreateByShapeAndType(dtype, new Shape(1, shape.Shapes[0]));
             }
             else if (ndim == 2)
             {
-                for (int idx = 0; idx < np.shape.Shapes[0]; idx++)
-                    for (int jdx = 0; jdx < np.shape.Shapes[1]; jdx++)
-                        np[idx, jdx] = this[jdx, idx];
+                for (int idx = 0; idx < nd.shape.Shapes[0]; idx++)
+                    for (int jdx = 0; jdx < nd.shape.Shapes[1]; jdx++)
+                        nd[idx, jdx] = this[jdx, idx];
             }
             else
             {
                 throw new NotImplementedException();
             }
 
-            return np;
+            return nd;
         }
     }
 
