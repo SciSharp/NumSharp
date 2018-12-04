@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class Matrix
+    public partial class matrix
     {
-        public Matrix sum()
+        public matrix sum()
         {
             return this;
         }
