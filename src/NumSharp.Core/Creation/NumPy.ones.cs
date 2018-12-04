@@ -48,6 +48,10 @@ namespace NumSharp.Core
                 case "Double":
                     nd.Set(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
                     break;
+
+                case "Boolean":
+                    nd.Set(Enumerable.Range(0, nd.size).Select(x => true).ToArray());
+                    break;
             }
 
             return nd;
