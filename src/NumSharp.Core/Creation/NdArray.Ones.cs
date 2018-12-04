@@ -22,5 +22,9 @@ namespace NumSharp.Core
 
             return this;
         }
+        public NDArray ones(params int[] shapes)
+        {
+            return this.ones(typeof(double),shapes);
+        }
     }
 }
