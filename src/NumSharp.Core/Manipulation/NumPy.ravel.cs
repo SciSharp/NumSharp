@@ -6,7 +6,7 @@ namespace NumSharp.Core.Manipulation
 {
     public partial class NumPy
     {
-        public NDArray ravel(Matrix mx)
+        public NDArray ravel(matrix mx)
         {
             var nd = new NDArray(mx.dtype, mx.size);
 

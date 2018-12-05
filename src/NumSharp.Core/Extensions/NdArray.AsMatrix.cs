@@ -8,9 +8,9 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static Matrix AsMatrix(this NDArray nd)
+        public static matrix AsMatrix(this NDArray nd)
         {
-            var npAsMatrix = new Matrix(nd);
+            var npAsMatrix = new matrix(nd);
 
             npAsMatrix.reshape(nd.shape);
 

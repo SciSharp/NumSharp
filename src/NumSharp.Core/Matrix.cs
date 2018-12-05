@@ -3,9 +3,9 @@ using System.Linq;
 
 namespace NumSharp.Core
 {
-    public partial class Matrix: NDArray
+    public partial class matrix: NDArray
     {
-        public Matrix(NDArray data, Type dtype = null)
+        public matrix(NDArray data, Type dtype = null)
         {
             if (dtype == null)
             {
@@ -29,7 +29,7 @@ namespace NumSharp.Core
             }
         }
 
-        public Matrix(string matrixString, Type dtype = null)
+        public matrix(string matrixString, Type dtype = null)
         {
             string[][] splitted = null;
 

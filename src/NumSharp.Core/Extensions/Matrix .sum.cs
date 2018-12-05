@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class Matrix
+    public partial class matrix
     {
-        public new Matrix transpose()
+        public new matrix transpose()
         {
             Storage.Shape = new Shape(this.Storage.Shape.Shapes.Reverse().ToArray());
 

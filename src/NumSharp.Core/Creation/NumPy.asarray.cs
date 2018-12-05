@@ -9,7 +9,7 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public NDArray asarray(Matrix mx, int ndim = 1)
+        public NDArray asarray(matrix mx, int ndim = 1)
         {
             var nd = new NDArray(mx.dtype, mx.shape);
             nd.Storage = mx.Storage;

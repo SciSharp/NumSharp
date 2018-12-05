@@ -7,7 +7,7 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public Matrix asmatrix(NDArray nd)
+        public matrix asmatrix(NDArray nd)
         {
             return nd.AsMatrix();
         }
