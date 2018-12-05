@@ -39,7 +39,7 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
   * zeros
   
 ### How to use
-```
+```cs
 // init NumPy instance which pesists integer data type
 var np = new NumPy<int>();
 // create a 2-dimension matrix
