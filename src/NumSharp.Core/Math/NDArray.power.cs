@@ -32,7 +32,7 @@ namespace NumSharp.Core
                     var powerData = powerDataSysArr as float[];
 
                     for (int idx = 0; idx < data.Length;idx++)
-                        powerData[idx] = (float) Math.Pow((double)data[idx], (double)exponent);
+                        powerData[idx] = Convert.ToSingle(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(exponent)));
                     
                     break;
                 }
@@ -41,7 +41,7 @@ namespace NumSharp.Core
                     var powerData = powerDataSysArr as Complex[];
 
                     for (int idx = 0; idx < data.Length;idx++)
-                        powerData[idx] = Complex.Pow(data[idx],(double)exponent);
+                        powerData[idx] = Complex.Pow(data[idx],Convert.ToDouble(exponent));
                     
                     break;
                 }
@@ -50,7 +50,7 @@ namespace NumSharp.Core
                     var powerData = powerDataSysArr as int[];
 
                     for (int idx = 0; idx < data.Length;idx++)
-                        powerData[idx] = (int) Math.Pow((double)data[idx], (double)exponent);
+                        powerData[idx] = Convert.ToInt32(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(exponent)));
                     
                     break;
                 }
