@@ -27,10 +27,12 @@ namespace NumSharp.Core
 
             int[] storageArr = puffer.Storage.GetData<int>();
 
-            for(int idx = 0; idx < noOfDiagElement;idx++ )
-            {
-                 storageArr[diagonalIndex + idx + idx * puffer.shape.Shapes[1]] = 1;
-            }
+            if (diagonalIndex > -1)
+                for(int idx = 0; idx < noOfDiagElement;idx++ )
+                    storageArr[diagonalIndex + idx + idx * puffer.shape.Shapes[1]] = 1;
+            else 
+                for(int idx = dim - 1; idx > dim - noOfDiagElement - 1;idx-- )
+                    storageArr[diagonalIndex + idx + idx * puffer.shape.Shapes[1]] = 1;
 
             this.Storage = puffer.Storage;
             
