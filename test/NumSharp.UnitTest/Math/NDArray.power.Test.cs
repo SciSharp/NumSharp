@@ -14,13 +14,13 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void PowerWithSingleValue()
         {
-            var np = new NumPyGeneric<double>().arange(3);
+            var np = new NumPy().arange(3);
             
-            np = np.power(2);
+            var np1 = np.power(2).MakeGeneric<double>();
             
-            Assert.IsTrue(np[0] == 0);
-            Assert.IsTrue(np[1] == 1);
-            Assert.IsTrue(np[2] == 4);
+            Assert.IsTrue(np1[0] == 0);
+            Assert.IsTrue(np1[1] == 1);
+            Assert.IsTrue(np1[2] == 4);
         }
     }
 }
