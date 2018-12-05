@@ -3,23 +3,25 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core.Extensions
+namespace NumSharp.Core
 {
-    public static partial class NDArrayRandomExtensions
+    public partial class NumPyRandom
     {
-        public static NDArrayGeneric<int> Permutation(this NumPyRandom rand, int max)
+        public NDArray Permutation(int max)
         {
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NDArrayGeneric<int>().arange(max);
+            var np = new NDArray(typeof(int)).arange(max);
+
+            int[] npData = np.Storage.GetData<int>();
 
             for(int i = 0; i < max; i++)
             {
                 var pos = random.Next(0, max);
-                var zero = np.Data[0];
-                np.Data[0] = np.Data[pos];
-                np.Data[pos] = zero;
+                var zero = npData[0];
+                npData[0] = npData[pos];
+                npData[pos] = zero;
             }
             
             return np;

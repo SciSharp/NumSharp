@@ -45,8 +45,8 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n[2, 1] == 6);
 
             //3D
-            n1 = np.arange(12).reshape(2, 3, 2);
-            n2 = np.arange(12).reshape(2, 3, 2);
+            n1 = np.array(new double[] {0,1,2,3,4,5,6,7,8,9,10,11} ).reshape(2, 3, 2);
+            n2 = np.array(new double[] {0,1,2,3,4,5,6,7,8,9,10,11} ).reshape(2, 3, 2);
             n = np.hstack(n1, n2);
 
             Assert.IsTrue(n.Size == (n1.Size + n2.Size));

@@ -54,6 +54,30 @@ namespace NumSharp.Core
                     
                     break;
                 }
+                case 3 : 
+                {
+                    T[] data = Storage.GetData<T>();
+                    T[][][] dotNetArrayPuffer = new T[shape.Shapes[0]][][]; 
+                    for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
+                    {
+                        dotNetArrayPuffer[idx] = new T[shape.Shapes[1]][];
+                        for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
+                            dotNetArrayPuffer[idx][jdx] = new T[shape.Shapes[2]];
+                    }
+                    
+                    for (int idx = 0; idx < shape.Shapes[0];idx++)
+                        for (int jdx = 0;jdx < shape.Shapes[1];jdx++)
+                            for(int kdx = 0; kdx < shape.Shapes[2];kdx++)
+                                dotNetArrayPuffer[idx][jdx][kdx] = (T) this[idx,jdx,kdx];
+                        
+                    dotNetArray = dotNetArrayPuffer;
+                    
+                    break;
+                }
+                default : 
+                {
+                    throw new IncorrectShapeException();
+                }
 
             }
 

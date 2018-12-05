@@ -11,40 +11,6 @@ namespace NumSharp.Core
     [Obsolete("please use NumPy")]
     public class NumPyGeneric<T>
     {
-        
-
-        public NDArrayGeneric<T> arange(int stop)
-        {
-            return arange(0, stop);
-        }
-
-        public NDArrayGeneric<T> arange(int start, int stop, int step = 1)
-        {
-            if(start > stop)
-            {
-                throw new Exception("parameters invalid");
-            }
-
-            switch (typeof(T).Name)
-            {
-                case "Int32":
-                    {
-                        var n = new NDArrayGeneric<int>();
-                        n.arange(stop, start, step);
-                        return n as NDArrayGeneric<T>;
-                    }
-
-                case "Double":
-                    {
-                        var n = new NDArrayGeneric<double>();
-                        n.arange(stop, start, step);
-                        return n as NDArrayGeneric<T>;
-                    }
-                default:
-                    throw new NotImplementedException();
-            }
-        }
-
         public NDArrayGeneric<T> array(T[] data)
         {
             var n = new NDArrayGeneric<T>();
