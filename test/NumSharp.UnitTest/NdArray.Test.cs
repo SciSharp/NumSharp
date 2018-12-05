@@ -39,14 +39,14 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CheckVectorString()
         {
-            var np = new NDArrayGeneric<double>().arange(9);
+            var np = new NDArray(typeof(double)).arange(9).MakeGeneric<double>();
 
             var random = new Random();
-            np.Data = np.Data.Select(x => x + random.NextDouble()).ToArray();
-            np.Data[1] = 1;
-            np.Data[2] -= 4;
-            np.Data[3] -= 20;
-            np.Data[8] += 23;
+            np.Storage.SetData(np.Storage.GetData<double>().Select(x => x + random.NextDouble()).ToArray());
+            np[1] = 1;
+            np[2] -= 4;
+            np[3] -= 20;
+            np[8] += 23;
 
             var stringOfNp = np.ToString();
         }
@@ -67,19 +67,19 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray1D()
         {
-            var np1 = new NDArrayGeneric<double>().arange(9);
+            var np1 = new NDArray(typeof(double) ).arange(9).MakeGeneric<double>();
 
-            double[] np1_ = np1.ToDotNetArray<double[]>();
+            double[] np1_ = (double[]) np1.ToMuliDimArray<double>();
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1_,np1.Data));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1_,np1.Storage.GetData<double>()));
         } 
 
         [TestMethod]
         public void ToDotNetArray2D()
         {
-            var np1 = new NDArrayGeneric<double>().arange(9).reshape(3,3);
+            var np1 = new NDArray(typeof(double)).arange(9).reshape(3,3).MakeGeneric<double>();
 
-            double[][] np1_ = np1.ToDotNetArray<double[][]>();
+            double[][] np1_ = (double[][]) np1.ToJaggedArray<double>();
 
             for (int idx = 0; idx < 3; idx ++)
             {
@@ -93,9 +93,11 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray3D()
         {
-            var np1 = new NDArrayGeneric<double>().arange(27).reshape(3,3,3);
+            var np1 = new NDArray(typeof(double)).arange(27).reshape(3,3,3);
 
-            double[][][] np1_ = np1.ToDotNetArray<double[][][]>();
+            double[][][] np1_ = (double[][][]) np1.ToJaggedArray<double>();
+
+            var np2 = np1.MakeGeneric<double>();
 
             for (int idx = 0; idx < 3; idx ++)
             {
@@ -103,7 +105,7 @@ namespace NumSharp.UnitTest
                 {
                     for (int kdx = 0; kdx < 3;kdx++)
                     {
-                        Assert.IsTrue(np1[idx,jdx,kdx] == np1_[idx][jdx][kdx]);
+                        Assert.IsTrue(np2[idx,jdx,kdx] == np1_[idx][jdx][kdx]);
                     }
                 }    
             }
