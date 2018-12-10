@@ -9,17 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.PowerShell", "src\NumSharp.PowerShell\NumSharp.PowerShell.csproj", "{CA5288B3-C1C9-441B-9D34-D2580E2920FB}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E2079C90-B890-4DF8-9D64-D6AF361F705F}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{381613F6-A794-4255-B50E-D2315F8A8CEC}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSharp.Core\NumSharp.Core.csproj", "{190A2514-31CD-4738-AF20-3492DD47DE8C}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.LAPACK", "src\NumSharp.LAPACK\NumSharp.LAPACK.csproj", "{213959AF-7E31-42EE-B3F7-58BA7636BFCA}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{FCB4CD94-A229-4736-9648-5CFC9D5509B3}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.LAPACKTest", "test\NumSharp.LAPACKTest\NumSharp.LAPACKTest.csproj", "{78AF2D19-9A38-4456-A653-66855138C0D8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -47,23 +39,11 @@ Global
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{213959AF-7E31-42EE-B3F7-58BA7636BFCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{213959AF-7E31-42EE-B3F7-58BA7636BFCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{213959AF-7E31-42EE-B3F7-58BA7636BFCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{213959AF-7E31-42EE-B3F7-58BA7636BFCA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{78AF2D19-9A38-4456-A653-66855138C0D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{78AF2D19-9A38-4456-A653-66855138C0D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{78AF2D19-9A38-4456-A653-66855138C0D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{78AF2D19-9A38-4456-A653-66855138C0D8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{213959AF-7E31-42EE-B3F7-58BA7636BFCA} = {E2079C90-B890-4DF8-9D64-D6AF361F705F}
-		{78AF2D19-9A38-4456-A653-66855138C0D8} = {FCB4CD94-A229-4736-9648-5CFC9D5509B3}
 	EndGlobalSection
 EndGlobal
