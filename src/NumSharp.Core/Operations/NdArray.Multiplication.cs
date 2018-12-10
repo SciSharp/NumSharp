@@ -185,9 +185,9 @@ namespace NumSharp.Core
             return sum;
         }
         
-        public static NDArray operator *(double scalar, NDArray np1)
+        public static NDArray operator *(ValueType scalar, NDArray np1)
         {
-            return np1 + scalar;
+            return np1 * scalar;
         }
     }
     public partial class NDArrayGeneric<T>

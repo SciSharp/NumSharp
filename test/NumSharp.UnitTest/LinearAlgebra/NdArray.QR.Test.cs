@@ -22,7 +22,12 @@ namespace NumSharp.UnitTest.Extensions
         {
             var nd1 = np.array(new double[]{1,1,0,1,0,1,0,1,1}).reshape(3,3);
 
-            var T = nd1.qr();
+            var (Q,R) = nd1.qr();
+
+            var nd2 = Q.transpose().dot(R);
+
+            // make sure the highest difference is lower than 0.0000000001
+            Assert.IsTrue( ((double)(nd1 - nd2).absolute().max()[0] )  < 0.00000000001); 
         }
         
     }
