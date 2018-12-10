@@ -70,4 +70,9 @@ Add np.ravel, np.transpose.</PackageReleaseNotes>
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
+  <ItemGroup>
+    <None Update="*.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="*.so" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
