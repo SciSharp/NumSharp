@@ -38,9 +38,15 @@ namespace NumSharp.Core
 
             R.Storage.SetData(RDouble);
 
-            //   H(i) = I - tau * v * v'
+            int k = tau.Length;
 
-            return (default(NDArray),default(NDArray));
+            LAPACK.dorgqr_(ref m, ref n,ref k ,a, ref lda, tau, work, ref lwork,ref info);
+
+            var Q = new NDArray(typeof(double),tau.Length,tau.Length);
+
+            Q.Storage.SetData(a);
+
+            return (Q,R);
         }
     }
 }

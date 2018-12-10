@@ -23,16 +23,16 @@ namespace NumSharp.Core
                 puffer = new NDArray(this.dtype,this.shape.Shapes.ToArray());
             }
             
-            puffer.Storage.SetData(new int[puffer.size]);
+            puffer.Storage.SetData(Array.CreateInstance(dtype,puffer.size));
 
-            int[] storageArr = puffer.Storage.GetData<int>();
+            Array storageArr = puffer.Storage.GetData();
 
             if (diagonalIndex > -1)
                 for(int idx = 0; idx < noOfDiagElement;idx++ )
-                    storageArr[diagonalIndex + idx + idx * puffer.shape.Shapes[1]] = 1;
+                    storageArr.SetValue(1,diagonalIndex + idx + idx * puffer.shape.Shapes[1]); 
             else 
                 for(int idx = dim - 1; idx > dim - noOfDiagElement - 1;idx-- )
-                    storageArr[diagonalIndex + idx + idx * puffer.shape.Shapes[1]] = 1;
+                    storageArr.SetValue(1,diagonalIndex + idx + idx * puffer.shape.Shapes[1]); // = 1;
 
             this.Storage = puffer.Storage;
             
