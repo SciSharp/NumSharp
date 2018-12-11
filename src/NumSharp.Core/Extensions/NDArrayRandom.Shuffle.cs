@@ -4,14 +4,14 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace NumSharp.Core.Extensions
+namespace NumSharp.Core
 {
     public static partial class NDArrayRandomExtensions
     {
-        public static void Shuffle(this NumPyRandom rand, NDArrayGeneric<double> list)
+        public static void shuffle(this NumPyRandom rand, NDArray list)
         {
             var rng = new Random();
-            var count = list.Shape.Shapes[0];
+            var count = list.size;
             while (count > 1)
             {
                 count--;

@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.Extensions
         public void randint()
         {
             var np = new NumPy();
-            var a = np.random.randint(low: 0, high: 10, size: new Shape(5, 5));
+            var a = np.random.randint(low: 0, high: 10, shape: new Shape(5, 5));
             Assert.IsTrue(a.Data<int>().Count(x => x < 10) == 25);
         }
     }

@@ -8,16 +8,39 @@ namespace NumSharp.Core
 {
     public partial class NumPyRandom
     {
-        public NDArray randint(int low, int? high = null, Shape size = null)
+        public NDArray randint(int low, int size = 1)
         {
             var rng = new Random();
-            var data = new int[size.Size];
-            for(int i = 0; i < data.Length; i++)
+            var data = new int[size];
+            for (int i = 0; i < data.Length; i++)
             {
-                data[i] = rng.Next(low, high.HasValue ? high.Value : int.MaxValue);
+                data[i] = rng.Next(low, int.MaxValue);
             }
 
-            var np = new NDArray(typeof(int), size.Shapes.ToArray());
+            var np = new NDArray(typeof(int), size);
+            np.Set(data);
+
+            return np;
+        }
+
+        public NDArray randint(int low, int? high = null, Shape shape = null)
+        {
+            var rng = new Random();
+            if(high == null)
+            {
+                high = int.MaxValue;
+            }
+            if(shape == null)
+            {
+                shape = new Shape(high.Value - low);
+            }
+            var data = new int[shape.Size];
+            for(int i = 0; i < data.Length; i++)
+            {
+                data[i] = rng.Next(low, high.Value);
+            }
+
+            var np = new NDArray(typeof(int), shape.Shapes.ToArray());
             np.Set(data);
 
             return np;
