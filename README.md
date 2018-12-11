@@ -41,15 +41,20 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
 ### How to use
 ```cs
 // init NumPy instance which pesists integer data type
-var np = new NumPy<int>();
-// create a 2-dimension matrix
-var nd = np.arange(12).reshape(3, 4);
+var np = new NumPy();
+
+// create a vector
+var nd = np.arange(12)
+
+// create a matrix
+nd = np.arange(12).reshape(3, 4);
 
 // access data by index
 var data = nd[1, 1];
 
-// create a 3-dimension vector
+// create a tensor
 nd = np.arange(12).reshape(2, 3, 2);
+
 // get the 2nd vector in the 1st dimension
 data = n[new Shape(1)];
 
@@ -59,7 +64,7 @@ data = n[new Shape(1, 2)];
 // interate ndarray
 foreach (data in nd)
 {
-	// data is a ndarray or a value
+  // data is a ndarray or a value
 }
 ```
 
@@ -83,6 +88,7 @@ Reference the [documents](https://numsharp.readthedocs.io) host on readthedocs.i
 NumSharp is referenced by:
 * [Pandas.NET](https://github.com/SciSharp/Pandas.NET)
 * [SciSharp-Learn](https://github.com/SciSharp/scisharp-learn)
+* [TensorFlow.NET](https://github.com/SciSharp/TensorFlow.NET)
 * [Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
 * [CherubNLP](https://github.com/Oceania2018/CherubNLP)
 * [BotSharp](https://github.com/dotnetcore/BotSharp)
