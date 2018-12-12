@@ -66,9 +66,5 @@
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 
-  <Target Name="CopyWindowsNatives" AfterTargets="BeforeBuild" Condition= "'$(OS)' == 'Windows_NT'" >
-    <Copy SourceFiles="../../src/NumSharp.Core/NativeCompiledLibs/x64/Windows/lapack.dll" DestinationFiles="$(OutDir)/lapack.dll" />
-    <Copy SourceFiles="../../src/NumSharp.Core/NativeCompiledLibs/x64/Windows/blas_win64_MT.dll" DestinationFiles="$(OutDir)/blas_win64_MT.dll" />
-  </Target>
 
 </Project>

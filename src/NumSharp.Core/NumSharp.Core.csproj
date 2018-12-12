@@ -70,9 +70,11 @@ Add np.ravel, np.transpose.</PackageReleaseNotes>
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
-  <Target Name="CopyWindowsNatives" AfterTargets="BeforeBuild" Condition= "'$(OS)' == 'Windows_NT'" >
-    <Copy SourceFiles="./NativeCompiledLibs/x64/Windows/lapack.dll" DestinationFiles="$(OutDir)/lapack.dll" />
-    <Copy SourceFiles="./NativeCompiledLibs/x64/Windows/blas_win64_MT.dll" DestinationFiles="$(OutDir)/blas_win64_MT.dll" />
-  </Target>
-  
+  <ItemGroup>
+		<Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/lapack.dll" Link="lapack.dll" Pack="true" PackagePath="runtimes/win-x64/native/lapack.dll" />
+    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/blas_win64_MT.dll" Link="blas_win64_MT.dll" Pack="true" PackagePath="runtimes/win-x64/native/blas_win64_MT.dll" />
+    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/blas.so" Link="blas.so" Pack="true" PackagePath="runtimes/linux-x64/native/blas.so" />
+    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/lapack.so" Link="lapack.so" Pack="true" PackagePath="runtimes/linux-x64/native/lapack.so" />
+  </ItemGroup>
+
 </Project>
