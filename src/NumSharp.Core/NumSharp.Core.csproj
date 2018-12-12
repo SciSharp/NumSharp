@@ -70,9 +70,9 @@ Add np.ravel, np.transpose.</PackageReleaseNotes>
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
-  <ItemGroup>
-    <None Update="*.dll" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="*.so" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
+  <Target Name="CopyWindowsNatives" AfterTargets="BeforeBuild" Condition= "'$(OS)' == 'Windows_NT'" >
+    <Copy SourceFiles="./NativeCompiledLibs/x64/Windows/lapack.dll" DestinationFiles="$(OutDir)/lapack.dll" />
+    <Copy SourceFiles="./NativeCompiledLibs/x64/Windows/blas_win64_MT.dll" DestinationFiles="$(OutDir)/blas_win64_MT.dll" />
+  </Target>
+  
 </Project>
