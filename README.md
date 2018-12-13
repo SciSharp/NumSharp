@@ -40,9 +40,9 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
   
 ### How to use
 ```cs
-// init NumPy instance which pesists integer data type
-var np = new NumPy();
-
+using np = NumSharp.Core.NumPy;
+```
+```cs
 // create a vector
 var nd = np.arange(12)
 
