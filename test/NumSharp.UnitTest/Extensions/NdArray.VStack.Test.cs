@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -17,8 +18,6 @@ namespace NumSharp.UnitTest.Extensions
         public void VStackNDArrays()
         {
             //1D
-            var np = new NumPy();
-
             var n1 = np.array(new double[] { 1, 2, 3 });
             var n2 = np.array(new double[] { 2, 3, 4 });
 

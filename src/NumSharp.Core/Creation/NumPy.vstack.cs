@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPyExtensions
+    public static partial class NumPy
     {
-        public static NDArray vstack(this NumPy np, params NDArray[] nps)
+        public static NDArray vstack(params NDArray[] nps)
         {
             var np1 = nps[0];
 

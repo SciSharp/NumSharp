@@ -35,7 +35,7 @@ namespace NumSharp.Core
                 for (int idx = 0; idx < npAll.Length;idx++)
                     list1D.AddRange(npAll[idx].Storage.GetData<object>().ToList());
                 
-                np = new NumPy().array(list1D.ToArray(),this.dtype);
+                np = NumPy.array(list1D.ToArray(),this.dtype);
             }
             else
             {

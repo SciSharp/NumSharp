@@ -6,6 +6,7 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest
 {
@@ -15,7 +16,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var np1 = new NumPy().array(new double[] {1, Math.E, Math.E*Math.E, 0}).MakeGeneric<double>();
+            var np1 = np.array(new double[] {1, Math.E, Math.E*Math.E, 0}).MakeGeneric<double>();
             
             var np2 = np1.log().MakeGeneric<double>();
             

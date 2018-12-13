@@ -7,7 +7,7 @@ namespace NumSharp.Core
 {
     public partial class NumPy
     {
-        public NDArray mean(NDArray np, int axis = -1)
+        public static NDArray mean(NDArray np, int axis = -1)
         {
             return np.mean(axis);
         }
