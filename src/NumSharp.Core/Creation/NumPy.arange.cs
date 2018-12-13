@@ -4,17 +4,18 @@ using System.ComponentModel;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray arange(double stop)
+        public static NDArray arange(double stop)
         {
             return arange(0, stop, 1);
         }
 
-        public NDArray arange(double start, double stop, double step = 1)
+        public static NDArray arange(double start, double stop, double step = 1)
         {
             if (start > stop)
             {
@@ -34,12 +35,12 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public NDArray arange(int stop)
+        public static NDArray arange(int stop)
         {
             return arange(0, stop, 1);
         }
 
-        public NDArray arange(int start, int stop, int step = 1)
+        public static NDArray arange(int start, int stop, int step = 1)
         {
             if (start > stop)
             {
@@ -49,7 +50,7 @@ namespace NumSharp.Core
             int length = (int)Math.Ceiling((stop - start + 0.0) / step);
             int index = 0;
 
-            var nd = new NDArray(int32, new Shape(length));
+            var nd = new NDArray(np.int32, new Shape(length));
 
             if(nd.Data<int>() is int[] a)
             {

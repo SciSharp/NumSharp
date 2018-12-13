@@ -5,15 +5,15 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray linspace(double start, double stop, int num, bool entdpoint = true, Type dtype = null)
+        public static NDArray linspace(double start, double stop, int num, bool entdpoint = true, Type dtype = null)
         {
             dtype = (dtype == null) ? typeof(double) : dtype;
 
             return new NDArray(dtype).linspace(start,stop,num,entdpoint);
         }
-        public NDArray linspace<T>(double start, double stop, int num, bool entdpoint = true)
+        public static NDArray linspace<T>(double start, double stop, int num, bool entdpoint = true)
         {
             double steps = (stop - start) / ((entdpoint) ? (double)num - 1.0 : (double)num);
 

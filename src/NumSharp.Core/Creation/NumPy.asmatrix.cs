@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public matrix asmatrix(NDArray nd)
+        public static matrix asmatrix(NDArray nd)
         {
             return nd.AsMatrix();
         }

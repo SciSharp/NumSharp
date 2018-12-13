@@ -2,8 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -13,7 +13,6 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReShape()
         {
-            var np = new NumPy();
             var n = np.reshape(np.arange(6), 3, 2).MakeGeneric<int>();
 
             Assert.IsTrue(n[0, 0] == 0);

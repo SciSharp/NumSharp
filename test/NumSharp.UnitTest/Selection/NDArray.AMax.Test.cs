@@ -2,8 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
-using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -14,8 +13,6 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void amax()
         {
-            var np = new NumPy();
-
             //no axis
             var n = np.arange(4).reshape(2, 2);
             var n1 = np.amax(n).MakeGeneric<double>();

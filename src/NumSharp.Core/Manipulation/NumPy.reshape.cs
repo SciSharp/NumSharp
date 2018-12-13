@@ -4,9 +4,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray reshape(NDArray nd, params int[] shape)
+        public static NDArray reshape(NDArray nd, params int[] shape)
         {
             nd.reshape(shape);
             return nd;

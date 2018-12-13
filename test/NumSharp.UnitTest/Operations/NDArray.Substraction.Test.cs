@@ -6,6 +6,7 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Operations
 {
@@ -15,8 +16,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void DoubleTwo1D_NDArraySubtraction()
         {
-            var np1 = new NumPy().array(new double[] { 3, 5, 7 });
-            var np2 = new NumPy().array(new double[] { 1, 3, 4 });
+            var np1 = np.array(new double[] { 3, 5, 7 });
+            var np2 = np.array(new double[] { 1, 3, 4 });
 
             var np3 = np1 - np2;
 
@@ -26,7 +27,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double1DPlusOffset_NDArraySubtraction()
         {
-            var np1 = new NumPy().array(new double[] { 3, 5, 7 });
+            var np1 = np.array(new double[] { 3, 5, 7 });
 
             var np2 = np1 - 3;
 
@@ -36,7 +37,7 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Complex1DPlusOffset_NDArraySubtraction()
         {
-            var np1 = new NumPy().array(new Complex[] { new Complex(6, 8), new Complex(10, 12) });
+            var np1 = np.array(new Complex[] { new Complex(6, 8), new Complex(10, 12) });
 
             var np2 = np1 - new Complex(2,1);
 
@@ -51,8 +52,8 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void ComplexTwo1D_NDArraySubtraction()
         {
-            var np1 = new NumPy().array(new Complex[] { new Complex(6, 8), new Complex(10, 12) });
-            var np2 = new NumPy().array(new Complex[] { new Complex(5, 6), new Complex(7, 8) });
+            var np1 = np.array(new Complex[] { new Complex(6, 8), new Complex(10, 12) });
+            var np2 = np.array(new Complex[] { new Complex(5, 6), new Complex(7, 8) });
 
             var np3 = np1 - np2;
 

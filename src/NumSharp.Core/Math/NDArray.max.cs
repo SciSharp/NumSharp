@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -8,7 +9,7 @@ namespace NumSharp.Core
     {
         public NDArray max(int? axis = null)
         {
-            return new NumPy().amax(this, axis);
+            return np.amax(this, axis);
         }
     }
 }

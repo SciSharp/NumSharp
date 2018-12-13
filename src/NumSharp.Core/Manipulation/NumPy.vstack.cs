@@ -5,14 +5,14 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
         /// <summary>
         /// Stack arrays in sequence vertically (row wise).
         /// </summary>
         /// <param name="nps"></param>
         /// <returns></returns>
-        public NDArray vstack<T>(params NDArray[] nps)
+        public static NDArray vstack<T>(params NDArray[] nps)
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");

@@ -5,9 +5,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray amax(NDArray nd, int? axis = null)
+        public static NDArray amax(NDArray nd, int? axis = null)
         {
             return nd.amax(axis);
         }

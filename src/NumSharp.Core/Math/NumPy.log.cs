@@ -7,9 +7,9 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray log(NDArray nd)
+        public static NDArray log(NDArray nd)
         {
             return nd.log();
         }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -11,7 +12,7 @@ namespace NumSharp.Core
             switch (dtype.Name)
             {
                 case "Double":
-                    return new NumPy().amin(this, axis);
+                    return np.amin(this, axis);
             }
 
             return null;
@@ -19,7 +20,7 @@ namespace NumSharp.Core
 
         public NDArray min<T>(int? axis = null)
         {
-            return new NumPy().amin(this, axis);
+            return np.amin(this, axis);
         }
     }
 }

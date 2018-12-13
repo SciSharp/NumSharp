@@ -7,9 +7,9 @@ using System.Drawing;
  
 namespace NumSharp.Core
 {
-	public partial class NumPy
+	public static partial class NumPy
 	{
-        public NDArray array(Array array, Type dtype = null, int ndim = 1)
+        public static NDArray array(Array array, Type dtype = null, int ndim = 1)
         {
             dtype = (dtype == null) ? array.GetType().GetElementType() : dtype;
             
@@ -28,7 +28,7 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public NDArray array(System.Drawing.Bitmap image)
+        public static NDArray array(System.Drawing.Bitmap image)
         {
             var imageArray = new NDArray(typeof(Byte));
 
@@ -45,7 +45,7 @@ namespace NumSharp.Core
             return imageArray;
         }
 
-        public NDArray array<T>(T[][] data)
+        public static NDArray array<T>(T[][] data)
         {
             int size = data.Length * data[0].Length;
             var all = new T[size];

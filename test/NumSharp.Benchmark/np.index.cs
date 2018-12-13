@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Benchmark
 {
@@ -12,7 +13,6 @@ namespace NumSharp.Benchmark
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class npindex
     {
-        private NumPy np;
         private NDArray nd;
 
         private Shape shape;
@@ -20,7 +20,6 @@ namespace NumSharp.Benchmark
         [GlobalSetup]
         public void Setup()
         {
-            np = new NumPy();
             shape = new Shape(1000, 1000);
             nd = np.arange(1000 * 1000 * 1.0).reshape(shape.Shapes.ToArray());
         }

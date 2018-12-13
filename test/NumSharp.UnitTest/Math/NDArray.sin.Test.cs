@@ -6,6 +6,7 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest
 {
@@ -15,7 +16,6 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var np = new NumPy();
             var nd = np.array(new double[] { 0, 30, 45, 60, 90 }) * (Math.PI / 180);
             
             var nd2 = np.sin(nd);

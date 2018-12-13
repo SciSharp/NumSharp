@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Selection
 {
@@ -13,7 +14,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Enumerate()
         {
-            var npStorage = new NumPy().arange(12).reshape(2, 3, 2).Storage;
+            var npStorage = np.arange(12).reshape(2, 3, 2).Storage;
 
             int i = 0;
             

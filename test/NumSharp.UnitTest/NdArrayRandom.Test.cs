@@ -3,15 +3,13 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Core.Extensions;
-using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest
 {
     [TestClass]
     public class NDArrayRandomTest
     {
-        NumPy np = new NumPy();
-
         [TestMethod]
         public void randn()
         {

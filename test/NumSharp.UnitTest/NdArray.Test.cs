@@ -5,14 +5,13 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest
 {
     [TestClass]
     public class NDArrayTest
     {
-        private NumPy np = new NumPy();
-
         [TestMethod]
         public void StringCheck()
         {
