@@ -18,31 +18,31 @@ public static partial class numpy
             case "Double" : 
             {
                 double[] array = list.Select(x => (double)x).ToArray();
-                returnArray = new NumPyGeneric<double>().array(array);
+                returnArray = NumPy.array(array);
                 break;
             }
             case "Float" : 
             {
                 float[] array = list.Select(x => (float)x ).ToArray();
-                returnArray = new NumPyGeneric<float>().array(array);
+                returnArray = NumPy.array(array);
                 break;
             }
             case "Int32" : 
             {
                 System.Int32[] array = list.Select(x => (System.Int32)x ).ToArray();
-                returnArray = new NumPyGeneric<int>().array(array);
+                returnArray = NumPy.array(array);
                 break;
             }
             case "Int64" : 
             {
                 System.Int64[] array = list.Select(x => (System.Int64)x ).ToArray();
-                returnArray = new NumPyGeneric<System.Int64>().array(array);
+                returnArray = NumPy.array(array);
                 break;
             }
             case "Complex" : 
             {
                 System.Numerics.Complex[] array = list.Select(x => (System.Numerics.Complex)x ).ToArray();
-                returnArray = new NumPyGeneric<System.Numerics.Complex>().array(array);
+                returnArray = NumPy.array(array);
                 break;
             }
             default : 
