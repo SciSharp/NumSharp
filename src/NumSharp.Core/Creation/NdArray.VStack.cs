@@ -11,40 +11,31 @@ namespace NumSharp.Core
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");
-
-            int dataLength = this.Storage.Length;
-
-            for (int idx = 0;idx < nps.Length;idx++)     
-                dataLength += nps[idx].Storage.Length;       
-
-            Array dataSysArr = Array.CreateInstance(this.dtype,dataLength);
-            NDArray np = new NDArray(this.dtype);
-
-            this.Storage.GetData(this.dtype).CopyTo(dataSysArr,0);
-
-            int idxOfLastCopyiedElement = this.Storage.Length;
-
-            for (int idx = 0; idx < nps.Length;idx++)
-            {
-                nps[idx].Storage.GetData(this.dtype).CopyTo(dataSysArr,idxOfLastCopyiedElement);
-                idxOfLastCopyiedElement += nps[idx].Storage.Length;
-            }
             
-            var check = dataSysArr.GetValue(idxOfLastCopyiedElement-1);
+            List<object> list = this.Storage.GetData<object>().ToList();
 
-            if (ndim == 1)
+            NDArray np = new NDArray(dtype);
+
+            foreach (NDArray ele in nps)
             {
-                np.Storage.Shape = new Shape(new int[] { nps.Length+1, shape.Shapes[0] });
+                if (nps[0].shape != ele.shape)
+                    throw new Exception("Arrays mush have same shapes");
+                
+                list.AddRange(ele.Storage.GetData<object>());
+            }
+
+            np.Storage.SetData(list.ToArray());
+            
+            if (nps[0].shape.Shapes.Count == 1)
+            {
+                np.Storage.Shape = new Shape(new int[] { nps.Length +1, nps[0].shape.Shapes[0] });
             }
             else
             {
                 int[] shapes = nps[0].shape.Shapes.ToArray();
-                shapes[0] *= nps.Length;
-                np.Storage.Shape = new Shape(shapes);
+                shapes[0] *= nps.Length + 1;
+                np.Storage.Shape = new Shape(shapes) ;
             }
-
-            np.Storage.SetData(dataSysArr);
-
             return np;
         }
     }

@@ -18,13 +18,14 @@ namespace NumSharp.UnitTest.Extensions
         public void HStackNDArrays()
         {
             //1D
-            var np = new NumPyGeneric<double>();
+            var np = new NumPy();
             var n1 = np.array(new double[] { 1, 2, 3 });
             var n2 = np.array(new double[] { 2, 3, 4 });
 
-            var n = np.hstack(n1, n2);
+            var n = np.hstack(n1, n2).MakeGeneric<double>();
 
-            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n.size == (n1.size + n2.size));
+            
             Assert.IsTrue(n[0] == 1);
             Assert.IsTrue(n[1] == 2);
             Assert.IsTrue(n[3] == 2);
@@ -34,9 +35,10 @@ namespace NumSharp.UnitTest.Extensions
             n1 = np.array(new double[][] { new double[] { 1 }, new double[] { 2 }, new double[] { 3 } });
             n2 = np.array(new double[][] { new double[] { 4 }, new double[] { 5 }, new double[] { 6 } });
 
-            n = np.hstack(n1, n2);
+            n = np.hstack(n1, n2).MakeGeneric<double>();
 
-            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n.size == (n1.size + n2.size));
+
             Assert.IsTrue(n[0, 0] == 1);
             Assert.IsTrue(n[1, 0] == 2);
             Assert.IsTrue(n[2, 0] == 3);
@@ -47,9 +49,11 @@ namespace NumSharp.UnitTest.Extensions
             //3D
             n1 = np.array(new double[] {0,1,2,3,4,5,6,7,8,9,10,11} ).reshape(2, 3, 2);
             n2 = np.array(new double[] {0,1,2,3,4,5,6,7,8,9,10,11} ).reshape(2, 3, 2);
-            n = np.hstack(n1, n2);
+            
+            n = np.hstack(n1, n2).MakeGeneric<double>();
 
-            Assert.IsTrue(n.Size == (n1.Size + n2.Size));
+            Assert.IsTrue(n.size == (n1.size + n2.size));
+            
             Assert.IsTrue(n[0, 0, 0] == 0);
             Assert.IsTrue(n[0, 1, 0] == 2);
             Assert.IsTrue(n[0, 2, 1] == 5);
