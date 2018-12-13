@@ -7,6 +7,7 @@ using System.Numerics;
 using NumSharp.UnitTest.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {

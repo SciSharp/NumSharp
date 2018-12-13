@@ -1,13 +1,12 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
     public class IndexingTest
     {
-        private NumPy np = new NumPy();
-
         [TestMethod]
         public void IndexAccessorGetter()
         {

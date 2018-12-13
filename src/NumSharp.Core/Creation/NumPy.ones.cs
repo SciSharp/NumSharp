@@ -7,16 +7,16 @@ using System.Numerics;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray ones(params int[] shapes)
+        public static NDArray ones(params int[] shapes)
         {
             Type dtype = typeof(double);
 
             return ones(dtype,shapes);
         }
 
-        public NDArray ones(Type dtype = null, params int[] shapes)
+        public static NDArray ones(Type dtype = null, params int[] shapes)
         {
             dtype = (dtype == null ) ? typeof(double) : dtype;
 
@@ -30,7 +30,7 @@ namespace NumSharp.Core
         /// <param name="np"></param>
         /// <param name="shape"></param>
         /// <returns></returns>
-        public NDArray ones(Shape shape, Type dtype = null)
+        public static NDArray ones(Shape shape, Type dtype = null)
         {
             if(dtype == null)
             {
@@ -57,7 +57,7 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public NDArray ones<T>(params int[] shapes)
+        public static NDArray ones<T>(params int[] shapes)
         {
             return ones(new Shape(shapes), typeof(T));
         }

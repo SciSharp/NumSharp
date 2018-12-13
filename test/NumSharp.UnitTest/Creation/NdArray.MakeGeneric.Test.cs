@@ -2,17 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
     public class NdArrayMakeGenericTester
     {
-        NumPy np = new NumPy();
-
         [TestMethod]
         public void Array1DimGeneric()
         {

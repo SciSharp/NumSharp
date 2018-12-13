@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Benchmark
 {
@@ -12,25 +13,19 @@ namespace NumSharp.Benchmark
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class nparange
     {
-        private NumPy np;
         private NDArray nd;
 
         private int start;
         private int step;
         private int length;
 
-        private NumPy np2;
-
         [GlobalSetup]
         public void Setup()
         {
-            np = new NumPy();
             nd = new NDArray(typeof(int));
             start = 0;
             step = 1;
             length = 100 * 100;
-
-            np2 = new NumPy();
         }
 
         [Benchmark]
@@ -43,12 +38,6 @@ namespace NumSharp.Benchmark
         public void arange_ndarray()
         {
             var nd3 = nd.arange(length, start, step);
-        }
-
-        [Benchmark]
-        public void arange_ndarray2()
-        {
-            var nd3 = np2.arange(start, length, step);
         }
 
         [Benchmark]

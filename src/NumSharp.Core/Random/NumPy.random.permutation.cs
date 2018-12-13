@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -11,17 +12,17 @@ namespace NumSharp.Core
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NumPy().arange(max);
+            var nd = np.arange(max);
 
             for (int i = 0; i < max; i++)
             {
                 var pos = random.Next(0, max);
-                var zero = np.Data<int>(0);
-                np[0] = np.Data<int>(pos);
-                np[pos] = zero;
+                var zero = nd.Data<int>(0);
+                nd[0] = nd.Data<int>(pos);
+                nd[pos] = zero;
             }
 
-            return np;
+            return nd;
         }
     }
 }

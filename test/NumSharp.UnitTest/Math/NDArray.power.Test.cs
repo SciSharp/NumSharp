@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest
 {
@@ -14,13 +15,13 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void PowerWithSingleValue()
         {
-            var np = new NumPy().arange(3);
+            var nd = np.arange(3);
             
-            var np1 = np.power(2).MakeGeneric<double>();
+            var nd1 = nd.power(2).MakeGeneric<double>();
             
-            Assert.IsTrue(np1[0] == 0);
-            Assert.IsTrue(np1[1] == 1);
-            Assert.IsTrue(np1[2] == 4);
+            Assert.IsTrue(nd1[0] == 0);
+            Assert.IsTrue(nd1[1] == 1);
+            Assert.IsTrue(nd1[2] == 4);
         }
     }
 }

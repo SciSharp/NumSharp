@@ -7,9 +7,9 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray sin(NDArray nd)
+        public static NDArray sin(NDArray nd)
         {
             return nd.sin();
         }

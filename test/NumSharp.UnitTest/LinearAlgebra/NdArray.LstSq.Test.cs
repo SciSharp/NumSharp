@@ -7,15 +7,13 @@ using System.Numerics;
 using NumSharp.UnitTest.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
-
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
     public  class NDArrayLinSqTester
     {
-        public NumPy np = new NumPy();
-
         [TestMethod]
         public void DefaultTest()
         {

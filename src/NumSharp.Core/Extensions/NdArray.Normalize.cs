@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -9,7 +10,6 @@ namespace NumSharp.Core
     {
         public void normalize()
         {
-            var np = new NumPy();
             var min = this.min(0);
             var max = this.max(0);
 

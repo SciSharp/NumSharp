@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Linq;
 using System.Text;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -9,8 +10,6 @@ namespace NumSharp.Core
     {
         public NDArray delete(IEnumerable delete)
         {
-            var np = new NumPy();
-
             var sysArr = this.Storage.GetData();
 
             NDArray res = null;

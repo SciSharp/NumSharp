@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
@@ -113,7 +113,7 @@ namespace NumSharp.Core
                         np1New = puffer.ToArray();
                     }
 
-                    var numSharpNew = new NumPy().array(np1New,dtype);
+                    var numSharpNew = np.array(np1New,dtype);
 
                     numSharpReturn = numSharpNew.Convolve(numSharpArray2,"valid");
                     break;

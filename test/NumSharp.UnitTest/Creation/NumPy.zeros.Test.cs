@@ -5,6 +5,7 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
+using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -14,8 +15,6 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void zero()
         {
-            var np = new NumPy();
-
             var n = np.zeros(3);
 
             Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<float>(), new float[] { 0, 0, 0 }));

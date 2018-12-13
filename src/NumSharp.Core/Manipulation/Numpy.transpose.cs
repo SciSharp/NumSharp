@@ -7,9 +7,9 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
-        public NDArray transpose(NDArray nd)
+        public static NDArray transpose(NDArray nd)
         {
             var np = new NDArray(nd.dtype);
 

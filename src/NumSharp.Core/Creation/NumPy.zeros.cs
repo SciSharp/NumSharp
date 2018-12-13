@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public static partial class NumPy
     {
         /// <summary>
         /// Return a new float array of given shape, filled with zeros.
@@ -12,13 +12,13 @@ namespace NumSharp.Core
         /// <param name="np"></param>
         /// <param name="shape"></param>
         /// <returns></returns>
-        public NDArray zeros(params int[] shape)
+        public static NDArray zeros(params int[] shape)
         {
             var nd = new NDArray(float64, new Shape(shape));
             return nd;
         }
 
-        public NDArray zeros<T>(params int[] shape)
+        public static NDArray zeros<T>(params int[] shape)
         {
             var nd = new NDArray(typeof(T));
             nd.Storage.Shape = new Shape(shape);
@@ -26,7 +26,7 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public NDArray zeros(Shape shape, Type dtype = null)
+        public static NDArray zeros(Shape shape, Type dtype = null)
         {
             return new NDArray(dtype == null? float64 : dtype, shape);
         }
