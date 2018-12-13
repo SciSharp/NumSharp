@@ -14,23 +14,23 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MeanAxis0()
         {
-            var np = new NumPyGeneric<double>().array(new double[]{1,2,3,4}).reshape(2,2);
+            var np = NumPy.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(0).Data, new double[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.mean(0).Storage.GetData<double>(), new double[] { 2, 3 }));
         }
         [TestMethod]
         public void MeanAxis1()
         {
-            var np = new NumPyGeneric<double>().array(new double[]{1,2,3,4}).reshape(2,2);
+            var np = NumPy.array(new double[]{1,2,3,4}).reshape(2,2);
             
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean(1).Data, new double[] { 1.5, 3.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.mean(1).Storage.GetData<double>(), new double[] { 1.5, 3.5 }));
         }
         [TestMethod]
         public void MeanAxisMinus1()
         {
-            var np = new NumPyGeneric<double>().array(new double[]{1,2,3,4}).reshape(2,2);
+            var np = NumPy.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np.Mean().Data, new double[] { 2.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np.mean().Storage.GetData<double>(), new double[] { 2.5 }));
             
         }
     }

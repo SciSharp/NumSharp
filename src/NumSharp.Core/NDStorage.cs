@@ -220,6 +220,8 @@ namespace NumSharp.Core
             object element = null;
             if (indexes.Length == Shape.NDim)
                 element = values.GetValue(Shape.GetIndexInShape(indexes));
+            else if (Shape.Shapes.Last() == 1)
+                element = values.GetValue(Shape.GetIndexInShape(indexes));
             else
                 throw new Exception("indexes must be equal to number of dimension.");
             return element;
@@ -293,7 +295,9 @@ namespace NumSharp.Core
                         }
                         else 
                         {
-
+                            var returnArray_ = returnArray as object[];
+                            for(int idx = 0;idx < returnArray.Length;idx++)
+                                returnArray_[idx] = values.GetValue(idx);
                         }
                         break;
                     }
