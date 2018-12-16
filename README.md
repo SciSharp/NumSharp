@@ -40,7 +40,7 @@ The NumPy class is a high-level abstraction of NDArray that allows NumSharp to b
   
 ### How to use
 ```cs
-using np = NumSharp.Core.NumPy;
+using NumSharp.Core;
 ```
 ```cs
 // create a vector
