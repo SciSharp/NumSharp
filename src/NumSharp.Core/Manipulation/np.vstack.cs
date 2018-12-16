@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         /// <summary>
         /// Stack arrays in sequence vertically (row wise).

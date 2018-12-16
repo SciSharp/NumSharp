@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NumSharp.Core;
-using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Benchmark
 {

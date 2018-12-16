@@ -5,11 +5,11 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         public static NDArray ones_like(NDArray nd, string order = "C")
         {
-            return NumPy.ones(new Shape(nd.shape.Shapes));
+            return np.ones(new Shape(nd.shape.Shapes));
         }
     }
 }

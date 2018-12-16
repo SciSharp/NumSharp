@@ -4,11 +4,10 @@ using System.ComponentModel;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         public static NDArray arange(double stop)
         {

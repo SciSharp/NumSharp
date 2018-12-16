@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Core.Extensions;
-using np = NumSharp.Core.NumPy;
+using NumSharp.Core;
 
 namespace NumSharp.UnitTest
 {

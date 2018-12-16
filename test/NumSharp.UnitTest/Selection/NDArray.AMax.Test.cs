@@ -1,8 +1,8 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Core;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using np = NumSharp.Core.NumPy;
 
 namespace NumSharp.UnitTest.Extensions
 {

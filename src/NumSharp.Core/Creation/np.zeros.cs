@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         /// <summary>
         /// Return a new float array of given shape, filled with zeros.

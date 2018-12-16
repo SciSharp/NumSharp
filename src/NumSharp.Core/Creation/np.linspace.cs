@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         public static NDArray linspace(double start, double stop, int num, bool entdpoint = true, Type dtype = null)
         {

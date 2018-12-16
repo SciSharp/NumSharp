@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
-using np = NumSharp.Core.NumPy;
+using NumSharp.Core;
 
 namespace NumSharp.UnitTest.Extensions
 {

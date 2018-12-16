@@ -7,7 +7,7 @@ using System.Drawing;
  
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         public static NDArray asarray(double[] data, int ndim = 1)
         {

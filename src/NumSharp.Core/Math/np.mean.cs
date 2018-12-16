@@ -5,7 +5,7 @@ using NumSharp.Core.Extensions;
 
 namespace NumSharp.Core
 {
-    public partial class NumPy
+    public partial class np
     {
         public static NDArray mean(NDArray np, int axis = -1)
         {

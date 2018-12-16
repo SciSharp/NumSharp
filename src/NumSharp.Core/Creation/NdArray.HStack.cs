@@ -26,7 +26,7 @@ namespace NumSharp.Core
                 else
                     npAll[idx+1] = nps[idx];
 
-            NDArray np = new NDArray();
+            NDArray nd = new NDArray();
 
             // easy 1D case
             if (this.ndim == 1)
@@ -35,7 +35,7 @@ namespace NumSharp.Core
                 for (int idx = 0; idx < npAll.Length;idx++)
                     list1D.AddRange(npAll[idx].Storage.GetData<object>().ToList());
                 
-                np = NumPy.array(list1D.ToArray(),this.dtype);
+                nd = np.array(list1D.ToArray(),this.dtype);
             }
             else
             {
@@ -54,7 +54,7 @@ namespace NumSharp.Core
                     }
                 }
                 
-                np.Storage.SetData( list.ToArray());
+                nd.Storage.SetData( list.ToArray());
 
                 int[] shapes = npAll[0].shape.Shapes.ToArray();
 
@@ -63,12 +63,12 @@ namespace NumSharp.Core
                 else
                     shapes[1] *= npAll.Length;
 
-                np.Storage.Shape = new Shape(shapes);
+                nd.Storage.Shape = new Shape(shapes);
 
             
             }
 
-            return np;
+            return nd;
         }
     }
 }

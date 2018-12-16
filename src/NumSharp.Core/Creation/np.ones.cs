@@ -7,7 +7,7 @@ using System.Numerics;
 
 namespace NumSharp.Core
 {
-    public static partial class NumPy
+    public static partial class np
     {
         public static NDArray ones(params int[] shapes)
         {

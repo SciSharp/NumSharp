@@ -5,9 +5,9 @@ using System.Text;
 namespace NumSharp.Core
 {
     /// <summary>
-    /// API bridge between NumSharp and Python NumPy  
+    /// API bridge between NumSharp and Python NumPy
     /// </summary>
-    public static partial class NumPy
+    public static partial class np
     {
         // https://docs.scipy.org/doc/numpy-1.15.0/user/basics.types.html
         public static Type int16 => typeof(short);
