@@ -16,6 +16,13 @@ namespace NumSharp.Core
             return nd;
         }
 
+        public static NDArray asarray(float data)
+        {
+            var nd = new NDArray(typeof(float), 1);
+            nd.Storage.Set(new float[] { data });
+            return nd;
+        }
+
         public static NDArray asarray(float[] data, int ndim = 1)
         {
             var nd = new NDArray(typeof(float), data.Length);
