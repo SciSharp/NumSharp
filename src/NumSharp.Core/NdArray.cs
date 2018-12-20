@@ -77,7 +77,7 @@ namespace NumSharp.Core
             {
                 case 1 :
                 {
-                    
+                    Storage.SetData(values);
                     break;
                 }
             } 
