@@ -15,11 +15,10 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DoubleSqrtTest()
         {
-            var np = new NDArray().arange(3).MakeGeneric<double>();
-            np[0] = 1;
-            np[1] = 4;
-            np[2] = 9;
-            Assert.IsTrue(Enumerable.SequenceEqual(np.sqrt().Storage.GetData<double>(), new double[] { 1, 2, 3 }));
+            var nd = new NDArray(np.float64,3);
+            nd.Storage.SetData(new double[]{1,4,9});
+
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Storage.GetData<double>(), new double[] { 1, 2, 3 }));
         }
         [TestMethod]
         public void ComplexSqrtTest()

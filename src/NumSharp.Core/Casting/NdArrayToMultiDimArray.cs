@@ -43,9 +43,9 @@ namespace NumSharp.Core
                 case 2 : 
                 {
                     T[] data = Storage.GetData<T>();
-                    T[,] dotNetArrayPuffer = new T[shape.Shapes[0],shape.Shapes[1]];
+                    T[,] dotNetArrayPuffer = new T[shape.Dimensions[0],shape.Dimensions[1]];
                     for (int idx = 0;idx < data.Length;idx++ )
-                        dotNetArrayPuffer[idx/shape.Shapes[1],idx%shape.Shapes[1]] = data[idx];
+                        dotNetArrayPuffer[idx/shape.Dimensions[1],idx%shape.Dimensions[1]] = data[idx];
                     
                     dotNetArray = dotNetArrayPuffer;
                     

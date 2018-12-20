@@ -15,13 +15,13 @@ namespace NumSharp.Core
 
             if (nd.ndim == 1)
             {
-                np.Storage.Shape = new Shape(1, np.shape.Shapes[0]);
+                np.Storage.Reshape(1, np.shape.Dimensions[0]);
             }
             else 
             {
-                np.Storage.Shape = new Shape(np.shape.Shapes.Reverse().ToArray());
-                for (int idx = 0;idx < np.shape.Shapes[0];idx++)
-                    for (int jdx = 0;jdx < np.shape.Shapes[1];jdx++)
+                np.Storage.Reshape(np.shape.Dimensions.Reverse().ToArray());
+                for (int idx = 0;idx < np.shape.Dimensions[0];idx++)
+                    for (int jdx = 0;jdx < np.shape.Dimensions[1];jdx++)
                         np[idx,jdx] = nd[jdx,idx];
             }
             

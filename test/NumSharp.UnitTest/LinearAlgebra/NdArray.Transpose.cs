@@ -10,7 +10,7 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
-    public class TransposeTest : TestBase
+    public class TransposeTest 
     {
         [TestMethod]
         public void TwoxThree()

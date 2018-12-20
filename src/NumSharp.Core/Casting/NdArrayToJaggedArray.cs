@@ -42,13 +42,13 @@ namespace NumSharp.Core
                 }
                 case 2 : 
                 {
-                    T[] data = Storage.GetData<T>();
-                    T[][] dotNetArrayPuffer = new T[shape.Shapes[0]][]; 
+                    T[][] dotNetArrayPuffer = new T[shape.Dimensions[0]][]; 
                     for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-                        dotNetArrayPuffer[idx] = new T[shape.Shapes[1]];
+                        dotNetArrayPuffer[idx] = new T[shape.Dimensions[1]];
                         
-                    for (int idx = 0;idx < data.Length;idx++ )
-                        dotNetArrayPuffer[idx/shape.Shapes[1]][idx%shape.Shapes[1]] = data[idx];
+                    for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
+                        for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
+                            dotNetArrayPuffer[idx][jdx] = (T) this[idx,jdx];
                     
                     dotNetArray = dotNetArrayPuffer;
                     
@@ -57,19 +57,19 @@ namespace NumSharp.Core
                 case 3 : 
                 {
                     T[] data = Storage.GetData<T>();
-                    T[][][] dotNetArrayPuffer = new T[shape.Shapes[0]][][]; 
+                    T[][][] dotNetArrayPuffer = new T[shape.Dimensions[0]][][]; 
                     for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
                     {
-                        dotNetArrayPuffer[idx] = new T[shape.Shapes[1]][];
+                        dotNetArrayPuffer[idx] = new T[shape.Dimensions[1]][];
                         for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
-                            dotNetArrayPuffer[idx][jdx] = new T[shape.Shapes[2]];
+                            dotNetArrayPuffer[idx][jdx] = new T[shape.Dimensions[2]];
                     }
                     
-                    for (int idx = 0; idx < shape.Shapes[0];idx++)
-                        for (int jdx = 0;jdx < shape.Shapes[1];jdx++)
-                            for(int kdx = 0; kdx < shape.Shapes[2];kdx++)
+                    for (int idx = 0; idx < shape.Dimensions[0];idx++)
+                        for (int jdx = 0;jdx < shape.Dimensions[1];jdx++)
+                            for(int kdx = 0; kdx < shape.Dimensions[2];kdx++)
                                 dotNetArrayPuffer[idx][jdx][kdx] = (T) this[idx,jdx,kdx];
-                        
+                     
                     dotNetArray = dotNetArrayPuffer;
                     
                     break;

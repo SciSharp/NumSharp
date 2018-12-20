@@ -23,7 +23,7 @@ namespace NumSharp.Core
                 doubleArray[idx] = start + idx * steps;
 
             var nd = new NDArray(typeof(T), doubleArray.Length);
-            nd.Set(doubleArray);
+            nd.Storage.SetData(doubleArray);
 
             return nd;
         }

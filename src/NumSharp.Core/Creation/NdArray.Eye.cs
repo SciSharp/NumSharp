@@ -20,21 +20,17 @@ namespace NumSharp.Core
             }
             else 
             {
-                puffer = new NDArray(this.dtype,this.shape.Shapes.ToArray());
+                puffer = new NDArray(this.dtype,this.shape.Dimensions.ToArray());
             }
-            
+
             puffer.Storage.SetData(Array.CreateInstance(dtype,puffer.size));
-
-            Array storageArr = puffer.Storage.GetData();
-
-            if (diagonalIndex > -1)
+             
+            if (diagonalIndex >= 0)
                 for(int idx = 0; idx < noOfDiagElement;idx++ )
-                    storageArr.SetValue(1,diagonalIndex + idx + idx * puffer.shape.Shapes[1]); 
+                   puffer.Storage.SetData(1,idx,idx+diagonalIndex);
             else 
-                for(int idx = dim - 1; idx > dim - noOfDiagElement - 1;idx-- )
-                    storageArr.SetValue(1,diagonalIndex + idx + idx * puffer.shape.Shapes[1]); // = 1;
-
-            this.Storage = puffer.Storage;
+                for(int idx = puffer.Storage.Shape.Dimensions[0]-1; idx > puffer.Storage.Shape.Dimensions[0]-1 - noOfDiagElement;idx-- )
+                   puffer.Storage.SetData(1,idx,idx+diagonalIndex);
             
             return puffer;
         }

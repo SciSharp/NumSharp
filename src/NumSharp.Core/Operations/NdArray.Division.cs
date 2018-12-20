@@ -4,128 +4,169 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Core.Shared;
 
 namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public static NDArray operator /(NDArray np1, NDArray np2)
+       public static NDArray operator /(NDArray np1, NDArray np2)
         {
-            var sum = new NDArray(np1.dtype, np1.shape);
+            NDArray div = new NDArray(np1.dtype,np1.Storage.Shape);
             
-            switch (sum.dtype.Name)
+            if (!Enumerable.SequenceEqual(np1.Storage.Shape.Dimensions,np2.Storage.Shape.Dimensions))
+                throw new IncorrectShapeException();
+
+            Array np1SysArr = np1.Storage.GetData();
+            Array np2SysArr = np2.Storage.GetData();
+            Array np3SysArr = div.Storage.GetData();
+
+            switch (np3SysArr)
             {
-                case "Double": 
+                case double[] divArray : 
                 {
-                    double[] np1Array = np1.Data<double>();
-                    double[] np2Array = np2.Data<double>();
+                    double[] np1Array = np1SysArr as double[];
+                    double[] np2Array = np2SysArr as double[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sum.size;idx++)
-                        sum[idx] = np1Array[idx] / np2Array[idx];
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
                     break;
                 }
-                /*case float[] sumArray : 
+                case float[] divArray : 
                 {
-                    float[] np1Array = np1.Data<float>();
-                    float[] np2Array = np2.Data<float>();
+                    float[] np1Array = np1SysArr as float[];
+                    float[] np2Array = np2SysArr as float[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / np2Array[idx];
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
                 }
-                case Complex[] sumArray : 
+                case int[] divArray : 
                 {
-                    Complex[] np1Array = np1.Data<Complex>();
-                    Complex[] np2Array = np2.Data<Complex>();
+                    int[] np1Array = np1SysArr as int[];
+                    int[] np2Array = np2SysArr as int[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / np2Array[idx];
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
                 }
-                case Quaternion[] sumArray : 
+                case Int64[] divArray : 
                 {
-                    Quaternion[] np1Array = np1.Data<Quaternion>();
-                    Quaternion[] np2Array = np2.Data<Quaternion>();
+                    Int64[] np1Array = np1SysArr as Int64[];
+                    Int64[] np2Array = np2SysArr as Int64[];
                     // for is faster than linq 
-                    for (int idx = 0; idx < sumArray.Length;idx++)
-                        sumArray[idx] = np1Array[idx] / np2Array[idx];
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
                     break; 
-                }*/
+                }
+                case Complex[] divArray : 
+                {
+                    Complex[] np1Array = np1SysArr as Complex[];
+                    Complex[] np2Array = np2SysArr as Complex[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
+                    break; 
+                }
+                case Quaternion[] divArray : 
+                {
+                    Quaternion[] np1Array = np1SysArr as Quaternion[];
+                    Quaternion[] np2Array = np2SysArr as Quaternion[];
+                    // for is faster than linq 
+                    for (int idx = 0; idx < divArray.Length;idx++)
+                        divArray[idx] = np1Array[idx] / np2Array[idx];
+                    break; 
+                }
                 default : 
                 {
-                    throw new Exception("The operation is not implemented for the "  + np1.dtype.Name);
+                    throw new IncorrectTypeException();
                 }
             }
 
-            return sum;
+            return div;
         }
-
-        public static NDArray operator /(NDArray np1, double scalar)
+        public static NDArray operator /(NDArray np1, ValueType scalar)
         {
-            var sum = new NDArray(np1.dtype, np1.shape);
+            NDArray div = new NDArray(np1.dtype,np1.shape);
             
-            switch (sum.dtype.Name)
+            Array np1SysArr = np1.Storage.GetData();
+            Array divSysArr = div.Storage.GetData();
+
+            switch (divSysArr)
             {
-                case "Double": 
+                case double[] divArr : 
                 {
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sum.size;idx++)
-                        sum[idx] = sum.float64[idx] / scalar;
+                    double scalar_ = Convert.ToDouble(scalar);
+                    double[] np1Array = np1SysArr as double[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+
                     break;
                 }
-                /*case float[] np1Array: 
+                case float[] divArr : 
                 {
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = np1Array[idx] / scalar;
-                    break; 
+                    float scalar_ = Convert.ToSingle(scalar);
+                    float[] np1Array = np1SysArr as float[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+                        
+                    break;
                 }
-                case Complex[] np1Array: 
+                case int[] divArr : 
                 {
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = np1Array[idx] / scalar;
-                    break; 
+                    int scalar_ = Convert.ToInt32(scalar);
+                    int[] np1Array = np1SysArr as int[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+                        
+                    break;
                 }
-                case Quaternion[] np1Array: 
+                case Int64[] divArr : 
                 {
-                    // for is faster than linq 
-                    for (int idx = 0; idx < sum.Size;idx++)
-                        sum[idx] = np1Array[idx] / scalar;
-                    break; 
-                }*/
+                    Int64 scalar_ = Convert.ToInt64(scalar);
+                    Int64[] np1Array = np1SysArr as Int64[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+                        
+                    break;
+                }
+                case Complex[] divArr : 
+                {
+                    Complex scalar_ = (Complex) scalar;
+                    Complex[] np1Array = np1SysArr as Complex[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+                        
+                    break;
+                }
+                case Quaternion[] divArr : 
+                {
+                    Quaternion scalar_ = (Quaternion) scalar;
+                    Quaternion[] np1Array = np1SysArr as Quaternion[];
+
+                    for (int idx = 0;idx < np1Array.Length;idx++)
+                        divArr[idx] = np1Array[idx] / scalar_;
+                        
+                    break;
+                }
                 default : 
                 {
-                    throw new Exception("The operation is not implemented for the "  + np1.dtype.Name);
+                    throw new IncorrectTypeException();
                 }
             }
 
-            return sum;
+            
+            return div;
         }
-
-        public static NDArray operator /(int scalar, NDArray np1)
-        {
-            return (double)scalar / np1;
-        }
-
+        
         public static NDArray operator /(double scalar, NDArray np1)
         {
-            var nd = new NDArray(typeof(double), np1.shape);
-
-            switch (np1.dtype.Name)
-            {
-                case "Double":
-                    nd.Set(np1.float64.Select(x => scalar / x).ToArray());
-                    break;
-                case "Int32":
-                    nd.Set(np1.int32.Select(x => scalar / x).ToArray());
-                    break;
-            }
-
-            return nd;
+            return np1 / scalar;
         }
-
-
     }
+
 }

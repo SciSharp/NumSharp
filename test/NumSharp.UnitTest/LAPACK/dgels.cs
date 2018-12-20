@@ -4,7 +4,6 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using System.Numerics;
-using NumSharp.UnitTest.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
 
@@ -15,7 +14,7 @@ namespace NumSharp.UnitTest.Extensions
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
     [TestClass]
-    public class NdArrayDGELSTest : TestBase
+    public class NdArrayDGELSTest 
     {
         [TestMethod]
         public void Standard()

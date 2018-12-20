@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
@@ -7,11 +8,13 @@ namespace NumSharp.Core.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static int ArgMax<T>(this NDArray np )
+        public static matrix AsMatrix(this NDArray nd)
         {
-            var max = np.Storage.GetData<T>().Max();
+            var npAsMatrix = new matrix(nd);
 
-            return np.Storage.GetData<T>().ToList().IndexOf(max);
+            npAsMatrix.reshape((Shape)nd.shape);
+
+            return npAsMatrix;
         }
     }
 }

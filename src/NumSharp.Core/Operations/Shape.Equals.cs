@@ -10,7 +10,7 @@ namespace NumSharp.Core
         public static bool operator ==(Shape a, Shape b)
         {
             if (b is null) return false;
-            return Enumerable.SequenceEqual(a.shape, b?.shape);
+            return Enumerable.SequenceEqual(a.Dimensions, b?.Dimensions);
         }
 
         public static bool operator !=(Shape a, Shape b)
@@ -22,7 +22,7 @@ namespace NumSharp.Core
         {
             if (obj.GetType() != typeof(Shape))
                 return false;
-            return Enumerable.SequenceEqual(this.shape, ((Shape)obj).shape);
+            return Enumerable.SequenceEqual(this.Dimensions, ((Shape)obj).Dimensions);
         }
 
         public override int GetHashCode()
@@ -32,7 +32,7 @@ namespace NumSharp.Core
 
         public override string ToString()
         {
-            return "(" + String.Join(", ", shape) + ")";
+            return "(" + String.Join(", ", _Dimensions) + ")";
         }
     }
 }

@@ -16,8 +16,8 @@ namespace NumSharp.Core
             for (int i = 0; i < max; i++)
             {
                 var pos = random.Next(0, max);
-                var zero = nd.Data<int>(0);
-                nd[0] = nd.Data<int>(pos);
+                var zero = nd.Storage.GetData<int>(0);
+                nd[0] = nd.Storage.GetData<int>(pos);
                 nd[pos] = zero;
             }
 

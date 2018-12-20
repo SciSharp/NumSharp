@@ -13,10 +13,10 @@ namespace NumSharp.Core.Manipulation
             switch (mx.dtype.Name)
             {
                 case "Double":
-                    nd.Set(mx.float64);
+                    nd.Storage.SetData(mx.Storage.GetData<double>());
                     break;
                 case "Int32":
-                    nd.Set(mx.int32);
+                    nd.Storage.SetData(mx.Storage.GetData<int>());
                     break;
             }
 

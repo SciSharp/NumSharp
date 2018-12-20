@@ -39,11 +39,14 @@ namespace NumSharp.Core
             }
             else
             {
+                for(int idx = 0; idx < npAll.Length;idx++)
+                    npAll[idx].Storage.ChangeTensorLayout(2);
+
                 var list = new List<object>();
 
-                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape.Shapes[0];
+                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape.Dimensions[0];
 
-                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape.Shapes[0] : npAll[0].shape.DimOffset[0];
+                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape.Dimensions[0] : npAll[0].shape.DimOffset[0];
 
                 for (int i = 0; i < total; i++)
                 {
@@ -54,18 +57,17 @@ namespace NumSharp.Core
                     }
                 }
                 
-                nd.Storage.SetData( list.ToArray());
-
-                int[] shapes = npAll[0].shape.Shapes.ToArray();
+                int[] shapes = npAll[0].shape.Dimensions.ToArray();
 
                 if (shapes.Length == 1)
                     shapes[0] *= npAll.Length;
                 else
                     shapes[1] *= npAll.Length;
 
-                nd.Storage.Shape = new Shape(shapes);
+                nd.Storage.Allocate(nd.Storage.DType,new Shape(shapes),2);
+                nd.Storage.SetData(list.ToArray());
+                nd.Storage.ChangeTensorLayout(1);
 
-            
             }
 
             return nd;

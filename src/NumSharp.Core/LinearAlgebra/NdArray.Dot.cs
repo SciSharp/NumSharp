@@ -20,30 +20,39 @@ namespace NumSharp.Core
         {
             var pufferShape = nd2.Storage.Shape;
 
+            // in case must do a reshape
+            var oldStorage1 = this.Storage;
+            var oldStorage2 = nd2.Storage;
+
             if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
-                if (this.shape.Shapes[0] != nd2.shape.Shapes[0])
+                if (this.shape.Dimensions[0] != nd2.shape.Dimensions[0])
                     throw new IncorrectShapeException(); 
                 else 
                 {
-                    nd2.Storage.Shape = new Shape(nd2.Storage.GetData().Length,1);
-                    this.Storage.Shape = new Shape(1,this.Storage.GetData().Length);
+                    this.Storage = new NDStorage();
+                    this.Storage.Allocate(oldStorage1.DType,new Shape(1,oldStorage1.GetData().Length),1);
+                    this.Storage.SetData(oldStorage1.GetData());
+
+                    nd2.Storage = new NDStorage();
+                    nd2.Storage.Allocate(oldStorage2.DType, new Shape(oldStorage2.GetData().Length,1),1);
+                    nd2.Storage.SetData(oldStorage2.GetData());
                 }
             else
-                if (this.shape.Shapes[1] != nd2.shape.Shapes[0])
+                if (this.shape.Dimensions[1] != nd2.shape.Dimensions[0])
                     throw new IncorrectShapeException();
             
             if ((shape.NDim == 2) & (nd2.shape.NDim == 1))
             {
-                var pufferList = pufferShape.Shapes.ToList();
+                var pufferList = pufferShape.Dimensions.ToList();
                 pufferList.Add(1);
-                nd2.Storage.Shape = new Shape(pufferList.ToArray());
+                nd2.Storage.Reshape(pufferList.ToArray());
             }
             
-            int iterator = this.shape.Shapes[1];
-            int dim0 = this.shape.Shapes[0];
-            int dim1 = nd2.shape.Shapes[1];
+            int iterator = this.shape.Dimensions[1];
+            int dim0 = this.shape.Dimensions[0];
+            int dim1 = nd2.shape.Dimensions[1];
             
-            var prod = new NDArray(this.Storage.dtype, dim0, dim1);
+            var prod = new NDArray(this.Storage.DType, dim0, dim1);
 
             Array nd1SystemArray = this.Storage.GetData();
 
@@ -56,11 +65,11 @@ namespace NumSharp.Core
 
                     for (int idx = 0; idx < prod.size; idx++)
                     {
-                        int puffer1 = idx / dim1;
-                        int puffer2 = idx % dim1;
-                        int puffer3 = puffer1 * iterator;
+                        int puffer1 = idx % dim0;
+                        int puffer2 = idx / dim0;
+                        int puffer3 = puffer2 * iterator;
                         for (int kdx = 0; kdx < iterator; kdx++)
-                            result[idx] += nd1Array[puffer3 + kdx] * nd2Array[dim1 * kdx + puffer2];
+                            result[idx] += nd2Array[puffer3 + kdx] * nd1Array[dim0 * kdx + puffer1];
                     }
                     break;
                 }
@@ -71,11 +80,11 @@ namespace NumSharp.Core
 
                     for (int idx = 0; idx < prod.size; idx++)
                     {
-                        int puffer1 = idx / dim1;
-                        int puffer2 = idx % dim1;
-                        int puffer3 = puffer1 * iterator;
+                        int puffer1 = idx % dim0;
+                        int puffer2 = idx / dim0;
+                        int puffer3 = puffer2 * iterator;
                         for (int kdx = 0; kdx < iterator; kdx++)
-                            result[idx] += nd1Array[puffer3 + kdx] * nd2Array[dim1 * kdx + puffer2];
+                            result[idx] += nd2Array[puffer3 + kdx] * nd1Array[dim0 * kdx + puffer1];
                     }
                     break;
                 }
@@ -86,11 +95,11 @@ namespace NumSharp.Core
 
                     for (int idx = 0; idx < prod.size; idx++)
                     {
-                        int puffer1 = idx / dim1;
-                        int puffer2 = idx % dim1;
-                        int puffer3 = puffer1 * iterator;
+                        int puffer1 = idx % dim0;
+                        int puffer2 = idx / dim0;
+                        int puffer3 = puffer2 * iterator;
                         for (int kdx = 0; kdx < iterator; kdx++)
-                            result[idx] += nd1Array[puffer3 + kdx] * nd2Array[dim1 * kdx + puffer2];
+                            result[idx] += nd2Array[puffer3 + kdx] * nd1Array[dim0 * kdx + puffer1];
                     }
                     break;
                 }
@@ -101,11 +110,11 @@ namespace NumSharp.Core
 
                     for (int idx = 0; idx < prod.size; idx++)
                     {
-                        int puffer1 = idx / dim1;
-                        int puffer2 = idx % dim1;
-                        int puffer3 = puffer1 * iterator;
+                        int puffer1 = idx % dim0;
+                        int puffer2 = idx / dim0;
+                        int puffer3 = puffer2 * iterator;
                         for (int kdx = 0; kdx < iterator; kdx++)
-                            result[idx] += nd1Array[puffer3 + kdx] * nd2Array[dim1 * kdx + puffer2];
+                            result[idx] += nd2Array[puffer3 + kdx] * nd1Array[dim0 * kdx + puffer1];
                     }
                     break;
                 }
@@ -116,11 +125,11 @@ namespace NumSharp.Core
 
                     for (int idx = 0; idx < prod.size; idx++)
                     {
-                        int puffer1 = idx / dim1;
-                        int puffer2 = idx % dim1;
-                        int puffer3 = puffer1 * iterator;
+                        int puffer1 = idx % dim0;
+                        int puffer2 = idx / dim0;
+                        int puffer3 = puffer2 * iterator;
                         for (int kdx = 0; kdx < iterator; kdx++)
-                            result[idx] += nd1Array[puffer3 + kdx] * nd2Array[dim1 * kdx + puffer2];
+                            result[idx] += nd2Array[puffer3 + kdx] * nd1Array[dim0 * kdx + puffer1];
                     }
                     break;
                 }
@@ -132,12 +141,13 @@ namespace NumSharp.Core
 
             if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
             {
-                this.Storage.Shape = new Shape(this.Storage.GetData().Length);
-                nd2.Storage.Shape = new Shape(nd2.Storage.GetData().Length);
-                prod.Storage.Shape = new Shape(1);
+                this.Storage.Reshape(this.Storage.GetData().Length);
+                nd2.Storage.Reshape(nd2.Storage.GetData().Length);
+                prod.Storage.Reshape(1);
             }
 
-            nd2.Storage.Shape = pufferShape;
+            this.Storage = oldStorage1;
+            nd2.Storage = oldStorage2;
 
             return prod;
         }

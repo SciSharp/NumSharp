@@ -11,7 +11,7 @@ namespace NumSharp.Core
             switch (obj)
             {
                 case int o:
-                    return o == np.Data<int>()[0];
+                    return o == np.Storage.GetData<int>()[0];
             }
 
             return false;

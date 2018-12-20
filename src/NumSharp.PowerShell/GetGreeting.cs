@@ -6,7 +6,7 @@ using NumSharp.Core;
 namespace NumSharp.PowerShell
 {
     [Cmdlet(VerbsCommon.New,"NDArray")]
-    [OutputType(typeof(NDArrayGeneric<>))]
+    [OutputType(typeof(NDArray))]
     public class NewNDArray : Cmdlet
     {
         protected dynamic _NDArray;
@@ -23,7 +23,7 @@ namespace NumSharp.PowerShell
                 case "float" : 
                 {
                     float[] array = Array.Select(x => (float) x).ToArray();
-                    _NDArray = new NumSharp.Core.NDArrayGeneric<float>();
+                    _NDArray = new NumSharp.Core.NDArray();
                     _NDArray.Data = array;
                     _NDArray.Shape = new Shape(array.Length);
                     break;
@@ -31,7 +31,7 @@ namespace NumSharp.PowerShell
                 case "double" : 
                 {
                     double[] array = Array.Select(x => (double) x).ToArray();
-                    _NDArray = new NumSharp.Core.NDArrayGeneric<double>();
+                    _NDArray = new NumSharp.Core.NDArray();
                     _NDArray.Data = array;
                     _NDArray.Shape = new Shape(array.Length);
                     break;

@@ -10,9 +10,10 @@ namespace NumSharp.Core
         public NDArray unique<T>()
         {
             var nd = new NDArray(dtype);
-            var data = Data<T>().Distinct().ToArray();
-            nd.Set(data);
-            nd.Storage.Shape = new Shape(data.Length);
+            var data = Storage.GetData<T>().Distinct().ToArray();
+            nd.Storage.SetData(data);
+            
+            nd.Storage.Reshape(data.Length);
 
             return nd;
         }

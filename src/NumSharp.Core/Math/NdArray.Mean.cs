@@ -23,43 +23,43 @@ namespace NumSharp.Core.Extensions
             // to compute mean by compressing row and row
             else if (axis == 0)
             {
-                double[] sumVec = new double[np.shape.Shapes[0]];
+                double[] sumVec = new double[np.shape.Dimensions[0]];
 
                 for (int d = 0; d < sumVec.Length; d++)
                 {
-                    for (int p = 0; p < np.shape.Shapes[1]; p++)
+                    for (int p = 0; p < np.shape.Dimensions[1]; p++)
                     {
                         sumVec[p] += Convert.ToDouble(np[d,p]);
                     }
                 }
                 var puffer = mean.Storage.GetData<double>().ToList();
 
-                for (int d = 0; d < np.shape.Shapes[1]; d++)
+                for (int d = 0; d < np.shape.Dimensions[1]; d++)
                 {
-                    puffer.Add(sumVec[d] / np.shape.Shapes[0]);
+                    puffer.Add(sumVec[d] / np.shape.Dimensions[0]);
                 }
                 mean.Storage.SetData(puffer.ToArray());
 
-                mean.Storage.Shape = new Shape(mean.Storage.GetData().Length);
+                mean.Storage.Reshape(mean.Storage.GetData().Length);
             }
             else if (axis == 1)
             {
                 var puffer = mean.Storage.GetData<double>().ToList();
 
-                for (int d = 0; d < np.shape.Shapes[0]; d++)
+                for (int d = 0; d < np.shape.Dimensions[0]; d++)
                 {
                     double rowSum = 0;
                     
-                    for (int p = 0; p < np.shape.Shapes[1]; p++)
+                    for (int p = 0; p < np.shape.Dimensions[1]; p++)
                     {
                         rowSum += Convert.ToDouble(np[d,p]);
                     }
-                    puffer.Add(rowSum / np.shape.Shapes[1]);
+                    puffer.Add(rowSum / np.shape.Dimensions[1]);
                 }
 
                 mean.Storage.SetData(puffer.ToArray());
                 
-                mean.Storage.Shape = new Shape(mean.Storage.GetData().Length);
+                mean.Storage.Reshape(mean.Storage.GetData().Length);
             }
 
             return mean;

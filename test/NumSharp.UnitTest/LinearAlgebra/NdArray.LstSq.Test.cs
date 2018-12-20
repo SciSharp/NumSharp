@@ -4,7 +4,6 @@ using System.Text;
 using NumSharp.Core.Extensions;
 using System.Linq;
 using System.Numerics;
-using NumSharp.UnitTest.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
 
