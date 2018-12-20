@@ -29,26 +29,33 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public Array ToMuliDimArray<T>()
+        public void FromMultiDimArray(Array dotNetArray)
         {
-            Array dotNetArray = Array.CreateInstance(typeof(T),this.shape.Dimensions);
+            if(dotNetArray.GetType().GetElementType().IsArray)
+                throw new Exception("Jagged arrays are not allowed here!");
 
-            var pufferShape = new Shape(shape.Dimensions);
-            pufferShape.ChangeTensorLayout(2);
+            int[] dims = new int[dotNetArray.Rank];
 
-            int[] indexes = null;
-            object idxValue = null;
+            for(int idx = 0; idx < dims.Length;idx++)
+                dims[idx] = dotNetArray.GetLength(idx);
+            
+            Storage = new NDStorage();
+            Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims),1);
 
-            T[] array = Storage.GetData<T>();
+            Array internalStrg = Storage.GetData();
 
-            for(int idx = 0; idx < shape.Size;idx++)
+            var pufferShape = new Shape(dims);
+            pufferShape.ChangeTensorLayout(2); 
+
+            int[] idxDims = null;
+            object valueIdx = null;
+
+            for(int idx = 0; idx < Storage.Shape.Size;idx++)
             {
-                indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[shape.GetIndexInShape(indexes)];
-                dotNetArray.SetValue(idxValue,indexes);
+                idxDims = pufferShape.GetDimIndexOutShape(idx);
+                valueIdx = dotNetArray.GetValue(pufferShape.GetDimIndexOutShape(idx));
+                internalStrg.SetValue(valueIdx,Storage.Shape.GetIndexInShape(idxDims));
             }
-
-            return dotNetArray;
         }
         
     }
