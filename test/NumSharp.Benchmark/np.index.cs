@@ -20,7 +20,7 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             shape = new Shape(1000, 1000);
-            nd = np.arange(1000 * 1000 * 1.0).reshape(shape.Shapes.ToArray());
+            nd = np.arange(1000 * 1000 * 1.0).reshape(shape);
         }
 
         [Benchmark]
@@ -28,9 +28,9 @@ namespace NumSharp.Benchmark
         {
             double a = 0;
 
-            for (int d1 = 0; d1 < shape[0]; d1++)
+            for (int d1 = 0; d1 < shape.Dimensions[0]; d1++)
             {
-                for (int d2 = 0; d2 < shape[1]; d2++)
+                for (int d2 = 0; d2 < shape.Dimensions[1]; d2++)
                 {
                     a = (double)nd[d1, d2];
                 }
@@ -42,11 +42,11 @@ namespace NumSharp.Benchmark
         {
             double a = 0;
 
-            for (int d1 = 0; d1 < shape[0]; d1++)
+            for (int d1 = 0; d1 < shape.Dimensions[0]; d1++)
             {
-                for (int d2 = 0; d2 < shape[1]; d2++)
+                for (int d2 = 0; d2 < shape.Dimensions[1]; d2++)
                 {
-                    a = nd.Data<double>(d1, d2);
+                    a = nd.Storage.GetData<double>(d1, d2);
                 }
             }
         }
@@ -56,9 +56,9 @@ namespace NumSharp.Benchmark
         {
             object a = 0;
 
-            for (int d1 = 0; d1 < shape[0]; d1++)
+            for (int d1 = 0; d1 < shape.Dimensions[0]; d1++)
             {
-                for (int d2 = 0; d2 < shape[1]; d2++)
+                for (int d2 = 0; d2 < shape.Dimensions[1]; d2++)
                 {
                     a = nd[d1, d2];
                 }

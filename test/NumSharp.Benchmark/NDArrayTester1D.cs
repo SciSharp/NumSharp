@@ -15,9 +15,9 @@ namespace NumSharp.Benchmark
     [HtmlExporter]
     public class NDArrayTester1D
     {
-        public NDArrayGeneric<double> np1;
-        public NDArrayGeneric<double> np2;
-        public NDArrayGeneric<double> np3;
+        public NDArray np1;
+        public NDArray np2;
+        public NDArray np3;
         public double[] np1Double;
         public double[] np2Double;
         public double[] np3Double;
@@ -25,30 +25,20 @@ namespace NumSharp.Benchmark
         public void Setup()
         {
             // first array
-            np1 = new NDArrayGeneric<double>();
-            np1.Data = new double[100000].Select((x,idx) => x + idx ).ToArray();
-            np1.Shape = new Shape(np1.Data.Length);
+            np1 = new NDArray(new double[100000].Select((x, idx) => x + idx).ToArray());
+            np1Double = np1.Storage.GetData<double>();
 
-            np1Double = np1.Data;
-            
             // second array
-            np2 = new NDArrayGeneric<double>();
-            np2.Data = new double[100000].Select((x,idx) => x + idx  ).ToArray();
-            np2.Shape = new Shape(np2.Data.Length);
-
-            np2Double = np2.Data;
+            np2 = new NDArray(new double[100000].Select((x, idx) => x + idx).ToArray());
+            np2Double = np2.Storage.GetData<double>();
 
             // result array
-            np3 = new NDArrayGeneric<double>();
-            np3.Data = new double[100000];
-
-            np3Double = np3.Data;
+            np3 = new NDArray(new double[100000]);
+            np3Double = np3.Storage.GetData<double>();
 
             // result array
-            np3 = new NDArrayGeneric<double>();
-            np3.Data = new double[100000];
-
-            np3Double = np3.Data;
+            np3 = new NDArray(new double[100000]);
+            np3Double = np3.Storage.GetData<double>();
         }
         [Benchmark]
         public void DirectAddition1D()
