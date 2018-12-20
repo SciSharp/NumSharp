@@ -7,31 +7,14 @@ namespace NumSharp.Core
     {
         public matrix(NDArray data, Type dtype = null)
         {
-            if (dtype == null)
-            {
-                dtype = data.dtype;
-                this.Storage.dtype = data.dtype;
-            }
-
-            this.Storage.Shape = new Shape(data.shape.Shapes);
-
-            switch (data.dtype.Name)
-            {
-                case "Double":
-                    Set(data.float64);
-                    break;
-                case "Int32":
-                    Set(data.int32);
-                    break;
-                case "Complex":
-                    Set(data.complex128);
-                    break;
-            }
+            this.Storage = data.Storage;
         }
 
         public matrix(string matrixString, Type dtype = null)
         {
             string[][] splitted = null;
+
+            dtype = (dtype == null) ? np.float64 : dtype;
 
             if (matrixString.Contains(","))
             {
@@ -49,14 +32,9 @@ namespace NumSharp.Core
             int dim0 = splitted.Length;
             int dim1 = splitted[0].Length;
 
-            if (dtype == null)
-            {
-                dtype = typeof(double);
-                this.Storage.dtype = typeof(double);
-            }
+            var shape = new Shape( new int[] { dim0, dim1 });
 
-            this.Storage.Shape = new Shape(new int[] { dim0, dim1 });
-            this.Storage.Allocate(shape.Size);
+            this.Storage.Allocate(dtype,shape,1);
 
             switch (this.dtype.Name)
             {
@@ -85,8 +63,8 @@ namespace NumSharp.Core
         {
             string returnValue = "matrix([[";
 
-            int dim0 = shape.Shapes[0];
-            int dim1 = shape.Shapes[1];
+            int dim0 = shape.Dimensions[0];
+            int dim1 = shape.Dimensions[1];
 
             for (int idx = 0; idx < (dim0-1);idx++)
             {

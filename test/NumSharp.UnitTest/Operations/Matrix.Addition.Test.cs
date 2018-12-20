@@ -9,7 +9,7 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Operations
 {
     [TestClass]
-    public class MatrixAdditionTest : TestBase
+    public class MatrixAdditionTest 
     {
         [TestMethod]
         public void DoubleTwo2D_MatrixAddition()
@@ -19,7 +19,9 @@ namespace NumSharp.UnitTest.Operations
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.float64));
+            np3.Storage.ChangeTensorLayout(2);
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Storage.GetData<double>()));
         }
 
         [TestMethod]
@@ -30,7 +32,7 @@ namespace NumSharp.UnitTest.Operations
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Data<Complex>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Storage.GetData<Complex>()));
         }
     }
 }

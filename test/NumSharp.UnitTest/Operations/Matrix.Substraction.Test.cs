@@ -9,7 +9,7 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Operations
 {
     [TestClass]
-    public class MatrixSubstractionTest : TestBase
+    public class MatrixSubstractionTest 
     {
 
         [TestMethod]
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Operations
 
             var np3 = np1 - np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.float64));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.Storage.GetData<double>()));
         }
 
         [TestMethod]
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Operations
 
             var expArray = new Complex[] { new Complex(-7, -5), new Complex(-3, -1), new Complex(1, 3), new Complex(5, 7) };
 
-            Assert.IsTrue(Enumerable.SequenceEqual(expArray, np3.complex128));
+            Assert.IsTrue(Enumerable.SequenceEqual(expArray, np3.Storage.GetData<Complex>()));
         }
     }
 }

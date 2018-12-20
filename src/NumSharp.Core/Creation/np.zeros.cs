@@ -21,7 +21,7 @@ namespace NumSharp.Core
         public static NDArray zeros<T>(params int[] shape)
         {
             var nd = new NDArray(typeof(T));
-            nd.Storage.Shape = new Shape(shape);
+            nd.Storage.Reshape(shape);
 
             return nd;
         }

@@ -17,7 +17,9 @@ namespace NumSharp.Core
             for (int idx = 0; idx < dataLength;idx++)
                 dataArray.SetValue(1,idx);
             
-            this.Storage = NDStorage.CreateByShapeAndType(dtype,new Shape(shapes));
+            this.Storage = new NDStorage(dtype);
+            this.Storage.Allocate(dtype,new Shape(shapes));
+            
             this.Storage.SetData(dataArray);
 
             return this;

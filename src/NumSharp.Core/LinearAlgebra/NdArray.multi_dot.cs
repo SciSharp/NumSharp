@@ -21,15 +21,15 @@ namespace NumSharp.Core
             var np2 = np2Multi.Last(); 
 
             if ((this.shape.NDim == 1 ) & (np2.shape.NDim == 1))
-                if (this.shape.Shapes[0] != np2.shape.Shapes[0])
+                if (this.shape.Dimensions[0] != np2.shape.Dimensions[0])
                     throw new IncorrectShapeException(); 
                 else 
                 {
-                    np2.Storage.Shape = new Shape(np2.Storage.GetData().Length,1);
-                    this.Storage.Shape = new Shape(1,this.Storage.GetData().Length);
+                    np2.Storage.Reshape(np2.Storage.GetData().Length,1);
+                    this.Storage.Reshape(1,this.Storage.GetData().Length);
                 }
             else
-                if (this.shape.Shapes[1] != np2.shape.Shapes[0])
+                if (this.shape.Dimensions[1] != np2.shape.Dimensions[0])
                     throw new IncorrectShapeException();
             
             var prod = this.dot(np2Multi[0]);

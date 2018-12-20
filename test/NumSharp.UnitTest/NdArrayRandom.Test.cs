@@ -12,13 +12,13 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void randn()
         {
-            var n = np.random.randn(5, 2);
+            var n = new NumSharp.Core.NumPyRandom().randn(5, 2);
         }
 
         [TestMethod]
         public void normal()
         {
-            var n = np.random.normal(0, 1, 5);
+            var n = new NumSharp.Core.NumPyRandom().normal(0, 1, 5);
         }
     }
 }

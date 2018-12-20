@@ -30,6 +30,8 @@ namespace NumSharp.Core
             var array = new NDArray(typeof(double), new Shape(size).Size);
             Random rand = new Random(); //reuse this if you are generating many
 
+            double[] arr = array.Storage.GetData<double>();
+
             for (int i = 0; i < array.size; i++)
             {
                 double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
@@ -37,10 +39,10 @@ namespace NumSharp.Core
                 double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
                              Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
                 double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
-                array[i] = randNormal;
+                arr[i] = randNormal;
             }
 
-            array.Storage.Shape = new Shape(size);
+            array.Storage.Allocate(arr,1);
 
             return array;
         }

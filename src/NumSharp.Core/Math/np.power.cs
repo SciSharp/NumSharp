@@ -16,7 +16,7 @@ namespace NumSharp.Core
         public static NDArray power<T>(NDArray nd, T exponent)
         {
             var sinArray = new NDArray(nd.dtype);
-            sinArray.Storage.Shape = new Shape(nd.shape.Shapes);
+            sinArray.Storage.Reshape(nd.shape.Dimensions);
 
             switch (sinArray[0])
             {

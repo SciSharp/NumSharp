@@ -17,6 +17,9 @@ namespace NumSharp.Core
         {
             var res = new NDArray(dtype);
 
+            int oldLayout = this.Storage.TensorLayout;
+
+            this.Storage.ChangeTensorLayout(2);
             double[] npArr = this.Storage.GetData<double>();
 
             if (axis == null)
@@ -25,13 +28,15 @@ namespace NumSharp.Core
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage  = NDStorage.CreateByArray(new double[1] {min});                
+                res.Storage  = new NDStorage(); 
+                res.Storage.Allocate(dtype,new Shape(1),1);
+                res.Storage.SetData( new double[1] {min});                
             }
             else
             {
                 if (axis < 0 || axis >= this.ndim)
                     throw new Exception("Invalid input: axis");
-                int[] resShapes = new int[this.shape.Shapes.Count - 1];
+                int[] resShapes = new int[this.shape.Dimensions.Length - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
                 int prev = 1;
@@ -39,21 +44,21 @@ namespace NumSharp.Core
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape
-                for (int i = 0; i < this.shape.Shapes.Count; i++)
+                for (int i = 0; i < this.shape.Dimensions.Length; i++)
                 {
                     if (i == axis)
-                        cur = this.shape.Shapes[i];
+                        cur = this.shape.Dimensions[i];
                     else
                     {
-                        resShapes[index++] = this.shape.Shapes[i];
-                        size *= this.shape.Shapes[i];
+                        resShapes[index++] = this.shape.Dimensions[i];
+                        size *= this.shape.Dimensions[i];
                         if (i < axis)
-                            prev *= this.shape.Shapes[i];
+                            prev *= this.shape.Dimensions[i];
                         else
-                            post *= this.shape.Shapes[i];
+                            post *= this.shape.Dimensions[i];
                     }
                 }
-                res.Storage.Shape = new Shape(resShapes);
+                
                 //Fill in data
                 index = 0; //index for result data set
                 int sameSetOffset = this.shape.DimOffset[axis.Value];
@@ -75,9 +80,12 @@ namespace NumSharp.Core
                         resData[index++] = min;
                     }
                 }
-                res.Storage = NDStorage.CreateByArray(resData);
-                res.Storage.Shape = new Shape(resShapes);
+
+                res.Storage.Allocate(res.dtype,new Shape(resShapes),2);
+                res.Storage.SetData(resData); 
+                res.Storage.ChangeTensorLayout(1);
             }
+            this.Storage.ChangeTensorLayout(oldLayout);
             return res;
         }
     }

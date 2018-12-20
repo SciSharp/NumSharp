@@ -17,7 +17,9 @@ namespace NumSharp.Core
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.Storage = NDStorage.CreateByShapeAndType	(dtype, new Shape(new int[] { array.Length }));
+                nd.Storage = new NDStorage(dtype);
+                nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }),1);
+
                 nd.Storage.SetData(array); 
             }
             else 
@@ -39,30 +41,23 @@ namespace NumSharp.Core
             System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, bytes, 0, dataSize);
             image.UnlockBits(bmpd);
 
-            imageArray.Set(bytes);
-            imageArray.Storage.Shape = new Shape(new int[] { bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8 });
-
+            imageArray.Storage.Allocate(typeof(byte),new Shape(bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8),1);
+            imageArray.Storage.SetData(bytes);
+            
             return imageArray;
         }
 
         public static NDArray array<T>(T[][] data)
         {
-            int size = data.Length * data[0].Length;
-            var all = new T[size];
-
-            int idx = 0;
+            var nd = new NDArray(typeof(T),data.Length,data[0].Length);
+            
             for (int row = 0; row < data.Length; row++)
             {
                 for (int col = 0; col < data[row].Length; col++)
                 {
-                    all[idx] = data[row][col];
-                    idx++;
+                    nd[row,col] = data[row][col];
                 }
             }
-
-            var nd = new NDArray(typeof(T));
-            nd.Set(all.ToArray());
-            nd.Storage.Shape = new Shape(new int[] { data.Length, data[0].Length });
 
             return nd;
         }

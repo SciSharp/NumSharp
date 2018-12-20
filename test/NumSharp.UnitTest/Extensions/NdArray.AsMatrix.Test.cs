@@ -9,7 +9,7 @@ using NumSharp.Core;
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
-    public class NdArrayAsMatrixTest : TestBase
+    public class NdArrayAsMatrixTest 
     {
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()

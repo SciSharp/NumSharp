@@ -22,18 +22,18 @@ namespace NumSharp.Core
             {
                 if (nps[0].shape != ele.shape)
                     throw new Exception("Arrays mush have same shapes");
-                list.AddRange(ele.Data<T>());
+                list.AddRange(ele.Storage.GetData<T>());
             }
-            np.Set(list.ToArray());
+            np.Storage.SetData(list.ToArray());
             if (nps[0].ndim == 1)
             {
-                np.Storage.Shape = new Shape(new int[] { nps.Length, nps[0].shape.Shapes[0] });
+                np.Storage.Reshape(new int[] { nps.Length, nps[0].shape.Dimensions[0] });
             }
             else
             {
-                int[] shapes = nps[0].shape.Shapes.ToArray();
+                int[] shapes = nps[0].shape.Dimensions.ToArray();
                 shapes[0] *= nps.Length;
-                np.Storage.Shape = new Shape(shapes);
+                np.Storage.Reshape(shapes);
             }
             return np;
         }

@@ -14,13 +14,13 @@ namespace NumSharp.Core
 
             if (ndim == 2)
             {
-                for (int col = 0; col < shape.Shapes[1]; col++)
+                for (int col = 0; col < shape.Dimensions[1]; col++)
                 {
 
-                    double der = max.Data<double>(col) - min.Data<double>(col);
-                    for (int row = 0; row < shape.Shapes[0]; row++)
+                    double der = max.Storage.GetData<double>(col) - min.Storage.GetData<double>(col);
+                    for (int row = 0; row < shape.Dimensions[0]; row++)
                     {
-                        this[row, col] = (Data<double>(row, col) - min.Data<double>(col)) / der;
+                        this[row, col] = (Storage.GetData<double>(row, col) - min.Storage.GetData<double>(col)) / der;
                     }
                 }   
             }

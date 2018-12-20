@@ -12,29 +12,23 @@ namespace NumSharp.Core
         public static NDArray asarray(double[] data, int ndim = 1)
         {
             var nd = new NDArray(typeof(double), data.Length);
-            nd.Storage.Set(data);
-            return nd;
-        }
-
-        public static NDArray asarray(float data)
-        {
-            var nd = new NDArray(typeof(float), 1);
-            nd.Storage.Set(new float[] { data });
+            nd.Storage.SetData(data);
             return nd;
         }
 
         public static NDArray asarray(float[] data, int ndim = 1)
         {
             var nd = new NDArray(typeof(float), data.Length);
-            nd.Storage.Set(data);
+            nd.Storage.SetData(data);
             return nd;
         }
-
+        /*
         public static NDArray asarray(matrix mx, int ndim = 1)
         {
             var nd = new NDArray(mx.dtype, mx.shape);
             nd.Storage = mx.Storage;
             return nd;
         }
+        */
     }
 }

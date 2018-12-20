@@ -1,70 +1,63 @@
 ﻿using System;
+using NumSharp.Core.Interfaces;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace NumSharp.Core
 {
-    public partial class Shape
+    public partial class Shape : IShape
     {
-        private readonly IReadOnlyList<int> shape;
-        private readonly IReadOnlyList<int> dimOffset;
-        private readonly int dimOffsetTotal;
-
-        public int Size
+        protected int _TensorLayout;
+        public int TensorLayout {get {return _TensorLayout;}}
+        protected int[] _Dimensions;
+        protected int[] _DimOffset;
+        protected int _size;
+        public int NDim => _Dimensions.Length;
+        public int[] Dimensions {get{return _Dimensions;}}
+        public int[] DimOffset {get{return _DimOffset;}}
+        public int Size {get{return _size;}}
+        protected void _SetDimOffset()
         {
-            get
+            if (this._TensorLayout == 1)
             {
-                int idx = 1;
-                for (int i = 0; i < shape.Count; i++)
-                {
-                    idx *= shape[i];
-                }
-                return idx;
+                _DimOffset[0] = 1;
+
+                for(int idx = 1;idx < _DimOffset.Length;idx++)
+                    _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
+            }
+            else if ( _TensorLayout == 2)
+            {
+                _DimOffset[_DimOffset.Length-1] = 1;
+                for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
+                    _DimOffset[idx-1] = _DimOffset[idx] * this._Dimensions[idx];
             }
         }
-
-        public int NDim => shape.Count;
-
-        public int this[int dim] => shape[dim];
-
         public Shape(params int[] shape)
         {
             if (shape.Length == 0)
                 throw new Exception("Shape cannot be empty.");
-            this.shape = shape;
-            int[] temp = new int[shape.Length];
-            temp[shape.Length - 1] = 1;
-            for (int i = shape.Length - 1; i >= 1; i--)
-            {
-                temp[i - 1] = temp[i] * shape[i];
-            }
             
-            dimOffset = temp;
-        }
+            this._Dimensions = shape;
+            this._DimOffset = new int[this._Dimensions.Length] ;
+            this._TensorLayout = 1;
 
-        public Shape(IReadOnlyList<int> shape)
+            this._size = 1;
+
+            for (int idx =0; idx < shape.Length;idx++)
+                _size *= shape[idx];
+            this._SetDimOffset();
+        }
+        public Shape(IEnumerable<int> shape) : this(shape.ToArray())
         {
-            if (shape.Count == 0)
-                throw new Exception("Shape cannot be empty.");
-            this.shape = shape;
-            int[] temp = new int[shape.Count];
-            temp[shape.Count - 1] = 1;
-            for (int i = shape.Count - 1; i >= 1; i--)
-            {
-                temp[i - 1] = temp[i] * shape[i];
-            }
-            dimOffset = temp;
+            
         }
-
-        public IReadOnlyList<int> DimOffset => dimOffset;
-        public IReadOnlyList<int> Shapes => shape;
-
         public int GetIndexInShape(params int[] select)
         {
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
             {
-                idx += dimOffset[i] * select[i];
+                idx += _DimOffset[i] * select[i];
             }
 
             return idx;
@@ -72,32 +65,46 @@ namespace NumSharp.Core
         public int[] GetDimIndexOutShape(int select)
         {
             int[] dimIndexes = null;
-            if (this.dimOffset.Count == 1)
+            if (this._DimOffset.Length == 1)
                 dimIndexes = new int[] {select};
-            else if (this.dimOffset.Count == 2) 
+            else if (this._TensorLayout == 1)
             {
-                dimIndexes = new int[dimOffset.Count];
+                int counter = select;
+                dimIndexes = new int[_DimOffset.Length];
 
-                int remaining = select;
-
-                for (int idx = 0;idx < dimOffset.Count;idx++)
+                for (int idx = _DimOffset.Length-1; idx > -1;idx--)
                 {
-                    dimIndexes[idx] = remaining / dimOffset[idx];
-                    remaining -= (dimIndexes[idx] * dimOffset[idx] );
-                }    
+                    dimIndexes[idx] = counter / _DimOffset[idx];
+                    counter -= dimIndexes[idx] * _DimOffset[idx];
+                }
             }
-            else 
+            else
             {
-                throw new IncorrectShapeException();
+                int counter = select;
+                dimIndexes = new int[_DimOffset.Length];
+
+                for (int idx = 0; idx < _DimOffset.Length;idx++)
+                {
+                    dimIndexes[idx] = counter / _DimOffset[idx];
+                    counter -= dimIndexes[idx] * _DimOffset[idx];
+                }    
             }
 
             return dimIndexes;
         }
+        public void  ChangeTensorLayout(int layout)
+        {
+            _DimOffset = new int[this._Dimensions.Length];
 
-        public int UniShape => shape[0];
+            layout = (layout == 0) ? 1 : layout;
+            
+            _TensorLayout = layout;
+            _SetDimOffset();
+        }
+        public int UniShape => _Dimensions[0];
 
-        public (int, int) BiShape => shape.Count == 2 ? (shape[0], shape[1]) : (0, 0);
+        public (int, int) BiShape => _Dimensions.Length == 2 ? (_Dimensions[0], _Dimensions[1]) : (0, 0);
 
-        public (int, int, int) TriShape => shape.Count == 3 ? (shape[0], shape[1], shape[2]) : (0, 0, 0);
+        public (int, int, int) TriShape => _Dimensions.Length == 3 ? (_Dimensions[0], _Dimensions[1], _Dimensions[2]) : (0, 0, 0);
     }
 }

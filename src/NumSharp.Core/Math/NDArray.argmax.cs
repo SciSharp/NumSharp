@@ -51,9 +51,9 @@ namespace NumSharp.Core
 
         public int argmax<T>()
         {
-            var max = Data<T>().Max();
+            var max = Storage.GetData<T>().Max();
 
-            return Data<T>().ToList().IndexOf(max);
+            return Storage.GetData<T>().ToList().IndexOf(max);
         }
     }
 }

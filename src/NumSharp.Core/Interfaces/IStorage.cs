@@ -18,7 +18,7 @@ namespace NumSharp.Core.Interfaces
     ///  - CloneData<T> clone storage and cast this clone 
     ///     
     /// </summary>
-    public interface IStorage
+    public interface IStorage : ICloneable
     {
         /// <summary>
         /// Data Type of stored elements
@@ -34,14 +34,14 @@ namespace NumSharp.Core.Interfaces
         /// column wise or row wise order
         /// </summary>
         /// <value>0 row wise, 1 column wise</value>
-        int TensorOrder {get;}
+        int TensorLayout {get;}
         /// <summary>
         /// Allocate memory by dtype, shape, tensororder (default column wise)
         /// </summary>
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
         /// <param name="tensorOrder">row or column wise</param>
-        void Allocate(Type dtype, Shape shape, int tensorOrder = 1);
+        void Allocate(Type dtype, IShape shape, int tensorOrder = 1);
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
@@ -119,19 +119,6 @@ namespace NumSharp.Core.Interfaces
         /// <param name="indexes"></param>
         void SetData(object value, params int[] indexes);
         /// <summary>
-        /// Set a 1D Array of type T to internal storage and cast dtype
-        /// </summary>
-        /// <param name="values"></param>
-        /// <typeparam name="T"></typeparam>
-        void SetData<T>(T[] values);
-        /// <summary>
-        /// Set a single value of type dtype to internal storage and cast storage
-        /// </summary>
-        /// <param name="value"></param>
-        /// <param name="indexes"></param>
-        /// <typeparam name="T"></typeparam>
-        void SetData<T>(T value, params int[] indexes);
-        /// <summary>
         /// Set an Array to internal storage, cast it to new dtype and change dtype  
         /// </summary>
         /// <param name="values"></param>
@@ -142,12 +129,13 @@ namespace NumSharp.Core.Interfaces
         /// </summary>
         /// <param name="dtype">new storage data type</param>
         /// <returns>sucess or not</returns>
-        bool ChangeDataType(Type dtype);   
+        void ChangeDataType(Type dtype);   
         /// <summary>
         /// Cange layout to 0 row wise or 1 colum wise
         /// </summary>
         /// <param name="order">0 or 1</param>
         /// <returns>success or not</returns>
-        bool SwitchTensorOrder(int order);
+        void ChangeTensorLayout(int order);
+        void Reshape(params int[] dimensions);
     }
 }

@@ -19,14 +19,14 @@ namespace NumSharp.UnitTest
             
             var nd2 = np.sin(nd);
             
-            Assert.IsTrue(nd2.Data<double>(0) == 0);
-            Assert.IsTrue(nd2.Data<double>(1) < 0.501);
-            Assert.IsTrue(nd2.Data<double>(1) > 0.498);
-            Assert.IsTrue(nd2.Data<double>(2) < 0.708);
-            Assert.IsTrue(nd2.Data<double>(2) > 0.7069);
-            Assert.IsTrue(nd2.Data<double>(3) < 0.867);
-            Assert.IsTrue(nd2.Data<double>(3) > 0.8659);
-            Assert.IsTrue(nd2.Data<double>(4) == 1);
+            Assert.IsTrue(nd2.Storage.GetData<double>(0) == 0);
+            Assert.IsTrue(nd2.Storage.GetData<double>(1) < 0.501);
+            Assert.IsTrue(nd2.Storage.GetData<double>(1) > 0.498);
+            Assert.IsTrue(nd2.Storage.GetData<double>(2) < 0.708);
+            Assert.IsTrue(nd2.Storage.GetData<double>(2) > 0.7069);
+            Assert.IsTrue(nd2.Storage.GetData<double>(3) < 0.867);
+            Assert.IsTrue(nd2.Storage.GetData<double>(3) > 0.8659);
+            Assert.IsTrue(nd2.Storage.GetData<double>(4) == 1);
             
         }
     }

@@ -14,7 +14,8 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            var nd = np.arange(9.0).reshape(3,3);
+            /* 
+            var nd =  np.arange(9.0).reshape(3,3);
 
             var random = new Random();
             nd.Set(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
@@ -33,6 +34,7 @@ namespace NumSharp.UnitTest
             stringOfNp = nd.ToString();        
 
             Assert.IsTrue(stringOfNp.Contains("([[ 0,"));*/
+            
         }
         [TestMethod]
         public void CheckVectorString()
@@ -49,20 +51,6 @@ namespace NumSharp.UnitTest
             var stringOfNp = np.ToString();
         }
         [TestMethod]
-        public void DimOrder()
-        {
-            NDArrayGeneric<double> np1 = new NDArrayGeneric<double>().Zeros(2,2);
-
-            np1[0,0] = 0;
-            np1[1,0] = 10;
-            np1[0,1] = 1;
-            np1[1,1] = 11;
-
-            // columns first than rows
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0,1,10,11}, np1.Data ));
-        }
-
-        [TestMethod]
         public void ToDotNetArray1D()
         {
             var np1 = new NDArray(typeof(double) ).arange(9).MakeGeneric<double>();
@@ -76,7 +64,6 @@ namespace NumSharp.UnitTest
         public void ToDotNetArray2D()
         {
             var np1 = new NDArray(typeof(double)).arange(9).reshape(3,3).MakeGeneric<double>();
-
             double[][] np1_ = (double[][]) np1.ToJaggedArray<double>();
 
             for (int idx = 0; idx < 3; idx ++)

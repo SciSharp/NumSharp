@@ -8,15 +8,14 @@ namespace NumSharp.Core.Interfaces
     {
         int Size {get;}
         int NDim {get;}
-        int TensorOrder {get;}
-        IReadOnlyList<int> DimOffset {get;}
-        IReadOnlyList<int> Shapes {get;}
-        int ReShape(params int[] dimensions);
+        int TensorLayout {get;}
+        int[] DimOffset {get;}
+        int[] Dimensions {get;}
         int GetIndexInShape(params int[] select); 
         int[] GetDimIndexOutShape(int select);
         int UniShape {get;}
         (int, int) BiShape {get;}
         (int, int, int) TriShape {get;}
-        bool ChangeTensorOrder(int order);
+        void ChangeTensorLayout(int order);
     }
 }

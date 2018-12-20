@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Extensions
             var list = new int[] { 1, 2, 3 };
             var n = np.array(list);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 1, 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<int>(), new int[] { 1, 2, 3 }));
         }
 
         [TestMethod]
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Extensions
 
             var n = np.array(list);
 
-            Assert.IsTrue(n.Data<int>(1, 0) == 3);
+            Assert.IsTrue(n.Storage.GetData<int>(1, 0) == 3);
         }
 
         [TestMethod]
@@ -52,9 +52,10 @@ namespace NumSharp.UnitTest.Extensions
                 var image = new System.Drawing.Bitmap(imagePath);
                 var imageNDArray = np.array(image);
 
-                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 0) == 255);
-                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 1) == 253);
-                Assert.IsTrue(imageNDArray.Data<byte>(0, 0, 2) == 252);
+                Assert.IsTrue(imageNDArray.Storage.GetData<byte>()[0] == 255 );
+                Assert.IsTrue(imageNDArray.Storage.GetData<byte>()[1] == 253 );
+                Assert.IsTrue(imageNDArray.Storage.GetData<byte>()[2] == 252 );
+
             }
         }
     }

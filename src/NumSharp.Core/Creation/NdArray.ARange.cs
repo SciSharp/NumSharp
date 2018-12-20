@@ -65,7 +65,7 @@ namespace NumSharp.Core
                     }
             }
 
-            this.Storage.Shape = new Shape(list.Length);
+            this.Storage.Reshape(list.Length);
 
             return this;
         }

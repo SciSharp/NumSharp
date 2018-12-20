@@ -18,10 +18,10 @@ namespace NumSharp.Core
             var A = (double[]) AT.Storage.GetData<double>().Clone();
             var b = (double[]) bT.Storage.GetData<double>().Clone();
 
-            int m = this.shape.Shapes[0];
-            int n = this.shape.Shapes[1];
+            int m = this.shape.Dimensions[0];
+            int n = this.shape.Dimensions[1];
 
-            int nrhs = nDArrayB.shape.Shapes[1];
+            int nrhs = nDArrayB.shape.Dimensions[1];
 
             int lda = m;
             int ldb = m;

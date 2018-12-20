@@ -18,7 +18,7 @@ namespace NumSharp.Core
             }
 
             var np = new NDArray(typeof(int), size);
-            np.Set(data);
+            np.Storage.SetData(data);
 
             return np;
         }
@@ -40,8 +40,8 @@ namespace NumSharp.Core
                 data[i] = rng.Next(low, high.Value);
             }
 
-            var np = new NDArray(typeof(int), shape.Shapes.ToArray());
-            np.Set(data);
+            var np = new NDArray(typeof(int), shape.Dimensions.ToArray());
+            np.Storage.SetData(data);
 
             return np;
         }
