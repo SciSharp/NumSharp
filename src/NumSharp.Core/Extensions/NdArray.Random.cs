@@ -5,6 +5,7 @@ using System.Text;
 
 namespace NumSharp.Core
 {
+    /* 
     public partial class NDArray_Legacy<TData>
     {
         public NumPyRandom Random()
@@ -13,4 +14,5 @@ namespace NumSharp.Core
             return rand;
         }
     }
+    */
 }

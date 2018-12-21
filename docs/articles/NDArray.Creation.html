@@ -72,35 +72,39 @@
 <p>Before we do some fancy numeric stuff or even machine learning we have to clear one thing.</p>
 <p><strong>How do we generate NDArrays?</strong></p>
 <p>Since NDArray is the key class in SciSharp stack there must be numerous possibilities how to generate this arrays. And yes that’s the case.</p>
-<p>Maybe first of all we should see the dump way – which can be always used but is not too user friendly.</p>
+<p>Maybe first of all we should see the dump way – which can be always used but is not too user friendly.<br>
+In this example we access the Storage property directly - one more reason to avoid it.</p>
 <p><strong>Dump way</strong></p>
-<pre><code class="lang-CSHARP">// first standard constructor
-// you also specify the generic type of the NDArray
-var np = new NDArray&lt;double&gt;();
-
-// set 9 elements into this array
-np.Data = new double[] {1,2,3,4,5,6,7,8,9};
-
-// shape it to a 3x3 matrix 
-np.Shape = new Shape(3,3);
+<pre><code class="lang-CSHARP">// first constructor with data type and shape (here 3x3 matrix)
+var nd = new NDArray(typeof(double),3,3);
+            
+// set 9 elements into the storage of this array.
+np.Storage.SetData(new double[] {1,2,3,4,5,6,7,8,9});
 </code></pre>
 <p>Ok looks not too difficult. But also not too userfriendly.</p>
-<p>We create an empty NDArray&lt; double &gt;, fill it with 9 elements and shape it to 3x3 matrix.</p>
-<p>At this point we could shape it also to a 1x9 vector but we shaped it to a 3x3.</p>
-<p>So with this 3x3 shaped NDArray we can do matrix multiplication but with a 1x9 we could not.</p>
-<p>Always be careful with your shape and be sure what you want to do with your elements.</p>
+<p>We create an empty NDArray with 3x3 shape, fill it with 9 elements.
+We followed the row wise matrix layour by default.</p>
+<p>So with this 3x3 shaped NDArray we can do matrix multiplication, QR decomposition, SVD, ...</p>
+<p>But keep in mind - always be careful with your shape and be sure what you want to do with your elements in this shape.</p>
 <p><strong>Create by enumeration</strong></p>
-<pre><code class="lang-CSHARP">// at this point we use a numpy class so it looks like numpy function call 
-var np = new Numpy&lt;double&gt;();
+<p>The next example shows the numpy style creation.</p>
+<pre><code class="lang-CSHARP">using NumSharp.Core;
 
 // we take the Data / elements from an array 
-// we do not need to define the shape here
+// we do not need to define the shape here - it is automaticly shaped to 1D
 var np1 = np.array(new double[] {1,2,3,4,5,6} );
 </code></pre>
 <p>Ok as we can see, this time the array was created without define the shape.</p>
 <p>This is possible since the method expect that the double[] array shall be transformed into a NDArray directly.</p>
+<p><strong>Create by implicit cast</strong></p>
+<p>Beside this numpy style C# offers its own flavour of creation.</p>
+<pre><code class="lang-CSHARP">using NumSharp.Core;
+
+// implicit cast double[] to NDArray - dtype &amp; shape are deduced by array type and shape
+NDArray nd = new double[]{1,2,3,4};
+</code></pre>
 <p><strong>Create by given range</strong></p>
-<pre><code class="lang-CSHARP">var np = new Numpy&lt;double&gt;();
+<pre><code class="lang-CSHARP">using NumSharp.Core;
 
 // we simple say &quot;create an array with 10 elements&quot;
 // start is expected to be 0 and step 1

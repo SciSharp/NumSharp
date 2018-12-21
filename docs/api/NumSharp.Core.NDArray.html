@@ -1,0 +1,3349 @@
+﻿<!DOCTYPE html>
+<!--[if IE]><![endif]-->
+<html>
+  
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Class NDArray
+   </title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="title" content="Class NDArray
+   ">
+    <meta name="generator" content="docfx 2.40.2.0">
+    
+    <link rel="shortcut icon" href="../favicon.ico">
+    <link rel="stylesheet" href="../styles/docfx.vendor.css">
+    <link rel="stylesheet" href="../styles/docfx.css">
+    <link rel="stylesheet" href="../styles/main.css">
+    <meta property="docfx:navrel" content="../toc.html">
+    <meta property="docfx:tocrel" content="toc.html">
+    
+    
+    
+  </head>
+  <body data-spy="scroll" data-target="#affix" data-offset="120">
+    <div id="wrapper">
+      <header>
+        
+        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
+          <div class="container">
+            <div class="navbar-header">
+              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+              </button>
+              
+              <a class="navbar-brand" href="../index.html">
+                <img id="logo" class="svg" src="../logo.svg" alt="">
+              </a>
+            </div>
+            <div class="collapse navbar-collapse" id="navbar">
+              <form class="navbar-form navbar-right" role="search" id="search">
+                <div class="form-group">
+                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
+                </div>
+              </form>
+            </div>
+          </div>
+        </nav>
+        
+        <div class="subnav navbar navbar-default">
+          <div class="container hide-when-search" id="breadcrumb">
+            <ul class="breadcrumb">
+              <li></li>
+            </ul>
+          </div>
+        </div>
+      </header>
+      <div role="main" class="container body-content hide-when-search">
+        
+        <div class="sidenav hide-when-search">
+          <a class="btn toc-toggle collapse" data-toggle="collapse" href="#sidetoggle" aria-expanded="false" aria-controls="sidetoggle">Show / Hide Table of Contents</a>
+          <div class="sidetoggle collapse" id="sidetoggle">
+            <div id="sidetoc"></div>
+          </div>
+        </div>
+        <div class="article row grid-right">
+          <div class="col-md-10">
+            <article class="content wrap" id="_content" data-uid="NumSharp.Core.NDArray">
+  
+  
+  <h1 id="NumSharp_Core_NDArray" data-uid="NumSharp.Core.NDArray" class="text-break">Class NDArray
+  </h1>
+  <div class="markdown level0 summary"><p>A powerful N-dimensional array object
+Inspired from <a href="https://www.numpy.org/devdocs/user/quickstart.html">https://www.numpy.org/devdocs/user/quickstart.html</a></p>
+</div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="inheritance">
+    <h5>Inheritance</h5>
+    <div class="level0"><span class="xref">System.Object</span></div>
+    <div class="level1"><span class="xref">NDArray</span></div>
+      <div class="level2"><a class="xref" href="NumSharp.Core.matrix.html">matrix</a></div>
+      <div class="level2"><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;T&gt;</div>
+  </div>
+  <div class="inheritedMembers">
+    <h5>Inherited Members</h5>
+    <div>
+      <span class="xref">System.Object.Equals(System.Object, System.Object)</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.GetType()</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.MemberwiseClone()</span>
+    </div>
+    <div>
+      <span class="xref">System.Object.ReferenceEquals(System.Object, System.Object)</span>
+    </div>
+  </div>
+  <h6><strong>Namespace</strong>: <a class="xref" href="NumSharp.Core.html">NumSharp.Core</a></h6>
+  <h6><strong>Assembly</strong>: NumSharp.Core.dll</h6>
+  <h5 id="NumSharp_Core_NDArray_syntax">Syntax</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NDArray</code></pre>
+  </div>
+  <h3 id="constructors">Constructors
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ctor.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.%23ctor%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L59">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ctor_" data-uid="NumSharp.Core.NDArray.#ctor*"></a>
+  <h4 id="NumSharp_Core_NDArray__ctor" data-uid="NumSharp.Core.NDArray.#ctor">NDArray()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray()</code></pre>
+  </div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ctor_System_Array_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.%23ctor(System.Array)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L67">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ctor_" data-uid="NumSharp.Core.NDArray.#ctor*"></a>
+  <h4 id="NumSharp_Core_NDArray__ctor_System_Array_" data-uid="NumSharp.Core.NDArray.#ctor(System.Array)">NDArray(Array)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Array values)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td><span class="parametername">values</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ctor_System_Type_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.%23ctor(System.Type)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L63">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ctor_" data-uid="NumSharp.Core.NDArray.#ctor*"></a>
+  <h4 id="NumSharp_Core_NDArray__ctor_System_Type_" data-uid="NumSharp.Core.NDArray.#ctor(System.Type)">NDArray(Type)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Type dtype)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Type</span></td>
+        <td><span class="parametername">dtype</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ctor_System_Type_NumSharp_Core_Interfaces_IShape_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.%23ctor(System.Type%2CNumSharp.Core.Interfaces.IShape)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L85">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ctor_" data-uid="NumSharp.Core.NDArray.#ctor*"></a>
+  <h4 id="NumSharp_Core_NDArray__ctor_System_Type_NumSharp_Core_Interfaces_IShape_" data-uid="NumSharp.Core.NDArray.#ctor(System.Type,NumSharp.Core.Interfaces.IShape)">NDArray(Type, IShape)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Type dtype, IShape shape)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Type</span></td>
+        <td><span class="parametername">dtype</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.Interfaces.IShape.html">IShape</a></td>
+        <td><span class="parametername">shape</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ctor_System_Type_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.%23ctor(System.Type%2CSystem.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L90">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ctor_" data-uid="NumSharp.Core.NDArray.#ctor*"></a>
+  <h4 id="NumSharp_Core_NDArray__ctor_System_Type_System_Int32___" data-uid="NumSharp.Core.NDArray.#ctor(System.Type,System.Int32[])">NDArray(Type, Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Type dtype, params int[] shapes)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Type</span></td>
+        <td><span class="parametername">dtype</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shapes</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="properties">Properties
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_dtype.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.dtype%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L40">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_dtype_" data-uid="NumSharp.Core.NDArray.dtype*"></a>
+  <h4 id="NumSharp_Core_NDArray_dtype" data-uid="NumSharp.Core.NDArray.dtype">dtype</h4>
+  <div class="markdown level1 summary"><p>Data type of NDArray</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Type dtype { get; }</code></pre>
+  </div>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Type</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_Item_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.Item(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Selection/NDArray.Indexing.cs/#L17">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_Item_" data-uid="NumSharp.Core.NDArray.Item*"></a>
+  <h4 id="NumSharp_Core_NDArray_Item_System_Int32___" data-uid="NumSharp.Core.NDArray.Item(System.Int32[])">Item[Int32[]]</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object this[params int[] select] { get; set; }</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">select</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Object</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ndim.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ndim%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L48">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ndim_" data-uid="NumSharp.Core.NDArray.ndim*"></a>
+  <h4 id="NumSharp_Core_NDArray_ndim" data-uid="NumSharp.Core.NDArray.ndim">ndim</h4>
+  <div class="markdown level1 summary"><p>Dimension count</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ndim { get; }</code></pre>
+  </div>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_shape.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.shape%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L44">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_shape_" data-uid="NumSharp.Core.NDArray.shape*"></a>
+  <h4 id="NumSharp_Core_NDArray_shape" data-uid="NumSharp.Core.NDArray.shape">shape</h4>
+  <div class="markdown level1 summary"><p>Data length of every dimension</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IShape shape { get; }</code></pre>
+  </div>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.Interfaces.IShape.html">IShape</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_size.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.size%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L52">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_size_" data-uid="NumSharp.Core.NDArray.size*"></a>
+  <h4 id="NumSharp_Core_NDArray_size" data-uid="NumSharp.Core.NDArray.size">size</h4>
+  <div class="markdown level1 summary"><p>Total of elements</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int size { get; }</code></pre>
+  </div>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_Storage.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.Storage%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L57">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_Storage_" data-uid="NumSharp.Core.NDArray.Storage*"></a>
+  <h4 id="NumSharp_Core_NDArray_Storage" data-uid="NumSharp.Core.NDArray.Storage">Storage</h4>
+  <div class="markdown level1 summary"><p>The internal storage for elements of NDArray</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDStorage Storage { get; set; }</code></pre>
+  </div>
+  <h5 class="propertyValue">Property Value</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDStorage.html">NDStorage</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="methods">Methods
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ParseNumber_System_Object_System_Int32__System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray._ParseNumber(System.Object%2CSystem.Int32%40%2CSystem.Int32%40)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.ToString.cs/#L121">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ParseNumber_" data-uid="NumSharp.Core.NDArray._ParseNumber*"></a>
+  <h4 id="NumSharp_Core_NDArray__ParseNumber_System_Object_System_Int32__System_Int32__" data-uid="NumSharp.Core.NDArray._ParseNumber(System.Object,System.Int32@,System.Int32@)">_ParseNumber(Object, ref Int32, ref Int32)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string _ParseNumber(object number, ref int noBefore, ref int noAfter)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Object</span></td>
+        <td><span class="parametername">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">noBefore</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">noAfter</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ToMatrixString__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray._ToMatrixString%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.ToString.cs/#L77">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ToMatrixString_" data-uid="NumSharp.Core.NDArray._ToMatrixString*"></a>
+  <h4 id="NumSharp_Core_NDArray__ToMatrixString__1" data-uid="NumSharp.Core.NDArray._ToMatrixString``1">_ToMatrixString&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string _ToMatrixString&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray__ToVectorString__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray._ToVectorString%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.ToString.cs/#L41">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray__ToVectorString_" data-uid="NumSharp.Core.NDArray._ToVectorString*"></a>
+  <h4 id="NumSharp_Core_NDArray__ToVectorString__1" data-uid="NumSharp.Core.NDArray._ToVectorString``1">_ToVectorString&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string _ToVectorString&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_absolute.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.absolute%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.Absolute.cs/#L11">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_absolute_" data-uid="NumSharp.Core.NDArray.absolute*"></a>
+  <h4 id="NumSharp_Core_NDArray_absolute" data-uid="NumSharp.Core.NDArray.absolute">absolute()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray absolute()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_amax_System_Nullable_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.amax(System.Nullable%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Selection/NdArray.AMax.cs/#L16">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_amax_" data-uid="NumSharp.Core.NDArray.amax*"></a>
+  <h4 id="NumSharp_Core_NDArray_amax_System_Nullable_System_Int32__" data-uid="NumSharp.Core.NDArray.amax(System.Nullable{System.Int32})">amax(Nullable&lt;Int32&gt;)</h4>
+  <div class="markdown level1 summary"><p>Return the maximum of an array or minimum along an axis</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray amax(int? axis = default(int? ))</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Nullable</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">axis</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_amin_System_Nullable_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.amin(System.Nullable%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Selection/NdArray.AMin.cs/#L16">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_amin_" data-uid="NumSharp.Core.NDArray.amin*"></a>
+  <h4 id="NumSharp_Core_NDArray_amin_System_Nullable_System_Int32__" data-uid="NumSharp.Core.NDArray.amin(System.Nullable{System.Int32})">amin(Nullable&lt;Int32&gt;)</h4>
+  <div class="markdown level1 summary"><p>Return the maximum of an array or minimum along an axis</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray amin(int? axis = default(int? ))</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Nullable</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">axis</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_arange_System_Int32_System_Int32_System_Int32_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.arange(System.Int32%2CSystem.Int32%2CSystem.Int32)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ARange.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_arange_" data-uid="NumSharp.Core.NDArray.arange*"></a>
+  <h4 id="NumSharp_Core_NDArray_arange_System_Int32_System_Int32_System_Int32_" data-uid="NumSharp.Core.NDArray.arange(System.Int32,System.Int32,System.Int32)">arange(Int32, Int32, Int32)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray arange(int stop, int start = 0, int step = 1)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">stop</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">start</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">step</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_argmax.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.argmax%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.argmax.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_argmax_" data-uid="NumSharp.Core.NDArray.argmax*"></a>
+  <h4 id="NumSharp_Core_NDArray_argmax" data-uid="NumSharp.Core.NDArray.argmax">argmax()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int argmax()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_argmax__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.argmax%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.argmax.cs/#L52">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_argmax_" data-uid="NumSharp.Core.NDArray.argmax*"></a>
+  <h4 id="NumSharp_Core_NDArray_argmax__1" data-uid="NumSharp.Core.NDArray.argmax``1">argmax&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int argmax&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_CalculateNegativeShape_System_Int32_System_Collections_Generic_IList_System_Int32__System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32%2CSystem.Collections.Generic.IList%7BSystem.Int32%7D%2CSystem.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs/#L49">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_CalculateNegativeShape_" data-uid="NumSharp.Core.NDArray.CalculateNegativeShape*"></a>
+  <h4 id="NumSharp_Core_NDArray_CalculateNegativeShape_System_Int32_System_Collections_Generic_IList_System_Int32__System_Int32___" data-uid="NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32,System.Collections.Generic.IList{System.Int32},System.Int32[])">CalculateNegativeShape(Int32, IList&lt;Int32&gt;, Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static int[] CalculateNegativeShape(int negativeIndex, IList&lt;int&gt; currentShape, params int[] shapeParams)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">negativeIndex</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Collections.Generic.IList</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">currentShape</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shapeParams</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_Convolve_NumSharp_Core_NDArray_System_String_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray%2CSystem.String)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.Convolve.cs/#L18">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_Convolve_" data-uid="NumSharp.Core.NDArray.Convolve*"></a>
+  <h4 id="NumSharp_Core_NDArray_Convolve_NumSharp_Core_NDArray_System_String_" data-uid="NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray,System.String)">Convolve(NDArray, String)</h4>
+  <div class="markdown level1 summary"><p>Convolution of 2 series</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray Convolve(NDArray numSharpArray2, string mode = &quot;full&quot;)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">numSharpArray2</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td><span class="parametername">mode</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_delete_System_Collections_IEnumerable_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NDArray.ravel.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_delete_" data-uid="NumSharp.Core.NDArray.delete*"></a>
+  <h4 id="NumSharp_Core_NDArray_delete_System_Collections_IEnumerable_" data-uid="NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)">delete(IEnumerable)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray delete(IEnumerable delete)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Collections.IEnumerable</span></td>
+        <td><span class="parametername">delete</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_dot_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.dot(NumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.Dot.cs/#L19">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_dot_" data-uid="NumSharp.Core.NDArray.dot*"></a>
+  <h4 id="NumSharp_Core_NDArray_dot_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.dot(NumSharp.Core.NDArray)">dot(NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray dot(NDArray nd2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">nd2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_Equals_System_Object_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.Equals(System.Object)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L103">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_Equals_" data-uid="NumSharp.Core.NDArray.Equals*"></a>
+  <h4 id="NumSharp_Core_NDArray_Equals_System_Object_" data-uid="NumSharp.Core.NDArray.Equals(System.Object)">Equals(Object)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool Equals(object obj)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Object</span></td>
+        <td><span class="parametername">obj</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Boolean</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="overrides">Overrides</h5>
+  <div><span class="xref">System.Object.Equals(System.Object)</span></div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_eye_System_Int32_System_Int32_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.eye(System.Int32%2CSystem.Int32)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.Eye.cs/#L11">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_eye_" data-uid="NumSharp.Core.NDArray.eye*"></a>
+  <h4 id="NumSharp_Core_NDArray_eye_System_Int32_System_Int32_" data-uid="NumSharp.Core.NDArray.eye(System.Int32,System.Int32)">eye(Int32, Int32)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray eye(int dim, int diagonalIndex = 0)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">dim</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">diagonalIndex</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_FindNegativeIndex_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.FindNegativeIndex(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs/#L30">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_FindNegativeIndex_" data-uid="NumSharp.Core.NDArray.FindNegativeIndex*"></a>
+  <h4 id="NumSharp_Core_NDArray_FindNegativeIndex_System_Int32___" data-uid="NumSharp.Core.NDArray.FindNegativeIndex(System.Int32[])">FindNegativeIndex(Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static int FindNegativeIndex(params int[] shape)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shape</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_FromMultiDimArray_System_Array_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.FromMultiDimArray(System.Array)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayFromMultiDimArr.cs/#L32">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_FromMultiDimArray_" data-uid="NumSharp.Core.NDArray.FromMultiDimArray*"></a>
+  <h4 id="NumSharp_Core_NDArray_FromMultiDimArray_System_Array_" data-uid="NumSharp.Core.NDArray.FromMultiDimArray(System.Array)">FromMultiDimArray(Array)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromMultiDimArray(Array dotNetArray)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td><span class="parametername">dotNetArray</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_GetHashCode.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.GetHashCode%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/NdArray.cs/#L93">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_GetHashCode_" data-uid="NumSharp.Core.NDArray.GetHashCode*"></a>
+  <h4 id="NumSharp_Core_NDArray_GetHashCode" data-uid="NumSharp.Core.NDArray.GetHashCode">GetHashCode()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="overrides">Overrides</h5>
+  <div><span class="xref">System.Object.GetHashCode()</span></div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_hstack_NumSharp_Core_NDArray___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.HStack.cs/#L15">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_hstack_" data-uid="NumSharp.Core.NDArray.hstack*"></a>
+  <h4 id="NumSharp_Core_NDArray_hstack_NumSharp_Core_NDArray___" data-uid="NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray[])">hstack(NDArray[])</h4>
+  <div class="markdown level1 summary"><p>Stack arrays in sequence horizontally</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray hstack(params NDArray[] nps)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a>[]</td>
+        <td><span class="parametername">nps</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_inv.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.inv%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.Inv.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_inv_" data-uid="NumSharp.Core.NDArray.inv*"></a>
+  <h4 id="NumSharp_Core_NDArray_inv" data-uid="NumSharp.Core.NDArray.inv">inv()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray inv()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_linspace_System_Double_System_Double_System_Int32_System_Boolean_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.linspace(System.Double%2CSystem.Double%2CSystem.Int32%2CSystem.Boolean)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.LinSpace.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_linspace_" data-uid="NumSharp.Core.NDArray.linspace*"></a>
+  <h4 id="NumSharp_Core_NDArray_linspace_System_Double_System_Double_System_Int32_System_Boolean_" data-uid="NumSharp.Core.NDArray.linspace(System.Double,System.Double,System.Int32,System.Boolean)">linspace(Double, Double, Int32, Boolean)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray linspace(double start, double stop, int num, bool entdpoint = true)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Double</span></td>
+        <td><span class="parametername">start</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Double</span></td>
+        <td><span class="parametername">stop</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td><span class="parametername">num</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Boolean</span></td>
+        <td><span class="parametername">entdpoint</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_log.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.log%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.log.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_log_" data-uid="NumSharp.Core.NDArray.log*"></a>
+  <h4 id="NumSharp_Core_NDArray_log" data-uid="NumSharp.Core.NDArray.log">log()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray log()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_lstqr_NumSharp_Core_NDArray_System_Double_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.lstqr(NumSharp.Core.NDArray%2CSystem.Double)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.LstSq.cs/#L13">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_lstqr_" data-uid="NumSharp.Core.NDArray.lstqr*"></a>
+  <h4 id="NumSharp_Core_NDArray_lstqr_NumSharp_Core_NDArray_System_Double_" data-uid="NumSharp.Core.NDArray.lstqr(NumSharp.Core.NDArray,System.Double)">lstqr(NDArray, Double)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray lstqr(NDArray nDArrayB, double rcon = 0.0001)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">nDArrayB</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Double</span></td>
+        <td><span class="parametername">rcon</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_MakeGeneric__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.MakeGeneric%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.MakeGeneric.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_MakeGeneric_" data-uid="NumSharp.Core.NDArray.MakeGeneric*"></a>
+  <h4 id="NumSharp_Core_NDArray_MakeGeneric__1" data-uid="NumSharp.Core.NDArray.MakeGeneric``1">MakeGeneric&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;T&gt; MakeGeneric&lt;T&gt;()
+    where T : struct</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;T&gt;</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_max_System_Nullable_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.max(System.Nullable%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.max.cs/#L9">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_max_" data-uid="NumSharp.Core.NDArray.max*"></a>
+  <h4 id="NumSharp_Core_NDArray_max_System_Nullable_System_Int32__" data-uid="NumSharp.Core.NDArray.max(System.Nullable{System.Int32})">max(Nullable&lt;Int32&gt;)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray max(int? axis = default(int? ))</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Nullable</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">axis</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_min_System_Nullable_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.min(System.Nullable%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.min.cs/#L9">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_min_" data-uid="NumSharp.Core.NDArray.min*"></a>
+  <h4 id="NumSharp_Core_NDArray_min_System_Nullable_System_Int32__" data-uid="NumSharp.Core.NDArray.min(System.Nullable{System.Int32})">min(Nullable&lt;Int32&gt;)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray min(int? axis = default(int? ))</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Nullable</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">axis</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_min__1_System_Nullable_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.min%60%601(System.Nullable%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.min.cs/#L20">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_min_" data-uid="NumSharp.Core.NDArray.min*"></a>
+  <h4 id="NumSharp_Core_NDArray_min__1_System_Nullable_System_Int32__" data-uid="NumSharp.Core.NDArray.min``1(System.Nullable{System.Int32})">min&lt;T&gt;(Nullable&lt;Int32&gt;)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray min&lt;T&gt;(int? axis = default(int? ))</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Nullable</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
+        <td><span class="parametername">axis</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_multi_dot_NumSharp_Core_NDArray___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.multi_dot.cs/#L19">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_multi_dot_" data-uid="NumSharp.Core.NDArray.multi_dot*"></a>
+  <h4 id="NumSharp_Core_NDArray_multi_dot_NumSharp_Core_NDArray___" data-uid="NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray[])">multi_dot(NDArray[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray multi_dot(params NDArray[] np2Multi)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a>[]</td>
+        <td><span class="parametername">np2Multi</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_normalize.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.normalize%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Extensions/NdArray.Normalize.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_normalize_" data-uid="NumSharp.Core.NDArray.normalize*"></a>
+  <h4 id="NumSharp_Core_NDArray_normalize" data-uid="NumSharp.Core.NDArray.normalize">normalize()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void normalize()</code></pre>
+  </div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ones_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ones(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.Ones.cs/#L27">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ones_" data-uid="NumSharp.Core.NDArray.ones*"></a>
+  <h4 id="NumSharp_Core_NDArray_ones_System_Int32___" data-uid="NumSharp.Core.NDArray.ones(System.Int32[])">ones(Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray ones(params int[] shapes)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shapes</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ones_System_Type_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ones(System.Type%2CSystem.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.Ones.cs/#L7">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ones_" data-uid="NumSharp.Core.NDArray.ones*"></a>
+  <h4 id="NumSharp_Core_NDArray_ones_System_Type_System_Int32___" data-uid="NumSharp.Core.NDArray.ones(System.Type,System.Int32[])">ones(Type, Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray ones(Type dtype = null, params int[] shapes)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Type</span></td>
+        <td><span class="parametername">dtype</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shapes</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_power_System_ValueType_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.power(System.ValueType)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.power.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_power_" data-uid="NumSharp.Core.NDArray.power*"></a>
+  <h4 id="NumSharp_Core_NDArray_power_System_ValueType_" data-uid="NumSharp.Core.NDArray.power(System.ValueType)">power(ValueType)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray power(ValueType exponent)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">exponent</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_qr.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.qr%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.QR.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_qr_" data-uid="NumSharp.Core.NDArray.qr*"></a>
+  <h4 id="NumSharp_Core_NDArray_qr" data-uid="NumSharp.Core.NDArray.qr">qr()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NDArray, NDArray)qr()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.ValueTuple</span>&lt;<a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a>, <a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a>&gt;</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ravel.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ravel%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Manipulation/NdArray.delete.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ravel_" data-uid="NumSharp.Core.NDArray.ravel*"></a>
+  <h4 id="NumSharp_Core_NDArray_ravel" data-uid="NumSharp.Core.NDArray.ravel">ravel()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray ravel()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_reshape_NumSharp_Core_Shape_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.reshape(NumSharp.Core.Shape)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs/#L11">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_reshape_" data-uid="NumSharp.Core.NDArray.reshape*"></a>
+  <h4 id="NumSharp_Core_NDArray_reshape_NumSharp_Core_Shape_" data-uid="NumSharp.Core.NDArray.reshape(NumSharp.Core.Shape)">reshape(Shape)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray reshape(Shape shape)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.Shape.html">Shape</a></td>
+        <td><span class="parametername">shape</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_reshape_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.reshape(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.ReShape.cs/#L16">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_reshape_" data-uid="NumSharp.Core.NDArray.reshape*"></a>
+  <h4 id="NumSharp_Core_NDArray_reshape_System_Int32___" data-uid="NumSharp.Core.NDArray.reshape(System.Int32[])">reshape(Int32[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray reshape(params int[] shape)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span>[]</td>
+        <td><span class="parametername">shape</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_sin.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.sin%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.sin.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_sin_" data-uid="NumSharp.Core.NDArray.sin*"></a>
+  <h4 id="NumSharp_Core_NDArray_sin" data-uid="NumSharp.Core.NDArray.sin">sin()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray sin()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_sqrt.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.sqrt%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NdArray.Sqrt.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_sqrt_" data-uid="NumSharp.Core.NDArray.sqrt*"></a>
+  <h4 id="NumSharp_Core_NDArray_sqrt" data-uid="NumSharp.Core.NDArray.sqrt">sqrt()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray sqrt()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_sum_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.sum(NumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Math/NDArray.sum.cs/#L9">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_sum_" data-uid="NumSharp.Core.NDArray.sum*"></a>
+  <h4 id="NumSharp_Core_NDArray_sum_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.sum(NumSharp.Core.NDArray)">sum(NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int sum(NDArray np2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Int32</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ToJaggedArray__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ToJaggedArray%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayToJaggedArray.cs/#L32">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ToJaggedArray_" data-uid="NumSharp.Core.NDArray.ToJaggedArray*"></a>
+  <h4 id="NumSharp_Core_NDArray_ToJaggedArray__1" data-uid="NumSharp.Core.NDArray.ToJaggedArray``1">ToJaggedArray&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Array ToJaggedArray&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ToMuliDimArray__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ToMuliDimArray%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs/#L32">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ToMuliDimArray_" data-uid="NumSharp.Core.NDArray.ToMuliDimArray*"></a>
+  <h4 id="NumSharp_Core_NDArray_ToMuliDimArray__1" data-uid="NumSharp.Core.NDArray.ToMuliDimArray``1">ToMuliDimArray&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Array ToMuliDimArray&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_ToString.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.ToString%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.ToString.cs/#L11">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_ToString_" data-uid="NumSharp.Core.NDArray.ToString*"></a>
+  <h4 id="NumSharp_Core_NDArray_ToString" data-uid="NumSharp.Core.NDArray.ToString">ToString()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="overrides">Overrides</h5>
+  <div><span class="xref">System.Object.ToString()</span></div>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_transpose.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.transpose%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/LinearAlgebra/NdArray.Transpose.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_transpose_" data-uid="NumSharp.Core.NDArray.transpose*"></a>
+  <h4 id="NumSharp_Core_NDArray_transpose" data-uid="NumSharp.Core.NDArray.transpose">transpose()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray transpose()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_unique__1.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.unique%60%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Extensions/NdArray.Unique.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_unique_" data-uid="NumSharp.Core.NDArray.unique*"></a>
+  <h4 id="NumSharp_Core_NDArray_unique__1" data-uid="NumSharp.Core.NDArray.unique``1">unique&lt;T&gt;()</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray unique&lt;T&gt;()</code></pre>
+  </div>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="typeParameters">Type Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="parametername">T</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_vstack_NumSharp_Core_NDArray___.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Creation/NdArray.VStack.cs/#L10">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_vstack_" data-uid="NumSharp.Core.NDArray.vstack*"></a>
+  <h4 id="NumSharp_Core_NDArray_vstack_NumSharp_Core_NDArray___" data-uid="NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray[])">vstack(NDArray[])</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray vstack(params NDArray[] nps)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a>[]</td>
+        <td><span class="parametername">nps</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="operators">Operators
+  </h3>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Addition.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Addition_" data-uid="NumSharp.Core.NDArray.op_Addition*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,NumSharp.Core.NDArray)">Addition(NDArray, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator +(NDArray np1, NDArray np2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_System_ValueType_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray%2CSystem.ValueType)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Addition.cs/#L87">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Addition_" data-uid="NumSharp.Core.NDArray.op_Addition*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_System_ValueType_" data-uid="NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,System.ValueType)">Addition(NDArray, ValueType)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator +(NDArray np1, ValueType scalar)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Addition_System_Double_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Addition(System.Double%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Addition.cs/#L166">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Addition_" data-uid="NumSharp.Core.NDArray.op_Addition*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Addition_System_Double_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Addition(System.Double,NumSharp.Core.NDArray)">Addition(Double, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator +(double scalar, NDArray np1)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Double</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Division.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Division_" data-uid="NumSharp.Core.NDArray.op_Division*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,NumSharp.Core.NDArray)">Division(NDArray, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator /(NDArray np1, NDArray np2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_System_ValueType_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray%2CSystem.ValueType)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Division.cs/#L87">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Division_" data-uid="NumSharp.Core.NDArray.op_Division*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_System_ValueType_" data-uid="NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,System.ValueType)">Division(NDArray, ValueType)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator /(NDArray np1, ValueType scalar)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Division_System_Double_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Division(System.Double%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Division.cs/#L166">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Division_" data-uid="NumSharp.Core.NDArray.op_Division*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Division_System_Double_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Division(System.Double,NumSharp.Core.NDArray)">Division(Double, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator /(double scalar, NDArray np1)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Double</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Equality_NumSharp_Core_NDArray_System_Object_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Equality(NumSharp.Core.NDArray%2CSystem.Object)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NDArray.Equals.cs/#L9">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Equality_" data-uid="NumSharp.Core.NDArray.op_Equality*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Equality_NumSharp_Core_NDArray_System_Object_" data-uid="NumSharp.Core.NDArray.op_Equality(NumSharp.Core.NDArray,System.Object)">Equality(NDArray, Object)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator ==(NDArray np, object obj)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Object</span></td>
+        <td><span class="parametername">obj</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Boolean</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Implicit_NumSharp_Core_NDArray__System_Array.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Implicit(NumSharp.Core.NDArray)~System.Array%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.Implicit.cs/#L41">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Implicit_" data-uid="NumSharp.Core.NDArray.op_Implicit*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Implicit_NumSharp_Core_NDArray__System_Array" data-uid="NumSharp.Core.NDArray.op_Implicit(NumSharp.Core.NDArray)~System.Array">Implicit(NDArray to Array)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Array(NDArray nd)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">nd</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Implicit_System_Array__NumSharp_Core_NDArray.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Implicit(System.Array)~NumSharp.Core.NDArray%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.Implicit.cs/#L34">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Implicit_" data-uid="NumSharp.Core.NDArray.op_Implicit*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Implicit_System_Array__NumSharp_Core_NDArray" data-uid="NumSharp.Core.NDArray.op_Implicit(System.Array)~NumSharp.Core.NDArray">Implicit(Array to NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator NDArray(Array d)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Array</span></td>
+        <td><span class="parametername">d</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Implicit_System_String__NumSharp_Core_NDArray.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Implicit(System.String)~NumSharp.Core.NDArray%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Casting/NdArray.Implicit.cs/#L48">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Implicit_" data-uid="NumSharp.Core.NDArray.op_Implicit*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Implicit_System_String__NumSharp_Core_NDArray" data-uid="NumSharp.Core.NDArray.op_Implicit(System.String)~NumSharp.Core.NDArray">Implicit(String to NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator NDArray(string str)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.String</span></td>
+        <td><span class="parametername">str</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Inequality_NumSharp_Core_NDArray_System_Object_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Inequality(NumSharp.Core.NDArray%2CSystem.Object)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NDArray.NotEquals.cs/#L9">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Inequality_" data-uid="NumSharp.Core.NDArray.op_Inequality*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Inequality_NumSharp_Core_NDArray_System_Object_" data-uid="NumSharp.Core.NDArray.op_Inequality(NumSharp.Core.NDArray,System.Object)">Inequality(NDArray, Object)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator !=(NDArray np, object obj)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.Object</span></td>
+        <td><span class="parametername">obj</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.Boolean</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Multiplication.cs/#L13">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Multiply_" data-uid="NumSharp.Core.NDArray.op_Multiply*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,NumSharp.Core.NDArray)">Multiply(NDArray, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator *(NDArray np1, NDArray np2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_System_ValueType_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray%2CSystem.ValueType)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Multiplication.cs/#L88">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Multiply_" data-uid="NumSharp.Core.NDArray.op_Multiply*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_System_ValueType_" data-uid="NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,System.ValueType)">Multiply(NDArray, ValueType)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator *(NDArray np1, ValueType scalar)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Multiply_System_ValueType_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Multiply(System.ValueType%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Multiplication.cs/#L188">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Multiply_" data-uid="NumSharp.Core.NDArray.op_Multiply*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Multiply_System_ValueType_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Multiply(System.ValueType,NumSharp.Core.NDArray)">Multiply(ValueType, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator *(ValueType scalar, NDArray np1)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Substraction.cs/#L12">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Subtraction_" data-uid="NumSharp.Core.NDArray.op_Subtraction*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,NumSharp.Core.NDArray)">Subtraction(NDArray, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator -(NDArray np1, NDArray np2)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np2</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_System_ValueType_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray%2CSystem.ValueType)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Substraction.cs/#L88">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Subtraction_" data-uid="NumSharp.Core.NDArray.op_Subtraction*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_System_ValueType_" data-uid="NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,System.ValueType)">Subtraction(NDArray, ValueType)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator -(NDArray np1, ValueType scalar)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="small pull-right mobile-hide">
+    <span class="divider">|</span>
+    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray_op_Subtraction_System_ValueType_NumSharp_Core_NDArray_.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray.op_Subtraction(System.ValueType%2CNumSharp.Core.NDArray)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
+  </span>
+  <span class="small pull-right mobile-hide">
+    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Operations/NdArray.Substraction.cs/#L167">View Source</a>
+  </span>
+  <a id="NumSharp_Core_NDArray_op_Subtraction_" data-uid="NumSharp.Core.NDArray.op_Subtraction*"></a>
+  <h4 id="NumSharp_Core_NDArray_op_Subtraction_System_ValueType_NumSharp_Core_NDArray_" data-uid="NumSharp.Core.NDArray.op_Subtraction(System.ValueType,NumSharp.Core.NDArray)">Subtraction(ValueType, NDArray)</h4>
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+  <h5 class="decalaration">Declaration</h5>
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NDArray operator -(ValueType scalar, NDArray np1)</code></pre>
+  </div>
+  <h5 class="parameters">Parameters</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="xref">System.ValueType</span></td>
+        <td><span class="parametername">scalar</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td><span class="parametername">np1</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h5 class="returns">Returns</h5>
+  <table class="table table-bordered table-striped table-condensed">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 id="extensionmethods">Extension Methods</h3>
+  <div>
+      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_AsMatrix_NumSharp_Core_NDArray_">NDArrayExtensions.AsMatrix(NDArray)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_ArgMax__1_NumSharp_Core_NDArray_">NDArrayExtensions.ArgMax&lt;T&gt;(NDArray)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_mean_NumSharp_Core_NDArray_System_Int32_">NDArrayExtensions.mean(NDArray, Int32)</a>
+  </div>
+</article>
+          </div>
+          
+          <div class="hidden-sm col-md-2" role="complementary">
+            <div class="sideaffix">
+              <div class="contribution">
+                <ul class="nav">
+                  <li>
+                    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Core_NDArray.md&amp;value=---%0Auid%3A%20NumSharp.Core.NDArray%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A" class="contribution-link">Improve this Doc</a>
+                  </li>
+                  <li>
+                    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Selection/NDArray.Indexing.cs/#L9" class="contribution-link">View Source</a>
+                  </li>
+                </ul>
+              </div>
+              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
+              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <footer>
+        <div class="grad-bottom"></div>
+        <div class="footer">
+          <div class="container">
+            <span class="pull-right">
+              <a href="#top">Back to top</a>
+            </span>
+            
+            <span>Generated by <strong>DocFX</strong></span>
+          </div>
+        </div>
+      </footer>
+    </div>
+    
+    <script type="text/javascript" src="../styles/docfx.vendor.js"></script>
+    <script type="text/javascript" src="../styles/docfx.js"></script>
+    <script type="text/javascript" src="../styles/main.js"></script>
+  </body>
+</html>

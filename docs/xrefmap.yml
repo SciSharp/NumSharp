@@ -1,3 +1,2908 @@
 ### YamlMime:XRefMap
 sorted: true
-references: []
+references:
+- uid: NumSharp.Core
+  name: NumSharp.Core
+  href: api/NumSharp.Core.html
+  commentId: N:NumSharp.Core
+  fullName: NumSharp.Core
+  nameWithType: NumSharp.Core
+- uid: NumSharp.Core.Extensions
+  name: NumSharp.Core.Extensions
+  href: api/NumSharp.Core.Extensions.html
+  commentId: N:NumSharp.Core.Extensions
+  fullName: NumSharp.Core.Extensions
+  nameWithType: NumSharp.Core.Extensions
+- uid: NumSharp.Core.Extensions.NDArrayExtensions
+  name: NDArrayExtensions
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html
+  commentId: T:NumSharp.Core.Extensions.NDArrayExtensions
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions
+  nameWithType: NDArrayExtensions
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.ArgMax*
+  name: ArgMax
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_ArgMax_
+  commentId: Overload:NumSharp.Core.Extensions.NDArrayExtensions.ArgMax
+  isSpec: "True"
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.ArgMax
+  nameWithType: NDArrayExtensions.ArgMax
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.ArgMax``1(NumSharp.Core.NDArray)
+  name: ArgMax<T>(NDArray)
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_ArgMax__1_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.Extensions.NDArrayExtensions.ArgMax``1(NumSharp.Core.NDArray)
+  name.vb: ArgMax(Of T)(NDArray)
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.ArgMax<T>(NumSharp.Core.NDArray)
+  fullName.vb: NumSharp.Core.Extensions.NDArrayExtensions.ArgMax(Of T)(NumSharp.Core.NDArray)
+  nameWithType: NDArrayExtensions.ArgMax<T>(NDArray)
+  nameWithType.vb: NDArrayExtensions.ArgMax(Of T)(NDArray)
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix(NumSharp.Core.NDArray)
+  name: AsMatrix(NDArray)
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_AsMatrix_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix(NumSharp.Core.NDArray)
+  nameWithType: NDArrayExtensions.AsMatrix(NDArray)
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix*
+  name: AsMatrix
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_AsMatrix_
+  commentId: Overload:NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix
+  isSpec: "True"
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.AsMatrix
+  nameWithType: NDArrayExtensions.AsMatrix
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.mean(NumSharp.Core.NDArray,System.Int32)
+  name: mean(NDArray, Int32)
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_mean_NumSharp_Core_NDArray_System_Int32_
+  commentId: M:NumSharp.Core.Extensions.NDArrayExtensions.mean(NumSharp.Core.NDArray,System.Int32)
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.mean(NumSharp.Core.NDArray, System.Int32)
+  nameWithType: NDArrayExtensions.mean(NDArray, Int32)
+- uid: NumSharp.Core.Extensions.NDArrayExtensions.mean*
+  name: mean
+  href: api/NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_mean_
+  commentId: Overload:NumSharp.Core.Extensions.NDArrayExtensions.mean
+  isSpec: "True"
+  fullName: NumSharp.Core.Extensions.NDArrayExtensions.mean
+  nameWithType: NDArrayExtensions.mean
+- uid: NumSharp.Core.Interfaces
+  name: NumSharp.Core.Interfaces
+  href: api/NumSharp.Core.Interfaces.html
+  commentId: N:NumSharp.Core.Interfaces
+  fullName: NumSharp.Core.Interfaces
+  nameWithType: NumSharp.Core.Interfaces
+- uid: NumSharp.Core.Interfaces.IShape
+  name: IShape
+  href: api/NumSharp.Core.Interfaces.IShape.html
+  commentId: T:NumSharp.Core.Interfaces.IShape
+  fullName: NumSharp.Core.Interfaces.IShape
+  nameWithType: IShape
+- uid: NumSharp.Core.Interfaces.IShape.BiShape
+  name: BiShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_BiShape
+  commentId: P:NumSharp.Core.Interfaces.IShape.BiShape
+  fullName: NumSharp.Core.Interfaces.IShape.BiShape
+  nameWithType: IShape.BiShape
+- uid: NumSharp.Core.Interfaces.IShape.BiShape*
+  name: BiShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_BiShape_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.BiShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.BiShape
+  nameWithType: IShape.BiShape
+- uid: NumSharp.Core.Interfaces.IShape.ChangeTensorLayout(System.Int32)
+  name: ChangeTensorLayout(Int32)
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_ChangeTensorLayout_System_Int32_
+  commentId: M:NumSharp.Core.Interfaces.IShape.ChangeTensorLayout(System.Int32)
+  fullName: NumSharp.Core.Interfaces.IShape.ChangeTensorLayout(System.Int32)
+  nameWithType: IShape.ChangeTensorLayout(Int32)
+- uid: NumSharp.Core.Interfaces.IShape.ChangeTensorLayout*
+  name: ChangeTensorLayout
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_ChangeTensorLayout_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.ChangeTensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.ChangeTensorLayout
+  nameWithType: IShape.ChangeTensorLayout
+- uid: NumSharp.Core.Interfaces.IShape.Dimensions
+  name: Dimensions
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_Dimensions
+  commentId: P:NumSharp.Core.Interfaces.IShape.Dimensions
+  fullName: NumSharp.Core.Interfaces.IShape.Dimensions
+  nameWithType: IShape.Dimensions
+- uid: NumSharp.Core.Interfaces.IShape.Dimensions*
+  name: Dimensions
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_Dimensions_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.Dimensions
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.Dimensions
+  nameWithType: IShape.Dimensions
+- uid: NumSharp.Core.Interfaces.IShape.DimOffset
+  name: DimOffset
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_DimOffset
+  commentId: P:NumSharp.Core.Interfaces.IShape.DimOffset
+  fullName: NumSharp.Core.Interfaces.IShape.DimOffset
+  nameWithType: IShape.DimOffset
+- uid: NumSharp.Core.Interfaces.IShape.DimOffset*
+  name: DimOffset
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_DimOffset_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.DimOffset
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.DimOffset
+  nameWithType: IShape.DimOffset
+- uid: NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape(System.Int32)
+  name: GetDimIndexOutShape(Int32)
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_GetDimIndexOutShape_System_Int32_
+  commentId: M:NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape(System.Int32)
+  fullName: NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape(System.Int32)
+  nameWithType: IShape.GetDimIndexOutShape(Int32)
+- uid: NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape*
+  name: GetDimIndexOutShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_GetDimIndexOutShape_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.GetDimIndexOutShape
+  nameWithType: IShape.GetDimIndexOutShape
+- uid: NumSharp.Core.Interfaces.IShape.GetIndexInShape(System.Int32[])
+  name: GetIndexInShape(Int32[])
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_GetIndexInShape_System_Int32___
+  commentId: M:NumSharp.Core.Interfaces.IShape.GetIndexInShape(System.Int32[])
+  name.vb: GetIndexInShape(Int32())
+  fullName: NumSharp.Core.Interfaces.IShape.GetIndexInShape(System.Int32[])
+  fullName.vb: NumSharp.Core.Interfaces.IShape.GetIndexInShape(System.Int32())
+  nameWithType: IShape.GetIndexInShape(Int32[])
+  nameWithType.vb: IShape.GetIndexInShape(Int32())
+- uid: NumSharp.Core.Interfaces.IShape.GetIndexInShape*
+  name: GetIndexInShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_GetIndexInShape_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.GetIndexInShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.GetIndexInShape
+  nameWithType: IShape.GetIndexInShape
+- uid: NumSharp.Core.Interfaces.IShape.NDim
+  name: NDim
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_NDim
+  commentId: P:NumSharp.Core.Interfaces.IShape.NDim
+  fullName: NumSharp.Core.Interfaces.IShape.NDim
+  nameWithType: IShape.NDim
+- uid: NumSharp.Core.Interfaces.IShape.NDim*
+  name: NDim
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_NDim_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.NDim
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.NDim
+  nameWithType: IShape.NDim
+- uid: NumSharp.Core.Interfaces.IShape.Size
+  name: Size
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_Size
+  commentId: P:NumSharp.Core.Interfaces.IShape.Size
+  fullName: NumSharp.Core.Interfaces.IShape.Size
+  nameWithType: IShape.Size
+- uid: NumSharp.Core.Interfaces.IShape.Size*
+  name: Size
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_Size_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.Size
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.Size
+  nameWithType: IShape.Size
+- uid: NumSharp.Core.Interfaces.IShape.TensorLayout
+  name: TensorLayout
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_TensorLayout
+  commentId: P:NumSharp.Core.Interfaces.IShape.TensorLayout
+  fullName: NumSharp.Core.Interfaces.IShape.TensorLayout
+  nameWithType: IShape.TensorLayout
+- uid: NumSharp.Core.Interfaces.IShape.TensorLayout*
+  name: TensorLayout
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_TensorLayout_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.TensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.TensorLayout
+  nameWithType: IShape.TensorLayout
+- uid: NumSharp.Core.Interfaces.IShape.TriShape
+  name: TriShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_TriShape
+  commentId: P:NumSharp.Core.Interfaces.IShape.TriShape
+  fullName: NumSharp.Core.Interfaces.IShape.TriShape
+  nameWithType: IShape.TriShape
+- uid: NumSharp.Core.Interfaces.IShape.TriShape*
+  name: TriShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_TriShape_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.TriShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.TriShape
+  nameWithType: IShape.TriShape
+- uid: NumSharp.Core.Interfaces.IShape.UniShape
+  name: UniShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_UniShape
+  commentId: P:NumSharp.Core.Interfaces.IShape.UniShape
+  fullName: NumSharp.Core.Interfaces.IShape.UniShape
+  nameWithType: IShape.UniShape
+- uid: NumSharp.Core.Interfaces.IShape.UniShape*
+  name: UniShape
+  href: api/NumSharp.Core.Interfaces.IShape.html#NumSharp_Core_Interfaces_IShape_UniShape_
+  commentId: Overload:NumSharp.Core.Interfaces.IShape.UniShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IShape.UniShape
+  nameWithType: IShape.UniShape
+- uid: NumSharp.Core.Interfaces.IStorage
+  name: IStorage
+  href: api/NumSharp.Core.Interfaces.IStorage.html
+  commentId: T:NumSharp.Core.Interfaces.IStorage
+  fullName: NumSharp.Core.Interfaces.IStorage
+  nameWithType: IStorage
+- uid: NumSharp.Core.Interfaces.IStorage.Allocate(System.Array,System.Int32)
+  name: Allocate(Array, Int32)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Allocate_System_Array_System_Int32_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.Allocate(System.Array,System.Int32)
+  fullName: NumSharp.Core.Interfaces.IStorage.Allocate(System.Array, System.Int32)
+  nameWithType: IStorage.Allocate(Array, Int32)
+- uid: NumSharp.Core.Interfaces.IStorage.Allocate(System.Type,NumSharp.Core.Interfaces.IShape,System.Int32)
+  name: Allocate(Type, IShape, Int32)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Allocate_System_Type_NumSharp_Core_Interfaces_IShape_System_Int32_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.Allocate(System.Type,NumSharp.Core.Interfaces.IShape,System.Int32)
+  fullName: NumSharp.Core.Interfaces.IStorage.Allocate(System.Type, NumSharp.Core.Interfaces.IShape, System.Int32)
+  nameWithType: IStorage.Allocate(Type, IShape, Int32)
+- uid: NumSharp.Core.Interfaces.IStorage.Allocate*
+  name: Allocate
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Allocate_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.Allocate
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.Allocate
+  nameWithType: IStorage.Allocate
+- uid: NumSharp.Core.Interfaces.IStorage.ChangeDataType(System.Type)
+  name: ChangeDataType(Type)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_ChangeDataType_System_Type_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.ChangeDataType(System.Type)
+  fullName: NumSharp.Core.Interfaces.IStorage.ChangeDataType(System.Type)
+  nameWithType: IStorage.ChangeDataType(Type)
+- uid: NumSharp.Core.Interfaces.IStorage.ChangeDataType*
+  name: ChangeDataType
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_ChangeDataType_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.ChangeDataType
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.ChangeDataType
+  nameWithType: IStorage.ChangeDataType
+- uid: NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout(System.Int32)
+  name: ChangeTensorLayout(Int32)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_ChangeTensorLayout_System_Int32_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout(System.Int32)
+  fullName: NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout(System.Int32)
+  nameWithType: IStorage.ChangeTensorLayout(Int32)
+- uid: NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout*
+  name: ChangeTensorLayout
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_ChangeTensorLayout_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.ChangeTensorLayout
+  nameWithType: IStorage.ChangeTensorLayout
+- uid: NumSharp.Core.Interfaces.IStorage.CloneData
+  name: CloneData()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_CloneData
+  commentId: M:NumSharp.Core.Interfaces.IStorage.CloneData
+  fullName: NumSharp.Core.Interfaces.IStorage.CloneData()
+  nameWithType: IStorage.CloneData()
+- uid: NumSharp.Core.Interfaces.IStorage.CloneData(System.Type)
+  name: CloneData(Type)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_CloneData_System_Type_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.CloneData(System.Type)
+  fullName: NumSharp.Core.Interfaces.IStorage.CloneData(System.Type)
+  nameWithType: IStorage.CloneData(Type)
+- uid: NumSharp.Core.Interfaces.IStorage.CloneData*
+  name: CloneData
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_CloneData_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.CloneData
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.CloneData
+  nameWithType: IStorage.CloneData
+- uid: NumSharp.Core.Interfaces.IStorage.CloneData``1
+  name: CloneData<T>()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_CloneData__1
+  commentId: M:NumSharp.Core.Interfaces.IStorage.CloneData``1
+  name.vb: CloneData(Of T)()
+  fullName: NumSharp.Core.Interfaces.IStorage.CloneData<T>()
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.CloneData(Of T)()
+  nameWithType: IStorage.CloneData<T>()
+  nameWithType.vb: IStorage.CloneData(Of T)()
+- uid: NumSharp.Core.Interfaces.IStorage.DType
+  name: DType
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_DType
+  commentId: P:NumSharp.Core.Interfaces.IStorage.DType
+  fullName: NumSharp.Core.Interfaces.IStorage.DType
+  nameWithType: IStorage.DType
+- uid: NumSharp.Core.Interfaces.IStorage.DType*
+  name: DType
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_DType_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.DType
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.DType
+  nameWithType: IStorage.DType
+- uid: NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage
+  name: GetColumWiseStorage()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetColumWiseStorage
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage
+  fullName: NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage()
+  nameWithType: IStorage.GetColumWiseStorage()
+- uid: NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage*
+  name: GetColumWiseStorage
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetColumWiseStorage_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.GetColumWiseStorage
+  nameWithType: IStorage.GetColumWiseStorage
+- uid: NumSharp.Core.Interfaces.IStorage.GetData
+  name: GetData()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetData
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData()
+  nameWithType: IStorage.GetData()
+- uid: NumSharp.Core.Interfaces.IStorage.GetData(System.Int32[])
+  name: GetData(Int32[])
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData_System_Int32___
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetData(System.Int32[])
+  name.vb: GetData(Int32())
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData(System.Int32[])
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.GetData(System.Int32())
+  nameWithType: IStorage.GetData(Int32[])
+  nameWithType.vb: IStorage.GetData(Int32())
+- uid: NumSharp.Core.Interfaces.IStorage.GetData(System.Type)
+  name: GetData(Type)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData_System_Type_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetData(System.Type)
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData(System.Type)
+  nameWithType: IStorage.GetData(Type)
+- uid: NumSharp.Core.Interfaces.IStorage.GetData*
+  name: GetData
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.GetData
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData
+  nameWithType: IStorage.GetData
+- uid: NumSharp.Core.Interfaces.IStorage.GetData``1
+  name: GetData<T>()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData__1
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetData``1
+  name.vb: GetData(Of T)()
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData<T>()
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.GetData(Of T)()
+  nameWithType: IStorage.GetData<T>()
+  nameWithType.vb: IStorage.GetData(Of T)()
+- uid: NumSharp.Core.Interfaces.IStorage.GetData``1(System.Int32[])
+  name: GetData<T>(Int32[])
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetData__1_System_Int32___
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetData``1(System.Int32[])
+  name.vb: GetData(Of T)(Int32())
+  fullName: NumSharp.Core.Interfaces.IStorage.GetData<T>(System.Int32[])
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.GetData(Of T)(System.Int32())
+  nameWithType: IStorage.GetData<T>(Int32[])
+  nameWithType.vb: IStorage.GetData(Of T)(Int32())
+- uid: NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage
+  name: GetRowWiseStorage()
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetRowWiseStorage
+  commentId: M:NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage
+  fullName: NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage()
+  nameWithType: IStorage.GetRowWiseStorage()
+- uid: NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage*
+  name: GetRowWiseStorage
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_GetRowWiseStorage_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.GetRowWiseStorage
+  nameWithType: IStorage.GetRowWiseStorage
+- uid: NumSharp.Core.Interfaces.IStorage.Reshape(System.Int32[])
+  name: Reshape(Int32[])
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Reshape_System_Int32___
+  commentId: M:NumSharp.Core.Interfaces.IStorage.Reshape(System.Int32[])
+  name.vb: Reshape(Int32())
+  fullName: NumSharp.Core.Interfaces.IStorage.Reshape(System.Int32[])
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.Reshape(System.Int32())
+  nameWithType: IStorage.Reshape(Int32[])
+  nameWithType.vb: IStorage.Reshape(Int32())
+- uid: NumSharp.Core.Interfaces.IStorage.Reshape*
+  name: Reshape
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Reshape_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.Reshape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.Reshape
+  nameWithType: IStorage.Reshape
+- uid: NumSharp.Core.Interfaces.IStorage.SetData(System.Array)
+  name: SetData(Array)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_SetData_System_Array_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.SetData(System.Array)
+  fullName: NumSharp.Core.Interfaces.IStorage.SetData(System.Array)
+  nameWithType: IStorage.SetData(Array)
+- uid: NumSharp.Core.Interfaces.IStorage.SetData(System.Array,System.Type)
+  name: SetData(Array, Type)
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_SetData_System_Array_System_Type_
+  commentId: M:NumSharp.Core.Interfaces.IStorage.SetData(System.Array,System.Type)
+  fullName: NumSharp.Core.Interfaces.IStorage.SetData(System.Array, System.Type)
+  nameWithType: IStorage.SetData(Array, Type)
+- uid: NumSharp.Core.Interfaces.IStorage.SetData(System.Object,System.Int32[])
+  name: SetData(Object, Int32[])
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_SetData_System_Object_System_Int32___
+  commentId: M:NumSharp.Core.Interfaces.IStorage.SetData(System.Object,System.Int32[])
+  name.vb: SetData(Object, Int32())
+  fullName: NumSharp.Core.Interfaces.IStorage.SetData(System.Object, System.Int32[])
+  fullName.vb: NumSharp.Core.Interfaces.IStorage.SetData(System.Object, System.Int32())
+  nameWithType: IStorage.SetData(Object, Int32[])
+  nameWithType.vb: IStorage.SetData(Object, Int32())
+- uid: NumSharp.Core.Interfaces.IStorage.SetData*
+  name: SetData
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_SetData_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.SetData
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.SetData
+  nameWithType: IStorage.SetData
+- uid: NumSharp.Core.Interfaces.IStorage.Shape
+  name: Shape
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Shape
+  commentId: P:NumSharp.Core.Interfaces.IStorage.Shape
+  fullName: NumSharp.Core.Interfaces.IStorage.Shape
+  nameWithType: IStorage.Shape
+- uid: NumSharp.Core.Interfaces.IStorage.Shape*
+  name: Shape
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_Shape_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.Shape
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.Shape
+  nameWithType: IStorage.Shape
+- uid: NumSharp.Core.Interfaces.IStorage.TensorLayout
+  name: TensorLayout
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_TensorLayout
+  commentId: P:NumSharp.Core.Interfaces.IStorage.TensorLayout
+  fullName: NumSharp.Core.Interfaces.IStorage.TensorLayout
+  nameWithType: IStorage.TensorLayout
+- uid: NumSharp.Core.Interfaces.IStorage.TensorLayout*
+  name: TensorLayout
+  href: api/NumSharp.Core.Interfaces.IStorage.html#NumSharp_Core_Interfaces_IStorage_TensorLayout_
+  commentId: Overload:NumSharp.Core.Interfaces.IStorage.TensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Interfaces.IStorage.TensorLayout
+  nameWithType: IStorage.TensorLayout
+- uid: NumSharp.Core.LAPACK
+  name: LAPACK
+  href: api/NumSharp.Core.LAPACK.html
+  commentId: T:NumSharp.Core.LAPACK
+  fullName: NumSharp.Core.LAPACK
+  nameWithType: LAPACK
+- uid: NumSharp.Core.LAPACK.dgelss_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double@,System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name: dgelss_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], ref Int32, Double[], ref Double, ref Int32, Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgelss__System_Int32__System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Int32__System_Double___System_Double__System_Int32__System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dgelss_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double@,System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name.vb: dgelss_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, Double(), ByRef Double, ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dgelss_(ref System.Int32, ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Double[], ref System.Int32, System.Double[], ref System.Double, ref System.Int32, System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dgelss_(ByRef System.Int32, ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), ByRef System.Double, ByRef System.Int32, System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dgelss_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], ref Int32, Double[], ref Double, ref Int32, Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dgelss_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, Double(), ByRef Double, ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dgelss_*
+  name: dgelss_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgelss__
+  commentId: Overload:NumSharp.Core.LAPACK.dgelss_
+  fullName: NumSharp.Core.LAPACK.dgelss_
+  nameWithType: LAPACK.dgelss_
+- uid: NumSharp.Core.LAPACK.dgelsy_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Int32[],System.Double@,System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name: dgelsy_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], ref Int32, Int32[], ref Double, ref Int32, Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgelsy__System_Int32__System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Int32__System_Int32___System_Double__System_Int32__System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dgelsy_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Int32[],System.Double@,System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name.vb: dgelsy_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, Int32(), ByRef Double, ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dgelsy_(ref System.Int32, ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Double[], ref System.Int32, System.Int32[], ref System.Double, ref System.Int32, System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dgelsy_(ByRef System.Int32, ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), ByRef System.Int32, System.Int32(), ByRef System.Double, ByRef System.Int32, System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dgelsy_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], ref Int32, Int32[], ref Double, ref Int32, Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dgelsy_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, Int32(), ByRef Double, ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dgelsy_*
+  name: dgelsy_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgelsy__
+  commentId: Overload:NumSharp.Core.LAPACK.dgelsy_
+  fullName: NumSharp.Core.LAPACK.dgelsy_
+  nameWithType: LAPACK.dgelsy_
+- uid: NumSharp.Core.LAPACK.dgeqrf_(System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Int32@)
+  name: dgeqrf_(ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgeqrf__System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dgeqrf_(System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Int32@)
+  name.vb: dgeqrf_(ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dgeqrf_(ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Double[], System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dgeqrf_(ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dgeqrf_(ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dgeqrf_(ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dgeqrf_*
+  name: dgeqrf_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgeqrf__
+  commentId: Overload:NumSharp.Core.LAPACK.dgeqrf_
+  fullName: NumSharp.Core.LAPACK.dgeqrf_
+  nameWithType: LAPACK.dgeqrf_
+- uid: NumSharp.Core.LAPACK.dgesv_(System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Int32[],System.Double[],System.Int32@,System.Int32@)
+  name: dgesv_(ref Int32, ref Int32, Double[], ref Int32, Int32[], Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgesv__System_Int32__System_Int32__System_Double___System_Int32__System_Int32___System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dgesv_(System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Int32[],System.Double[],System.Int32@,System.Int32@)
+  name.vb: dgesv_(ByRef Int32, ByRef Int32, Double(), ByRef Int32, Int32(), Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dgesv_(ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Int32[], System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dgesv_(ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Int32(), System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dgesv_(ref Int32, ref Int32, Double[], ref Int32, Int32[], Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dgesv_(ByRef Int32, ByRef Int32, Double(), ByRef Int32, Int32(), Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dgesv_*
+  name: dgesv_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgesv__
+  commentId: Overload:NumSharp.Core.LAPACK.dgesv_
+  fullName: NumSharp.Core.LAPACK.dgesv_
+  nameWithType: LAPACK.dgesv_
+- uid: NumSharp.Core.LAPACK.dorgqr_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Int32@)
+  name: dorgqr_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dorgqr__System_Int32__System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dorgqr_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Int32@)
+  name.vb: dorgqr_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dorgqr_(ref System.Int32, ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Double[], System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dorgqr_(ByRef System.Int32, ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dorgqr_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dorgqr_(ByRef Int32, ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dorgqr_*
+  name: dorgqr_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dorgqr__
+  commentId: Overload:NumSharp.Core.LAPACK.dorgqr_
+  fullName: NumSharp.Core.LAPACK.dorgqr_
+  nameWithType: LAPACK.dorgqr_
+- uid: NumSharp.Core.Manipulation
+  name: NumSharp.Core.Manipulation
+  href: api/NumSharp.Core.Manipulation.html
+  commentId: N:NumSharp.Core.Manipulation
+  fullName: NumSharp.Core.Manipulation
+  nameWithType: NumSharp.Core.Manipulation
+- uid: NumSharp.Core.Manipulation.NumPy
+  name: NumPy
+  href: api/NumSharp.Core.Manipulation.NumPy.html
+  commentId: T:NumSharp.Core.Manipulation.NumPy
+  fullName: NumSharp.Core.Manipulation.NumPy
+  nameWithType: NumPy
+- uid: NumSharp.Core.Manipulation.NumPy.ravel(NumSharp.Core.matrix)
+  name: ravel(matrix)
+  href: api/NumSharp.Core.Manipulation.NumPy.html#NumSharp_Core_Manipulation_NumPy_ravel_NumSharp_Core_matrix_
+  commentId: M:NumSharp.Core.Manipulation.NumPy.ravel(NumSharp.Core.matrix)
+  fullName: NumSharp.Core.Manipulation.NumPy.ravel(NumSharp.Core.matrix)
+  nameWithType: NumPy.ravel(matrix)
+- uid: NumSharp.Core.Manipulation.NumPy.ravel*
+  name: ravel
+  href: api/NumSharp.Core.Manipulation.NumPy.html#NumSharp_Core_Manipulation_NumPy_ravel_
+  commentId: Overload:NumSharp.Core.Manipulation.NumPy.ravel
+  isSpec: "True"
+  fullName: NumSharp.Core.Manipulation.NumPy.ravel
+  nameWithType: NumPy.ravel
+- uid: NumSharp.Core.matrix
+  name: matrix
+  href: api/NumSharp.Core.matrix.html
+  commentId: T:NumSharp.Core.matrix
+  fullName: NumSharp.Core.matrix
+  nameWithType: matrix
+- uid: NumSharp.Core.matrix.#ctor(NumSharp.Core.NDArray,System.Type)
+  name: matrix(NDArray, Type)
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix__ctor_NumSharp_Core_NDArray_System_Type_
+  commentId: M:NumSharp.Core.matrix.#ctor(NumSharp.Core.NDArray,System.Type)
+  fullName: NumSharp.Core.matrix.matrix(NumSharp.Core.NDArray, System.Type)
+  nameWithType: matrix.matrix(NDArray, Type)
+- uid: NumSharp.Core.matrix.#ctor(System.String,System.Type)
+  name: matrix(String, Type)
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix__ctor_System_String_System_Type_
+  commentId: M:NumSharp.Core.matrix.#ctor(System.String,System.Type)
+  fullName: NumSharp.Core.matrix.matrix(System.String, System.Type)
+  nameWithType: matrix.matrix(String, Type)
+- uid: NumSharp.Core.matrix.#ctor*
+  name: matrix
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix__ctor_
+  commentId: Overload:NumSharp.Core.matrix.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Core.matrix.matrix
+  nameWithType: matrix.matrix
+- uid: NumSharp.Core.matrix.StringToDoubleMatrix(System.String[][])
+  name: StringToDoubleMatrix(String[][])
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_StringToDoubleMatrix_System_String_____
+  commentId: M:NumSharp.Core.matrix.StringToDoubleMatrix(System.String[][])
+  name.vb: StringToDoubleMatrix(String()())
+  fullName: NumSharp.Core.matrix.StringToDoubleMatrix(System.String[][])
+  fullName.vb: NumSharp.Core.matrix.StringToDoubleMatrix(System.String()())
+  nameWithType: matrix.StringToDoubleMatrix(String[][])
+  nameWithType.vb: matrix.StringToDoubleMatrix(String()())
+- uid: NumSharp.Core.matrix.StringToDoubleMatrix*
+  name: StringToDoubleMatrix
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_StringToDoubleMatrix_
+  commentId: Overload:NumSharp.Core.matrix.StringToDoubleMatrix
+  isSpec: "True"
+  fullName: NumSharp.Core.matrix.StringToDoubleMatrix
+  nameWithType: matrix.StringToDoubleMatrix
+- uid: NumSharp.Core.matrix.sum
+  name: sum()
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_sum
+  commentId: M:NumSharp.Core.matrix.sum
+  fullName: NumSharp.Core.matrix.sum()
+  nameWithType: matrix.sum()
+- uid: NumSharp.Core.matrix.sum*
+  name: sum
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_sum_
+  commentId: Overload:NumSharp.Core.matrix.sum
+  isSpec: "True"
+  fullName: NumSharp.Core.matrix.sum
+  nameWithType: matrix.sum
+- uid: NumSharp.Core.matrix.ToString
+  name: ToString()
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_ToString
+  commentId: M:NumSharp.Core.matrix.ToString
+  fullName: NumSharp.Core.matrix.ToString()
+  nameWithType: matrix.ToString()
+- uid: NumSharp.Core.matrix.ToString*
+  name: ToString
+  href: api/NumSharp.Core.matrix.html#NumSharp_Core_matrix_ToString_
+  commentId: Overload:NumSharp.Core.matrix.ToString
+  isSpec: "True"
+  fullName: NumSharp.Core.matrix.ToString
+  nameWithType: matrix.ToString
+- uid: NumSharp.Core.NDArray
+  name: NDArray
+  href: api/NumSharp.Core.NDArray.html
+  commentId: T:NumSharp.Core.NDArray
+  fullName: NumSharp.Core.NDArray
+  nameWithType: NDArray
+- uid: NumSharp.Core.NDArray.#ctor
+  name: NDArray()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor
+  commentId: M:NumSharp.Core.NDArray.#ctor
+  fullName: NumSharp.Core.NDArray.NDArray()
+  nameWithType: NDArray.NDArray()
+- uid: NumSharp.Core.NDArray.#ctor(System.Array)
+  name: NDArray(Array)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor_System_Array_
+  commentId: M:NumSharp.Core.NDArray.#ctor(System.Array)
+  fullName: NumSharp.Core.NDArray.NDArray(System.Array)
+  nameWithType: NDArray.NDArray(Array)
+- uid: NumSharp.Core.NDArray.#ctor(System.Type)
+  name: NDArray(Type)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor_System_Type_
+  commentId: M:NumSharp.Core.NDArray.#ctor(System.Type)
+  fullName: NumSharp.Core.NDArray.NDArray(System.Type)
+  nameWithType: NDArray.NDArray(Type)
+- uid: NumSharp.Core.NDArray.#ctor(System.Type,NumSharp.Core.Interfaces.IShape)
+  name: NDArray(Type, IShape)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor_System_Type_NumSharp_Core_Interfaces_IShape_
+  commentId: M:NumSharp.Core.NDArray.#ctor(System.Type,NumSharp.Core.Interfaces.IShape)
+  fullName: NumSharp.Core.NDArray.NDArray(System.Type, NumSharp.Core.Interfaces.IShape)
+  nameWithType: NDArray.NDArray(Type, IShape)
+- uid: NumSharp.Core.NDArray.#ctor(System.Type,System.Int32[])
+  name: NDArray(Type, Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor_System_Type_System_Int32___
+  commentId: M:NumSharp.Core.NDArray.#ctor(System.Type,System.Int32[])
+  name.vb: NDArray(Type, Int32())
+  fullName: NumSharp.Core.NDArray.NDArray(System.Type, System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.NDArray(System.Type, System.Int32())
+  nameWithType: NDArray.NDArray(Type, Int32[])
+  nameWithType.vb: NDArray.NDArray(Type, Int32())
+- uid: NumSharp.Core.NDArray.#ctor*
+  name: NDArray
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ctor_
+  commentId: Overload:NumSharp.Core.NDArray.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.NDArray
+  nameWithType: NDArray.NDArray
+- uid: NumSharp.Core.NDArray._ParseNumber(System.Object,System.Int32@,System.Int32@)
+  name: _ParseNumber(Object, ref Int32, ref Int32)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ParseNumber_System_Object_System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.NDArray._ParseNumber(System.Object,System.Int32@,System.Int32@)
+  name.vb: _ParseNumber(Object, ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.NDArray._ParseNumber(System.Object, ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.NDArray._ParseNumber(System.Object, ByRef System.Int32, ByRef System.Int32)
+  nameWithType: NDArray._ParseNumber(Object, ref Int32, ref Int32)
+  nameWithType.vb: NDArray._ParseNumber(Object, ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.NDArray._ParseNumber*
+  name: _ParseNumber
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ParseNumber_
+  commentId: Overload:NumSharp.Core.NDArray._ParseNumber
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray._ParseNumber
+  nameWithType: NDArray._ParseNumber
+- uid: NumSharp.Core.NDArray._ToMatrixString*
+  name: _ToMatrixString
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToMatrixString_
+  commentId: Overload:NumSharp.Core.NDArray._ToMatrixString
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray._ToMatrixString
+  nameWithType: NDArray._ToMatrixString
+- uid: NumSharp.Core.NDArray._ToMatrixString``1
+  name: _ToMatrixString<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToMatrixString__1
+  commentId: M:NumSharp.Core.NDArray._ToMatrixString``1
+  name.vb: _ToMatrixString(Of T)()
+  fullName: NumSharp.Core.NDArray._ToMatrixString<T>()
+  fullName.vb: NumSharp.Core.NDArray._ToMatrixString(Of T)()
+  nameWithType: NDArray._ToMatrixString<T>()
+  nameWithType.vb: NDArray._ToMatrixString(Of T)()
+- uid: NumSharp.Core.NDArray._ToVectorString*
+  name: _ToVectorString
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToVectorString_
+  commentId: Overload:NumSharp.Core.NDArray._ToVectorString
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray._ToVectorString
+  nameWithType: NDArray._ToVectorString
+- uid: NumSharp.Core.NDArray._ToVectorString``1
+  name: _ToVectorString<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToVectorString__1
+  commentId: M:NumSharp.Core.NDArray._ToVectorString``1
+  name.vb: _ToVectorString(Of T)()
+  fullName: NumSharp.Core.NDArray._ToVectorString<T>()
+  fullName.vb: NumSharp.Core.NDArray._ToVectorString(Of T)()
+  nameWithType: NDArray._ToVectorString<T>()
+  nameWithType.vb: NDArray._ToVectorString(Of T)()
+- uid: NumSharp.Core.NDArray.absolute
+  name: absolute()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_absolute
+  commentId: M:NumSharp.Core.NDArray.absolute
+  fullName: NumSharp.Core.NDArray.absolute()
+  nameWithType: NDArray.absolute()
+- uid: NumSharp.Core.NDArray.absolute*
+  name: absolute
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_absolute_
+  commentId: Overload:NumSharp.Core.NDArray.absolute
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.absolute
+  nameWithType: NDArray.absolute
+- uid: NumSharp.Core.NDArray.amax(System.Nullable{System.Int32})
+  name: amax(Nullable<Int32>)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amax_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.NDArray.amax(System.Nullable{System.Int32})
+  name.vb: amax(Nullable(Of Int32))
+  fullName: NumSharp.Core.NDArray.amax(System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.NDArray.amax(System.Nullable(Of System.Int32))
+  nameWithType: NDArray.amax(Nullable<Int32>)
+  nameWithType.vb: NDArray.amax(Nullable(Of Int32))
+- uid: NumSharp.Core.NDArray.amax*
+  name: amax
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amax_
+  commentId: Overload:NumSharp.Core.NDArray.amax
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.amax
+  nameWithType: NDArray.amax
+- uid: NumSharp.Core.NDArray.amin(System.Nullable{System.Int32})
+  name: amin(Nullable<Int32>)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amin_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.NDArray.amin(System.Nullable{System.Int32})
+  name.vb: amin(Nullable(Of Int32))
+  fullName: NumSharp.Core.NDArray.amin(System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.NDArray.amin(System.Nullable(Of System.Int32))
+  nameWithType: NDArray.amin(Nullable<Int32>)
+  nameWithType.vb: NDArray.amin(Nullable(Of Int32))
+- uid: NumSharp.Core.NDArray.amin*
+  name: amin
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amin_
+  commentId: Overload:NumSharp.Core.NDArray.amin
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.amin
+  nameWithType: NDArray.amin
+- uid: NumSharp.Core.NDArray.arange(System.Int32,System.Int32,System.Int32)
+  name: arange(Int32, Int32, Int32)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_arange_System_Int32_System_Int32_System_Int32_
+  commentId: M:NumSharp.Core.NDArray.arange(System.Int32,System.Int32,System.Int32)
+  fullName: NumSharp.Core.NDArray.arange(System.Int32, System.Int32, System.Int32)
+  nameWithType: NDArray.arange(Int32, Int32, Int32)
+- uid: NumSharp.Core.NDArray.arange*
+  name: arange
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_arange_
+  commentId: Overload:NumSharp.Core.NDArray.arange
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.arange
+  nameWithType: NDArray.arange
+- uid: NumSharp.Core.NDArray.argmax
+  name: argmax()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_argmax
+  commentId: M:NumSharp.Core.NDArray.argmax
+  fullName: NumSharp.Core.NDArray.argmax()
+  nameWithType: NDArray.argmax()
+- uid: NumSharp.Core.NDArray.argmax*
+  name: argmax
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_argmax_
+  commentId: Overload:NumSharp.Core.NDArray.argmax
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.argmax
+  nameWithType: NDArray.argmax
+- uid: NumSharp.Core.NDArray.argmax``1
+  name: argmax<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_argmax__1
+  commentId: M:NumSharp.Core.NDArray.argmax``1
+  name.vb: argmax(Of T)()
+  fullName: NumSharp.Core.NDArray.argmax<T>()
+  fullName.vb: NumSharp.Core.NDArray.argmax(Of T)()
+  nameWithType: NDArray.argmax<T>()
+  nameWithType.vb: NDArray.argmax(Of T)()
+- uid: NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32,System.Collections.Generic.IList{System.Int32},System.Int32[])
+  name: CalculateNegativeShape(Int32, IList<Int32>, Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_CalculateNegativeShape_System_Int32_System_Collections_Generic_IList_System_Int32__System_Int32___
+  commentId: M:NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32,System.Collections.Generic.IList{System.Int32},System.Int32[])
+  name.vb: CalculateNegativeShape(Int32, IList(Of Int32), Int32())
+  fullName: NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32, System.Collections.Generic.IList<System.Int32>, System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.CalculateNegativeShape(System.Int32, System.Collections.Generic.IList(Of System.Int32), System.Int32())
+  nameWithType: NDArray.CalculateNegativeShape(Int32, IList<Int32>, Int32[])
+  nameWithType.vb: NDArray.CalculateNegativeShape(Int32, IList(Of Int32), Int32())
+- uid: NumSharp.Core.NDArray.CalculateNegativeShape*
+  name: CalculateNegativeShape
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_CalculateNegativeShape_
+  commentId: Overload:NumSharp.Core.NDArray.CalculateNegativeShape
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.CalculateNegativeShape
+  nameWithType: NDArray.CalculateNegativeShape
+- uid: NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray,System.String)
+  name: Convolve(NDArray, String)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Convolve_NumSharp_Core_NDArray_System_String_
+  commentId: M:NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray,System.String)
+  fullName: NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray, System.String)
+  nameWithType: NDArray.Convolve(NDArray, String)
+- uid: NumSharp.Core.NDArray.Convolve*
+  name: Convolve
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Convolve_
+  commentId: Overload:NumSharp.Core.NDArray.Convolve
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Convolve
+  nameWithType: NDArray.Convolve
+- uid: NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)
+  name: delete(IEnumerable)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_delete_System_Collections_IEnumerable_
+  commentId: M:NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)
+  fullName: NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)
+  nameWithType: NDArray.delete(IEnumerable)
+- uid: NumSharp.Core.NDArray.delete*
+  name: delete
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_delete_
+  commentId: Overload:NumSharp.Core.NDArray.delete
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.delete
+  nameWithType: NDArray.delete
+- uid: NumSharp.Core.NDArray.dot(NumSharp.Core.NDArray)
+  name: dot(NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dot_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.dot(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.dot(NumSharp.Core.NDArray)
+  nameWithType: NDArray.dot(NDArray)
+- uid: NumSharp.Core.NDArray.dot*
+  name: dot
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dot_
+  commentId: Overload:NumSharp.Core.NDArray.dot
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.dot
+  nameWithType: NDArray.dot
+- uid: NumSharp.Core.NDArray.dtype
+  name: dtype
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dtype
+  commentId: P:NumSharp.Core.NDArray.dtype
+  fullName: NumSharp.Core.NDArray.dtype
+  nameWithType: NDArray.dtype
+- uid: NumSharp.Core.NDArray.dtype*
+  name: dtype
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dtype_
+  commentId: Overload:NumSharp.Core.NDArray.dtype
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.dtype
+  nameWithType: NDArray.dtype
+- uid: NumSharp.Core.NDArray.Equals(System.Object)
+  name: Equals(Object)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Equals_System_Object_
+  commentId: M:NumSharp.Core.NDArray.Equals(System.Object)
+  fullName: NumSharp.Core.NDArray.Equals(System.Object)
+  nameWithType: NDArray.Equals(Object)
+- uid: NumSharp.Core.NDArray.Equals*
+  name: Equals
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Equals_
+  commentId: Overload:NumSharp.Core.NDArray.Equals
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Equals
+  nameWithType: NDArray.Equals
+- uid: NumSharp.Core.NDArray.eye(System.Int32,System.Int32)
+  name: eye(Int32, Int32)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_eye_System_Int32_System_Int32_
+  commentId: M:NumSharp.Core.NDArray.eye(System.Int32,System.Int32)
+  fullName: NumSharp.Core.NDArray.eye(System.Int32, System.Int32)
+  nameWithType: NDArray.eye(Int32, Int32)
+- uid: NumSharp.Core.NDArray.eye*
+  name: eye
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_eye_
+  commentId: Overload:NumSharp.Core.NDArray.eye
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.eye
+  nameWithType: NDArray.eye
+- uid: NumSharp.Core.NDArray.FindNegativeIndex(System.Int32[])
+  name: FindNegativeIndex(Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FindNegativeIndex_System_Int32___
+  commentId: M:NumSharp.Core.NDArray.FindNegativeIndex(System.Int32[])
+  name.vb: FindNegativeIndex(Int32())
+  fullName: NumSharp.Core.NDArray.FindNegativeIndex(System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.FindNegativeIndex(System.Int32())
+  nameWithType: NDArray.FindNegativeIndex(Int32[])
+  nameWithType.vb: NDArray.FindNegativeIndex(Int32())
+- uid: NumSharp.Core.NDArray.FindNegativeIndex*
+  name: FindNegativeIndex
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FindNegativeIndex_
+  commentId: Overload:NumSharp.Core.NDArray.FindNegativeIndex
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.FindNegativeIndex
+  nameWithType: NDArray.FindNegativeIndex
+- uid: NumSharp.Core.NDArray.FromMultiDimArray(System.Array)
+  name: FromMultiDimArray(Array)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FromMultiDimArray_System_Array_
+  commentId: M:NumSharp.Core.NDArray.FromMultiDimArray(System.Array)
+  fullName: NumSharp.Core.NDArray.FromMultiDimArray(System.Array)
+  nameWithType: NDArray.FromMultiDimArray(Array)
+- uid: NumSharp.Core.NDArray.FromMultiDimArray*
+  name: FromMultiDimArray
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FromMultiDimArray_
+  commentId: Overload:NumSharp.Core.NDArray.FromMultiDimArray
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.FromMultiDimArray
+  nameWithType: NDArray.FromMultiDimArray
+- uid: NumSharp.Core.NDArray.GetHashCode
+  name: GetHashCode()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_GetHashCode
+  commentId: M:NumSharp.Core.NDArray.GetHashCode
+  fullName: NumSharp.Core.NDArray.GetHashCode()
+  nameWithType: NDArray.GetHashCode()
+- uid: NumSharp.Core.NDArray.GetHashCode*
+  name: GetHashCode
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_GetHashCode_
+  commentId: Overload:NumSharp.Core.NDArray.GetHashCode
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.GetHashCode
+  nameWithType: NDArray.GetHashCode
+- uid: NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray[])
+  name: hstack(NDArray[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_hstack_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray[])
+  name.vb: hstack(NDArray())
+  fullName: NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.NDArray.hstack(NumSharp.Core.NDArray())
+  nameWithType: NDArray.hstack(NDArray[])
+  nameWithType.vb: NDArray.hstack(NDArray())
+- uid: NumSharp.Core.NDArray.hstack*
+  name: hstack
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_hstack_
+  commentId: Overload:NumSharp.Core.NDArray.hstack
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.hstack
+  nameWithType: NDArray.hstack
+- uid: NumSharp.Core.NDArray.inv
+  name: inv()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_inv
+  commentId: M:NumSharp.Core.NDArray.inv
+  fullName: NumSharp.Core.NDArray.inv()
+  nameWithType: NDArray.inv()
+- uid: NumSharp.Core.NDArray.inv*
+  name: inv
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_inv_
+  commentId: Overload:NumSharp.Core.NDArray.inv
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.inv
+  nameWithType: NDArray.inv
+- uid: NumSharp.Core.NDArray.Item(System.Int32[])
+  name: Item[Int32[]]
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Item_System_Int32___
+  commentId: P:NumSharp.Core.NDArray.Item(System.Int32[])
+  name.vb: Item(Int32())
+  fullName: NumSharp.Core.NDArray.Item[System.Int32[]]
+  fullName.vb: NumSharp.Core.NDArray.Item(System.Int32())
+  nameWithType: NDArray.Item[Int32[]]
+  nameWithType.vb: NDArray.Item(Int32())
+- uid: NumSharp.Core.NDArray.Item*
+  name: Item
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Item_
+  commentId: Overload:NumSharp.Core.NDArray.Item
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Item
+  nameWithType: NDArray.Item
+- uid: NumSharp.Core.NDArray.linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  name: linspace(Double, Double, Int32, Boolean)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_linspace_System_Double_System_Double_System_Int32_System_Boolean_
+  commentId: M:NumSharp.Core.NDArray.linspace(System.Double,System.Double,System.Int32,System.Boolean)
+  fullName: NumSharp.Core.NDArray.linspace(System.Double, System.Double, System.Int32, System.Boolean)
+  nameWithType: NDArray.linspace(Double, Double, Int32, Boolean)
+- uid: NumSharp.Core.NDArray.linspace*
+  name: linspace
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_linspace_
+  commentId: Overload:NumSharp.Core.NDArray.linspace
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.linspace
+  nameWithType: NDArray.linspace
+- uid: NumSharp.Core.NDArray.log
+  name: log()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_log
+  commentId: M:NumSharp.Core.NDArray.log
+  fullName: NumSharp.Core.NDArray.log()
+  nameWithType: NDArray.log()
+- uid: NumSharp.Core.NDArray.log*
+  name: log
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_log_
+  commentId: Overload:NumSharp.Core.NDArray.log
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.log
+  nameWithType: NDArray.log
+- uid: NumSharp.Core.NDArray.lstqr(NumSharp.Core.NDArray,System.Double)
+  name: lstqr(NDArray, Double)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_lstqr_NumSharp_Core_NDArray_System_Double_
+  commentId: M:NumSharp.Core.NDArray.lstqr(NumSharp.Core.NDArray,System.Double)
+  fullName: NumSharp.Core.NDArray.lstqr(NumSharp.Core.NDArray, System.Double)
+  nameWithType: NDArray.lstqr(NDArray, Double)
+- uid: NumSharp.Core.NDArray.lstqr*
+  name: lstqr
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_lstqr_
+  commentId: Overload:NumSharp.Core.NDArray.lstqr
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.lstqr
+  nameWithType: NDArray.lstqr
+- uid: NumSharp.Core.NDArray.MakeGeneric*
+  name: MakeGeneric
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_MakeGeneric_
+  commentId: Overload:NumSharp.Core.NDArray.MakeGeneric
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.MakeGeneric
+  nameWithType: NDArray.MakeGeneric
+- uid: NumSharp.Core.NDArray.MakeGeneric``1
+  name: MakeGeneric<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_MakeGeneric__1
+  commentId: M:NumSharp.Core.NDArray.MakeGeneric``1
+  name.vb: MakeGeneric(Of T)()
+  fullName: NumSharp.Core.NDArray.MakeGeneric<T>()
+  fullName.vb: NumSharp.Core.NDArray.MakeGeneric(Of T)()
+  nameWithType: NDArray.MakeGeneric<T>()
+  nameWithType.vb: NDArray.MakeGeneric(Of T)()
+- uid: NumSharp.Core.NDArray.max(System.Nullable{System.Int32})
+  name: max(Nullable<Int32>)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_max_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.NDArray.max(System.Nullable{System.Int32})
+  name.vb: max(Nullable(Of Int32))
+  fullName: NumSharp.Core.NDArray.max(System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.NDArray.max(System.Nullable(Of System.Int32))
+  nameWithType: NDArray.max(Nullable<Int32>)
+  nameWithType.vb: NDArray.max(Nullable(Of Int32))
+- uid: NumSharp.Core.NDArray.max*
+  name: max
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_max_
+  commentId: Overload:NumSharp.Core.NDArray.max
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.max
+  nameWithType: NDArray.max
+- uid: NumSharp.Core.NDArray.min(System.Nullable{System.Int32})
+  name: min(Nullable<Int32>)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_min_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.NDArray.min(System.Nullable{System.Int32})
+  name.vb: min(Nullable(Of Int32))
+  fullName: NumSharp.Core.NDArray.min(System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.NDArray.min(System.Nullable(Of System.Int32))
+  nameWithType: NDArray.min(Nullable<Int32>)
+  nameWithType.vb: NDArray.min(Nullable(Of Int32))
+- uid: NumSharp.Core.NDArray.min*
+  name: min
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_min_
+  commentId: Overload:NumSharp.Core.NDArray.min
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.min
+  nameWithType: NDArray.min
+- uid: NumSharp.Core.NDArray.min``1(System.Nullable{System.Int32})
+  name: min<T>(Nullable<Int32>)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_min__1_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.NDArray.min``1(System.Nullable{System.Int32})
+  name.vb: min(Of T)(Nullable(Of Int32))
+  fullName: NumSharp.Core.NDArray.min<T>(System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.NDArray.min(Of T)(System.Nullable(Of System.Int32))
+  nameWithType: NDArray.min<T>(Nullable<Int32>)
+  nameWithType.vb: NDArray.min(Of T)(Nullable(Of Int32))
+- uid: NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray[])
+  name: multi_dot(NDArray[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_multi_dot_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray[])
+  name.vb: multi_dot(NDArray())
+  fullName: NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.NDArray.multi_dot(NumSharp.Core.NDArray())
+  nameWithType: NDArray.multi_dot(NDArray[])
+  nameWithType.vb: NDArray.multi_dot(NDArray())
+- uid: NumSharp.Core.NDArray.multi_dot*
+  name: multi_dot
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_multi_dot_
+  commentId: Overload:NumSharp.Core.NDArray.multi_dot
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.multi_dot
+  nameWithType: NDArray.multi_dot
+- uid: NumSharp.Core.NDArray.ndim
+  name: ndim
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ndim
+  commentId: P:NumSharp.Core.NDArray.ndim
+  fullName: NumSharp.Core.NDArray.ndim
+  nameWithType: NDArray.ndim
+- uid: NumSharp.Core.NDArray.ndim*
+  name: ndim
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ndim_
+  commentId: Overload:NumSharp.Core.NDArray.ndim
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ndim
+  nameWithType: NDArray.ndim
+- uid: NumSharp.Core.NDArray.normalize
+  name: normalize()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_normalize
+  commentId: M:NumSharp.Core.NDArray.normalize
+  fullName: NumSharp.Core.NDArray.normalize()
+  nameWithType: NDArray.normalize()
+- uid: NumSharp.Core.NDArray.normalize*
+  name: normalize
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_normalize_
+  commentId: Overload:NumSharp.Core.NDArray.normalize
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.normalize
+  nameWithType: NDArray.normalize
+- uid: NumSharp.Core.NDArray.ones(System.Int32[])
+  name: ones(Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ones_System_Int32___
+  commentId: M:NumSharp.Core.NDArray.ones(System.Int32[])
+  name.vb: ones(Int32())
+  fullName: NumSharp.Core.NDArray.ones(System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.ones(System.Int32())
+  nameWithType: NDArray.ones(Int32[])
+  nameWithType.vb: NDArray.ones(Int32())
+- uid: NumSharp.Core.NDArray.ones(System.Type,System.Int32[])
+  name: ones(Type, Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ones_System_Type_System_Int32___
+  commentId: M:NumSharp.Core.NDArray.ones(System.Type,System.Int32[])
+  name.vb: ones(Type, Int32())
+  fullName: NumSharp.Core.NDArray.ones(System.Type, System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.ones(System.Type, System.Int32())
+  nameWithType: NDArray.ones(Type, Int32[])
+  nameWithType.vb: NDArray.ones(Type, Int32())
+- uid: NumSharp.Core.NDArray.ones*
+  name: ones
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ones_
+  commentId: Overload:NumSharp.Core.NDArray.ones
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ones
+  nameWithType: NDArray.ones
+- uid: NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  name: Addition(NDArray, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Addition(NumSharp.Core.NDArray, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Addition(NDArray, NDArray)
+- uid: NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,System.ValueType)
+  name: Addition(NDArray, ValueType)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Addition_NumSharp_Core_NDArray_System_ValueType_
+  commentId: M:NumSharp.Core.NDArray.op_Addition(NumSharp.Core.NDArray,System.ValueType)
+  fullName: NumSharp.Core.NDArray.Addition(NumSharp.Core.NDArray, System.ValueType)
+  nameWithType: NDArray.Addition(NDArray, ValueType)
+- uid: NumSharp.Core.NDArray.op_Addition(System.Double,NumSharp.Core.NDArray)
+  name: Addition(Double, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Addition_System_Double_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Addition(System.Double,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Addition(System.Double, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Addition(Double, NDArray)
+- uid: NumSharp.Core.NDArray.op_Addition*
+  name: Addition
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Addition_
+  commentId: Overload:NumSharp.Core.NDArray.op_Addition
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Addition
+  nameWithType: NDArray.Addition
+- uid: NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  name: Division(NDArray, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Division(NumSharp.Core.NDArray, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Division(NDArray, NDArray)
+- uid: NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,System.ValueType)
+  name: Division(NDArray, ValueType)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Division_NumSharp_Core_NDArray_System_ValueType_
+  commentId: M:NumSharp.Core.NDArray.op_Division(NumSharp.Core.NDArray,System.ValueType)
+  fullName: NumSharp.Core.NDArray.Division(NumSharp.Core.NDArray, System.ValueType)
+  nameWithType: NDArray.Division(NDArray, ValueType)
+- uid: NumSharp.Core.NDArray.op_Division(System.Double,NumSharp.Core.NDArray)
+  name: Division(Double, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Division_System_Double_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Division(System.Double,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Division(System.Double, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Division(Double, NDArray)
+- uid: NumSharp.Core.NDArray.op_Division*
+  name: Division
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Division_
+  commentId: Overload:NumSharp.Core.NDArray.op_Division
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Division
+  nameWithType: NDArray.Division
+- uid: NumSharp.Core.NDArray.op_Equality(NumSharp.Core.NDArray,System.Object)
+  name: Equality(NDArray, Object)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Equality_NumSharp_Core_NDArray_System_Object_
+  commentId: M:NumSharp.Core.NDArray.op_Equality(NumSharp.Core.NDArray,System.Object)
+  fullName: NumSharp.Core.NDArray.Equality(NumSharp.Core.NDArray, System.Object)
+  nameWithType: NDArray.Equality(NDArray, Object)
+- uid: NumSharp.Core.NDArray.op_Equality*
+  name: Equality
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Equality_
+  commentId: Overload:NumSharp.Core.NDArray.op_Equality
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Equality
+  nameWithType: NDArray.Equality
+- uid: NumSharp.Core.NDArray.op_Implicit(NumSharp.Core.NDArray)~System.Array
+  name: Implicit(NDArray to Array)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Implicit_NumSharp_Core_NDArray__System_Array
+  commentId: M:NumSharp.Core.NDArray.op_Implicit(NumSharp.Core.NDArray)~System.Array
+  name.vb: Widening(NDArray to Array)
+  fullName: NumSharp.Core.NDArray.Implicit(NumSharp.Core.NDArray to System.Array)
+  fullName.vb: NumSharp.Core.NDArray.Widening(NumSharp.Core.NDArray to System.Array)
+  nameWithType: NDArray.Implicit(NDArray to Array)
+  nameWithType.vb: NDArray.Widening(NDArray to Array)
+- uid: NumSharp.Core.NDArray.op_Implicit(System.Array)~NumSharp.Core.NDArray
+  name: Implicit(Array to NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Implicit_System_Array__NumSharp_Core_NDArray
+  commentId: M:NumSharp.Core.NDArray.op_Implicit(System.Array)~NumSharp.Core.NDArray
+  name.vb: Widening(Array to NDArray)
+  fullName: NumSharp.Core.NDArray.Implicit(System.Array to NumSharp.Core.NDArray)
+  fullName.vb: NumSharp.Core.NDArray.Widening(System.Array to NumSharp.Core.NDArray)
+  nameWithType: NDArray.Implicit(Array to NDArray)
+  nameWithType.vb: NDArray.Widening(Array to NDArray)
+- uid: NumSharp.Core.NDArray.op_Implicit(System.String)~NumSharp.Core.NDArray
+  name: Implicit(String to NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Implicit_System_String__NumSharp_Core_NDArray
+  commentId: M:NumSharp.Core.NDArray.op_Implicit(System.String)~NumSharp.Core.NDArray
+  name.vb: Widening(String to NDArray)
+  fullName: NumSharp.Core.NDArray.Implicit(System.String to NumSharp.Core.NDArray)
+  fullName.vb: NumSharp.Core.NDArray.Widening(System.String to NumSharp.Core.NDArray)
+  nameWithType: NDArray.Implicit(String to NDArray)
+  nameWithType.vb: NDArray.Widening(String to NDArray)
+- uid: NumSharp.Core.NDArray.op_Implicit*
+  name: Implicit
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Implicit_
+  commentId: Overload:NumSharp.Core.NDArray.op_Implicit
+  isSpec: "True"
+  name.vb: Widening
+  fullName: NumSharp.Core.NDArray.Implicit
+  fullName.vb: NumSharp.Core.NDArray.Widening
+  nameWithType: NDArray.Implicit
+  nameWithType.vb: NDArray.Widening
+- uid: NumSharp.Core.NDArray.op_Inequality(NumSharp.Core.NDArray,System.Object)
+  name: Inequality(NDArray, Object)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Inequality_NumSharp_Core_NDArray_System_Object_
+  commentId: M:NumSharp.Core.NDArray.op_Inequality(NumSharp.Core.NDArray,System.Object)
+  fullName: NumSharp.Core.NDArray.Inequality(NumSharp.Core.NDArray, System.Object)
+  nameWithType: NDArray.Inequality(NDArray, Object)
+- uid: NumSharp.Core.NDArray.op_Inequality*
+  name: Inequality
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Inequality_
+  commentId: Overload:NumSharp.Core.NDArray.op_Inequality
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Inequality
+  nameWithType: NDArray.Inequality
+- uid: NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  name: Multiply(NDArray, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Multiply(NumSharp.Core.NDArray, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Multiply(NDArray, NDArray)
+- uid: NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,System.ValueType)
+  name: Multiply(NDArray, ValueType)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Multiply_NumSharp_Core_NDArray_System_ValueType_
+  commentId: M:NumSharp.Core.NDArray.op_Multiply(NumSharp.Core.NDArray,System.ValueType)
+  fullName: NumSharp.Core.NDArray.Multiply(NumSharp.Core.NDArray, System.ValueType)
+  nameWithType: NDArray.Multiply(NDArray, ValueType)
+- uid: NumSharp.Core.NDArray.op_Multiply(System.ValueType,NumSharp.Core.NDArray)
+  name: Multiply(ValueType, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Multiply_System_ValueType_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Multiply(System.ValueType,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Multiply(System.ValueType, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Multiply(ValueType, NDArray)
+- uid: NumSharp.Core.NDArray.op_Multiply*
+  name: Multiply
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Multiply_
+  commentId: Overload:NumSharp.Core.NDArray.op_Multiply
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Multiply
+  nameWithType: NDArray.Multiply
+- uid: NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  name: Subtraction(NDArray, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Subtraction(NumSharp.Core.NDArray, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Subtraction(NDArray, NDArray)
+- uid: NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,System.ValueType)
+  name: Subtraction(NDArray, ValueType)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Subtraction_NumSharp_Core_NDArray_System_ValueType_
+  commentId: M:NumSharp.Core.NDArray.op_Subtraction(NumSharp.Core.NDArray,System.ValueType)
+  fullName: NumSharp.Core.NDArray.Subtraction(NumSharp.Core.NDArray, System.ValueType)
+  nameWithType: NDArray.Subtraction(NDArray, ValueType)
+- uid: NumSharp.Core.NDArray.op_Subtraction(System.ValueType,NumSharp.Core.NDArray)
+  name: Subtraction(ValueType, NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Subtraction_System_ValueType_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.op_Subtraction(System.ValueType,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.Subtraction(System.ValueType, NumSharp.Core.NDArray)
+  nameWithType: NDArray.Subtraction(ValueType, NDArray)
+- uid: NumSharp.Core.NDArray.op_Subtraction*
+  name: Subtraction
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_op_Subtraction_
+  commentId: Overload:NumSharp.Core.NDArray.op_Subtraction
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Subtraction
+  nameWithType: NDArray.Subtraction
+- uid: NumSharp.Core.NDArray.power(System.ValueType)
+  name: power(ValueType)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_power_System_ValueType_
+  commentId: M:NumSharp.Core.NDArray.power(System.ValueType)
+  fullName: NumSharp.Core.NDArray.power(System.ValueType)
+  nameWithType: NDArray.power(ValueType)
+- uid: NumSharp.Core.NDArray.power*
+  name: power
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_power_
+  commentId: Overload:NumSharp.Core.NDArray.power
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.power
+  nameWithType: NDArray.power
+- uid: NumSharp.Core.NDArray.qr
+  name: qr()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_qr
+  commentId: M:NumSharp.Core.NDArray.qr
+  fullName: NumSharp.Core.NDArray.qr()
+  nameWithType: NDArray.qr()
+- uid: NumSharp.Core.NDArray.qr*
+  name: qr
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_qr_
+  commentId: Overload:NumSharp.Core.NDArray.qr
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.qr
+  nameWithType: NDArray.qr
+- uid: NumSharp.Core.NDArray.ravel
+  name: ravel()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ravel
+  commentId: M:NumSharp.Core.NDArray.ravel
+  fullName: NumSharp.Core.NDArray.ravel()
+  nameWithType: NDArray.ravel()
+- uid: NumSharp.Core.NDArray.ravel*
+  name: ravel
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ravel_
+  commentId: Overload:NumSharp.Core.NDArray.ravel
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ravel
+  nameWithType: NDArray.ravel
+- uid: NumSharp.Core.NDArray.reshape(NumSharp.Core.Shape)
+  name: reshape(Shape)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_reshape_NumSharp_Core_Shape_
+  commentId: M:NumSharp.Core.NDArray.reshape(NumSharp.Core.Shape)
+  fullName: NumSharp.Core.NDArray.reshape(NumSharp.Core.Shape)
+  nameWithType: NDArray.reshape(Shape)
+- uid: NumSharp.Core.NDArray.reshape(System.Int32[])
+  name: reshape(Int32[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_reshape_System_Int32___
+  commentId: M:NumSharp.Core.NDArray.reshape(System.Int32[])
+  name.vb: reshape(Int32())
+  fullName: NumSharp.Core.NDArray.reshape(System.Int32[])
+  fullName.vb: NumSharp.Core.NDArray.reshape(System.Int32())
+  nameWithType: NDArray.reshape(Int32[])
+  nameWithType.vb: NDArray.reshape(Int32())
+- uid: NumSharp.Core.NDArray.reshape*
+  name: reshape
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_reshape_
+  commentId: Overload:NumSharp.Core.NDArray.reshape
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.reshape
+  nameWithType: NDArray.reshape
+- uid: NumSharp.Core.NDArray.shape
+  name: shape
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_shape
+  commentId: P:NumSharp.Core.NDArray.shape
+  fullName: NumSharp.Core.NDArray.shape
+  nameWithType: NDArray.shape
+- uid: NumSharp.Core.NDArray.shape*
+  name: shape
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_shape_
+  commentId: Overload:NumSharp.Core.NDArray.shape
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.shape
+  nameWithType: NDArray.shape
+- uid: NumSharp.Core.NDArray.sin
+  name: sin()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sin
+  commentId: M:NumSharp.Core.NDArray.sin
+  fullName: NumSharp.Core.NDArray.sin()
+  nameWithType: NDArray.sin()
+- uid: NumSharp.Core.NDArray.sin*
+  name: sin
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sin_
+  commentId: Overload:NumSharp.Core.NDArray.sin
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.sin
+  nameWithType: NDArray.sin
+- uid: NumSharp.Core.NDArray.size
+  name: size
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_size
+  commentId: P:NumSharp.Core.NDArray.size
+  fullName: NumSharp.Core.NDArray.size
+  nameWithType: NDArray.size
+- uid: NumSharp.Core.NDArray.size*
+  name: size
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_size_
+  commentId: Overload:NumSharp.Core.NDArray.size
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.size
+  nameWithType: NDArray.size
+- uid: NumSharp.Core.NDArray.sqrt
+  name: sqrt()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sqrt
+  commentId: M:NumSharp.Core.NDArray.sqrt
+  fullName: NumSharp.Core.NDArray.sqrt()
+  nameWithType: NDArray.sqrt()
+- uid: NumSharp.Core.NDArray.sqrt*
+  name: sqrt
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sqrt_
+  commentId: Overload:NumSharp.Core.NDArray.sqrt
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.sqrt
+  nameWithType: NDArray.sqrt
+- uid: NumSharp.Core.NDArray.Storage
+  name: Storage
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Storage
+  commentId: P:NumSharp.Core.NDArray.Storage
+  fullName: NumSharp.Core.NDArray.Storage
+  nameWithType: NDArray.Storage
+- uid: NumSharp.Core.NDArray.Storage*
+  name: Storage
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Storage_
+  commentId: Overload:NumSharp.Core.NDArray.Storage
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Storage
+  nameWithType: NDArray.Storage
+- uid: NumSharp.Core.NDArray.sum(NumSharp.Core.NDArray)
+  name: sum(NDArray)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sum_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArray.sum(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArray.sum(NumSharp.Core.NDArray)
+  nameWithType: NDArray.sum(NDArray)
+- uid: NumSharp.Core.NDArray.sum*
+  name: sum
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sum_
+  commentId: Overload:NumSharp.Core.NDArray.sum
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.sum
+  nameWithType: NDArray.sum
+- uid: NumSharp.Core.NDArray.ToJaggedArray*
+  name: ToJaggedArray
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToJaggedArray_
+  commentId: Overload:NumSharp.Core.NDArray.ToJaggedArray
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ToJaggedArray
+  nameWithType: NDArray.ToJaggedArray
+- uid: NumSharp.Core.NDArray.ToJaggedArray``1
+  name: ToJaggedArray<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToJaggedArray__1
+  commentId: M:NumSharp.Core.NDArray.ToJaggedArray``1
+  name.vb: ToJaggedArray(Of T)()
+  fullName: NumSharp.Core.NDArray.ToJaggedArray<T>()
+  fullName.vb: NumSharp.Core.NDArray.ToJaggedArray(Of T)()
+  nameWithType: NDArray.ToJaggedArray<T>()
+  nameWithType.vb: NDArray.ToJaggedArray(Of T)()
+- uid: NumSharp.Core.NDArray.ToMuliDimArray*
+  name: ToMuliDimArray
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToMuliDimArray_
+  commentId: Overload:NumSharp.Core.NDArray.ToMuliDimArray
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ToMuliDimArray
+  nameWithType: NDArray.ToMuliDimArray
+- uid: NumSharp.Core.NDArray.ToMuliDimArray``1
+  name: ToMuliDimArray<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToMuliDimArray__1
+  commentId: M:NumSharp.Core.NDArray.ToMuliDimArray``1
+  name.vb: ToMuliDimArray(Of T)()
+  fullName: NumSharp.Core.NDArray.ToMuliDimArray<T>()
+  fullName.vb: NumSharp.Core.NDArray.ToMuliDimArray(Of T)()
+  nameWithType: NDArray.ToMuliDimArray<T>()
+  nameWithType.vb: NDArray.ToMuliDimArray(Of T)()
+- uid: NumSharp.Core.NDArray.ToString
+  name: ToString()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToString
+  commentId: M:NumSharp.Core.NDArray.ToString
+  fullName: NumSharp.Core.NDArray.ToString()
+  nameWithType: NDArray.ToString()
+- uid: NumSharp.Core.NDArray.ToString*
+  name: ToString
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToString_
+  commentId: Overload:NumSharp.Core.NDArray.ToString
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.ToString
+  nameWithType: NDArray.ToString
+- uid: NumSharp.Core.NDArray.transpose
+  name: transpose()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_transpose
+  commentId: M:NumSharp.Core.NDArray.transpose
+  fullName: NumSharp.Core.NDArray.transpose()
+  nameWithType: NDArray.transpose()
+- uid: NumSharp.Core.NDArray.transpose*
+  name: transpose
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_transpose_
+  commentId: Overload:NumSharp.Core.NDArray.transpose
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.transpose
+  nameWithType: NDArray.transpose
+- uid: NumSharp.Core.NDArray.unique*
+  name: unique
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_unique_
+  commentId: Overload:NumSharp.Core.NDArray.unique
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.unique
+  nameWithType: NDArray.unique
+- uid: NumSharp.Core.NDArray.unique``1
+  name: unique<T>()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_unique__1
+  commentId: M:NumSharp.Core.NDArray.unique``1
+  name.vb: unique(Of T)()
+  fullName: NumSharp.Core.NDArray.unique<T>()
+  fullName.vb: NumSharp.Core.NDArray.unique(Of T)()
+  nameWithType: NDArray.unique<T>()
+  nameWithType.vb: NDArray.unique(Of T)()
+- uid: NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray[])
+  name: vstack(NDArray[])
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_vstack_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray[])
+  name.vb: vstack(NDArray())
+  fullName: NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.NDArray.vstack(NumSharp.Core.NDArray())
+  nameWithType: NDArray.vstack(NDArray[])
+  nameWithType.vb: NDArray.vstack(NDArray())
+- uid: NumSharp.Core.NDArray.vstack*
+  name: vstack
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_vstack_
+  commentId: Overload:NumSharp.Core.NDArray.vstack
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.vstack
+  nameWithType: NDArray.vstack
+- uid: NumSharp.Core.NDArrayRandomExtensions
+  name: NDArrayRandomExtensions
+  href: api/NumSharp.Core.NDArrayRandomExtensions.html
+  commentId: T:NumSharp.Core.NDArrayRandomExtensions
+  fullName: NumSharp.Core.NDArrayRandomExtensions
+  nameWithType: NDArrayRandomExtensions
+- uid: NumSharp.Core.NDArrayRandomExtensions.shuffle(NumSharp.Core.NumPyRandom,NumSharp.Core.NDArray)
+  name: shuffle(NumPyRandom, NDArray)
+  href: api/NumSharp.Core.NDArrayRandomExtensions.html#NumSharp_Core_NDArrayRandomExtensions_shuffle_NumSharp_Core_NumPyRandom_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.NDArrayRandomExtensions.shuffle(NumSharp.Core.NumPyRandom,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.NDArrayRandomExtensions.shuffle(NumSharp.Core.NumPyRandom, NumSharp.Core.NDArray)
+  nameWithType: NDArrayRandomExtensions.shuffle(NumPyRandom, NDArray)
+- uid: NumSharp.Core.NDArrayRandomExtensions.shuffle*
+  name: shuffle
+  href: api/NumSharp.Core.NDArrayRandomExtensions.html#NumSharp_Core_NDArrayRandomExtensions_shuffle_
+  commentId: Overload:NumSharp.Core.NDArrayRandomExtensions.shuffle
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArrayRandomExtensions.shuffle
+  nameWithType: NDArrayRandomExtensions.shuffle
+- uid: NumSharp.Core.NDStorage
+  name: NDStorage
+  href: api/NumSharp.Core.NDStorage.html
+  commentId: T:NumSharp.Core.NDStorage
+  fullName: NumSharp.Core.NDStorage
+  nameWithType: NDStorage
+- uid: NumSharp.Core.NDStorage.#ctor
+  name: NDStorage()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ctor
+  commentId: M:NumSharp.Core.NDStorage.#ctor
+  fullName: NumSharp.Core.NDStorage.NDStorage()
+  nameWithType: NDStorage.NDStorage()
+- uid: NumSharp.Core.NDStorage.#ctor(System.Double[])
+  name: NDStorage(Double[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ctor_System_Double___
+  commentId: M:NumSharp.Core.NDStorage.#ctor(System.Double[])
+  name.vb: NDStorage(Double())
+  fullName: NumSharp.Core.NDStorage.NDStorage(System.Double[])
+  fullName.vb: NumSharp.Core.NDStorage.NDStorage(System.Double())
+  nameWithType: NDStorage.NDStorage(Double[])
+  nameWithType.vb: NDStorage.NDStorage(Double())
+- uid: NumSharp.Core.NDStorage.#ctor(System.Object[])
+  name: NDStorage(Object[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ctor_System_Object___
+  commentId: M:NumSharp.Core.NDStorage.#ctor(System.Object[])
+  name.vb: NDStorage(Object())
+  fullName: NumSharp.Core.NDStorage.NDStorage(System.Object[])
+  fullName.vb: NumSharp.Core.NDStorage.NDStorage(System.Object())
+  nameWithType: NDStorage.NDStorage(Object[])
+  nameWithType.vb: NDStorage.NDStorage(Object())
+- uid: NumSharp.Core.NDStorage.#ctor(System.Type)
+  name: NDStorage(Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ctor_System_Type_
+  commentId: M:NumSharp.Core.NDStorage.#ctor(System.Type)
+  fullName: NumSharp.Core.NDStorage.NDStorage(System.Type)
+  nameWithType: NDStorage.NDStorage(Type)
+- uid: NumSharp.Core.NDStorage.#ctor*
+  name: NDStorage
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ctor_
+  commentId: Overload:NumSharp.Core.NDStorage.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.NDStorage
+  nameWithType: NDStorage.NDStorage
+- uid: NumSharp.Core.NDStorage._ChangeColumnToRowLayout
+  name: _ChangeColumnToRowLayout()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeColumnToRowLayout
+  commentId: M:NumSharp.Core.NDStorage._ChangeColumnToRowLayout
+  fullName: NumSharp.Core.NDStorage._ChangeColumnToRowLayout()
+  nameWithType: NDStorage._ChangeColumnToRowLayout()
+- uid: NumSharp.Core.NDStorage._ChangeColumnToRowLayout*
+  name: _ChangeColumnToRowLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeColumnToRowLayout_
+  commentId: Overload:NumSharp.Core.NDStorage._ChangeColumnToRowLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage._ChangeColumnToRowLayout
+  nameWithType: NDStorage._ChangeColumnToRowLayout
+- uid: NumSharp.Core.NDStorage._ChangeRowToColumnLayout
+  name: _ChangeRowToColumnLayout()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeRowToColumnLayout
+  commentId: M:NumSharp.Core.NDStorage._ChangeRowToColumnLayout
+  fullName: NumSharp.Core.NDStorage._ChangeRowToColumnLayout()
+  nameWithType: NDStorage._ChangeRowToColumnLayout()
+- uid: NumSharp.Core.NDStorage._ChangeRowToColumnLayout*
+  name: _ChangeRowToColumnLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeRowToColumnLayout_
+  commentId: Overload:NumSharp.Core.NDStorage._ChangeRowToColumnLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage._ChangeRowToColumnLayout
+  nameWithType: NDStorage._ChangeRowToColumnLayout
+- uid: NumSharp.Core.NDStorage._ChangeTypeOfArray(System.Array,System.Type)
+  name: _ChangeTypeOfArray(Array, Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeTypeOfArray_System_Array_System_Type_
+  commentId: M:NumSharp.Core.NDStorage._ChangeTypeOfArray(System.Array,System.Type)
+  fullName: NumSharp.Core.NDStorage._ChangeTypeOfArray(System.Array, System.Type)
+  nameWithType: NDStorage._ChangeTypeOfArray(Array, Type)
+- uid: NumSharp.Core.NDStorage._ChangeTypeOfArray*
+  name: _ChangeTypeOfArray
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__ChangeTypeOfArray_
+  commentId: Overload:NumSharp.Core.NDStorage._ChangeTypeOfArray
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage._ChangeTypeOfArray
+  nameWithType: NDStorage._ChangeTypeOfArray
+- uid: NumSharp.Core.NDStorage._DType
+  name: _DType
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__DType
+  commentId: F:NumSharp.Core.NDStorage._DType
+  fullName: NumSharp.Core.NDStorage._DType
+  nameWithType: NDStorage._DType
+- uid: NumSharp.Core.NDStorage._Shape
+  name: _Shape
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__Shape
+  commentId: F:NumSharp.Core.NDStorage._Shape
+  fullName: NumSharp.Core.NDStorage._Shape
+  nameWithType: NDStorage._Shape
+- uid: NumSharp.Core.NDStorage._TensorLayout
+  name: _TensorLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__TensorLayout
+  commentId: F:NumSharp.Core.NDStorage._TensorLayout
+  fullName: NumSharp.Core.NDStorage._TensorLayout
+  nameWithType: NDStorage._TensorLayout
+- uid: NumSharp.Core.NDStorage._values
+  name: _values
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage__values
+  commentId: F:NumSharp.Core.NDStorage._values
+  fullName: NumSharp.Core.NDStorage._values
+  nameWithType: NDStorage._values
+- uid: NumSharp.Core.NDStorage.Allocate(System.Array,System.Int32)
+  name: Allocate(Array, Int32)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Allocate_System_Array_System_Int32_
+  commentId: M:NumSharp.Core.NDStorage.Allocate(System.Array,System.Int32)
+  fullName: NumSharp.Core.NDStorage.Allocate(System.Array, System.Int32)
+  nameWithType: NDStorage.Allocate(Array, Int32)
+- uid: NumSharp.Core.NDStorage.Allocate(System.Type,NumSharp.Core.Interfaces.IShape,System.Int32)
+  name: Allocate(Type, IShape, Int32)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Allocate_System_Type_NumSharp_Core_Interfaces_IShape_System_Int32_
+  commentId: M:NumSharp.Core.NDStorage.Allocate(System.Type,NumSharp.Core.Interfaces.IShape,System.Int32)
+  fullName: NumSharp.Core.NDStorage.Allocate(System.Type, NumSharp.Core.Interfaces.IShape, System.Int32)
+  nameWithType: NDStorage.Allocate(Type, IShape, Int32)
+- uid: NumSharp.Core.NDStorage.Allocate*
+  name: Allocate
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Allocate_
+  commentId: Overload:NumSharp.Core.NDStorage.Allocate
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.Allocate
+  nameWithType: NDStorage.Allocate
+- uid: NumSharp.Core.NDStorage.ChangeDataType(System.Type)
+  name: ChangeDataType(Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_ChangeDataType_System_Type_
+  commentId: M:NumSharp.Core.NDStorage.ChangeDataType(System.Type)
+  fullName: NumSharp.Core.NDStorage.ChangeDataType(System.Type)
+  nameWithType: NDStorage.ChangeDataType(Type)
+- uid: NumSharp.Core.NDStorage.ChangeDataType*
+  name: ChangeDataType
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_ChangeDataType_
+  commentId: Overload:NumSharp.Core.NDStorage.ChangeDataType
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.ChangeDataType
+  nameWithType: NDStorage.ChangeDataType
+- uid: NumSharp.Core.NDStorage.ChangeTensorLayout(System.Int32)
+  name: ChangeTensorLayout(Int32)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_ChangeTensorLayout_System_Int32_
+  commentId: M:NumSharp.Core.NDStorage.ChangeTensorLayout(System.Int32)
+  fullName: NumSharp.Core.NDStorage.ChangeTensorLayout(System.Int32)
+  nameWithType: NDStorage.ChangeTensorLayout(Int32)
+- uid: NumSharp.Core.NDStorage.ChangeTensorLayout*
+  name: ChangeTensorLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_ChangeTensorLayout_
+  commentId: Overload:NumSharp.Core.NDStorage.ChangeTensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.ChangeTensorLayout
+  nameWithType: NDStorage.ChangeTensorLayout
+- uid: NumSharp.Core.NDStorage.Clone
+  name: Clone()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Clone
+  commentId: M:NumSharp.Core.NDStorage.Clone
+  fullName: NumSharp.Core.NDStorage.Clone()
+  nameWithType: NDStorage.Clone()
+- uid: NumSharp.Core.NDStorage.Clone*
+  name: Clone
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Clone_
+  commentId: Overload:NumSharp.Core.NDStorage.Clone
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.Clone
+  nameWithType: NDStorage.Clone
+- uid: NumSharp.Core.NDStorage.CloneData
+  name: CloneData()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_CloneData
+  commentId: M:NumSharp.Core.NDStorage.CloneData
+  fullName: NumSharp.Core.NDStorage.CloneData()
+  nameWithType: NDStorage.CloneData()
+- uid: NumSharp.Core.NDStorage.CloneData(System.Type)
+  name: CloneData(Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_CloneData_System_Type_
+  commentId: M:NumSharp.Core.NDStorage.CloneData(System.Type)
+  fullName: NumSharp.Core.NDStorage.CloneData(System.Type)
+  nameWithType: NDStorage.CloneData(Type)
+- uid: NumSharp.Core.NDStorage.CloneData*
+  name: CloneData
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_CloneData_
+  commentId: Overload:NumSharp.Core.NDStorage.CloneData
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.CloneData
+  nameWithType: NDStorage.CloneData
+- uid: NumSharp.Core.NDStorage.CloneData``1
+  name: CloneData<T>()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_CloneData__1
+  commentId: M:NumSharp.Core.NDStorage.CloneData``1
+  name.vb: CloneData(Of T)()
+  fullName: NumSharp.Core.NDStorage.CloneData<T>()
+  fullName.vb: NumSharp.Core.NDStorage.CloneData(Of T)()
+  nameWithType: NDStorage.CloneData<T>()
+  nameWithType.vb: NDStorage.CloneData(Of T)()
+- uid: NumSharp.Core.NDStorage.DType
+  name: DType
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_DType
+  commentId: P:NumSharp.Core.NDStorage.DType
+  fullName: NumSharp.Core.NDStorage.DType
+  nameWithType: NDStorage.DType
+- uid: NumSharp.Core.NDStorage.DType*
+  name: DType
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_DType_
+  commentId: Overload:NumSharp.Core.NDStorage.DType
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.DType
+  nameWithType: NDStorage.DType
+- uid: NumSharp.Core.NDStorage.GetColumWiseStorage
+  name: GetColumWiseStorage()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetColumWiseStorage
+  commentId: M:NumSharp.Core.NDStorage.GetColumWiseStorage
+  fullName: NumSharp.Core.NDStorage.GetColumWiseStorage()
+  nameWithType: NDStorage.GetColumWiseStorage()
+- uid: NumSharp.Core.NDStorage.GetColumWiseStorage*
+  name: GetColumWiseStorage
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetColumWiseStorage_
+  commentId: Overload:NumSharp.Core.NDStorage.GetColumWiseStorage
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.GetColumWiseStorage
+  nameWithType: NDStorage.GetColumWiseStorage
+- uid: NumSharp.Core.NDStorage.GetData
+  name: GetData()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData
+  commentId: M:NumSharp.Core.NDStorage.GetData
+  fullName: NumSharp.Core.NDStorage.GetData()
+  nameWithType: NDStorage.GetData()
+- uid: NumSharp.Core.NDStorage.GetData(System.Int32[])
+  name: GetData(Int32[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData_System_Int32___
+  commentId: M:NumSharp.Core.NDStorage.GetData(System.Int32[])
+  name.vb: GetData(Int32())
+  fullName: NumSharp.Core.NDStorage.GetData(System.Int32[])
+  fullName.vb: NumSharp.Core.NDStorage.GetData(System.Int32())
+  nameWithType: NDStorage.GetData(Int32[])
+  nameWithType.vb: NDStorage.GetData(Int32())
+- uid: NumSharp.Core.NDStorage.GetData(System.Type)
+  name: GetData(Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData_System_Type_
+  commentId: M:NumSharp.Core.NDStorage.GetData(System.Type)
+  fullName: NumSharp.Core.NDStorage.GetData(System.Type)
+  nameWithType: NDStorage.GetData(Type)
+- uid: NumSharp.Core.NDStorage.GetData*
+  name: GetData
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData_
+  commentId: Overload:NumSharp.Core.NDStorage.GetData
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.GetData
+  nameWithType: NDStorage.GetData
+- uid: NumSharp.Core.NDStorage.GetData``1
+  name: GetData<T>()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData__1
+  commentId: M:NumSharp.Core.NDStorage.GetData``1
+  name.vb: GetData(Of T)()
+  fullName: NumSharp.Core.NDStorage.GetData<T>()
+  fullName.vb: NumSharp.Core.NDStorage.GetData(Of T)()
+  nameWithType: NDStorage.GetData<T>()
+  nameWithType.vb: NDStorage.GetData(Of T)()
+- uid: NumSharp.Core.NDStorage.GetData``1(System.Int32[])
+  name: GetData<T>(Int32[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetData__1_System_Int32___
+  commentId: M:NumSharp.Core.NDStorage.GetData``1(System.Int32[])
+  name.vb: GetData(Of T)(Int32())
+  fullName: NumSharp.Core.NDStorage.GetData<T>(System.Int32[])
+  fullName.vb: NumSharp.Core.NDStorage.GetData(Of T)(System.Int32())
+  nameWithType: NDStorage.GetData<T>(Int32[])
+  nameWithType.vb: NDStorage.GetData(Of T)(Int32())
+- uid: NumSharp.Core.NDStorage.GetRowWiseStorage
+  name: GetRowWiseStorage()
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetRowWiseStorage
+  commentId: M:NumSharp.Core.NDStorage.GetRowWiseStorage
+  fullName: NumSharp.Core.NDStorage.GetRowWiseStorage()
+  nameWithType: NDStorage.GetRowWiseStorage()
+- uid: NumSharp.Core.NDStorage.GetRowWiseStorage*
+  name: GetRowWiseStorage
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_GetRowWiseStorage_
+  commentId: Overload:NumSharp.Core.NDStorage.GetRowWiseStorage
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.GetRowWiseStorage
+  nameWithType: NDStorage.GetRowWiseStorage
+- uid: NumSharp.Core.NDStorage.Reshape(System.Int32[])
+  name: Reshape(Int32[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Reshape_System_Int32___
+  commentId: M:NumSharp.Core.NDStorage.Reshape(System.Int32[])
+  name.vb: Reshape(Int32())
+  fullName: NumSharp.Core.NDStorage.Reshape(System.Int32[])
+  fullName.vb: NumSharp.Core.NDStorage.Reshape(System.Int32())
+  nameWithType: NDStorage.Reshape(Int32[])
+  nameWithType.vb: NDStorage.Reshape(Int32())
+- uid: NumSharp.Core.NDStorage.Reshape*
+  name: Reshape
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Reshape_
+  commentId: Overload:NumSharp.Core.NDStorage.Reshape
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.Reshape
+  nameWithType: NDStorage.Reshape
+- uid: NumSharp.Core.NDStorage.SetData(System.Array)
+  name: SetData(Array)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_SetData_System_Array_
+  commentId: M:NumSharp.Core.NDStorage.SetData(System.Array)
+  fullName: NumSharp.Core.NDStorage.SetData(System.Array)
+  nameWithType: NDStorage.SetData(Array)
+- uid: NumSharp.Core.NDStorage.SetData(System.Array,System.Type)
+  name: SetData(Array, Type)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_SetData_System_Array_System_Type_
+  commentId: M:NumSharp.Core.NDStorage.SetData(System.Array,System.Type)
+  fullName: NumSharp.Core.NDStorage.SetData(System.Array, System.Type)
+  nameWithType: NDStorage.SetData(Array, Type)
+- uid: NumSharp.Core.NDStorage.SetData(System.Object,System.Int32[])
+  name: SetData(Object, Int32[])
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_SetData_System_Object_System_Int32___
+  commentId: M:NumSharp.Core.NDStorage.SetData(System.Object,System.Int32[])
+  name.vb: SetData(Object, Int32())
+  fullName: NumSharp.Core.NDStorage.SetData(System.Object, System.Int32[])
+  fullName.vb: NumSharp.Core.NDStorage.SetData(System.Object, System.Int32())
+  nameWithType: NDStorage.SetData(Object, Int32[])
+  nameWithType.vb: NDStorage.SetData(Object, Int32())
+- uid: NumSharp.Core.NDStorage.SetData*
+  name: SetData
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_SetData_
+  commentId: Overload:NumSharp.Core.NDStorage.SetData
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.SetData
+  nameWithType: NDStorage.SetData
+- uid: NumSharp.Core.NDStorage.SetData``1(System.Array)
+  name: SetData<T>(Array)
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_SetData__1_System_Array_
+  commentId: M:NumSharp.Core.NDStorage.SetData``1(System.Array)
+  name.vb: SetData(Of T)(Array)
+  fullName: NumSharp.Core.NDStorage.SetData<T>(System.Array)
+  fullName.vb: NumSharp.Core.NDStorage.SetData(Of T)(System.Array)
+  nameWithType: NDStorage.SetData<T>(Array)
+  nameWithType.vb: NDStorage.SetData(Of T)(Array)
+- uid: NumSharp.Core.NDStorage.Shape
+  name: Shape
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Shape
+  commentId: P:NumSharp.Core.NDStorage.Shape
+  fullName: NumSharp.Core.NDStorage.Shape
+  nameWithType: NDStorage.Shape
+- uid: NumSharp.Core.NDStorage.Shape*
+  name: Shape
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_Shape_
+  commentId: Overload:NumSharp.Core.NDStorage.Shape
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.Shape
+  nameWithType: NDStorage.Shape
+- uid: NumSharp.Core.NDStorage.TensorLayout
+  name: TensorLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_TensorLayout
+  commentId: P:NumSharp.Core.NDStorage.TensorLayout
+  fullName: NumSharp.Core.NDStorage.TensorLayout
+  nameWithType: NDStorage.TensorLayout
+- uid: NumSharp.Core.NDStorage.TensorLayout*
+  name: TensorLayout
+  href: api/NumSharp.Core.NDStorage.html#NumSharp_Core_NDStorage_TensorLayout_
+  commentId: Overload:NumSharp.Core.NDStorage.TensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.NDStorage.TensorLayout
+  nameWithType: NDStorage.TensorLayout
+- uid: NumSharp.Core.np
+  name: np
+  href: api/NumSharp.Core.np.html
+  commentId: T:NumSharp.Core.np
+  fullName: NumSharp.Core.np
+  nameWithType: np
+- uid: NumSharp.Core.np.amax(NumSharp.Core.NDArray,System.Nullable{System.Int32})
+  name: amax(NDArray, Nullable<Int32>)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_amax_NumSharp_Core_NDArray_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.np.amax(NumSharp.Core.NDArray,System.Nullable{System.Int32})
+  name.vb: amax(NDArray, Nullable(Of Int32))
+  fullName: NumSharp.Core.np.amax(NumSharp.Core.NDArray, System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.np.amax(NumSharp.Core.NDArray, System.Nullable(Of System.Int32))
+  nameWithType: np.amax(NDArray, Nullable<Int32>)
+  nameWithType.vb: np.amax(NDArray, Nullable(Of Int32))
+- uid: NumSharp.Core.np.amax*
+  name: amax
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_amax_
+  commentId: Overload:NumSharp.Core.np.amax
+  isSpec: "True"
+  fullName: NumSharp.Core.np.amax
+  nameWithType: np.amax
+- uid: NumSharp.Core.np.amin(NumSharp.Core.NDArray,System.Nullable{System.Int32})
+  name: amin(NDArray, Nullable<Int32>)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_amin_NumSharp_Core_NDArray_System_Nullable_System_Int32__
+  commentId: M:NumSharp.Core.np.amin(NumSharp.Core.NDArray,System.Nullable{System.Int32})
+  name.vb: amin(NDArray, Nullable(Of Int32))
+  fullName: NumSharp.Core.np.amin(NumSharp.Core.NDArray, System.Nullable<System.Int32>)
+  fullName.vb: NumSharp.Core.np.amin(NumSharp.Core.NDArray, System.Nullable(Of System.Int32))
+  nameWithType: np.amin(NDArray, Nullable<Int32>)
+  nameWithType.vb: np.amin(NDArray, Nullable(Of Int32))
+- uid: NumSharp.Core.np.amin*
+  name: amin
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_amin_
+  commentId: Overload:NumSharp.Core.np.amin
+  isSpec: "True"
+  fullName: NumSharp.Core.np.amin
+  nameWithType: np.amin
+- uid: NumSharp.Core.np.arange(System.Double)
+  name: arange(Double)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_arange_System_Double_
+  commentId: M:NumSharp.Core.np.arange(System.Double)
+  fullName: NumSharp.Core.np.arange(System.Double)
+  nameWithType: np.arange(Double)
+- uid: NumSharp.Core.np.arange(System.Double,System.Double,System.Double)
+  name: arange(Double, Double, Double)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_arange_System_Double_System_Double_System_Double_
+  commentId: M:NumSharp.Core.np.arange(System.Double,System.Double,System.Double)
+  fullName: NumSharp.Core.np.arange(System.Double, System.Double, System.Double)
+  nameWithType: np.arange(Double, Double, Double)
+- uid: NumSharp.Core.np.arange(System.Int32)
+  name: arange(Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_arange_System_Int32_
+  commentId: M:NumSharp.Core.np.arange(System.Int32)
+  fullName: NumSharp.Core.np.arange(System.Int32)
+  nameWithType: np.arange(Int32)
+- uid: NumSharp.Core.np.arange(System.Int32,System.Int32,System.Int32)
+  name: arange(Int32, Int32, Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_arange_System_Int32_System_Int32_System_Int32_
+  commentId: M:NumSharp.Core.np.arange(System.Int32,System.Int32,System.Int32)
+  fullName: NumSharp.Core.np.arange(System.Int32, System.Int32, System.Int32)
+  nameWithType: np.arange(Int32, Int32, Int32)
+- uid: NumSharp.Core.np.arange*
+  name: arange
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_arange_
+  commentId: Overload:NumSharp.Core.np.arange
+  isSpec: "True"
+  fullName: NumSharp.Core.np.arange
+  nameWithType: np.arange
+- uid: NumSharp.Core.np.array(System.Array,System.Type,System.Int32)
+  name: array(Array, Type, Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_array_System_Array_System_Type_System_Int32_
+  commentId: M:NumSharp.Core.np.array(System.Array,System.Type,System.Int32)
+  fullName: NumSharp.Core.np.array(System.Array, System.Type, System.Int32)
+  nameWithType: np.array(Array, Type, Int32)
+- uid: NumSharp.Core.np.array(System.Drawing.Bitmap)
+  name: array(Bitmap)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_array_System_Drawing_Bitmap_
+  commentId: M:NumSharp.Core.np.array(System.Drawing.Bitmap)
+  fullName: NumSharp.Core.np.array(System.Drawing.Bitmap)
+  nameWithType: np.array(Bitmap)
+- uid: NumSharp.Core.np.array*
+  name: array
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_array_
+  commentId: Overload:NumSharp.Core.np.array
+  isSpec: "True"
+  fullName: NumSharp.Core.np.array
+  nameWithType: np.array
+- uid: NumSharp.Core.np.array``1(``0[][])
+  name: array<T>(T[][])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_array__1___0_____
+  commentId: M:NumSharp.Core.np.array``1(``0[][])
+  name.vb: array(Of T)(T()())
+  fullName: NumSharp.Core.np.array<T>(T[][])
+  fullName.vb: NumSharp.Core.np.array(Of T)(T()())
+  nameWithType: np.array<T>(T[][])
+  nameWithType.vb: np.array(Of T)(T()())
+- uid: NumSharp.Core.np.asarray(System.Double[],System.Int32)
+  name: asarray(Double[], Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asarray_System_Double___System_Int32_
+  commentId: M:NumSharp.Core.np.asarray(System.Double[],System.Int32)
+  name.vb: asarray(Double(), Int32)
+  fullName: NumSharp.Core.np.asarray(System.Double[], System.Int32)
+  fullName.vb: NumSharp.Core.np.asarray(System.Double(), System.Int32)
+  nameWithType: np.asarray(Double[], Int32)
+  nameWithType.vb: np.asarray(Double(), Int32)
+- uid: NumSharp.Core.np.asarray(System.Single)
+  name: asarray(Single)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asarray_System_Single_
+  commentId: M:NumSharp.Core.np.asarray(System.Single)
+  fullName: NumSharp.Core.np.asarray(System.Single)
+  nameWithType: np.asarray(Single)
+- uid: NumSharp.Core.np.asarray(System.Single[],System.Int32)
+  name: asarray(Single[], Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asarray_System_Single___System_Int32_
+  commentId: M:NumSharp.Core.np.asarray(System.Single[],System.Int32)
+  name.vb: asarray(Single(), Int32)
+  fullName: NumSharp.Core.np.asarray(System.Single[], System.Int32)
+  fullName.vb: NumSharp.Core.np.asarray(System.Single(), System.Int32)
+  nameWithType: np.asarray(Single[], Int32)
+  nameWithType.vb: np.asarray(Single(), Int32)
+- uid: NumSharp.Core.np.asarray*
+  name: asarray
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asarray_
+  commentId: Overload:NumSharp.Core.np.asarray
+  isSpec: "True"
+  fullName: NumSharp.Core.np.asarray
+  nameWithType: np.asarray
+- uid: NumSharp.Core.np.asmatrix(NumSharp.Core.NDArray)
+  name: asmatrix(NDArray)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asmatrix_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.np.asmatrix(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.np.asmatrix(NumSharp.Core.NDArray)
+  nameWithType: np.asmatrix(NDArray)
+- uid: NumSharp.Core.np.asmatrix*
+  name: asmatrix
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_asmatrix_
+  commentId: Overload:NumSharp.Core.np.asmatrix
+  isSpec: "True"
+  fullName: NumSharp.Core.np.asmatrix
+  nameWithType: np.asmatrix
+- uid: NumSharp.Core.np.chars
+  name: chars
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_chars
+  commentId: P:NumSharp.Core.np.chars
+  fullName: NumSharp.Core.np.chars
+  nameWithType: np.chars
+- uid: NumSharp.Core.np.chars*
+  name: chars
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_chars_
+  commentId: Overload:NumSharp.Core.np.chars
+  isSpec: "True"
+  fullName: NumSharp.Core.np.chars
+  nameWithType: np.chars
+- uid: NumSharp.Core.np.dot(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  name: dot(NDArray, NDArray)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_dot_NumSharp_Core_NDArray_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.np.dot(NumSharp.Core.NDArray,NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.np.dot(NumSharp.Core.NDArray, NumSharp.Core.NDArray)
+  nameWithType: np.dot(NDArray, NDArray)
+- uid: NumSharp.Core.np.dot*
+  name: dot
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_dot_
+  commentId: Overload:NumSharp.Core.np.dot
+  isSpec: "True"
+  fullName: NumSharp.Core.np.dot
+  nameWithType: np.dot
+- uid: NumSharp.Core.np.float32
+  name: float32
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_float32
+  commentId: P:NumSharp.Core.np.float32
+  fullName: NumSharp.Core.np.float32
+  nameWithType: np.float32
+- uid: NumSharp.Core.np.float32*
+  name: float32
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_float32_
+  commentId: Overload:NumSharp.Core.np.float32
+  isSpec: "True"
+  fullName: NumSharp.Core.np.float32
+  nameWithType: np.float32
+- uid: NumSharp.Core.np.float64
+  name: float64
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_float64
+  commentId: P:NumSharp.Core.np.float64
+  fullName: NumSharp.Core.np.float64
+  nameWithType: np.float64
+- uid: NumSharp.Core.np.float64*
+  name: float64
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_float64_
+  commentId: Overload:NumSharp.Core.np.float64
+  isSpec: "True"
+  fullName: NumSharp.Core.np.float64
+  nameWithType: np.float64
+- uid: NumSharp.Core.np.hstack(NumSharp.Core.NDArray[])
+  name: hstack(NDArray[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_hstack_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.np.hstack(NumSharp.Core.NDArray[])
+  name.vb: hstack(NDArray())
+  fullName: NumSharp.Core.np.hstack(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.np.hstack(NumSharp.Core.NDArray())
+  nameWithType: np.hstack(NDArray[])
+  nameWithType.vb: np.hstack(NDArray())
+- uid: NumSharp.Core.np.hstack*
+  name: hstack
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_hstack_
+  commentId: Overload:NumSharp.Core.np.hstack
+  isSpec: "True"
+  fullName: NumSharp.Core.np.hstack
+  nameWithType: np.hstack
+- uid: NumSharp.Core.np.int16
+  name: int16
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int16
+  commentId: P:NumSharp.Core.np.int16
+  fullName: NumSharp.Core.np.int16
+  nameWithType: np.int16
+- uid: NumSharp.Core.np.int16*
+  name: int16
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int16_
+  commentId: Overload:NumSharp.Core.np.int16
+  isSpec: "True"
+  fullName: NumSharp.Core.np.int16
+  nameWithType: np.int16
+- uid: NumSharp.Core.np.int32
+  name: int32
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int32
+  commentId: P:NumSharp.Core.np.int32
+  fullName: NumSharp.Core.np.int32
+  nameWithType: np.int32
+- uid: NumSharp.Core.np.int32*
+  name: int32
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int32_
+  commentId: Overload:NumSharp.Core.np.int32
+  isSpec: "True"
+  fullName: NumSharp.Core.np.int32
+  nameWithType: np.int32
+- uid: NumSharp.Core.np.int64
+  name: int64
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int64
+  commentId: P:NumSharp.Core.np.int64
+  fullName: NumSharp.Core.np.int64
+  nameWithType: np.int64
+- uid: NumSharp.Core.np.int64*
+  name: int64
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_int64_
+  commentId: Overload:NumSharp.Core.np.int64
+  isSpec: "True"
+  fullName: NumSharp.Core.np.int64
+  nameWithType: np.int64
+- uid: NumSharp.Core.np.linspace(System.Double,System.Double,System.Int32,System.Boolean,System.Type)
+  name: linspace(Double, Double, Int32, Boolean, Type)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_linspace_System_Double_System_Double_System_Int32_System_Boolean_System_Type_
+  commentId: M:NumSharp.Core.np.linspace(System.Double,System.Double,System.Int32,System.Boolean,System.Type)
+  fullName: NumSharp.Core.np.linspace(System.Double, System.Double, System.Int32, System.Boolean, System.Type)
+  nameWithType: np.linspace(Double, Double, Int32, Boolean, Type)
+- uid: NumSharp.Core.np.linspace*
+  name: linspace
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_linspace_
+  commentId: Overload:NumSharp.Core.np.linspace
+  isSpec: "True"
+  fullName: NumSharp.Core.np.linspace
+  nameWithType: np.linspace
+- uid: NumSharp.Core.np.linspace``1(System.Double,System.Double,System.Int32,System.Boolean)
+  name: linspace<T>(Double, Double, Int32, Boolean)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_linspace__1_System_Double_System_Double_System_Int32_System_Boolean_
+  commentId: M:NumSharp.Core.np.linspace``1(System.Double,System.Double,System.Int32,System.Boolean)
+  name.vb: linspace(Of T)(Double, Double, Int32, Boolean)
+  fullName: NumSharp.Core.np.linspace<T>(System.Double, System.Double, System.Int32, System.Boolean)
+  fullName.vb: NumSharp.Core.np.linspace(Of T)(System.Double, System.Double, System.Int32, System.Boolean)
+  nameWithType: np.linspace<T>(Double, Double, Int32, Boolean)
+  nameWithType.vb: np.linspace(Of T)(Double, Double, Int32, Boolean)
+- uid: NumSharp.Core.np.log(NumSharp.Core.NDArray)
+  name: log(NDArray)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_log_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.np.log(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.np.log(NumSharp.Core.NDArray)
+  nameWithType: np.log(NDArray)
+- uid: NumSharp.Core.np.log*
+  name: log
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_log_
+  commentId: Overload:NumSharp.Core.np.log
+  isSpec: "True"
+  fullName: NumSharp.Core.np.log
+  nameWithType: np.log
+- uid: NumSharp.Core.np.mean(NumSharp.Core.NDArray,System.Int32)
+  name: mean(NDArray, Int32)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_mean_NumSharp_Core_NDArray_System_Int32_
+  commentId: M:NumSharp.Core.np.mean(NumSharp.Core.NDArray,System.Int32)
+  fullName: NumSharp.Core.np.mean(NumSharp.Core.NDArray, System.Int32)
+  nameWithType: np.mean(NDArray, Int32)
+- uid: NumSharp.Core.np.mean*
+  name: mean
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_mean_
+  commentId: Overload:NumSharp.Core.np.mean
+  isSpec: "True"
+  fullName: NumSharp.Core.np.mean
+  nameWithType: np.mean
+- uid: NumSharp.Core.np.ones(NumSharp.Core.Shape,System.Type)
+  name: ones(Shape, Type)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_NumSharp_Core_Shape_System_Type_
+  commentId: M:NumSharp.Core.np.ones(NumSharp.Core.Shape,System.Type)
+  fullName: NumSharp.Core.np.ones(NumSharp.Core.Shape, System.Type)
+  nameWithType: np.ones(Shape, Type)
+- uid: NumSharp.Core.np.ones(System.Int32[])
+  name: ones(Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_System_Int32___
+  commentId: M:NumSharp.Core.np.ones(System.Int32[])
+  name.vb: ones(Int32())
+  fullName: NumSharp.Core.np.ones(System.Int32[])
+  fullName.vb: NumSharp.Core.np.ones(System.Int32())
+  nameWithType: np.ones(Int32[])
+  nameWithType.vb: np.ones(Int32())
+- uid: NumSharp.Core.np.ones(System.Type,System.Int32[])
+  name: ones(Type, Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_System_Type_System_Int32___
+  commentId: M:NumSharp.Core.np.ones(System.Type,System.Int32[])
+  name.vb: ones(Type, Int32())
+  fullName: NumSharp.Core.np.ones(System.Type, System.Int32[])
+  fullName.vb: NumSharp.Core.np.ones(System.Type, System.Int32())
+  nameWithType: np.ones(Type, Int32[])
+  nameWithType.vb: np.ones(Type, Int32())
+- uid: NumSharp.Core.np.ones*
+  name: ones
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_
+  commentId: Overload:NumSharp.Core.np.ones
+  isSpec: "True"
+  fullName: NumSharp.Core.np.ones
+  nameWithType: np.ones
+- uid: NumSharp.Core.np.ones_like(NumSharp.Core.NDArray,System.String)
+  name: ones_like(NDArray, String)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_like_NumSharp_Core_NDArray_System_String_
+  commentId: M:NumSharp.Core.np.ones_like(NumSharp.Core.NDArray,System.String)
+  fullName: NumSharp.Core.np.ones_like(NumSharp.Core.NDArray, System.String)
+  nameWithType: np.ones_like(NDArray, String)
+- uid: NumSharp.Core.np.ones_like*
+  name: ones_like
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones_like_
+  commentId: Overload:NumSharp.Core.np.ones_like
+  isSpec: "True"
+  fullName: NumSharp.Core.np.ones_like
+  nameWithType: np.ones_like
+- uid: NumSharp.Core.np.ones``1(System.Int32[])
+  name: ones<T>(Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_ones__1_System_Int32___
+  commentId: M:NumSharp.Core.np.ones``1(System.Int32[])
+  name.vb: ones(Of T)(Int32())
+  fullName: NumSharp.Core.np.ones<T>(System.Int32[])
+  fullName.vb: NumSharp.Core.np.ones(Of T)(System.Int32())
+  nameWithType: np.ones<T>(Int32[])
+  nameWithType.vb: np.ones(Of T)(Int32())
+- uid: NumSharp.Core.np.power(NumSharp.Core.NDArray,System.ValueType)
+  name: power(NDArray, ValueType)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_power_NumSharp_Core_NDArray_System_ValueType_
+  commentId: M:NumSharp.Core.np.power(NumSharp.Core.NDArray,System.ValueType)
+  fullName: NumSharp.Core.np.power(NumSharp.Core.NDArray, System.ValueType)
+  nameWithType: np.power(NDArray, ValueType)
+- uid: NumSharp.Core.np.power*
+  name: power
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_power_
+  commentId: Overload:NumSharp.Core.np.power
+  isSpec: "True"
+  fullName: NumSharp.Core.np.power
+  nameWithType: np.power
+- uid: NumSharp.Core.np.power``1(NumSharp.Core.NDArray,``0)
+  name: power<T>(NDArray, T)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_power__1_NumSharp_Core_NDArray___0_
+  commentId: M:NumSharp.Core.np.power``1(NumSharp.Core.NDArray,``0)
+  name.vb: power(Of T)(NDArray, T)
+  fullName: NumSharp.Core.np.power<T>(NumSharp.Core.NDArray, T)
+  fullName.vb: NumSharp.Core.np.power(Of T)(NumSharp.Core.NDArray, T)
+  nameWithType: np.power<T>(NDArray, T)
+  nameWithType.vb: np.power(Of T)(NDArray, T)
+- uid: NumSharp.Core.np.reshape(NumSharp.Core.NDArray,System.Int32[])
+  name: reshape(NDArray, Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_reshape_NumSharp_Core_NDArray_System_Int32___
+  commentId: M:NumSharp.Core.np.reshape(NumSharp.Core.NDArray,System.Int32[])
+  name.vb: reshape(NDArray, Int32())
+  fullName: NumSharp.Core.np.reshape(NumSharp.Core.NDArray, System.Int32[])
+  fullName.vb: NumSharp.Core.np.reshape(NumSharp.Core.NDArray, System.Int32())
+  nameWithType: np.reshape(NDArray, Int32[])
+  nameWithType.vb: np.reshape(NDArray, Int32())
+- uid: NumSharp.Core.np.reshape*
+  name: reshape
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_reshape_
+  commentId: Overload:NumSharp.Core.np.reshape
+  isSpec: "True"
+  fullName: NumSharp.Core.np.reshape
+  nameWithType: np.reshape
+- uid: NumSharp.Core.np.sin(NumSharp.Core.NDArray)
+  name: sin(NDArray)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_sin_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.np.sin(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.np.sin(NumSharp.Core.NDArray)
+  nameWithType: np.sin(NDArray)
+- uid: NumSharp.Core.np.sin*
+  name: sin
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_sin_
+  commentId: Overload:NumSharp.Core.np.sin
+  isSpec: "True"
+  fullName: NumSharp.Core.np.sin
+  nameWithType: np.sin
+- uid: NumSharp.Core.np.transpose(NumSharp.Core.NDArray)
+  name: transpose(NDArray)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_transpose_NumSharp_Core_NDArray_
+  commentId: M:NumSharp.Core.np.transpose(NumSharp.Core.NDArray)
+  fullName: NumSharp.Core.np.transpose(NumSharp.Core.NDArray)
+  nameWithType: np.transpose(NDArray)
+- uid: NumSharp.Core.np.transpose*
+  name: transpose
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_transpose_
+  commentId: Overload:NumSharp.Core.np.transpose
+  isSpec: "True"
+  fullName: NumSharp.Core.np.transpose
+  nameWithType: np.transpose
+- uid: NumSharp.Core.np.vstack(NumSharp.Core.NDArray[])
+  name: vstack(NDArray[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_vstack_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.np.vstack(NumSharp.Core.NDArray[])
+  name.vb: vstack(NDArray())
+  fullName: NumSharp.Core.np.vstack(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.np.vstack(NumSharp.Core.NDArray())
+  nameWithType: np.vstack(NDArray[])
+  nameWithType.vb: np.vstack(NDArray())
+- uid: NumSharp.Core.np.vstack*
+  name: vstack
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_vstack_
+  commentId: Overload:NumSharp.Core.np.vstack
+  isSpec: "True"
+  fullName: NumSharp.Core.np.vstack
+  nameWithType: np.vstack
+- uid: NumSharp.Core.np.vstack``1(NumSharp.Core.NDArray[])
+  name: vstack<T>(NDArray[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_vstack__1_NumSharp_Core_NDArray___
+  commentId: M:NumSharp.Core.np.vstack``1(NumSharp.Core.NDArray[])
+  name.vb: vstack(Of T)(NDArray())
+  fullName: NumSharp.Core.np.vstack<T>(NumSharp.Core.NDArray[])
+  fullName.vb: NumSharp.Core.np.vstack(Of T)(NumSharp.Core.NDArray())
+  nameWithType: np.vstack<T>(NDArray[])
+  nameWithType.vb: np.vstack(Of T)(NDArray())
+- uid: NumSharp.Core.np.zeros(NumSharp.Core.Shape,System.Type)
+  name: zeros(Shape, Type)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_zeros_NumSharp_Core_Shape_System_Type_
+  commentId: M:NumSharp.Core.np.zeros(NumSharp.Core.Shape,System.Type)
+  fullName: NumSharp.Core.np.zeros(NumSharp.Core.Shape, System.Type)
+  nameWithType: np.zeros(Shape, Type)
+- uid: NumSharp.Core.np.zeros(System.Int32[])
+  name: zeros(Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_zeros_System_Int32___
+  commentId: M:NumSharp.Core.np.zeros(System.Int32[])
+  name.vb: zeros(Int32())
+  fullName: NumSharp.Core.np.zeros(System.Int32[])
+  fullName.vb: NumSharp.Core.np.zeros(System.Int32())
+  nameWithType: np.zeros(Int32[])
+  nameWithType.vb: np.zeros(Int32())
+- uid: NumSharp.Core.np.zeros*
+  name: zeros
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_zeros_
+  commentId: Overload:NumSharp.Core.np.zeros
+  isSpec: "True"
+  fullName: NumSharp.Core.np.zeros
+  nameWithType: np.zeros
+- uid: NumSharp.Core.np.zeros``1(System.Int32[])
+  name: zeros<T>(Int32[])
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_zeros__1_System_Int32___
+  commentId: M:NumSharp.Core.np.zeros``1(System.Int32[])
+  name.vb: zeros(Of T)(Int32())
+  fullName: NumSharp.Core.np.zeros<T>(System.Int32[])
+  fullName.vb: NumSharp.Core.np.zeros(Of T)(System.Int32())
+  nameWithType: np.zeros<T>(Int32[])
+  nameWithType.vb: np.zeros(Of T)(Int32())
+- uid: NumSharp.Core.NumPyRandom
+  name: NumPyRandom
+  href: api/NumSharp.Core.NumPyRandom.html
+  commentId: T:NumSharp.Core.NumPyRandom
+  fullName: NumSharp.Core.NumPyRandom
+  nameWithType: NumPyRandom
+- uid: NumSharp.Core.NumPyRandom.normal(System.Double,System.Double,System.Int32[])
+  name: normal(Double, Double, Int32[])
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_normal_System_Double_System_Double_System_Int32___
+  commentId: M:NumSharp.Core.NumPyRandom.normal(System.Double,System.Double,System.Int32[])
+  name.vb: normal(Double, Double, Int32())
+  fullName: NumSharp.Core.NumPyRandom.normal(System.Double, System.Double, System.Int32[])
+  fullName.vb: NumSharp.Core.NumPyRandom.normal(System.Double, System.Double, System.Int32())
+  nameWithType: NumPyRandom.normal(Double, Double, Int32[])
+  nameWithType.vb: NumPyRandom.normal(Double, Double, Int32())
+- uid: NumSharp.Core.NumPyRandom.normal*
+  name: normal
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_normal_
+  commentId: Overload:NumSharp.Core.NumPyRandom.normal
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.normal
+  nameWithType: NumPyRandom.normal
+- uid: NumSharp.Core.NumPyRandom.permutation(System.Int32)
+  name: permutation(Int32)
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_permutation_System_Int32_
+  commentId: M:NumSharp.Core.NumPyRandom.permutation(System.Int32)
+  fullName: NumSharp.Core.NumPyRandom.permutation(System.Int32)
+  nameWithType: NumPyRandom.permutation(Int32)
+- uid: NumSharp.Core.NumPyRandom.Permutation(System.Int32)
+  name: Permutation(Int32)
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_Permutation_System_Int32_
+  commentId: M:NumSharp.Core.NumPyRandom.Permutation(System.Int32)
+  fullName: NumSharp.Core.NumPyRandom.Permutation(System.Int32)
+  nameWithType: NumPyRandom.Permutation(Int32)
+- uid: NumSharp.Core.NumPyRandom.permutation*
+  name: permutation
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_permutation_
+  commentId: Overload:NumSharp.Core.NumPyRandom.permutation
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.permutation
+  nameWithType: NumPyRandom.permutation
+- uid: NumSharp.Core.NumPyRandom.Permutation*
+  name: Permutation
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_Permutation_
+  commentId: Overload:NumSharp.Core.NumPyRandom.Permutation
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.Permutation
+  nameWithType: NumPyRandom.Permutation
+- uid: NumSharp.Core.NumPyRandom.randint(System.Int32,System.Int32)
+  name: randint(Int32, Int32)
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_randint_System_Int32_System_Int32_
+  commentId: M:NumSharp.Core.NumPyRandom.randint(System.Int32,System.Int32)
+  fullName: NumSharp.Core.NumPyRandom.randint(System.Int32, System.Int32)
+  nameWithType: NumPyRandom.randint(Int32, Int32)
+- uid: NumSharp.Core.NumPyRandom.randint(System.Int32,System.Nullable{System.Int32},NumSharp.Core.Shape)
+  name: randint(Int32, Nullable<Int32>, Shape)
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_randint_System_Int32_System_Nullable_System_Int32__NumSharp_Core_Shape_
+  commentId: M:NumSharp.Core.NumPyRandom.randint(System.Int32,System.Nullable{System.Int32},NumSharp.Core.Shape)
+  name.vb: randint(Int32, Nullable(Of Int32), Shape)
+  fullName: NumSharp.Core.NumPyRandom.randint(System.Int32, System.Nullable<System.Int32>, NumSharp.Core.Shape)
+  fullName.vb: NumSharp.Core.NumPyRandom.randint(System.Int32, System.Nullable(Of System.Int32), NumSharp.Core.Shape)
+  nameWithType: NumPyRandom.randint(Int32, Nullable<Int32>, Shape)
+  nameWithType.vb: NumPyRandom.randint(Int32, Nullable(Of Int32), Shape)
+- uid: NumSharp.Core.NumPyRandom.randint*
+  name: randint
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_randint_
+  commentId: Overload:NumSharp.Core.NumPyRandom.randint
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.randint
+  nameWithType: NumPyRandom.randint
+- uid: NumSharp.Core.NumPyRandom.randn(System.Int32[])
+  name: randn(Int32[])
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_randn_System_Int32___
+  commentId: M:NumSharp.Core.NumPyRandom.randn(System.Int32[])
+  name.vb: randn(Int32())
+  fullName: NumSharp.Core.NumPyRandom.randn(System.Int32[])
+  fullName.vb: NumSharp.Core.NumPyRandom.randn(System.Int32())
+  nameWithType: NumPyRandom.randn(Int32[])
+  nameWithType.vb: NumPyRandom.randn(Int32())
+- uid: NumSharp.Core.NumPyRandom.randn*
+  name: randn
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_randn_
+  commentId: Overload:NumSharp.Core.NumPyRandom.randn
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.randn
+  nameWithType: NumPyRandom.randn
+- uid: NumSharp.Core.NumPyRandom.Seed
+  name: Seed
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_Seed
+  commentId: P:NumSharp.Core.NumPyRandom.Seed
+  fullName: NumSharp.Core.NumPyRandom.Seed
+  nameWithType: NumPyRandom.Seed
+- uid: NumSharp.Core.NumPyRandom.Seed*
+  name: Seed
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_Seed_
+  commentId: Overload:NumSharp.Core.NumPyRandom.Seed
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.Seed
+  nameWithType: NumPyRandom.Seed
+- uid: NumSharp.Core.NumPyRandom.stardard_normal(System.Int32[])
+  name: stardard_normal(Int32[])
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_stardard_normal_System_Int32___
+  commentId: M:NumSharp.Core.NumPyRandom.stardard_normal(System.Int32[])
+  name.vb: stardard_normal(Int32())
+  fullName: NumSharp.Core.NumPyRandom.stardard_normal(System.Int32[])
+  fullName.vb: NumSharp.Core.NumPyRandom.stardard_normal(System.Int32())
+  nameWithType: NumPyRandom.stardard_normal(Int32[])
+  nameWithType.vb: NumPyRandom.stardard_normal(Int32())
+- uid: NumSharp.Core.NumPyRandom.stardard_normal*
+  name: stardard_normal
+  href: api/NumSharp.Core.NumPyRandom.html#NumSharp_Core_NumPyRandom_stardard_normal_
+  commentId: Overload:NumSharp.Core.NumPyRandom.stardard_normal
+  isSpec: "True"
+  fullName: NumSharp.Core.NumPyRandom.stardard_normal
+  nameWithType: NumPyRandom.stardard_normal
+- uid: NumSharp.Core.Shape
+  name: Shape
+  href: api/NumSharp.Core.Shape.html
+  commentId: T:NumSharp.Core.Shape
+  fullName: NumSharp.Core.Shape
+  nameWithType: Shape
+- uid: NumSharp.Core.Shape.#ctor(System.Collections.Generic.IEnumerable{System.Int32})
+  name: Shape(IEnumerable<Int32>)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__ctor_System_Collections_Generic_IEnumerable_System_Int32__
+  commentId: M:NumSharp.Core.Shape.#ctor(System.Collections.Generic.IEnumerable{System.Int32})
+  name.vb: Shape(IEnumerable(Of Int32))
+  fullName: NumSharp.Core.Shape.Shape(System.Collections.Generic.IEnumerable<System.Int32>)
+  fullName.vb: NumSharp.Core.Shape.Shape(System.Collections.Generic.IEnumerable(Of System.Int32))
+  nameWithType: Shape.Shape(IEnumerable<Int32>)
+  nameWithType.vb: Shape.Shape(IEnumerable(Of Int32))
+- uid: NumSharp.Core.Shape.#ctor(System.Int32[])
+  name: Shape(Int32[])
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__ctor_System_Int32___
+  commentId: M:NumSharp.Core.Shape.#ctor(System.Int32[])
+  name.vb: Shape(Int32())
+  fullName: NumSharp.Core.Shape.Shape(System.Int32[])
+  fullName.vb: NumSharp.Core.Shape.Shape(System.Int32())
+  nameWithType: Shape.Shape(Int32[])
+  nameWithType.vb: Shape.Shape(Int32())
+- uid: NumSharp.Core.Shape.#ctor*
+  name: Shape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__ctor_
+  commentId: Overload:NumSharp.Core.Shape.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Shape
+  nameWithType: Shape.Shape
+- uid: NumSharp.Core.Shape._Dimensions
+  name: _Dimensions
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__Dimensions
+  commentId: F:NumSharp.Core.Shape._Dimensions
+  fullName: NumSharp.Core.Shape._Dimensions
+  nameWithType: Shape._Dimensions
+- uid: NumSharp.Core.Shape._DimOffset
+  name: _DimOffset
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__DimOffset
+  commentId: F:NumSharp.Core.Shape._DimOffset
+  fullName: NumSharp.Core.Shape._DimOffset
+  nameWithType: Shape._DimOffset
+- uid: NumSharp.Core.Shape._SetDimOffset
+  name: _SetDimOffset()
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__SetDimOffset
+  commentId: M:NumSharp.Core.Shape._SetDimOffset
+  fullName: NumSharp.Core.Shape._SetDimOffset()
+  nameWithType: Shape._SetDimOffset()
+- uid: NumSharp.Core.Shape._SetDimOffset*
+  name: _SetDimOffset
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__SetDimOffset_
+  commentId: Overload:NumSharp.Core.Shape._SetDimOffset
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape._SetDimOffset
+  nameWithType: Shape._SetDimOffset
+- uid: NumSharp.Core.Shape._size
+  name: _size
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__size
+  commentId: F:NumSharp.Core.Shape._size
+  fullName: NumSharp.Core.Shape._size
+  nameWithType: Shape._size
+- uid: NumSharp.Core.Shape._TensorLayout
+  name: _TensorLayout
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape__TensorLayout
+  commentId: F:NumSharp.Core.Shape._TensorLayout
+  fullName: NumSharp.Core.Shape._TensorLayout
+  nameWithType: Shape._TensorLayout
+- uid: NumSharp.Core.Shape.BiShape
+  name: BiShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_BiShape
+  commentId: P:NumSharp.Core.Shape.BiShape
+  fullName: NumSharp.Core.Shape.BiShape
+  nameWithType: Shape.BiShape
+- uid: NumSharp.Core.Shape.BiShape*
+  name: BiShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_BiShape_
+  commentId: Overload:NumSharp.Core.Shape.BiShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.BiShape
+  nameWithType: Shape.BiShape
+- uid: NumSharp.Core.Shape.ChangeTensorLayout(System.Int32)
+  name: ChangeTensorLayout(Int32)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_ChangeTensorLayout_System_Int32_
+  commentId: M:NumSharp.Core.Shape.ChangeTensorLayout(System.Int32)
+  fullName: NumSharp.Core.Shape.ChangeTensorLayout(System.Int32)
+  nameWithType: Shape.ChangeTensorLayout(Int32)
+- uid: NumSharp.Core.Shape.ChangeTensorLayout*
+  name: ChangeTensorLayout
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_ChangeTensorLayout_
+  commentId: Overload:NumSharp.Core.Shape.ChangeTensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.ChangeTensorLayout
+  nameWithType: Shape.ChangeTensorLayout
+- uid: NumSharp.Core.Shape.Dimensions
+  name: Dimensions
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Dimensions
+  commentId: P:NumSharp.Core.Shape.Dimensions
+  fullName: NumSharp.Core.Shape.Dimensions
+  nameWithType: Shape.Dimensions
+- uid: NumSharp.Core.Shape.Dimensions*
+  name: Dimensions
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Dimensions_
+  commentId: Overload:NumSharp.Core.Shape.Dimensions
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Dimensions
+  nameWithType: Shape.Dimensions
+- uid: NumSharp.Core.Shape.DimOffset
+  name: DimOffset
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_DimOffset
+  commentId: P:NumSharp.Core.Shape.DimOffset
+  fullName: NumSharp.Core.Shape.DimOffset
+  nameWithType: Shape.DimOffset
+- uid: NumSharp.Core.Shape.DimOffset*
+  name: DimOffset
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_DimOffset_
+  commentId: Overload:NumSharp.Core.Shape.DimOffset
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.DimOffset
+  nameWithType: Shape.DimOffset
+- uid: NumSharp.Core.Shape.Equals(System.Object)
+  name: Equals(Object)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Equals_System_Object_
+  commentId: M:NumSharp.Core.Shape.Equals(System.Object)
+  fullName: NumSharp.Core.Shape.Equals(System.Object)
+  nameWithType: Shape.Equals(Object)
+- uid: NumSharp.Core.Shape.Equals*
+  name: Equals
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Equals_
+  commentId: Overload:NumSharp.Core.Shape.Equals
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Equals
+  nameWithType: Shape.Equals
+- uid: NumSharp.Core.Shape.GetDimIndexOutShape(System.Int32)
+  name: GetDimIndexOutShape(Int32)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetDimIndexOutShape_System_Int32_
+  commentId: M:NumSharp.Core.Shape.GetDimIndexOutShape(System.Int32)
+  fullName: NumSharp.Core.Shape.GetDimIndexOutShape(System.Int32)
+  nameWithType: Shape.GetDimIndexOutShape(Int32)
+- uid: NumSharp.Core.Shape.GetDimIndexOutShape*
+  name: GetDimIndexOutShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetDimIndexOutShape_
+  commentId: Overload:NumSharp.Core.Shape.GetDimIndexOutShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.GetDimIndexOutShape
+  nameWithType: Shape.GetDimIndexOutShape
+- uid: NumSharp.Core.Shape.GetHashCode
+  name: GetHashCode()
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetHashCode
+  commentId: M:NumSharp.Core.Shape.GetHashCode
+  fullName: NumSharp.Core.Shape.GetHashCode()
+  nameWithType: Shape.GetHashCode()
+- uid: NumSharp.Core.Shape.GetHashCode*
+  name: GetHashCode
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetHashCode_
+  commentId: Overload:NumSharp.Core.Shape.GetHashCode
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.GetHashCode
+  nameWithType: Shape.GetHashCode
+- uid: NumSharp.Core.Shape.GetIndexInShape(System.Int32[])
+  name: GetIndexInShape(Int32[])
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetIndexInShape_System_Int32___
+  commentId: M:NumSharp.Core.Shape.GetIndexInShape(System.Int32[])
+  name.vb: GetIndexInShape(Int32())
+  fullName: NumSharp.Core.Shape.GetIndexInShape(System.Int32[])
+  fullName.vb: NumSharp.Core.Shape.GetIndexInShape(System.Int32())
+  nameWithType: Shape.GetIndexInShape(Int32[])
+  nameWithType.vb: Shape.GetIndexInShape(Int32())
+- uid: NumSharp.Core.Shape.GetIndexInShape*
+  name: GetIndexInShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_GetIndexInShape_
+  commentId: Overload:NumSharp.Core.Shape.GetIndexInShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.GetIndexInShape
+  nameWithType: Shape.GetIndexInShape
+- uid: NumSharp.Core.Shape.NDim
+  name: NDim
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_NDim
+  commentId: P:NumSharp.Core.Shape.NDim
+  fullName: NumSharp.Core.Shape.NDim
+  nameWithType: Shape.NDim
+- uid: NumSharp.Core.Shape.NDim*
+  name: NDim
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_NDim_
+  commentId: Overload:NumSharp.Core.Shape.NDim
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.NDim
+  nameWithType: Shape.NDim
+- uid: NumSharp.Core.Shape.op_Equality(NumSharp.Core.Shape,NumSharp.Core.Shape)
+  name: Equality(Shape, Shape)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_op_Equality_NumSharp_Core_Shape_NumSharp_Core_Shape_
+  commentId: M:NumSharp.Core.Shape.op_Equality(NumSharp.Core.Shape,NumSharp.Core.Shape)
+  fullName: NumSharp.Core.Shape.Equality(NumSharp.Core.Shape, NumSharp.Core.Shape)
+  nameWithType: Shape.Equality(Shape, Shape)
+- uid: NumSharp.Core.Shape.op_Equality*
+  name: Equality
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_op_Equality_
+  commentId: Overload:NumSharp.Core.Shape.op_Equality
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Equality
+  nameWithType: Shape.Equality
+- uid: NumSharp.Core.Shape.op_Inequality(NumSharp.Core.Shape,NumSharp.Core.Shape)
+  name: Inequality(Shape, Shape)
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_op_Inequality_NumSharp_Core_Shape_NumSharp_Core_Shape_
+  commentId: M:NumSharp.Core.Shape.op_Inequality(NumSharp.Core.Shape,NumSharp.Core.Shape)
+  fullName: NumSharp.Core.Shape.Inequality(NumSharp.Core.Shape, NumSharp.Core.Shape)
+  nameWithType: Shape.Inequality(Shape, Shape)
+- uid: NumSharp.Core.Shape.op_Inequality*
+  name: Inequality
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_op_Inequality_
+  commentId: Overload:NumSharp.Core.Shape.op_Inequality
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Inequality
+  nameWithType: Shape.Inequality
+- uid: NumSharp.Core.Shape.Size
+  name: Size
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Size
+  commentId: P:NumSharp.Core.Shape.Size
+  fullName: NumSharp.Core.Shape.Size
+  nameWithType: Shape.Size
+- uid: NumSharp.Core.Shape.Size*
+  name: Size
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_Size_
+  commentId: Overload:NumSharp.Core.Shape.Size
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.Size
+  nameWithType: Shape.Size
+- uid: NumSharp.Core.Shape.TensorLayout
+  name: TensorLayout
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_TensorLayout
+  commentId: P:NumSharp.Core.Shape.TensorLayout
+  fullName: NumSharp.Core.Shape.TensorLayout
+  nameWithType: Shape.TensorLayout
+- uid: NumSharp.Core.Shape.TensorLayout*
+  name: TensorLayout
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_TensorLayout_
+  commentId: Overload:NumSharp.Core.Shape.TensorLayout
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.TensorLayout
+  nameWithType: Shape.TensorLayout
+- uid: NumSharp.Core.Shape.ToString
+  name: ToString()
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_ToString
+  commentId: M:NumSharp.Core.Shape.ToString
+  fullName: NumSharp.Core.Shape.ToString()
+  nameWithType: Shape.ToString()
+- uid: NumSharp.Core.Shape.ToString*
+  name: ToString
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_ToString_
+  commentId: Overload:NumSharp.Core.Shape.ToString
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.ToString
+  nameWithType: Shape.ToString
+- uid: NumSharp.Core.Shape.TriShape
+  name: TriShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_TriShape
+  commentId: P:NumSharp.Core.Shape.TriShape
+  fullName: NumSharp.Core.Shape.TriShape
+  nameWithType: Shape.TriShape
+- uid: NumSharp.Core.Shape.TriShape*
+  name: TriShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_TriShape_
+  commentId: Overload:NumSharp.Core.Shape.TriShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.TriShape
+  nameWithType: Shape.TriShape
+- uid: NumSharp.Core.Shape.UniShape
+  name: UniShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_UniShape
+  commentId: P:NumSharp.Core.Shape.UniShape
+  fullName: NumSharp.Core.Shape.UniShape
+  nameWithType: Shape.UniShape
+- uid: NumSharp.Core.Shape.UniShape*
+  name: UniShape
+  href: api/NumSharp.Core.Shape.html#NumSharp_Core_Shape_UniShape_
+  commentId: Overload:NumSharp.Core.Shape.UniShape
+  isSpec: "True"
+  fullName: NumSharp.Core.Shape.UniShape
+  nameWithType: Shape.UniShape
+- uid: NumSharp.Core.Slice
+  name: Slice
+  href: api/NumSharp.Core.Slice.html
+  commentId: T:NumSharp.Core.Slice
+  fullName: NumSharp.Core.Slice
+  nameWithType: Slice
+- uid: NumSharp.Core.Slice.#ctor(System.Int32[])
+  name: Slice(Int32[])
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice__ctor_System_Int32___
+  commentId: M:NumSharp.Core.Slice.#ctor(System.Int32[])
+  name.vb: Slice(Int32())
+  fullName: NumSharp.Core.Slice.Slice(System.Int32[])
+  fullName.vb: NumSharp.Core.Slice.Slice(System.Int32())
+  nameWithType: Slice.Slice(Int32[])
+  nameWithType.vb: Slice.Slice(Int32())
+- uid: NumSharp.Core.Slice.#ctor*
+  name: Slice
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice__ctor_
+  commentId: Overload:NumSharp.Core.Slice.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Core.Slice.Slice
+  nameWithType: Slice.Slice
+- uid: NumSharp.Core.Slice.Length
+  name: Length
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Length
+  commentId: P:NumSharp.Core.Slice.Length
+  fullName: NumSharp.Core.Slice.Length
+  nameWithType: Slice.Length
+- uid: NumSharp.Core.Slice.Length*
+  name: Length
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Length_
+  commentId: Overload:NumSharp.Core.Slice.Length
+  isSpec: "True"
+  fullName: NumSharp.Core.Slice.Length
+  nameWithType: Slice.Length
+- uid: NumSharp.Core.Slice.Start
+  name: Start
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Start
+  commentId: P:NumSharp.Core.Slice.Start
+  fullName: NumSharp.Core.Slice.Start
+  nameWithType: Slice.Start
+- uid: NumSharp.Core.Slice.Start*
+  name: Start
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Start_
+  commentId: Overload:NumSharp.Core.Slice.Start
+  isSpec: "True"
+  fullName: NumSharp.Core.Slice.Start
+  nameWithType: Slice.Start
+- uid: NumSharp.Core.Slice.Step
+  name: Step
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Step
+  commentId: P:NumSharp.Core.Slice.Step
+  fullName: NumSharp.Core.Slice.Step
+  nameWithType: Slice.Step
+- uid: NumSharp.Core.Slice.Step*
+  name: Step
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Step_
+  commentId: Overload:NumSharp.Core.Slice.Step
+  isSpec: "True"
+  fullName: NumSharp.Core.Slice.Step
+  nameWithType: Slice.Step
+- uid: NumSharp.Core.Slice.Stop
+  name: Stop
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Stop
+  commentId: P:NumSharp.Core.Slice.Stop
+  fullName: NumSharp.Core.Slice.Stop
+  nameWithType: Slice.Stop
+- uid: NumSharp.Core.Slice.Stop*
+  name: Stop
+  href: api/NumSharp.Core.Slice.html#NumSharp_Core_Slice_Stop_
+  commentId: Overload:NumSharp.Core.Slice.Stop
+  isSpec: "True"
+  fullName: NumSharp.Core.Slice.Stop
+  nameWithType: Slice.Stop
+- uid: NumSharp.Generic
+  name: NumSharp.Generic
+  href: api/NumSharp.Generic.html
+  commentId: N:NumSharp.Generic
+  fullName: NumSharp.Generic
+  nameWithType: NumSharp.Generic
+- uid: NumSharp.Generic.NDArray`1
+  name: NDArray<T>
+  href: api/NumSharp.Generic.NDArray-1.html
+  commentId: T:NumSharp.Generic.NDArray`1
+  name.vb: NDArray(Of T)
+  fullName: NumSharp.Generic.NDArray<T>
+  fullName.vb: NumSharp.Generic.NDArray(Of T)
+  nameWithType: NDArray<T>
+  nameWithType.vb: NDArray(Of T)
+- uid: NumSharp.Generic.NDArray`1.#ctor
+  name: NDArray()
+  href: api/NumSharp.Generic.NDArray-1.html#NumSharp_Generic_NDArray_1__ctor
+  commentId: M:NumSharp.Generic.NDArray`1.#ctor
+  fullName: NumSharp.Generic.NDArray<T>.NDArray()
+  fullName.vb: NumSharp.Generic.NDArray(Of T).NDArray()
+  nameWithType: NDArray<T>.NDArray()
+  nameWithType.vb: NDArray(Of T).NDArray()
+- uid: NumSharp.Generic.NDArray`1.#ctor(NumSharp.Core.Interfaces.IShape)
+  name: NDArray(IShape)
+  href: api/NumSharp.Generic.NDArray-1.html#NumSharp_Generic_NDArray_1__ctor_NumSharp_Core_Interfaces_IShape_
+  commentId: M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Core.Interfaces.IShape)
+  fullName: NumSharp.Generic.NDArray<T>.NDArray(NumSharp.Core.Interfaces.IShape)
+  fullName.vb: NumSharp.Generic.NDArray(Of T).NDArray(NumSharp.Core.Interfaces.IShape)
+  nameWithType: NDArray<T>.NDArray(IShape)
+  nameWithType.vb: NDArray(Of T).NDArray(IShape)
+- uid: NumSharp.Generic.NDArray`1.#ctor*
+  name: NDArray
+  href: api/NumSharp.Generic.NDArray-1.html#NumSharp_Generic_NDArray_1__ctor_
+  commentId: Overload:NumSharp.Generic.NDArray`1.#ctor
+  isSpec: "True"
+  fullName: NumSharp.Generic.NDArray<T>.NDArray
+  fullName.vb: NumSharp.Generic.NDArray(Of T).NDArray
+  nameWithType: NDArray<T>.NDArray
+  nameWithType.vb: NDArray(Of T).NDArray
+- uid: NumSharp.Generic.NDArray`1.Item(System.Int32[])
+  name: Item[Int32[]]
+  href: api/NumSharp.Generic.NDArray-1.html#NumSharp_Generic_NDArray_1_Item_System_Int32___
+  commentId: P:NumSharp.Generic.NDArray`1.Item(System.Int32[])
+  name.vb: Item(Int32())
+  fullName: NumSharp.Generic.NDArray<T>.Item[System.Int32[]]
+  fullName.vb: NumSharp.Generic.NDArray(Of T).Item(System.Int32())
+  nameWithType: NDArray<T>.Item[Int32[]]
+  nameWithType.vb: NDArray(Of T).Item(Int32())
+- uid: NumSharp.Generic.NDArray`1.Item*
+  name: Item
+  href: api/NumSharp.Generic.NDArray-1.html#NumSharp_Generic_NDArray_1_Item_
+  commentId: Overload:NumSharp.Generic.NDArray`1.Item
+  isSpec: "True"
+  fullName: NumSharp.Generic.NDArray<T>.Item
+  fullName.vb: NumSharp.Generic.NDArray(Of T).Item
+  nameWithType: NDArray<T>.Item
+  nameWithType.vb: NDArray(Of T).Item
