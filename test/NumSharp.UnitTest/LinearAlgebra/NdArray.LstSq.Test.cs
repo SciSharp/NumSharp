@@ -15,17 +15,14 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void DefaultTest()
         {
-            double[] a = { 0, 1, 1, 1,2,1,3,1};
+            NDArray A = new double[,] {{0.0,1.0},{1.0,1.0},{2.0,1.0},{3.0,1.0}};  
 
-            var A = np.array(a,typeof(double)).reshape(4,2);
+            NDArray B = new double[] {-1,0.2,0.9,2.1};
 
-            double[] b =    {-1,0.2,0.9,2.1};
-
-            var B = np.array(b,typeof(double)).reshape(4,1);
-
-            var C = A.lstqr(B);
-
-            
+            double[,] C = (Array)A.lstqr(B) as double[,];
+        
+            Assert.IsTrue((C[0,0] - 1.0) < 0.0001);
+            Assert.IsTrue((C[1,0] + 0.95) < 0.0001);
         }
     }
 }
