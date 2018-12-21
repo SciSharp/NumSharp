@@ -4,23 +4,24 @@
     <!--<TargetFramework>netcoreapp2.1</TargetFramework>-->
     <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <Authors>Haiping Chen, Christian Kahr</Authors>
-    <Description>NumPy is the fundamental package for scientific computing with dot NET. NumSharp has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
+    <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
     <PackageProjectUrl>https://github.com/Oceania2018/NumSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/Oceania2018/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Abstract storage and shape from NDArray.
-Support dynamic dtype, make generic NDArray inherit from NDArray.
-Add string[] and bool[] storage.
-Updated online documents.
-Add np.ravel, np.transpose.</PackageReleaseNotes>
-    <AssemblyVersion>0.5.0.0</AssemblyVersion>
-    <FileVersion>0.5.0.0</FileVersion>
+    <PackageReleaseNotes>Added LAPACK as a new Linear Algebra provider to improve performance.
+Document enhanced.
+Small changes for API.
+Added np.linalg.lstsq.
+Turned NumPy to static class and renamed to np to be more like numpy.
+Added IShape interface.</PackageReleaseNotes>
+    <AssemblyVersion>0.6.0.0</AssemblyVersion>
+    <FileVersion>0.6.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <Version>0.5.0</Version>
-    <PackageLicenseUrl>https://raw.githubusercontent.com/Oceania2018/NumSharp/master/LICENSE</PackageLicenseUrl>
+    <Version>0.6.0</Version>
+    <PackageLicenseUrl>LICENSE</PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
