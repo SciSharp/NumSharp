@@ -32,7 +32,7 @@ namespace NumSharp.Core
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public partial class NDArray
+    public partial class NDArray : ICloneable
     {
         /// <summary>
         /// Data type of NDArray
@@ -114,6 +114,18 @@ namespace NumSharp.Core
             }
             return isSame;
         }
-        
+
+        public object Clone()
+        {
+            var puffer = new NDArray(this.dtype);
+            var shapePuffer = new Shape(this.shape.Dimensions);
+            shapePuffer.ChangeTensorLayout(this.shape.TensorLayout);
+
+            puffer.Storage.Allocate(this.dtype, shapePuffer, this.Storage.TensorLayout );
+
+            puffer.Storage.SetData(this.Storage.CloneData());
+
+            return puffer;
+        }
     }
 }
