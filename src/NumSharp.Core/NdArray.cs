@@ -53,17 +53,33 @@ namespace NumSharp.Core
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
-        /// <value></value>
+        /// <value>Internal Storage</value>
         public NDStorage Storage {get;set;}
         
+        /// <summary>
+        /// Default constructor 
+        /// Create a 1D double array with 1 element
+        /// one element is 1
+        /// </summary>
         public NDArray()
         {
             Storage = new NDStorage();
         }
+        /// <summary>
+        /// Constructor for init data type
+        /// internal storage is 1D with 1 element
+        /// </summary>
+        /// <param name="dtype">Data type of elements</param>
         public NDArray(Type dtype)
         {
             Storage = new NDStorage(dtype);
         }
+        /// <summary>
+        /// Constructor which takes .NET array
+        /// dtype and shape is determined from array
+        /// </summary>
+        /// <param name="values"></param>
+        /// <returns>Array with values</returns>
         public NDArray(Array values ) : this(values.GetType().GetElementType())
         {
             int[] strgDim = new int[values.Rank];
@@ -82,11 +98,24 @@ namespace NumSharp.Core
                 }
             } 
         }
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and shape are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
         public NDArray(Type dtype, IShape shape)
         {
             Storage = new NDStorage();
             Storage.Allocate(dtype,shape,1);
         }
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and dimensions are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shapes">dimensions</param>
+        /// <returns></returns>
         public NDArray(Type dtype, params int[] shapes) : this(dtype, new Shape(shapes) )
         {
         }
@@ -100,6 +129,11 @@ namespace NumSharp.Core
                 return result;
             }
         }
+        /// <summary>
+        /// Determines if NDarray references are the same
+        /// </summary>
+        /// <param name="obj">NDArray to compare</param>
+        /// <returns>if reference is same</returns>
         public override bool Equals(object obj)
         {
             bool isSame = false;
@@ -114,7 +148,11 @@ namespace NumSharp.Core
             }
             return isSame;
         }
-
+        /// <summary>
+        /// Clone the whole NDArray
+        /// internal storage is also cloned into 2nd memory area
+        /// </summary>
+        /// <returns>Cloned NDArray</returns>
         public object Clone()
         {
             var puffer = new NDArray(this.dtype);

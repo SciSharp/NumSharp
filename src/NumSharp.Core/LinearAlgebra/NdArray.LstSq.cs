@@ -9,7 +9,15 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        
+        /// <summary>
+        /// Least Square method
+        /// 
+        /// Determines NDArray X which reduces least square error of Linear System A * X = B.
+        /// This NDArray is equal to A.
+        /// </summary>
+        /// <param name="nDArrayB">Result NDArray B</param>
+        /// <param name="rcon"></param>
+        /// <returns>NArray X</returns>
         public NDArray lstqr(NDArray nDArrayB, double rcon = 0.0001)
         {
             var A = (double[]) this.Storage.CloneData<double>();
