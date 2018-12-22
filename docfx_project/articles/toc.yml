@@ -2,3 +2,7 @@
   href: intro.md
 - name: Array Creation 
   href: NDArray.Creation.md
+- name: Linear Algebra
+  href: NDArray.LinAlg.md
+
+  
