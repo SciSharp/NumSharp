@@ -81,6 +81,10 @@
     <div class="level1"><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></div>
     <div class="level2"><span class="xref">NDArray&lt;T&gt;</span></div>
   </div>
+  <div classs="implements">
+    <h5>Implements</h5>
+    <div><span class="xref">System.ICloneable</span></div>
+  </div>
   <div class="inheritedMembers">
     <h5>Inherited Members</h5>
     <div>
@@ -106,6 +110,9 @@
     </div>
     <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_arange_System_Int32_System_Int32_System_Int32_">NDArray.arange(Int32, Int32, Int32)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_copy_System_String_">NDArray.copy(String)</a>
     </div>
     <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_eye_System_Int32_System_Int32_">NDArray.eye(Int32, Int32)</a>
@@ -156,10 +163,16 @@
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_lstqr_NumSharp_Core_NDArray_System_Double_">NDArray.lstqr(NDArray, Double)</a>
     </div>
     <div>
+      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_matrix_power_System_Int32_">NDArray.matrix_power(Int32)</a>
+    </div>
+    <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_multi_dot_NumSharp_Core_NDArray___">NDArray.multi_dot(NDArray[])</a>
     </div>
     <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_qr">NDArray.qr()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_svd">NDArray.svd()</a>
     </div>
     <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_transpose">NDArray.transpose()</a>
@@ -228,6 +241,9 @@
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Equals_System_Object_">NDArray.Equals(Object)</a>
     </div>
     <div>
+      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Clone">NDArray.Clone()</a>
+    </div>
+    <div>
       <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amax_System_Nullable_System_Int32__">NDArray.amax(Nullable&lt;Int32&gt;)</a>
     </div>
     <div>
@@ -250,7 +266,7 @@
   <h6><strong>Assembly</strong>: NumSharp.Core.dll</h6>
   <h5 id="NumSharp_Generic_NDArray_1_syntax">Syntax</h5>
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public class NDArray&lt;T&gt; : NDArray where T : struct</code></pre>
+    <pre><code class="lang-csharp hljs">public class NDArray&lt;T&gt; : NDArray, ICloneable where T : struct</code></pre>
   </div>
   <h5 class="typeParameters">Type Parameters</h5>
   <table class="table table-bordered table-striped table-condensed">
@@ -366,6 +382,10 @@
       </tr>
     </tbody>
   </table>
+  <h3 id="implements">Implements</h3>
+  <div>
+      <span class="xref">System.ICloneable</span>
+  </div>
   <h3 id="extensionmethods">Extension Methods</h3>
   <div>
       <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_AsMatrix_NumSharp_Core_NDArray_">NDArrayExtensions.AsMatrix(NDArray)</a>

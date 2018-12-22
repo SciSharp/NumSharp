@@ -94,6 +94,7 @@ So NumSharps NDArray can store a vector, a matrix or sth with dimension 5 and hi
 <p>NDStorage is an object which stores the data of a tesor in a single 1D array. Since it is a 1D array independend of the tensor dimension NDStorage can be used for all kind of tensors. A vector is stored inside a 1D array, a matrix, a 3 dimensional tensor and so on.</p>
 <p><strong>But hold on! How the data comes into this 1D arrayand how we get them back?</strong></p>
 <p>NDStorage has a property called &quot;shape&quot;. The shape is a small but important class in NumSharp. It stores the dimensions and most important! it determines which element in the 1D array is selected by given indexes.</p>
+<p>To understand the methods for determines 1D internal storage index by NDArray indexes and vice versa we give examples of different tensor types.</p>
 <p><strong>Vector</strong></p>
 <p>Imagine a 1D tensor (a vector). Here it is easy because you can access the data with a single index like 'a = np[idx]'. The internal data store in NDStorage is a 1D array - so index to access is the same index in internal storage.</p>
 <p><strong>Matrix</strong></p>
@@ -121,6 +122,7 @@ After we switch to the next higher level of dimension (so change to next row).</
 <p>So fill first dimension, increase next, fill again, etc. also in n dimensional tensor.</p>
 <p>[0,0,0] -&gt; [1,0,0] -&gt; [2,0,0] -&gt; [3,0,0] -&gt; [n-1,0,0] -&gt; [0,1,0] -&gt; [1,1,0] -&gt; [n-1,1,0] -&gt; [0,2,0] -&gt; [n-1,2,0] -&gt; [0,m-1,0] -&gt;</p>
 <p>And this you can imagine as <strong>forward filling layout</strong>.</p>
+<p>That's it. Now you have enough knowledge about NDArray, NDStorage and Shape. Check the other chapters for a how to use. :)</p>
 </article>
           </div>
           

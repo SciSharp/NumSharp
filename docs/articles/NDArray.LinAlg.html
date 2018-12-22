@@ -5,9 +5,9 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <title>Array creation </title>
+    <title>Linear algebra </title>
     <meta name="viewport" content="width=device-width">
-    <meta name="title" content="Array creation ">
+    <meta name="title" content="Linear algebra ">
     <meta name="generator" content="docfx 2.40.2.0">
     
     <link rel="shortcut icon" href="../favicon.ico">
@@ -67,76 +67,16 @@
         <div class="article row grid-right">
           <div class="col-md-10">
             <article class="content wrap" id="_content" data-uid="">
-<h1 id="array-creation">Array creation</h1>
+<h1 id="linear-algebra">Linear algebra</h1>
 
-<p>Before we do some fancy numeric stuff or even machine learning we have to clear one thing.</p>
-<p><strong>How do we generate NDArrays?</strong></p>
-<p>Since NDArray is the key class in SciSharp stack there must be numerous possibilities how to generate this arrays. And yes that’s the case.</p>
-<p>Maybe first of all we should see the dump way – which can be always used but is not too user friendly.<br>
-In this example we access the Storage property directly - one more reason to avoid it.</p>
-<p><strong>Dump way</strong></p>
-<pre><code class="lang-CSHARP">// first constructor with data type and shape (here 3x3 matrix)
-var nd = new NDArray(typeof(double),3,3);
-            
-// set 9 elements into the storage of this array.
-np.Storage.SetData(new double[] {1,2,3,4,5,6,7,8,9});
-</code></pre>
-<p>Ok looks not too difficult. But also not too userfriendly.</p>
-<p>We create an empty NDArray with 3x3 shape, fill it with 9 elements.
-We followed the row wise matrix layour by default.</p>
-<p>So with this 3x3 shaped NDArray we can do matrix multiplication, QR decomposition, SVD, ...</p>
-<p>But keep in mind - always be careful with your shape and be sure what you want to do with your elements in this shape.</p>
-<p><strong>Create by enumeration</strong></p>
-<p>The next example shows the numpy style creation.</p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-// we take the Data / elements from an array 
-// we do not need to define the shape here - it is automaticly shaped to 1D
-var np1 = np.array(new double[] {1,2,3,4,5,6} );
-</code></pre>
-<p>Ok as we can see, this time the array was created without define the shape.</p>
-<p>This is possible since the method expect that the double[] array shall be transformed into a NDArray directly.</p>
-<p><strong>Create by implicit cast</strong></p>
-<p>Beside this numpy style C# offers its own flavour of creation.</p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-// implicit cast double[] to NDArray - dtype &amp; shape are deduced by array type and shape
-NDArray nd = new double[]{1,2,3,4};
-</code></pre>
-<p>And for matrix and n dim tensors also work the same.</p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-NDArray nd = new double[,]{{1,2,3},{4,5,6}};
-</code></pre>
-<p>Beside the .NET array to NDArray converting there exist different kinds of methods which also exist in numpy.</p>
-<p><strong>Create by given range</strong></p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-// we simple say &quot;create an array with 10 elements&quot;
-// start is expected to be 0 and step 1
-var np1 = np.arange(10);
-
-// this time start with 1, step 2 
-// and do it as long as smaller than 10
-var np2 = np.arange(1,10,2);
-</code></pre>
-<p><strong>Create diagonal matrix</strong></p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-// simple 5x5 eye matrix
-var nd1 = np.eye(5);
-
-// 3x3 eye matrix but elements different diagonal 
-nd1 = np.eye(3,1);
-</code></pre>
-<p><strong>Create by linspace</strong></p>
-<pre><code class="lang-CSHARP">using NumSharp.Core;
-
-// create vector with 50 elements, from 4 to 10
-// include last element 
-// and convert them to double (float64)
-var nd1 = np.linspace(4,10, 50, true, np.float64);
-</code></pre>
+<p>Now we got some arrays so we should understand what we can do with it.</p>
+<h2 id="element-wise-operation">element wise operation</h2>
+<h2 id="matrix-transpose">Matrix Transpose</h2>
+<h2 id="matrix-and-vector-multiplication">Matrix and Vector multiplication</h2>
+<h2 id="solve-linear-equation">Solve Linear Equation</h2>
+<h2 id="qr-decomposition">QR decomposition</h2>
+<h2 id="inverse-of-matrix">Inverse of Matrix</h2>
+<h2 id="svd">SVD</h2>
 </article>
           </div>
           
@@ -145,7 +85,7 @@ var nd1 = np.linspace(4,10, 50, true, np.float64);
               <div class="contribution">
                 <ul class="nav">
                   <li>
-                    <a href="https://github.com/dotChris90/NumSharp/blob/master/docfx_project/articles/NDArray.Creation.md/#L1" class="contribution-link">Improve this Doc</a>
+                    <a href="https://github.com/dotChris90/NumSharp/blob/master/docfx_project/articles/NDArray.LinAlg.md/#L1" class="contribution-link">Improve this Doc</a>
                   </li>
                 </ul>
               </div>

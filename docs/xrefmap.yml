@@ -519,6 +519,21 @@ references:
   commentId: Overload:NumSharp.Core.LAPACK.dgesv_
   fullName: NumSharp.Core.LAPACK.dgesv_
   nameWithType: LAPACK.dgesv_
+- uid: NumSharp.Core.LAPACK.dgesvd_(System.Char[],System.Char[],System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name: dgesvd_(Char[], Char[], ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, Double[], ref Int32, Double[], ref Int32, ref Int32)
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgesvd__System_Char___System_Char___System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Double___System_Int32__System_Double___System_Int32__System_Double___System_Int32__System_Int32__
+  commentId: M:NumSharp.Core.LAPACK.dgesvd_(System.Char[],System.Char[],System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Double[],System.Int32@,System.Double[],System.Int32@,System.Int32@)
+  name.vb: dgesvd_(Char(), Char(), ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+  fullName: NumSharp.Core.LAPACK.dgesvd_(System.Char[], System.Char[], ref System.Int32, ref System.Int32, System.Double[], ref System.Int32, System.Double[], System.Double[], ref System.Int32, System.Double[], ref System.Int32, System.Double[], ref System.Int32, ref System.Int32)
+  fullName.vb: NumSharp.Core.LAPACK.dgesvd_(System.Char(), System.Char(), ByRef System.Int32, ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), System.Double(), ByRef System.Int32, System.Double(), ByRef System.Int32, System.Double(), ByRef System.Int32, ByRef System.Int32)
+  nameWithType: LAPACK.dgesvd_(Char[], Char[], ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, Double[], ref Int32, Double[], ref Int32, ref Int32)
+  nameWithType.vb: LAPACK.dgesvd_(Char(), Char(), ByRef Int32, ByRef Int32, Double(), ByRef Int32, Double(), Double(), ByRef Int32, Double(), ByRef Int32, Double(), ByRef Int32, ByRef Int32)
+- uid: NumSharp.Core.LAPACK.dgesvd_*
+  name: dgesvd_
+  href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dgesvd__
+  commentId: Overload:NumSharp.Core.LAPACK.dgesvd_
+  fullName: NumSharp.Core.LAPACK.dgesvd_
+  nameWithType: LAPACK.dgesvd_
 - uid: NumSharp.Core.LAPACK.dorgqr_(System.Int32@,System.Int32@,System.Int32@,System.Double[],System.Int32@,System.Double[],System.Double[],System.Int32@,System.Int32@)
   name: dorgqr_(ref Int32, ref Int32, ref Int32, Double[], ref Int32, Double[], Double[], ref Int32, ref Int32)
   href: api/NumSharp.Core.LAPACK.html#NumSharp_Core_LAPACK_dorgqr__System_Int32__System_Int32__System_Int32__System_Double___System_Int32__System_Double___System_Double___System_Int32__System_Int32__
@@ -816,6 +831,19 @@ references:
   isSpec: "True"
   fullName: NumSharp.Core.NDArray.CalculateNegativeShape
   nameWithType: NDArray.CalculateNegativeShape
+- uid: NumSharp.Core.NDArray.Clone
+  name: Clone()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Clone
+  commentId: M:NumSharp.Core.NDArray.Clone
+  fullName: NumSharp.Core.NDArray.Clone()
+  nameWithType: NDArray.Clone()
+- uid: NumSharp.Core.NDArray.Clone*
+  name: Clone
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Clone_
+  commentId: Overload:NumSharp.Core.NDArray.Clone
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.Clone
+  nameWithType: NDArray.Clone
 - uid: NumSharp.Core.NDArray.Convolve(NumSharp.Core.NDArray,System.String)
   name: Convolve(NDArray, String)
   href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Convolve_NumSharp_Core_NDArray_System_String_
@@ -829,6 +857,19 @@ references:
   isSpec: "True"
   fullName: NumSharp.Core.NDArray.Convolve
   nameWithType: NDArray.Convolve
+- uid: NumSharp.Core.NDArray.copy(System.String)
+  name: copy(String)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_copy_System_String_
+  commentId: M:NumSharp.Core.NDArray.copy(System.String)
+  fullName: NumSharp.Core.NDArray.copy(System.String)
+  nameWithType: NDArray.copy(String)
+- uid: NumSharp.Core.NDArray.copy*
+  name: copy
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_copy_
+  commentId: Overload:NumSharp.Core.NDArray.copy
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.copy
+  nameWithType: NDArray.copy
 - uid: NumSharp.Core.NDArray.delete(System.Collections.IEnumerable)
   name: delete(IEnumerable)
   href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_delete_System_Collections_IEnumerable_
@@ -1036,6 +1077,19 @@ references:
   fullName.vb: NumSharp.Core.NDArray.MakeGeneric(Of T)()
   nameWithType: NDArray.MakeGeneric<T>()
   nameWithType.vb: NDArray.MakeGeneric(Of T)()
+- uid: NumSharp.Core.NDArray.matrix_power(System.Int32)
+  name: matrix_power(Int32)
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_matrix_power_System_Int32_
+  commentId: M:NumSharp.Core.NDArray.matrix_power(System.Int32)
+  fullName: NumSharp.Core.NDArray.matrix_power(System.Int32)
+  nameWithType: NDArray.matrix_power(Int32)
+- uid: NumSharp.Core.NDArray.matrix_power*
+  name: matrix_power
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_matrix_power_
+  commentId: Overload:NumSharp.Core.NDArray.matrix_power
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.matrix_power
+  nameWithType: NDArray.matrix_power
 - uid: NumSharp.Core.NDArray.max(System.Nullable{System.Int32})
   name: max(Nullable<Int32>)
   href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_max_System_Nullable_System_Int32__
@@ -1446,6 +1500,19 @@ references:
   isSpec: "True"
   fullName: NumSharp.Core.NDArray.sum
   nameWithType: NDArray.sum
+- uid: NumSharp.Core.NDArray.svd
+  name: svd()
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_svd
+  commentId: M:NumSharp.Core.NDArray.svd
+  fullName: NumSharp.Core.NDArray.svd()
+  nameWithType: NDArray.svd()
+- uid: NumSharp.Core.NDArray.svd*
+  name: svd
+  href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_svd_
+  commentId: Overload:NumSharp.Core.NDArray.svd
+  isSpec: "True"
+  fullName: NumSharp.Core.NDArray.svd
+  nameWithType: NDArray.svd
 - uid: NumSharp.Core.NDArray.ToJaggedArray*
   name: ToJaggedArray
   href: api/NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToJaggedArray_
@@ -2078,6 +2145,19 @@ references:
   isSpec: "True"
   fullName: NumSharp.Core.np.dot
   nameWithType: np.dot
+- uid: NumSharp.Core.np.eye(System.Int32,System.Int32,System.Type)
+  name: eye(Int32, Int32, Type)
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_eye_System_Int32_System_Int32_System_Type_
+  commentId: M:NumSharp.Core.np.eye(System.Int32,System.Int32,System.Type)
+  fullName: NumSharp.Core.np.eye(System.Int32, System.Int32, System.Type)
+  nameWithType: np.eye(Int32, Int32, Type)
+- uid: NumSharp.Core.np.eye*
+  name: eye
+  href: api/NumSharp.Core.np.html#NumSharp_Core_np_eye_
+  commentId: Overload:NumSharp.Core.np.eye
+  isSpec: "True"
+  fullName: NumSharp.Core.np.eye
+  nameWithType: np.eye
 - uid: NumSharp.Core.np.float32
   name: float32
   href: api/NumSharp.Core.np.html#NumSharp_Core_np_float32
