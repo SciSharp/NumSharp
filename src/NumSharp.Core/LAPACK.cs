@@ -17,6 +17,8 @@ namespace NumSharp.Core
         // not working well
         [DllImport("lapack",CallingConvention = CallingConvention.Cdecl), System.Security.SuppressUnmanagedCodeSecurity]
         public static extern void dgelsy_( ref int m, ref int n, ref int nrhs, double[] a, ref int lda, double[] b, ref int ldb, int[] jpvt, ref double rcond, ref int rank,double[] work, ref int lwork, ref int info );
-	
+
+        [DllImport("lapack")]
+        public static extern void dgesvd_(char[] JOBU,char[] JOBVT, ref int M, ref int N, double[] A, ref int LDA, double[] S, double[] U, ref int LDU, double[] VT, ref int LDVT, double[] WORK, ref int LWORK, ref int INFO ); 	
     }
 }

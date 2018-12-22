@@ -1,0 +1,48 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using NumSharp.Core.Extensions;
+using System.Linq;
+using System.Numerics;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Core;
+
+namespace NumSharp.UnitTest.LinearAlgebra
+{
+    [TestClass]
+    public  class NDArraySVDTester
+    {
+        [TestMethod]
+        public void DefaultTest()
+        {
+            NDArray A = new NDArray(np.float64,6,5);
+            A.Storage.SetData(new double[]{
+                                8.79,  6.11, -9.15,  9.57, -3.49,  9.84,
+                                9.93,  6.91, -7.93,  1.64,  4.02,  0.15,
+                                9.83,  5.04,  4.86,  8.83,  9.80, -8.99,
+                                5.45, -0.27,  4.85,  0.74, 10.00, -6.02,
+                                3.16,  7.98,  3.01,  5.80,  4.27, -5.31
+                            });
+
+            var allMatrix = A.svd();
+
+            var u = allMatrix.Item1;
+            var s = allMatrix.Item2;
+            var vt = allMatrix.Item3;
+            
+            var sMAtrix = np.eye(5);
+
+            for(int idx = 0; idx < 5;idx++)
+                sMAtrix[idx,idx] = s[idx];
+
+            var ACreated = u.dot(sMAtrix).dot(vt);
+
+            var error = A - ACreated;
+
+            double[] errorElements = error.Storage.GetData<double>();
+
+            for(int idx = 0; idx < errorElements.Length;idx++)
+                Assert.IsTrue(Math.Abs(errorElements[idx]) < 0.01 );
+        }
+    }
+}

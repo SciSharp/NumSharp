@@ -39,7 +39,9 @@ NDStorage is an object which stores the data of a tesor in a single 1D array. Si
 
 **But hold on! How the data comes into this 1D arrayand how we get them back?**
 
-NDStorage has a property called "shape". The shape is a small but important class in NumSharp. It stores the dimensions and most important! it determines which element in the 1D array is selected by given indexes. 
+NDStorage has a property called "shape". The shape is a small but important class in NumSharp. It stores the dimensions and most important! it determines which element in the 1D array is selected by given indexes.
+
+To understand the methods for determines 1D internal storage index by NDArray indexes and vice versa we give examples of different tensor types.
 
 **Vector**
 
@@ -97,6 +99,7 @@ So fill first dimension, increase next, fill again, etc. also in n dimensional t
 
 And this you can imagine as **forward filling layout**.
 
+That's it. Now you have enough knowledge about NDArray, NDStorage and Shape. Check the other chapters for a how to use. :)
 
 
 

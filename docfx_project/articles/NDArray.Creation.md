@@ -1,4 +1,4 @@
-# Array creation
+ # Array creation
 
 Before we do some fancy numeric stuff or even machine learning we have to clear one thing. 
 
@@ -55,6 +55,16 @@ using NumSharp.Core;
 NDArray nd = new double[]{1,2,3,4};
 ```
 
+And for matrix and n dim tensors also work the same.
+
+```CSHARP
+using NumSharp.Core;
+
+NDArray nd = new double[,]{{1,2,3},{4,5,6}};
+```
+
+Beside the .NET array to NDArray converting there exist different kinds of methods which also exist in numpy.
+
 **Create by given range**
 
 ```CSHARP
@@ -68,3 +78,27 @@ var np1 = np.arange(10);
 // and do it as long as smaller than 10
 var np2 = np.arange(1,10,2);
 ```
+
+**Create diagonal matrix**
+
+```CSHARP
+using NumSharp.Core;
+
+// simple 5x5 eye matrix
+var nd1 = np.eye(5);
+
+// 3x3 eye matrix but elements different diagonal 
+nd1 = np.eye(3,1);
+```
+
+**Create by linspace**
+
+```CSHARP
+using NumSharp.Core;
+
+// create vector with 50 elements, from 4 to 10
+// include last element 
+// and convert them to double (float64)
+var nd1 = np.linspace(4,10, 50, true, np.float64);
+```
+

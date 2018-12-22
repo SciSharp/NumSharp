@@ -10,12 +10,12 @@ namespace NumSharp.Core
     public partial class NDArray
     {
         /// <summary>
-        /// 
+        /// Matrix or vector product between given NDArray and 2nd one.
+        /// if both NDArrays are 1D, scalar product is returned independend of shape
+        /// if both NDArrays are 2D matrix product is returned.
         /// </summary>
-        /// <param name="np1"></param>
-        /// <param name="nd2"></param>
-        /// <typeparam name="TData"></typeparam>
-        /// <returns></returns>
+        /// <param name="nd2">2nd NDArray</param>
+        /// <returns>Scalarproduct or matrix prod</returns>
         public NDArray dot(NDArray nd2)
         {
             var pufferShape = nd2.Storage.Shape;
