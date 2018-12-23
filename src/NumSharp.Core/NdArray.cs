@@ -147,7 +147,14 @@ namespace NumSharp.Core
             try 
             {
                 var objCast  = (NDArray) obj;
-                isSame = this == objCast;
+                
+                if (objCast.Storage.GetData() == this.Storage.GetData())
+                {
+                    if (objCast.shape == this.shape)
+                    {
+                        isSame = true;
+                    } 
+                }
             }
             catch 
             {

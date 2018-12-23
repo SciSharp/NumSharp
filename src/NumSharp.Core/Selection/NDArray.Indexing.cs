@@ -26,6 +26,37 @@ namespace NumSharp.Core
                 Storage.SetData(value, select);
             }
         }
+        public NDArray this[NumSharp.Generic.NDArray<bool> booleanArray]
+        {
+            get
+            {
+                return default(NDArray);
+            }
+            set
+            {
+                if (!Enumerable.SequenceEqual(this.shape,booleanArray.shape))
+                {
+                    throw new IncorrectShapeException();
+                }
+
+                object scalarObj = value.Storage.GetData().GetValue(0);
+
+                bool[] boolDotNetArray = booleanArray.Storage.GetData() as bool[];
+
+                int elementsAmount = booleanArray.size;
+                Array data = this.Storage.GetData();
+
+                for(int idx = 0; idx < elementsAmount;idx++)
+                {
+                    if (boolDotNetArray[idx])
+                    {
+                        int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
+                        data.SetValue(scalarObj,this.Storage.Shape.GetIndexInShape(indexes));
+                    }
+                }
+
+            } 
+        }
       
     }
 
