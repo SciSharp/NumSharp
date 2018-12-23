@@ -19,25 +19,29 @@ namespace NumSharp.Core
         public int Size {get{return _size;}}
         protected void _SetDimOffset()
         {
-            if (this._TensorLayout == 1)
+            if (this._Dimensions.Length == 0)
             {
-                _DimOffset[0] = 1;
 
-                for(int idx = 1;idx < _DimOffset.Length;idx++)
-                    _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
             }
-            else if ( _TensorLayout == 2)
+            else
             {
-                _DimOffset[_DimOffset.Length-1] = 1;
-                for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
-                    _DimOffset[idx-1] = _DimOffset[idx] * this._Dimensions[idx];
+                if (this._TensorLayout == 1)
+                {
+                    _DimOffset[0] = 1;
+
+                    for(int idx = 1;idx < _DimOffset.Length;idx++)
+                        _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
+                }
+                else if ( _TensorLayout == 2)
+                {
+                    _DimOffset[_DimOffset.Length-1] = 1;
+                    for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
+                        _DimOffset[idx-1] = _DimOffset[idx] * this._Dimensions[idx];
+                }
             }
         }
         public Shape(params int[] shape)
         {
-            if (shape.Length == 0)
-                throw new Exception("Shape cannot be empty.");
-            
             this._Dimensions = shape;
             this._DimOffset = new int[this._Dimensions.Length] ;
             this._TensorLayout = 1;
