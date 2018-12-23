@@ -44,9 +44,12 @@ namespace NumSharp.Core
 
                 var list = new List<object>();
 
-                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
+                var pufferShape = new Shape(npAll[0].shape);
+                pufferShape.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
+                
+               int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
 
-                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape[0] : npAll[0].shape[0];
+                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape[0] : pufferShape.DimOffset[0];
 
                 for (int i = 0; i < total; i++)
                 {
