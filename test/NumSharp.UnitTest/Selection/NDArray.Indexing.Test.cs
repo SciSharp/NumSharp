@@ -29,5 +29,26 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.Storage.GetData<int>(0, 0) == 10);
             Assert.IsTrue(nd.Storage.GetData<int>(1, 3) == 7);
         }
+        [TestMethod]
+        public void BoolArray()
+        {
+            NDArray A = new double[] {1,2,3};
+
+            NDArray booleanArr = new bool[]{false,false,true};
+
+            A[booleanArr.MakeGeneric<bool>()] = 1;
+
+            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<int>(),new int[] {1,2,1} ));
+
+            A = new double[,] {{1,2,3},{4,5,6}};
+
+            booleanArr = new bool[,] {{true,false,true},{false,true,false}};
+
+            A[booleanArr.MakeGeneric<bool>()] = -2;
+
+            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<int>(),new int[] {-2,4,2,-2, -2,6} ));
+
+            
+        }
     }
 }
