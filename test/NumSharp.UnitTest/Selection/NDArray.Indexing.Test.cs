@@ -48,7 +48,16 @@ namespace NumSharp.UnitTest.Selection
 
             Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<int>(),new int[] {-2,4,2,-2, -2,6} ));
 
-            
+        }
+        [TestMethod]
+        public void Compare()
+        {
+            NDArray A = new double[,] {{1,2,3},{4,5,6}};
+
+            NumSharp.Generic.NDArray<bool> boolArr = (A < 3);
+
+            A[A < 3] = -2;
+
         }
     }
 }
