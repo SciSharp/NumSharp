@@ -94,13 +94,13 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < shape.NDim - 1; idx++)
+            for (int idx = 0; idx < this.ndim - 1; idx++)
             {
                 missingDigits = digitBefore - dataParsed[idx].Replace(" ", "").Split('.')[0].Length;
 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ', missingDigits).ToArray()) + "0." + elementFormatEnd;
 
-                if (((idx + 1) % shape.Dimensions[1]) == 0)
+                if (((idx + 1) % shape[1]) == 0)
                 {
                     returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Storage.GetData<T>()[idx]) + "],   \n       [");
                 }

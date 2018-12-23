@@ -23,7 +23,7 @@ namespace NumSharp.Core
             if (idx == -1)
                 this.Storage.Reshape(shape);
             else
-                this.Storage.Reshape(CalculateNegativeShape(idx, this.shape.Dimensions.ToList(), shape));
+                this.Storage.Reshape(CalculateNegativeShape(idx, this.shape.ToList(), shape));
 
             return this;
         }

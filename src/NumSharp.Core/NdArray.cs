@@ -41,7 +41,7 @@ namespace NumSharp.Core
         /// <summary>
         /// Data length of every dimension
         /// </summary>
-        public IShape shape => Storage.Shape;
+        public int[] shape => Storage.Shape.Dimensions;
         /// <summary>
         /// Dimension count
         /// </summary>
@@ -55,7 +55,14 @@ namespace NumSharp.Core
         /// </summary>
         /// <value>Internal Storage</value>
         public NDStorage Storage {get;set;}
-        
+
+        /// <summary>
+        /// Shortcut for access internal elements
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public T[] Data<T>() => Storage.GetData<T>();
+
         /// <summary>
         /// Default constructor 
         /// Create a 1D double array with 1 element
@@ -156,8 +163,8 @@ namespace NumSharp.Core
         public object Clone()
         {
             var puffer = new NDArray(this.dtype);
-            var shapePuffer = new Shape(this.shape.Dimensions);
-            shapePuffer.ChangeTensorLayout(this.shape.TensorLayout);
+            var shapePuffer = new Shape(this.shape);
+            shapePuffer.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
 
             puffer.Storage.Allocate(this.dtype, shapePuffer, this.Storage.TensorLayout );
 

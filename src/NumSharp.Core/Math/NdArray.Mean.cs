@@ -23,20 +23,20 @@ namespace NumSharp.Core.Extensions
             // to compute mean by compressing row and row
             else if (axis == 0)
             {
-                double[] sumVec = new double[np.shape.Dimensions[0]];
+                double[] sumVec = new double[np.shape[0]];
 
                 for (int d = 0; d < sumVec.Length; d++)
                 {
-                    for (int p = 0; p < np.shape.Dimensions[1]; p++)
+                    for (int p = 0; p < np.shape[1]; p++)
                     {
                         sumVec[p] += Convert.ToDouble(np[d,p]);
                     }
                 }
                 var puffer = mean.Storage.GetData<double>().ToList();
 
-                for (int d = 0; d < np.shape.Dimensions[1]; d++)
+                for (int d = 0; d < np.shape[1]; d++)
                 {
-                    puffer.Add(sumVec[d] / np.shape.Dimensions[0]);
+                    puffer.Add(sumVec[d] / np.shape[0]);
                 }
                 mean.Storage.SetData(puffer.ToArray());
 
@@ -46,15 +46,15 @@ namespace NumSharp.Core.Extensions
             {
                 var puffer = mean.Storage.GetData<double>().ToList();
 
-                for (int d = 0; d < np.shape.Dimensions[0]; d++)
+                for (int d = 0; d < np.shape[0]; d++)
                 {
                     double rowSum = 0;
                     
-                    for (int p = 0; p < np.shape.Dimensions[1]; p++)
+                    for (int p = 0; p < np.shape[1]; p++)
                     {
                         rowSum += Convert.ToDouble(np[d,p]);
                     }
-                    puffer.Add(rowSum / np.shape.Dimensions[1]);
+                    puffer.Add(rowSum / np.shape[1]);
                 }
 
                 mean.Storage.SetData(puffer.ToArray());

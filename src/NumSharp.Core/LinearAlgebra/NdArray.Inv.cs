@@ -32,9 +32,9 @@ namespace NumSharp.Core
                     double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
                     double[] invArray = invStorage as double[];
 
-                    for (int idx = 0; idx < npInv.shape.Dimensions[0]; idx++)
+                    for (int idx = 0; idx < npInv.shape[0]; idx++)
                     {
-                        for (int jdx = 0; jdx < npInv.shape.Dimensions[1]; jdx++)
+                        for (int jdx = 0; jdx < npInv.shape[1]; jdx++)
                         {
                             invArray[this.Storage.Shape.GetIndexInShape(idx,jdx)] = matrixInv[idx][jdx];
                         }

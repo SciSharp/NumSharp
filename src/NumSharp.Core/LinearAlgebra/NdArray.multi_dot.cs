@@ -20,8 +20,8 @@ namespace NumSharp.Core
         {
             var np2 = np2Multi.Last(); 
 
-            if ((this.shape.NDim == 1 ) & (np2.shape.NDim == 1))
-                if (this.shape.Dimensions[0] != np2.shape.Dimensions[0])
+            if ((this.ndim == 1 ) & (np2.ndim == 1))
+                if (this.shape[0] != np2.shape[0])
                     throw new IncorrectShapeException(); 
                 else 
                 {
@@ -29,7 +29,7 @@ namespace NumSharp.Core
                     this.Storage.Reshape(1,this.Storage.GetData().Length);
                 }
             else
-                if (this.shape.Dimensions[1] != np2.shape.Dimensions[0])
+                if (this.shape[1] != np2.shape[0])
                     throw new IncorrectShapeException();
             
             var prod = this.dot(np2Multi[0]);

@@ -12,7 +12,7 @@ namespace NumSharp.Core.Extensions
         {
             var npAsMatrix = new matrix(nd);
 
-            npAsMatrix.reshape((Shape)nd.shape);
+            npAsMatrix.reshape(nd.shape);
 
             return npAsMatrix;
         }

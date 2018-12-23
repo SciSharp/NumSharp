@@ -16,12 +16,12 @@ namespace NumSharp.Core
             if (ndim == 1)
             {
                 nd.Storage = new NDStorage(dtype);
-                nd.Storage.Allocate(dtype, new Shape(1, shape.Dimensions[0]),1);
+                nd.Storage.Allocate(dtype, new Shape(1, shape[0]),1);
             }
             else if (ndim == 2)
             {
-                for (int idx = 0; idx < nd.shape.Dimensions[0]; idx++)
-                    for (int jdx = 0; jdx < nd.shape.Dimensions[1]; jdx++)
+                for (int idx = 0; idx < nd.shape[0]; idx++)
+                    for (int jdx = 0; jdx < nd.shape[1]; jdx++)
                         nd[idx, jdx] = this[jdx, idx];
             }
             else

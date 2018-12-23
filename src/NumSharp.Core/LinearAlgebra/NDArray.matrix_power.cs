@@ -14,7 +14,7 @@ namespace NumSharp.Core
             for(int idx = 2; idx <= power;idx++)
                 product = product.dot(this);
 
-            product = (power == 0) ? np.eye(product.shape.Dimensions[0]) : product;
+            product = (power == 0) ? np.eye(product.shape[0]) : product;
             
             return product;
         }

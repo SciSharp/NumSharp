@@ -44,9 +44,9 @@ namespace NumSharp.Core
 
                 var list = new List<object>();
 
-                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape.Dimensions[0];
+                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
 
-                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape.Dimensions[0] : npAll[0].shape.DimOffset[0];
+                int pageSize = npAll[0].ndim == 1 ? npAll[0].shape[0] : npAll[0].shape[0];
 
                 for (int i = 0; i < total; i++)
                 {
@@ -57,7 +57,7 @@ namespace NumSharp.Core
                     }
                 }
                 
-                int[] shapes = npAll[0].shape.Dimensions.ToArray();
+                int[] shapes = npAll[0].shape;
 
                 if (shapes.Length == 1)
                     shapes[0] *= npAll.Length;

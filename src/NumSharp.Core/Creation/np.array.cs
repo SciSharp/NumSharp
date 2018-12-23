@@ -61,5 +61,14 @@ namespace NumSharp.Core
 
             return nd;
         }
-	}
+
+        public static NDArray array<T>(params T[] data)
+        {
+            var nd = new NDArray(typeof(T), data.Length);
+
+            nd.Storage.SetData<T>(data);
+
+            return nd;
+        }
+    }
 }

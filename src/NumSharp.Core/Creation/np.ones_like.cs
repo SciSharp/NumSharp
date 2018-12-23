@@ -9,7 +9,7 @@ namespace NumSharp.Core
     {
         public static NDArray ones_like(NDArray nd, string order = "C")
         {
-            return np.ones(new Shape(nd.shape.Dimensions));
+            return np.ones(new Shape(nd.shape));
         }
     }
 }

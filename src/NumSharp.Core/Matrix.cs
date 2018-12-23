@@ -63,8 +63,8 @@ namespace NumSharp.Core
         {
             string returnValue = "matrix([[";
 
-            int dim0 = shape.Dimensions[0];
-            int dim1 = shape.Dimensions[1];
+            int dim0 = shape[0];
+            int dim1 = shape[1];
 
             for (int idx = 0; idx < (dim0-1);idx++)
             {

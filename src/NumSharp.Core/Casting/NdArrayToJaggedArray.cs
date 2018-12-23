@@ -42,9 +42,9 @@ namespace NumSharp.Core
                 }
                 case 2 : 
                 {
-                    T[][] dotNetArrayPuffer = new T[shape.Dimensions[0]][]; 
+                    T[][] dotNetArrayPuffer = new T[shape[0]][]; 
                     for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-                        dotNetArrayPuffer[idx] = new T[shape.Dimensions[1]];
+                        dotNetArrayPuffer[idx] = new T[shape[1]];
                         
                     for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
                         for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
@@ -57,17 +57,17 @@ namespace NumSharp.Core
                 case 3 : 
                 {
                     T[] data = Storage.GetData<T>();
-                    T[][][] dotNetArrayPuffer = new T[shape.Dimensions[0]][][]; 
+                    T[][][] dotNetArrayPuffer = new T[shape[0]][][]; 
                     for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
                     {
-                        dotNetArrayPuffer[idx] = new T[shape.Dimensions[1]][];
+                        dotNetArrayPuffer[idx] = new T[shape[1]][];
                         for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
-                            dotNetArrayPuffer[idx][jdx] = new T[shape.Dimensions[2]];
+                            dotNetArrayPuffer[idx][jdx] = new T[shape[2]];
                     }
                     
-                    for (int idx = 0; idx < shape.Dimensions[0];idx++)
-                        for (int jdx = 0;jdx < shape.Dimensions[1];jdx++)
-                            for(int kdx = 0; kdx < shape.Dimensions[2];kdx++)
+                    for (int idx = 0; idx < shape[0];idx++)
+                        for (int jdx = 0;jdx < shape[1];jdx++)
+                            for(int kdx = 0; kdx < shape[2];kdx++)
                                 dotNetArrayPuffer[idx][jdx][kdx] = (T) this[idx,jdx,kdx];
                      
                     dotNetArray = dotNetArrayPuffer;

@@ -20,7 +20,7 @@ namespace NumSharp.Core
             }
             else 
             {
-                puffer = new NDArray(this.dtype,this.shape.Dimensions.ToArray());
+                puffer = new NDArray(this.dtype,this.shape);
             }
 
             puffer.Storage.SetData(Array.CreateInstance(dtype,puffer.size));

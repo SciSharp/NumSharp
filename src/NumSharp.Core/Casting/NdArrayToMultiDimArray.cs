@@ -31,9 +31,9 @@ namespace NumSharp.Core
     {
         public Array ToMuliDimArray<T>()
         {
-            Array dotNetArray = Array.CreateInstance(typeof(T),this.shape.Dimensions);
+            Array dotNetArray = Array.CreateInstance(typeof(T),this.shape);
 
-            var pufferShape = new Shape(shape.Dimensions);
+            var pufferShape = new Shape(shape);
             pufferShape.ChangeTensorLayout(2);
 
             int[] indexes = null;
@@ -41,10 +41,10 @@ namespace NumSharp.Core
 
             T[] array = Storage.GetData<T>();
 
-            for(int idx = 0; idx < shape.Size;idx++)
+            for(int idx = 0; idx < this.size;idx++)
             {
                 indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[shape.GetIndexInShape(indexes)];
+                idxValue = array[Storage.Shape.GetIndexInShape(indexes)];
                 dotNetArray.SetValue(idxValue,indexes);
             }
 

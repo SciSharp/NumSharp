@@ -36,7 +36,7 @@ namespace NumSharp.Core
             {
                 if (axis < 0 || axis >= this.ndim)
                     throw new Exception("Invalid input: axis");
-                int[] resShapes = new int[this.shape.Dimensions.Length - 1];
+                int[] resShapes = new int[this.shape.Length - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
                 int prev = 1;
@@ -44,24 +44,24 @@ namespace NumSharp.Core
                 int post = 1;
                 int size = 1; //total number of the elements for result
                 //Calculate new Shape
-                for (int i = 0; i < this.shape.Dimensions.Length; i++)
+                for (int i = 0; i < this.shape.Length; i++)
                 {
                     if (i == axis)
-                        cur = this.shape.Dimensions[i];
+                        cur = this.shape[i];
                     else
                     {
-                        resShapes[index++] = this.shape.Dimensions[i];
-                        size *= this.shape.Dimensions[i];
+                        resShapes[index++] = this.shape[i];
+                        size *= this.shape[i];
                         if (i < axis)
-                            prev *= this.shape.Dimensions[i];
+                            prev *= this.shape[i];
                         else
-                            post *= this.shape.Dimensions[i];
+                            post *= this.shape[i];
                     }
                 }
                 
                 //Fill in data
                 index = 0; //index for result data set
-                int sameSetOffset = this.shape.DimOffset[axis.Value];
+                int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
                 int increments = cur * post;
                 double[] resData = new double[size];  //res.Data = new double[size];
                 int start = 0;

@@ -23,10 +23,10 @@ namespace NumSharp.Core
             var A = (double[]) this.Storage.CloneData<double>();
             var b = (double[])nDArrayB.Storage.CloneData<double>();
 
-            int m = this.shape.Dimensions[0];
-            int n = this.shape.Dimensions[1];
+            int m = this.shape[0];
+            int n = this.shape[1];
 
-            int nrhs = (nDArrayB.shape.NDim > 1) ? nDArrayB.shape.Dimensions[1] : 1;
+            int nrhs = (nDArrayB.ndim > 1) ? nDArrayB.shape[1] : 1;
 
             int lda = m;
             int ldb = m;

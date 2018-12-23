@@ -18,8 +18,8 @@ namespace NumSharp.Core
 
             double[] A = this.Storage.CloneData<double>();
 
-            int m = this.shape.Dimensions[0];
-            int n = this.shape.Dimensions[1]; 
+            int m = this.shape[0];
+            int n = this.shape[1]; 
             int lda = m;
             int ldu = m; 
             int ldvt = n; 

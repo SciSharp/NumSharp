@@ -24,8 +24,8 @@ namespace NumSharp.Core
             var oldStorage1 = this.Storage;
             var oldStorage2 = nd2.Storage;
 
-            if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
-                if (this.shape.Dimensions[0] != nd2.shape.Dimensions[0])
+            if ((this.ndim == 1 ) & (nd2.ndim == 1))
+                if (this.shape[0] != nd2.shape[0])
                     throw new IncorrectShapeException(); 
                 else 
                 {
@@ -38,19 +38,19 @@ namespace NumSharp.Core
                     nd2.Storage.SetData(oldStorage2.GetData());
                 }
             else
-                if (this.shape.Dimensions[1] != nd2.shape.Dimensions[0])
+                if (this.shape[1] != nd2.shape[0])
                     throw new IncorrectShapeException();
             
-            if ((shape.NDim == 2) & (nd2.shape.NDim == 1))
+            if ((this.ndim == 2) & (nd2.ndim == 1))
             {
                 var pufferList = pufferShape.Dimensions.ToList();
                 pufferList.Add(1);
                 nd2.Storage.Reshape(pufferList.ToArray());
             }
             
-            int iterator = this.shape.Dimensions[1];
-            int dim0 = this.shape.Dimensions[0];
-            int dim1 = nd2.shape.Dimensions[1];
+            int iterator = this.shape[1];
+            int dim0 = this.shape[0];
+            int dim1 = nd2.shape[1];
             
             var prod = new NDArray(this.Storage.DType, dim0, dim1);
 
@@ -139,7 +139,7 @@ namespace NumSharp.Core
                 }
             }
 
-            if ((this.shape.NDim == 1 ) & (nd2.shape.NDim == 1))
+            if ((this.ndim == 1 ) & (nd2.ndim == 1))
             {
                 this.Storage.Reshape(this.Storage.GetData().Length);
                 nd2.Storage.Reshape(nd2.Storage.GetData().Length);
