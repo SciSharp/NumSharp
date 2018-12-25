@@ -6,9 +6,9 @@ using System.Text;
 
 namespace NumSharp.Core
 {
-    public static partial class NDArrayRandomExtensions
+    public partial class NumPyRandom
     {
-        public static void shuffle(this NumPyRandom rand, NDArray list)
+        public void shuffle(NDArray list)
         {
             var rng = new Random();
             var count = list.size;
