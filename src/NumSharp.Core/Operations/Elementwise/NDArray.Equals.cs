@@ -16,7 +16,7 @@ namespace NumSharp.Core
             {
                 case int[] values :
                 {
-                    int value = (int) obj;                 
+                    int value = Convert.ToInt32(obj);                 
                     for(int idx =0; idx < bools.Length;idx++)
                     {
                         if ( values[idx] == value )
@@ -26,7 +26,7 @@ namespace NumSharp.Core
                 }
                 case Int64[] values :
                 {
-                    Int64 value = (Int64) obj;                 
+                    Int64 value = Convert.ToInt64(obj);                 
                     for(int idx =0; idx < bools.Length;idx++)
                     {
                         if ( values[idx] == value )
@@ -36,7 +36,7 @@ namespace NumSharp.Core
                 }
                 case float[] values :
                 {
-                    float value = (float) obj;                 
+                    float value = Convert.ToSingle(obj);                 
                     for(int idx =0; idx < bools.Length;idx++)
                     {
                         if ( values[idx] == value )
@@ -46,7 +46,7 @@ namespace NumSharp.Core
                 }
                 case double[] values :
                 {
-                    double value = (double) obj;                 
+                    double value = Convert.ToDouble(obj);                 
                     for(int idx =0; idx < bools.Length;idx++)
                     {
                         if ( values[idx] == value )
