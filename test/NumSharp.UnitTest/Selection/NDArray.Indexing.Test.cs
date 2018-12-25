@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
+using System.Linq;
 
 namespace NumSharp.UnitTest.Selection
 {
@@ -58,6 +59,20 @@ namespace NumSharp.UnitTest.Selection
 
             A[A < 3] = -2;
 
+        }
+        [TestMethod]
+        public void NDArrayByNDArray()
+        {
+            NDArray x = new double[] {1,2,3,4,5,6};
+
+            NDArray index = new int[] {1,3,5};
+
+            NDArray selected = x[index];
+
+            double[] a = (System.Array) selected as double[];
+            double[] b = {2,4,6};
+
+            Assert.IsTrue(Enumerable.SequenceEqual(a,b)); 
         }
     }
 }
