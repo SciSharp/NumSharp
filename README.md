@@ -2,7 +2,7 @@
 
 NumPy port in C# .NET Standard
 
-[![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/numsharp/Lobby)
+[![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sci-sharp/community)
 ![NumSharp](https://ci.appveyor.com/api/projects/status/bmaauxd9rx5lsq9i?svg=true)
 ![NuGet](https://img.shields.io/nuget/dt/NumSharp.svg)
 
@@ -98,4 +98,4 @@ Welcome to fork and pull request to add more APIs, and make reference list longe
 
 <img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
 
-Star me on [Github](https://github.com/SciSharp/NumSharp) if you like it.
+Star me on [Github](https://gitter.im/sci-sharp/community) if you like it.
