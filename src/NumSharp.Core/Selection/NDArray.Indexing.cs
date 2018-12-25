@@ -26,6 +26,31 @@ namespace NumSharp.Core
                 Storage.SetData(value, select);
             }
         }
+        public NDArray this[NDArray indexes]
+        {
+            get
+            {
+                if(!(indexes.ndim == 1))
+                    throw new IncorrectShapeException();
+                
+                NDArray selectedValues = null;
+
+                if (this.ndim == 1)
+                {
+                    selectedValues = new NDArray(this.dtype,indexes.size);
+
+                    Array selValArr = selectedValues.Storage.GetData();
+                    Array indexesArr = indexes.Storage.GetData();
+                    Array thisArr = this.Storage.GetData();
+
+                    for(int idx = 0; idx < indexesArr.Length;idx++)
+                        selValArr.SetValue(thisArr.GetValue(Convert.ToInt32(indexesArr.GetValue(idx))),idx);
+                    
+                }
+
+                return selectedValues;
+            }
+        }
         public NDArray this[NumSharp.Generic.NDArray<bool> booleanArray]
         {
             get
