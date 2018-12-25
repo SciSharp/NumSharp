@@ -59,6 +59,8 @@ namespace NumSharp.UnitTest.Selection
 
             A[A < 3] = -2;
 
+            var a = A[A == -2 | A > 5];
+
         }
         [TestMethod]
         public void NDArrayByNDArray()
