@@ -55,8 +55,28 @@ namespace NumSharp.UnitTest.Extensions
             var nd3 = nd1.roll(-2);
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1.shape,nd3.shape));
+        }
+        [TestMethod]
+        public void RollWithAxis()
+        {
+            var x = np.arange(10);
+            var x2 = x.reshape(2,5);
 
+            var x3 = x2.roll(1,0);
+            var x4 = x2.roll(1,1);
 
+            int[,] x3_ = (Array) x3 as int[,];
+            int[,] x4_ = (Array) x4 as int[,];
+
+            int[,] expX3 = {{5,6,7,8,9},{0,1,2,3,4}};
+            int[,] expX4 = {{4,0,1,2,3},{9,5,6,7,8}};
+
+            for(int idx = 0; idx < expX3.GetLength(0);idx++)
+                for(int jdx = 0; jdx < expX3.GetLength(1);jdx++)
+                {    
+                    Assert.IsTrue(x3_[idx,jdx] == expX3[idx,jdx]);
+                    Assert.IsTrue(x4_[idx,jdx] == expX4[idx,jdx]);
+                }
         }
     }
     
