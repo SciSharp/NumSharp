@@ -4,6 +4,32 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        public NDArray roll(int shift, int axis )
+        {
+            if (axis > this.ndim)
+                throw new IncorrectShapeException();
+            
+            Array data = this.Storage.GetData();
+            Array result = this.Storage.CloneData();
+
+            shift = (axis == 0) ? (-1) * shift : shift;
+
+            shift = ((shift % this.shape[axis]) < 0) ? shift+this.shape[axis] : shift; 
+
+            for ( int idx = 0; idx < this.size;idx++)
+            {
+                int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                indexes[axis] = ( indexes[axis] + shift) % this.shape[axis];
+
+                result.SetValue(data.GetValue(idx),this.Storage.Shape.GetIndexInShape(indexes));
+            }
+            
+            NDArray resultNDArray = new NDArray(this.dtype,this.shape);
+
+            resultNDArray.Storage.SetData(result);
+
+            return resultNDArray;
+        }
         public NDArray roll(int shift)
         {
             shift = (-1) * shift;
