@@ -9,31 +9,32 @@ namespace NumSharp.Core
 {
     public static partial class np
     {
-        public static NDArray asarray(double[] data, int ndim = 1)
+        public static NDArray asarray(string data)
         {
-            var nd = new NDArray(typeof(double), data.Length);
+            var nd = new NDArray(typeof(string), new int[0]);
+            nd.Storage.SetData(new string[] { data });
+            return nd;
+        }
+
+        public static NDArray asarray<T>(T data) where T : struct
+        {
+            var nd = new NDArray(typeof(T), new int[0]);
+            nd.Storage.SetData(new T[] { data });
+            return nd;
+        }
+
+        public static NDArray asarray(string[] data, int ndim = 1)
+        {
+            var nd = new NDArray(typeof(string), data.Length);
             nd.Storage.SetData(data);
             return nd;
         }
 
-        public static NDArray asarray(float data)
+        public static NDArray asarray<T>(T[] data, int ndim = 1) where T : struct
         {
-            return new NDArray(new float[] { data });
-        }
-
-        public static NDArray asarray(float[] data, int ndim = 1)
-        {
-            var nd = new NDArray(typeof(float), data.Length);
+            var nd = new NDArray(typeof(T), data.Length);
             nd.Storage.SetData(data);
             return nd;
         }
-        /*
-        public static NDArray asarray(matrix mx, int ndim = 1)
-        {
-            var nd = new NDArray(mx.dtype, mx.shape);
-            nd.Storage = mx.Storage;
-            return nd;
-        }
-        */
     }
 }
