@@ -47,52 +47,66 @@ namespace NumSharp.Core
         }
         public static implicit operator NDArray(string str)
         {
-            if (!str.StartsWith("["))
-                throw new Exception("cannot cast this string to ndarray");
-            else 
+            var nd = new NDArray(typeof(string),new int[0]);
+            nd.Storage.SetData(new string[]{str});
+
+            return nd;
+            
+            /* 
+            if (str.StartsWith("["))
                 str = str.Replace("[","");
             
-            if (!str.EndsWith("]"))
-                throw new Exception("cannot cast this string to ndarray");
-            else 
+            if (str.EndsWith("]"))
                 str = str.Replace("]","");
-            
-            
-            string[][] splitted = null;
 
-            if (str.Contains(","))
+            NDArray nd = null;
+
+            if (str.StartsWith("["))
             {
-                splitted = str.Split(';')
-                              .Select(x => x.Split(',') )
-                              .ToArray();
-                              
-            }
-            else 
-            {
-                splitted = str.Split(';')
-                              .Select(x => x.Split(' ') )
-                              .ToArray();
-            }
-            
-            
-            int dim0 = splitted.Length;
-            int dim1 = splitted[0].Length;
+                string[][] splitted = null;
 
-            var shape = new Shape( new int[] { dim0, dim1 });
-
-            NDArray nd = new NDArray(typeof(double));
-
-            nd.Storage.Allocate(nd.dtype,shape,1);
-
-            for (int idx = 0; idx< splitted.Length;idx++)
-            {
-                for (int jdx = 0; jdx < splitted[0].Length;jdx++)
+                if (str.Contains(","))
                 {
-                    nd[idx,jdx] = Double.Parse(splitted[idx][jdx]);
+                    splitted = str.Split(';')
+                                .Select(x => x.Split(',') )
+                                .ToArray();
+                                
+                }
+                else 
+                {
+                    splitted = str.Split(';')
+                                .Select(x => x.Split(' ') )
+                                .ToArray();
+                }
+                
+                
+                int dim0 = splitted.Length;
+                int dim1 = splitted[0].Length;
+
+                var shape = new Shape( new int[] { dim0, dim1 });
+
+                nd = new NDArray(typeof(double));
+
+                nd.Storage.Allocate(nd.dtype,shape,1);
+
+                for (int idx = 0; idx< splitted.Length;idx++)
+                {
+                    for (int jdx = 0; jdx < splitted[0].Length;jdx++)
+                    {
+                        nd[idx,jdx] = Double.Parse(splitted[idx][jdx]);
+                    }
                 }
             }
-            
+            else
+            {
+                nd = new NDArray(typeof(string),new int[0]);
+                nd.Storage.SetData(new string[]{str});
+                
+            }
+                
             return nd;
+
+            */
         }
     }
 }

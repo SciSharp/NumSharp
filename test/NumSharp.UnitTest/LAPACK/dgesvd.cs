@@ -29,8 +29,6 @@ namespace NumSharp.UnitTest.Extensions
 
             int m = 6, n = 5, lda = 6, ldu = 6, ldvt = 5, info = 0, lwork = -1;
             
-            double wkopt;
-            
             double[] work = new double[5];
 
             /* Local arrays */
@@ -44,7 +42,6 @@ namespace NumSharp.UnitTest.Extensions
 
             LAPACK.dgesvd_("ALL".ToCharArray(),"All".ToCharArray(),ref m, ref n, A, ref lda, s, u, ref ldu, vt, ref ldvt, work, ref lwork, ref info );        
 
-            var a = 1;
         }
     }
 }

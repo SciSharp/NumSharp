@@ -6,6 +6,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <Authors>Haiping Chen, Christian Kahr</Authors>
+    <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>

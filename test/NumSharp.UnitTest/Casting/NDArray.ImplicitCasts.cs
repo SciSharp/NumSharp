@@ -54,13 +54,11 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCast()
         {
-            NDArray nd = "[1,2,3;4,5,6]";
+            NDArray nd = "hello";
 
-            var doubleMatr = new double[,]{{1,2,3},{4,5,6}};
+            var a = (string) nd.Storage.GetData().GetValue(0);
 
-            for(int idx = 0; idx < doubleMatr.GetLength(0);idx++)
-                for(int jdx = 0; jdx < doubleMatr.GetLength(1);jdx++)
-                    Assert.IsTrue((double)nd[idx,jdx] == doubleMatr[idx,jdx]); 
+            Assert.IsTrue(a == "hello");
         }
 
     }
