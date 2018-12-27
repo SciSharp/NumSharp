@@ -14,8 +14,6 @@ namespace NumSharp.UnitTest.Selection
         public void Enumerate()
         {
             var npStorage = np.arange(12).reshape(2, 3, 2).Storage;
-
-            int i = 0;
             
             /// not longer for ndarray
             /*
