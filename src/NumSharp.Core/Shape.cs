@@ -40,22 +40,17 @@ namespace NumSharp.Core
                 }
             }
         }
-        public Shape(params int[] shape)
+
+        public Shape(params int[] dims)
         {
-            this._Dimensions = shape;
-            this._DimOffset = new int[this._Dimensions.Length] ;
-            this._TensorLayout = 1;
-
-            this._size = 1;
-
-            for (int idx =0; idx < shape.Length;idx++)
-                _size *= shape[idx];
-            this._SetDimOffset();
+            ReShape(dims);
         }
+
         public Shape(IEnumerable<int> shape) : this(shape.ToArray())
         {
             
         }
+
         public int GetIndexInShape(params int[] select)
         {
             int idx = 0;
@@ -66,6 +61,7 @@ namespace NumSharp.Core
 
             return idx;
         }
+
         public int[] GetDimIndexOutShape(int select)
         {
             int[] dimIndexes = null;
@@ -96,6 +92,7 @@ namespace NumSharp.Core
 
             return dimIndexes;
         }
+
         public void  ChangeTensorLayout(int layout)
         {
             _DimOffset = new int[this._Dimensions.Length];
@@ -105,6 +102,20 @@ namespace NumSharp.Core
             _TensorLayout = layout;
             _SetDimOffset();
         }
+
+        public void ReShape(params int[] dims)
+        {
+            this._Dimensions = dims;
+            this._DimOffset = new int[this._Dimensions.Length];
+            this._TensorLayout = 1;
+
+            this._size = 1;
+
+            for (int idx = 0; idx < dims.Length; idx++)
+                _size *= dims[idx];
+            this._SetDimOffset();
+        }
+
         public int UniShape => _Dimensions[0];
 
         public (int, int) BiShape => _Dimensions.Length == 2 ? (_Dimensions[0], _Dimensions[1]) : (0, 0);

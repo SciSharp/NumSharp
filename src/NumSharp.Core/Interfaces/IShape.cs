@@ -17,5 +17,6 @@ namespace NumSharp.Core.Interfaces
         (int, int) BiShape {get;}
         (int, int, int) TriShape {get;}
         void ChangeTensorLayout(int order);
+        void ReShape(params int[] dims);
     }
 }
