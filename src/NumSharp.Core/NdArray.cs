@@ -63,6 +63,8 @@ namespace NumSharp.Core
         /// <returns></returns>
         public T[] Data<T>() => Storage.GetData<T>();
 
+        public Array Data() => Storage.GetData(dtype);
+
         /// <summary>
         /// Default constructor 
         /// Create a 1D double array with 1 element
@@ -72,6 +74,7 @@ namespace NumSharp.Core
         {
             Storage = new NDStorage();
         }
+
         /// <summary>
         /// Constructor for init data type
         /// internal storage is 1D with 1 element
@@ -81,6 +84,7 @@ namespace NumSharp.Core
         {
             Storage = new NDStorage(dtype);
         }
+
         /// <summary>
         /// Constructor which takes .NET array
         /// dtype and shape is determined from array
@@ -105,6 +109,7 @@ namespace NumSharp.Core
                 }
             } 
         }
+
         /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
@@ -126,6 +131,7 @@ namespace NumSharp.Core
         public NDArray(Type dtype, params int[] shapes) : this(dtype, new Shape(shapes) )
         {
         }
+
         public override int GetHashCode()
         {
             unchecked
@@ -136,6 +142,7 @@ namespace NumSharp.Core
                 return result;
             }
         }
+
         /// <summary>
         /// Determines if NDarray references are the same
         /// </summary>
@@ -162,6 +169,7 @@ namespace NumSharp.Core
             }
             return isSame;
         }
+
         /// <summary>
         /// Clone the whole NDArray
         /// internal storage is also cloned into 2nd memory area
