@@ -30,6 +30,14 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        public static implicit operator NDArray(float d)
+        {
+            var ndArray = new NDArray(typeof(float), new int[0]);
+            ndArray.Storage.SetData(new float[] { d });
+
+            return ndArray;
+        }
+
         public static implicit operator NDArray(double d)
         {
             var ndArray = new NDArray(typeof(double),new int[0]);
