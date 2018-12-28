@@ -21,13 +21,13 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="loc">Mean of the distribution</param>
         /// <param name="scale">Standard deviation of the distribution</param>
-        /// <param name="size"></param>
+        /// <param name="dims"></param>
         /// <returns></returns>
-        public NDArray normal(double loc, double scale, params int[] size)
+        public NDArray normal(double loc, double scale, params int[] dims)
         {
-            if (size.Length == 0)
+            if (dims.Length == 0)
                 throw new Exception("d cannot be empty.");
-            var array = new NDArray(typeof(double), new Shape(size).Size);
+            var array = new NDArray(typeof(double), new Shape(dims));
             Random rand = new Random(); //reuse this if you are generating many
 
             double[] arr = array.Storage.GetData<double>();
