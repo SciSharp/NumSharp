@@ -12,13 +12,16 @@ namespace NumSharp.Core
         {
             var rng = new Random();
             var count = list.size;
+
+            Array listArr = list.Storage.GetData();
+
             while (count > 1)
             {
                 count--;
                 var k = rng.Next(count + 1);
-                var value = list[k];
-                list[k] = list[count];
-                list[count] = value;
+                var value = listArr.GetValue(k);
+                listArr.SetValue(listArr.GetValue(count),k); 
+                listArr.SetValue(value,count);
             }
         }
     }
