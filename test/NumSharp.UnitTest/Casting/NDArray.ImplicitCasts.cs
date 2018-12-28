@@ -51,8 +51,9 @@ namespace NumSharp.UnitTest
                 }
                     
         }
+
         [TestMethod]
-        public void StringCast()
+        public void StringCast1()
         {
             NDArray nd = "hello";
 
@@ -61,6 +62,17 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(a == "hello");
         }
 
+        [TestMethod]
+        public void StringCast2()
+        {
+            NDArray nd = "[1,2,3;4,5,6]";
+
+            var doubleMatr = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
+
+            for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
+                for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
+                    Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
+        }
     }
 
 }

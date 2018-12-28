@@ -24,6 +24,7 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp.Core;
+using System.Text.RegularExpressions;
 
 namespace NumSharp.Core
 {
@@ -47,66 +48,56 @@ namespace NumSharp.Core
         }
         public static implicit operator NDArray(string str)
         {
-            var nd = new NDArray(typeof(string),new int[0]);
-            nd.Storage.SetData(new string[]{str});
+            Regex reg = new Regex(@"\[((\d,?)+|;)+\]");
 
-            return nd;
-            
-            /* 
-            if (str.StartsWith("["))
-                str = str.Replace("[","");
-            
-            if (str.EndsWith("]"))
-                str = str.Replace("]","");
-
-            NDArray nd = null;
-
-            if (str.StartsWith("["))
+            if (reg.IsMatch(str))
             {
+                NDArray nd = null;
+
                 string[][] splitted = null;
+                str = str.Substring(1, str.Length - 2);
 
                 if (str.Contains(","))
                 {
                     splitted = str.Split(';')
-                                .Select(x => x.Split(',') )
+                                .Select(x => x.Split(','))
                                 .ToArray();
-                                
+
                 }
-                else 
+                else
                 {
                     splitted = str.Split(';')
-                                .Select(x => x.Split(' ') )
+                                .Select(x => x.Split(' '))
                                 .ToArray();
                 }
-                
-                
+
+
                 int dim0 = splitted.Length;
                 int dim1 = splitted[0].Length;
 
-                var shape = new Shape( new int[] { dim0, dim1 });
+                var shape = new Shape(new int[] { dim0, dim1 });
 
                 nd = new NDArray(typeof(double));
 
-                nd.Storage.Allocate(nd.dtype,shape,1);
+                nd.Storage.Allocate(nd.dtype, shape, 1);
 
-                for (int idx = 0; idx< splitted.Length;idx++)
+                for (int idx = 0; idx < splitted.Length; idx++)
                 {
-                    for (int jdx = 0; jdx < splitted[0].Length;jdx++)
+                    for (int jdx = 0; jdx < splitted[0].Length; jdx++)
                     {
-                        nd[idx,jdx] = Double.Parse(splitted[idx][jdx]);
+                        nd[idx, jdx] = Double.Parse(splitted[idx][jdx]);
                     }
                 }
+
+                return nd;
             }
             else
             {
-                nd = new NDArray(typeof(string),new int[0]);
-                nd.Storage.SetData(new string[]{str});
-                
-            }
-                
-            return nd;
+                var nd = new NDArray(typeof(string), new int[0]);
+                nd.Storage.SetData(new string[] { str });
 
-            */
+                return nd;
+            }
         }
     }
 }

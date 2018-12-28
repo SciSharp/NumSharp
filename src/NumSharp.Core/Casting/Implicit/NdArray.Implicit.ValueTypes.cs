@@ -30,7 +30,6 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        
         public static implicit operator NDArray(double d)
         {
             var ndArray = new NDArray(typeof(double),new int[0]);
@@ -38,6 +37,7 @@ namespace NumSharp.Core
 
             return ndArray;
         }
+
         public static implicit operator NDArray(int d)
         {
             var ndArray = new NDArray(typeof(int),new int[0]);
@@ -45,13 +45,15 @@ namespace NumSharp.Core
 
             return ndArray;
         }
-        public static implicit operator NDArray(Int64 d)
+
+        public static implicit operator NDArray(long d)
         {
             var ndArray = new NDArray(typeof(Int64),new int[0]);
             ndArray.Storage.SetData(new Int64[]{d});
 
             return ndArray;
         }
+
         public static implicit operator NDArray(Complex d)
         {
             var ndArray = new NDArray(typeof(Complex),new int[0]);
@@ -59,6 +61,7 @@ namespace NumSharp.Core
 
             return ndArray;
         }
+
         public static implicit operator NDArray(Quaternion d)
         {
             var ndArray = new NDArray(typeof(Quaternion),new int[0]);
@@ -66,6 +69,5 @@ namespace NumSharp.Core
 
             return ndArray;
         }
-        
     }
 }
