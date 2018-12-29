@@ -172,6 +172,24 @@ namespace NumSharp.Core
         /// </summary>
         /// <value>numpys equal dtype</value>
         public Type DType {get {return _DType;}}
+
+        public int DTypeSize
+        {
+            get
+            {
+                switch (_DType.Name)
+                {
+                    case "Int32":
+                        return sizeof(int);
+                    case "Single":
+                        return sizeof(float);
+                    case "Double":
+                        return sizeof(double);
+                    default:
+                        return 0;
+                }
+            }
+        }
         /// <summary>
         /// storage shape for outside representation
         /// </summary>
