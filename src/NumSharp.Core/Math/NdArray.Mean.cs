@@ -16,7 +16,12 @@ namespace NumSharp.Core.Extensions
             // axis == -1: DEFAULT; to compute the mean of the flattened array.
             if (axis == -1)
             {
-                var sum = np.Storage.GetData<double>().Sum();
+                var data = np.Storage.GetData();
+
+                double sum = 0;
+
+                for (int idx =0; idx < data.Length;idx++)
+                    sum += Convert.ToDouble(data.GetValue(idx)); 
 
                 mean.Storage.SetData(new double[] { sum / np.size});
             }
@@ -32,7 +37,7 @@ namespace NumSharp.Core.Extensions
                         sumVec[p] += Convert.ToDouble(np[d,p]);
                     }
                 }
-                var puffer = mean.Storage.GetData<double>().ToList();
+                var puffer = mean.Storage.CloneData<double>().ToList();
 
                 for (int d = 0; d < np.shape[1]; d++)
                 {
