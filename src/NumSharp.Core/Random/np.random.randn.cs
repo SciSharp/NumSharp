@@ -42,7 +42,7 @@ namespace NumSharp.Core
                 arr[i] = randNormal;
             }
 
-            array.Storage.Allocate(arr,1);
+            array.Storage.SetData(arr);
 
             return array;
         }

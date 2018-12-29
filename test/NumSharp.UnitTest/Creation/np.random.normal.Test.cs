@@ -21,6 +21,8 @@ namespace NumSharp.UnitTest
 
             var mean = np.mean(s);
             Assert.IsTrue(Math.Abs(mu - mean.Data<float>()[0]) < 0.01);
+            Assert.IsTrue(s.shape[0] == 10);
+            Assert.IsTrue(s.shape[1] == 100);
 
             // var std = np.std(s, ddof = 1);
             // Assert.IsTrue(Math.Abs(sigma - std)) < 0.01;
