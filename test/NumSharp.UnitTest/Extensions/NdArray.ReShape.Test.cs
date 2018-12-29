@@ -81,11 +81,11 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(np.shape[0] == 10000);
             Assert.IsTrue(np.shape[1] == 3);
 
-            np.arange(15801033);
+            /*np.arange(15801033);
             np.reshape(2531, 2081, 3);
             np.reshape(-1, 3);
             Assert.IsTrue(np.shape[0] == 5267011);
-            Assert.IsTrue(np.shape[1] == 3);
+            Assert.IsTrue(np.shape[1] == 3);*/
         }
     }
 }
