@@ -50,6 +50,9 @@ namespace NumSharp.Core
         /// Total of elements
         /// </summary>
         public int size => Storage.Shape.Size;
+
+        public int dtypesize => Storage.DTypeSize;
+
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
