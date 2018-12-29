@@ -24,8 +24,8 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(s.shape[0] == 10);
             Assert.IsTrue(s.shape[1] == 100);
 
-            // var std = np.std(s, ddof = 1);
-            // Assert.IsTrue(Math.Abs(sigma - std)) < 0.01;
+            var std = s.std();
+            Assert.IsTrue(Math.Abs(sigma - std.Storage.GetData<double>()[0] )  < 0.01);
         }
     }
 }
