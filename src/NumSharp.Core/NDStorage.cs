@@ -439,6 +439,10 @@ namespace NumSharp.Core
                 _values = this._ChangeTypeOfArray(_values,dtype);
             _DType = dtype;
         }
+        public void SetNewShape(params int[] dimensions)
+        {
+            _Shape = new Shape(dimensions);
+        }
         public void Reshape(params int[] dimensions)
         {
             if (_TensorLayout == 2)
