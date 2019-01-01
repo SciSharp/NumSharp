@@ -5,6 +5,14 @@
    "version": "0.2.0",
    "configurations": [
        {
+           "type": "PowerShell",
+           "request": "launch",
+           "name": "PowerShell Launch Current File",
+           "script": "${file}",
+           "args": [],
+           "cwd": "${file}"
+       },
+       {
            "name": "NumSharp Example - Water equation",
            "type": "coreclr",
             "request": "launch",

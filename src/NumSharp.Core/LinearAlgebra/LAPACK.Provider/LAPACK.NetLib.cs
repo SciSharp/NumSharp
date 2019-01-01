@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Core
+namespace NumSharp.Core.LAPACKProvider
 {
-    public static partial class LAPACK
+    public static partial class NetLib
     {
         [DllImport("lapack")]
         public static extern void dgesv_(ref int n, ref int nrhs, double[] a, ref int lda, int[] ipiv, double[] b, ref int ldb, ref int info  );
