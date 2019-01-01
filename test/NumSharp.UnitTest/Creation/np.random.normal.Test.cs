@@ -21,11 +21,12 @@ namespace NumSharp.UnitTest
 
             var mean = np.mean(s);
             Assert.IsTrue(Math.Abs(mu - mean.Data<float>()[0]) < 0.01);
-            Assert.IsTrue(s.shape[0] == 10);
-            Assert.IsTrue(s.shape[1] == 100);
 
             var std = s.std();
-            Assert.IsTrue(Math.Abs(sigma - std.Storage.GetData<double>()[0] )  < 0.01);
+            Assert.IsTrue(Math.Abs(sigma - std.Data<double>()[0] )  < 0.01);
+
+            Assert.IsTrue(s.shape[0] == 10);
+            Assert.IsTrue(s.shape[1] == 100);
         }
     }
 }
