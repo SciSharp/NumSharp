@@ -8,4 +8,5 @@ install:
 - sh: sudo apt-get -y install libblas-dev liblapack-dev
 build: off
 test_script:
+- pwsh: "&($env:APPVEYOR_BUILD_FOLDER + '/GenerateCode.ps1')"
 - pwsh: "&($env:APPVEYOR_BUILD_FOLDER + '/ExecuteUnitTests.ps1')"
