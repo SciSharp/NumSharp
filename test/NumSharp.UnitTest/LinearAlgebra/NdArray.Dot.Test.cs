@@ -31,10 +31,22 @@ namespace NumSharp.UnitTest.Extensions
 
             var yArray = y.Storage.GetData<int>();
 
+
             Assert.AreEqual(yArray[0], 5);
             Assert.AreEqual(yArray[1], 8);
             Assert.AreEqual(yArray[2], 10);
             Assert.AreEqual(yArray[3], 13);
+        }
+
+        [TestMethod]
+        public void DotTwoScalar()
+        {
+
+            int sca1 = 2;
+            int sca2 = 3;
+            var sca3 = np.dot(sca1, sca2);
+
+            Assert.AreEqual(sca3.Data<int>()[0], 6);
         }
 
         [TestMethod]
