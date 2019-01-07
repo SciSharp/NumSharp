@@ -33,39 +33,29 @@ namespace NumSharp.Core
             }
             else if (this.ndim == 2)
             {
-                if(dtype == typeof(int))
-                {
-                    output = this._ToMatrixString<int>();
-                }
-                else if(dtype == typeof(double))
-                {
-                    output = this._ToMatrixString<double>();
-                }
-                
+                output = this._ToMatrixString();
             }
             else
             {
-                if (dtype == typeof(int))
-                {
-                    //output = this._ToVectorString<int>();
-                }
-                else if (dtype == typeof(double))
-                {
-                    //output = this._ToVectorString<double>();
-                }
+                output = this._ToVectorString();
             }
 
             return output;
         }
-        protected string _ToVectorString<T>()
+        protected string _ToVectorString()
         {
             string returnValue = "array([";
 
             int digitBefore = 0;
             int digitAfter = 0;
 
-            var dataParsed = Storage.GetData<T>().Select(x => _ParseNumber(x,ref digitBefore,ref digitAfter)).ToArray();
+            string[] dataParsed = new string[Storage.GetData().Length];
 
+            Array strg = Storage.GetData();
+
+            for (int idx = 0; idx < dataParsed.Length;idx++)
+                dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);
+            
             string elementFormatStart = "{0:";
             
             string elementFormatEnd = "";
@@ -83,25 +73,30 @@ namespace NumSharp.Core
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.GetData<T>()[idx]) + ", ");
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(idx)) + ", ");
             }
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.GetData<T>().Last()) + "])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "])");
 
             return returnValue;
         }
-        protected string _ToMatrixString<T>()
+        protected string _ToMatrixString()
         {
             string returnValue = "array([[";
 
             int digitBefore = 0;
             int digitAfter = 0;
 
-            string[] dataParsed = Storage.GetData<T>().Select(x => _ParseNumber(x, ref digitBefore, ref digitAfter)).ToArray();
+            string[] dataParsed = new string[Storage.GetData().Length];
 
+            Array strg = Storage.GetData();
+
+            for (int idx = 0; idx < dataParsed.Length;idx++)
+                dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);
+            
             string elementFormatStart = "{0:";
             
             string elementFormatEnd = "";
@@ -113,7 +108,7 @@ namespace NumSharp.Core
             int missingDigits;
             string elementFormat;
 
-            for (int idx = 0; idx < this.ndim - 1; idx++)
+            for (int idx = 0; idx < dataParsed.Length - 1; idx++)
             {
                 missingDigits = digitBefore - dataParsed[idx].Replace(" ", "").Split('.')[0].Length;
 
@@ -121,11 +116,11 @@ namespace NumSharp.Core
 
                 if (((idx + 1) % shape[1]) == 0)
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Storage.GetData<T>()[idx]) + "],   \n       [");
+                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, strg.GetValue(idx)) + "],   \n       [");
                 }
                 else
                 {
-                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, Storage.GetData<T>()[idx]) + ", ");
+                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, strg.GetValue(idx)) + ", ");
                 }
             }
 
@@ -133,7 +128,7 @@ namespace NumSharp.Core
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, Storage.GetData<T>().Last()) + "]])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "]])");
 
             return returnValue;    
         }
