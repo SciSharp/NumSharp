@@ -92,6 +92,9 @@ namespace NumSharp.Core
 
             string[] dataParsed = new string[Storage.GetData().Length];
 
+            int tensorLayout = Storage.TensorLayout;
+            Storage.ChangeTensorLayout(0);
+
             Array strg = Storage.GetData();
 
             for (int idx = 0; idx < dataParsed.Length;idx++)
@@ -129,6 +132,8 @@ namespace NumSharp.Core
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
             returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "]])");
+
+            Storage.ChangeTensorLayout(tensorLayout);
 
             return returnValue;    
         }
