@@ -75,4 +75,23 @@ Add T randn&lt;T&gt;()</PackageReleaseNotes>
     <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/lapack.so" Link="lapack.so" Pack="true" PackagePath="runtimes/linux-x64/native/lapack.so" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Operations\NdArray.ElementsWise.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>NdArray.ElementsWise.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Operations\NdArray.ElementsWise.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>NdArray.ElementsWise.tt</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
 </Project>
