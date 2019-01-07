@@ -3,6 +3,7 @@ using NumSharp.Core.Interfaces;
 using NumSharp.Core;
 using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace NumSharp.Core
 {
@@ -177,17 +178,7 @@ namespace NumSharp.Core
         {
             get
             {
-                switch (_DType.Name)
-                {
-                    case "Int32":
-                        return sizeof(int);
-                    case "Single":
-                        return sizeof(float);
-                    case "Double":
-                        return sizeof(double);
-                    default:
-                        return 0;
-                }
+                return Marshal.SizeOf(_DType);
             }
         }
         /// <summary>

@@ -46,6 +46,14 @@ namespace NumSharp.Core
             return ndArray;
         }
 
+        public static implicit operator NDArray(short d)
+        {
+            var ndArray = new NDArray(typeof(short), new int[0]);
+            ndArray.Storage.SetData(new short[] { d });
+
+            return ndArray;
+        }
+
         public static implicit operator NDArray(int d)
         {
             var ndArray = new NDArray(typeof(int),new int[0]);

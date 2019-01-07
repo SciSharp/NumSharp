@@ -17,6 +17,23 @@ namespace NumSharp.Core
         }
 
         /// <summary>
+        /// Scalar value
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public T randn<T>()
+        {
+            var nd = stardard_normal();
+            switch (typeof(T).Name)
+            {
+                case "Double":
+                    return (T)Convert.ChangeType(nd.Data<double>()[0], typeof(T));
+                default:
+                    throw new NotImplementedException("randn");
+            }
+        }
+
+        /// <summary>
         /// Draw random samples from a normal (Gaussian) distribution.
         /// </summary>
         /// <param name="loc">Mean of the distribution</param>
@@ -25,8 +42,6 @@ namespace NumSharp.Core
         /// <returns></returns>
         public NDArray normal(double loc, double scale, params int[] dims)
         {
-            if (dims.Length == 0)
-                throw new Exception("d cannot be empty.");
             var array = new NDArray(typeof(double), new Shape(dims));
             Random rand = new Random(); //reuse this if you are generating many
 
