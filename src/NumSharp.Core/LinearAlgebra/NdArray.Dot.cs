@@ -23,6 +23,15 @@ namespace NumSharp.Core
             // in case must do a reshape
             var oldStorage1 = this.Storage;
             var oldStorage2 = nd2.Storage;
+            if ((this.ndim == 0) & (nd2.ndim == 0))
+            {
+                if (this.dtype == typeof(int))
+                {
+                    var ret = this.Data<int>()[0] * nd2.Data<int>()[0];
+                    return new NDArray(new int[] { ret }).reshape();
+                }
+                
+            }
 
             if ((this.ndim == 1 ) & (nd2.ndim == 1))
                 if (this.shape[0] != nd2.shape[0])
