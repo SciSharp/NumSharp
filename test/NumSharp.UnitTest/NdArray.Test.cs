@@ -14,26 +14,26 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            /* 
-            var nd =  np.arange(9.0).reshape(3,3);
+            
+            var nd =  np.arange(9.0).reshape(3,3).MakeGeneric<double>();
 
             var random = new Random();
-            nd.Set(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
+            nd.Storage.SetData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             nd[1,0] = 1.0;
             nd[0,0] = 9.0;
             nd[2,2] = 7.0;
-            //nd.Storage[3] -= 20;
-            //nd.Storage[8] += 23;
+            nd[0,2] = nd[0,2] - 20.0;
+            nd[2,2] += 23;
 
             var stringOfNp = nd.ToString();
 
-            /*Assert.IsTrue(stringOfNp.Contains("[[ 0."));
+            Assert.IsTrue(stringOfNp.Contains("[["));
 
-            nd = np.arange(9).reshape(3,3);
+            nd = np.arange(9).reshape(3,3).MakeGeneric<double>();
 
             stringOfNp = nd.ToString();        
 
-            Assert.IsTrue(stringOfNp.Contains("([[ 0,"));*/
+            Assert.IsTrue(stringOfNp.Contains("([[ 0,"));
             
         }
         [TestMethod]
