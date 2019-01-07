@@ -178,7 +178,14 @@ namespace NumSharp.Core
         {
             get
             {
-                return Marshal.SizeOf(_DType);
+                if(_DType == typeof(string))
+                {
+                    return 0;
+                }
+                else
+                {
+                    return Marshal.SizeOf(_DType);
+                }
             }
         }
         /// <summary>
