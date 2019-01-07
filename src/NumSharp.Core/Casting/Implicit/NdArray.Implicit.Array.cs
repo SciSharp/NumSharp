@@ -35,7 +35,11 @@ namespace NumSharp.Core
         public static implicit operator NDArray(Array d)
         {
             var ndArray = new NDArray();
-            ndArray.FromMultiDimArray(d);
+
+            if (d.GetType().GetElementType().IsArray)
+                ndArray.FromJaggedArray(d);
+            else
+                ndArray.FromMultiDimArray(d);
 
             return ndArray;
         }

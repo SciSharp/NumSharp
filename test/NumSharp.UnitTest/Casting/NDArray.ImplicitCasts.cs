@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 using NumSharp.Core.Extensions;
 using NumSharp.Core;
 
@@ -10,6 +11,26 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class ImplicitCastTester
     {
+        [TestMethod]
+        public void ConvertFromJagged()
+        {
+            double[][] a = new double[3][];
+            for(int idx = 0; idx < a.Length;idx++)
+                a[idx] = new double[2];
+
+            
+            for (int idx = 0; idx < 3;idx++)
+                for (int jdx = 0; jdx < 2;jdx++)
+                    a[idx][jdx] = 10 * idx + jdx;
+
+            NDArray b = a;
+
+            var c = b.MakeGeneric<double>();
+            
+            for (int idx = 0; idx < 3;idx++)
+                for (int jdx = 0; jdx < 2;jdx++)
+                    Assert.IsTrue(c[idx,jdx] == a[idx][jdx]);
+        }
         [TestMethod]
         public void FromDotNetVector()
         {
