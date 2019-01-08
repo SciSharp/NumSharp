@@ -21,6 +21,9 @@ namespace NumSharp.Core
                     case "Int32":
                         output = Data<int>()[0].ToString();
                         break;
+                    case "Single":
+                        output = Data<float>()[0].ToString();
+                        break;
                     case "Double":
                         output = Data<double>()[0].ToString();
                         break;

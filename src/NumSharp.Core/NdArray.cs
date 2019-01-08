@@ -66,6 +66,8 @@ namespace NumSharp.Core
         /// <returns></returns>
         public T[] Data<T>() => Storage.GetData<T>();
 
+        public T Data<T>(int index) => Storage.GetData<T>()[index];
+
         public Array Data() => Storage.GetData(dtype);
 
         /// <summary>
