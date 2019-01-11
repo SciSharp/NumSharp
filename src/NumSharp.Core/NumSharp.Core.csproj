@@ -5,25 +5,24 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <Authors>Haiping Chen, Christian Kahr</Authors>
+    <Authors>Haiping Chen, Christian Kahr, Darren Schroeder</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Add public static implicit operator NDArray(short d)
-Add T randn&lt;T&gt;()</PackageReleaseNotes>
-    <AssemblyVersion>0.6.4.0</AssemblyVersion>
-    <FileVersion>0.6.4.0</FileVersion>
+    <PackageReleaseNotes>Improvements</PackageReleaseNotes>
+    <AssemblyVersion>0.6.5.0</AssemblyVersion>
+    <FileVersion>0.6.5.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <Version>0.6.4</Version>
+    <Version>0.6.5</Version>
     <PackageLicenseUrl>LICENSE</PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
-    <Company>SciSharp.org</Company>
+    <Company>SciSharp STACK</Company>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -50,7 +49,7 @@ Add T randn&lt;T&gt;()</PackageReleaseNotes>
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netstandard\d'))">      
     <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="2.0.1" />
-    <PackageReference Include="System.Memory" Version="4.5.1" />
+    <PackageReference Include="System.Memory" Version="4.5.2" />
   </ItemGroup>
 
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
