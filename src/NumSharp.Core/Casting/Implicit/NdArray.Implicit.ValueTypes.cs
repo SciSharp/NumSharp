@@ -23,27 +23,26 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
 using System.Numerics;
 
 namespace NumSharp.Core
 {
     public partial class NDArray
     {
-        public static implicit operator float(NDArray nd)
-        {
-            if (nd.ndim > 0)
-                throw new IncorrectShapeException();
-
-            return nd.Data<float>(0);
-        }
-
         public static implicit operator NDArray(float d)
         {
             var ndArray = new NDArray(typeof(float), new int[0]);
             ndArray.Storage.SetData(new float[] { d });
 
             return ndArray;
+        }
+
+        public static implicit operator float(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<float>(0);
         }
 
         public static implicit operator NDArray(double d)
@@ -54,12 +53,28 @@ namespace NumSharp.Core
             return ndArray;
         }
 
+        public static implicit operator double(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<double>(0);
+        }
+
         public static implicit operator NDArray(short d)
         {
             var ndArray = new NDArray(typeof(short), new int[0]);
             ndArray.Storage.SetData(new short[] { d });
 
             return ndArray;
+        }
+
+        public static implicit operator short(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<short>(0);
         }
 
         public static implicit operator NDArray(int d)
@@ -70,12 +85,28 @@ namespace NumSharp.Core
             return ndArray;
         }
 
+        public static implicit operator int(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<int>(0);
+        }
+
         public static implicit operator NDArray(long d)
         {
             var ndArray = new NDArray(typeof(Int64),new int[0]);
             ndArray.Storage.SetData(new Int64[]{d});
 
             return ndArray;
+        }
+
+        public static implicit operator long(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<long>(0);
         }
 
         public static implicit operator NDArray(Complex d)
