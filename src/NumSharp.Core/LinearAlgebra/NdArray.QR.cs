@@ -34,7 +34,7 @@ namespace NumSharp.Core
                     RDouble[idx+jdx * n] = a[idx+jdx*n];
 
 
-            var R = new NDArray(typeof(double),n,n);
+            var R = new NDArray(typeof(double), new Shape(n, n));
 
             R.Storage.SetData(RDouble);
 
@@ -42,7 +42,7 @@ namespace NumSharp.Core
 
             LAPACK.dorgqr_(ref m, ref n,ref k ,a, ref lda, tau, work, ref lwork,ref info);
 
-            var Q = new NDArray(typeof(double),tau.Length,tau.Length);
+            var Q = new NDArray(typeof(double), new Shape(tau.Length, tau.Length));
 
             Q.Storage.Allocate(Q.Storage.DType,Q.Storage.Shape,2);
             Q.Storage.SetData(a);

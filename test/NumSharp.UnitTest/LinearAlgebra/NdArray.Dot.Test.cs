@@ -111,20 +111,20 @@ namespace NumSharp.UnitTest.Extensions
         }
         [TestMethod]
         public void MatrixMultiplyComplex()
-        {   
-            var matrix1 = new NDArray(typeof(Complex),3,2);
+        {
+            var matrix1 = new NDArray(typeof(Complex), new Shape(3, 2));
             matrix1.Storage.ChangeTensorLayout(2);
             matrix1.Storage.SetData(new Complex[] {new Complex(1,-1),new Complex(2,-2), new Complex(3,0),new Complex(4,0), 5, 6}); 
             matrix1.Storage.ChangeTensorLayout(1);
 
-            var matrix2 = new NDArray(typeof(Complex),2,3);
+            var matrix2 = new NDArray(typeof(Complex), new Shape(2, 3));
             matrix2.Storage.ChangeTensorLayout(2);
             matrix2.Storage.SetData(new Complex[] {7,8,9,new Complex(10,-10),11, new Complex(12,-12)});
             matrix2.Storage.ChangeTensorLayout(1);
             
             var matrix3 = matrix1.dot(matrix2);
 
-            var matrix4 = new NDArray(typeof(Complex),3,3);
+            var matrix4 = new NDArray(typeof(Complex), new Shape(3, 3));
             matrix4.Storage.ChangeTensorLayout(2);
             matrix4.Storage.SetData(new Complex[9]);
             var mat4 = matrix4.Storage.GetData<Complex>();

@@ -13,9 +13,6 @@ namespace NumSharp.Core.Interfaces
         int[] Dimensions {get;}
         int GetIndexInShape(params int[] select); 
         int[] GetDimIndexOutShape(int select);
-        int UniShape {get;}
-        (int, int) BiShape {get;}
-        (int, int, int) TriShape {get;}
         void ChangeTensorLayout(int order);
         void ReShape(params int[] dims);
     }

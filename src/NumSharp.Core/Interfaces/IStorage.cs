@@ -29,7 +29,7 @@ namespace NumSharp.Core.Interfaces
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        IShape Shape {get;}
+        Shape Shape {get;}
         /// <summary>
         /// column wise or row wise order
         /// </summary>
@@ -41,7 +41,7 @@ namespace NumSharp.Core.Interfaces
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
         /// <param name="tensorOrder">row or column wise</param>
-        void Allocate(Type dtype, IShape shape, int tensorOrder = 1);
+        void Allocate(Type dtype, Shape shape, int tensorOrder = 1);
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>

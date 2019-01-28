@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void PerformaceBitmapSimulation()
         {
-            var npRealWorldBitmap = new NDArray(typeof(byte),2531,2081);
+            var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531,2081));
 
             Assert.IsTrue(npRealWorldBitmap.Storage.GetData<byte>().Length == (2531 * 2081));
         }

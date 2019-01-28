@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ZeroPowerTest()
         {
-            var nd1 = new NDArray(typeof(double),3,3);
+            var nd1 = new NDArray(typeof(double), new Shape(3,3));
 
             var onces = nd1.matrix_power(0).MakeGeneric<double>();
 

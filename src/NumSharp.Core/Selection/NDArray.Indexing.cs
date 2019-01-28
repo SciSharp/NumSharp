@@ -42,7 +42,7 @@ namespace NumSharp.Core
                 {
                     case 1 :
                     {
-                        selectedValues = new NDArray(this.dtype,indexes.size);
+                        selectedValues = new NDArray(this.dtype, indexes.size);
 
                         Array selValArr = selectedValues.Storage.GetData();
                     

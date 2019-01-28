@@ -60,8 +60,8 @@ namespace NumSharp.Core
             int iterator = this.shape[1];
             int dim0 = this.shape[0];
             int dim1 = nd2.shape[1];
-            
-            var prod = new NDArray(this.Storage.DType, dim0, dim1);
+
+            var prod = new NDArray(this.Storage.DType, new Shape(dim0, dim1));
 
             Array nd1SystemArray = this.Storage.GetData();
 

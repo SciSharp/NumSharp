@@ -26,7 +26,7 @@ namespace NumSharp.Core
     {
         protected Array _values;
         protected Type _DType;
-        protected IShape _Shape;
+        protected Shape _Shape;
         protected int _TensorLayout;
         protected void _ChangeRowToColumnLayout()
         {
@@ -192,7 +192,7 @@ namespace NumSharp.Core
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        public IShape Shape {get {return _Shape;}}
+        public Shape Shape {get {return _Shape;}}
         /// <summary>
         /// column wise or row wise order
         /// </summary>
@@ -232,7 +232,7 @@ namespace NumSharp.Core
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
         /// <param name="tensorOrder">row or column wise</param>
-        public void Allocate(Type dtype, IShape shape, int tensorOrder = 1)
+        public void Allocate(Type dtype, Shape shape, int tensorOrder = 1)
         {
             _DType = dtype;
             _Shape = shape;

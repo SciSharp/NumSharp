@@ -38,11 +38,11 @@ namespace NumSharp.Core
 
             work = new double[lwork]; 
 
-            LAPACK.dgesvd_("ALL".ToCharArray(),"All".ToCharArray(),ref m, ref n, A, ref lda, s, u, ref ldu, vt, ref ldvt, work, ref lwork, ref info );        
+            LAPACK.dgesvd_("ALL".ToCharArray(),"All".ToCharArray(),ref m, ref n, A, ref lda, s, u, ref ldu, vt, ref ldvt, work, ref lwork, ref info );
 
-            var uNDArr = new NDArray(typeof(double),m,n);
-            var vtNDArr = new NDArray(typeof(double),n,n);
-            var sNDArr = new NDArray(typeof(double),n);
+            var uNDArr = new NDArray(typeof(double), new Shape(m, n));
+            var vtNDArr = new NDArray(typeof(double), new Shape(n, n));
+            var sNDArr = new NDArray(typeof(double), n);
 
             // set variables
             double[] uDouble = uNDArr.Storage.GetData<double>();

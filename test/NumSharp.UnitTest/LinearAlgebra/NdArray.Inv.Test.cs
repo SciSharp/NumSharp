@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void Simple3x3()
         {
-            var np1 = new NDArray(typeof(double),3,3);
+            var np1 = new NDArray(typeof(double), new Shape(3, 3));
 
             var np1Arr = np1.Storage.GetData<double>();
 

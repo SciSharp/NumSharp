@@ -121,20 +121,10 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
-        public NDArray(Type dtype, IShape shape)
+        public NDArray(Type dtype, Shape shape)
         {
             Storage = new NDStorage();
             Storage.Allocate(dtype,shape,1);
-        }
-        /// <summary>
-        /// Constructor which initialize elements with 0
-        /// type and dimensions are given.
-        /// </summary>
-        /// <param name="dtype">internal data type</param>
-        /// <param name="shapes">dimensions</param>
-        /// <returns></returns>
-        public NDArray(Type dtype, params int[] shapes) : this(dtype, new Shape(shapes) )
-        {
         }
 
         public override int GetHashCode()

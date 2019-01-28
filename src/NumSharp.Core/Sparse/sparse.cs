@@ -9,7 +9,7 @@ namespace NumSharp.Core.Sparse
     {
         public csr_matrix diags(NDArray[] diagonals, int[] offsets = null, Shape shape = null, string format = null, Type dtype = null)
         {
-            var (m, n) = shape.BiShape;
+            int m = shape;
             var data_arr = np.zeros(m);
 
             for (int j = 0; j < diagonals.Length; j++)

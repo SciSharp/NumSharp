@@ -16,7 +16,7 @@ namespace NumSharp.Core
 
             if((ndim == 1) && (dim != 1))
             {
-                puffer = new NDArray(this.dtype, dim,dim);
+                puffer = new NDArray(this.dtype, new Shape(dim, dim));
             }
             else 
             {

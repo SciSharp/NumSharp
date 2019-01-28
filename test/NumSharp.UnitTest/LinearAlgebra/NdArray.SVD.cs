@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void DefaultTest()
         {
-            NDArray A = new NDArray(np.float64,6,5);
+            NDArray A = new NDArray(np.float64, new Shape(6, 5));
             A.Storage.SetData(new double[]{
                                 8.79,  6.11, -9.15,  9.57, -3.49,  9.84,
                                 9.93,  6.91, -7.93,  1.64,  4.02,  0.15,

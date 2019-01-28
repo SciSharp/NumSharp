@@ -116,10 +116,13 @@ namespace NumSharp.Core
             this._SetDimOffset();
         }
 
-        public int UniShape => _Dimensions[0];
-
+        public static implicit operator int(Shape shape) => shape.Size;
+        public static implicit operator (int, int)(Shape shape) => shape._Dimensions.Length == 2 ? (shape._Dimensions[0], shape._Dimensions[1]) : (0, 0);
+        public static implicit operator (int, int, int) (Shape shape) => shape._Dimensions.Length == 3 ? (shape._Dimensions[0], shape._Dimensions[1], shape._Dimensions[2]) : (0, 0, 0);
+        public static implicit operator int[](Shape shape) => shape._Dimensions;
         public (int, int) BiShape => _Dimensions.Length == 2 ? (_Dimensions[0], _Dimensions[1]) : (0, 0);
-
         public (int, int, int) TriShape => _Dimensions.Length == 3 ? (_Dimensions[0], _Dimensions[1], _Dimensions[2]) : (0, 0, 0);
+        public static implicit operator Shape(int[] dims) => new Shape(dims);
+        public static implicit operator Shape(int dim) => new Shape(dim);
     }
 }

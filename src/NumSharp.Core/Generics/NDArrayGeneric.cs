@@ -35,7 +35,7 @@ namespace NumSharp.Generic
             Storage = new NDStorage(typeof(T));
             Storage.Allocate(this.dtype,new Shape(1),1);
         }
-        public NDArray(IShape shape) : this()
+        public NDArray(Shape shape) : this()
         {
             Storage = new NDStorage(typeof(T));
             Storage.Allocate(this.dtype, shape,1);

@@ -49,7 +49,7 @@ namespace NumSharp.Core
 
         public static NDArray array<T>(T[][] data)
         {
-            var nd = new NDArray(typeof(T),data.Length,data[0].Length);
+            var nd = new NDArray(typeof(T), new Shape(data.Length, data[0].Length));
             
             for (int row = 0; row < data.Length; row++)
             {
