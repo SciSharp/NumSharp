@@ -29,6 +29,14 @@ namespace NumSharp.Core
 {
     public partial class NDArray
     {
+        public static implicit operator string(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<string>(0);
+        }
+
         public static implicit operator NDArray(float d)
         {
             var ndArray = new NDArray(typeof(float), new int[0]);
