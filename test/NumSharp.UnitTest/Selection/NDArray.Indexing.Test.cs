@@ -14,7 +14,17 @@ namespace NumSharp.UnitTest.Selection
 
             Assert.IsTrue(nd.Storage.GetData<int>(1, 1) == 5);
             Assert.IsTrue(nd.Storage.GetData<int>(2, 0) == 8);
+        }
 
+        [TestMethod]
+        public void NDArrayAccess()
+        {
+            var nd = np.arange(4).reshape(2, 2);
+
+            var row1 = nd[0];
+            Assert.AreEqual(row1.GetType(), typeof(NDArray));
+            // Assert.AreEqual(row1[0][0], 0);
+            // Assert.AreEqual(row1[0][1], 1);
         }
 
         [TestMethod]
