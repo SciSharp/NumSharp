@@ -57,7 +57,7 @@ namespace NumSharp.Core
         /// The internal storage for elements of NDArray
         /// </summary>
         /// <value>Internal Storage</value>
-        public NDStorage Storage {get;set;}
+        public NDStorage Storage { get; set; }
 
         /// <summary>
         /// Shortcut for access internal elements
@@ -124,7 +124,7 @@ namespace NumSharp.Core
         public NDArray(Type dtype, Shape shape)
         {
             Storage = new NDStorage();
-            Storage.Allocate(dtype,shape,1);
+            Storage.Allocate(dtype, shape, 1);
         }
 
         public override int GetHashCode()
@@ -139,30 +139,31 @@ namespace NumSharp.Core
         }
 
         /// <summary>
-        /// Determines if NDarray references are the same
+        /// Determines if NDArray references are the same
         /// </summary>
         /// <param name="obj">NDArray to compare</param>
         /// <returns>if reference is same</returns>
         public override bool Equals(object obj)
         {
-            bool isSame = false;
-            try 
+            switch (obj)
             {
-                var objCast  = (NDArray) obj;
-                
-                if (objCast.Storage.GetData() == this.Storage.GetData())
+                case NDArray safeCastObj:
                 {
-                    if (objCast.shape == this.shape)
+                    var thatData = safeCastObj.Storage?.GetData();
+                    if (thatData == null)
                     {
-                        isSame = true;
-                    } 
-                }
-            }
-            catch 
-            {
+                        return false;
+                    }
 
+                    var thisData = this.Storage?.GetData();
+                    return thisData == thatData && safeCastObj.shape == this.shape;
+
+                }
+                // Other object is not of Type NDArray, return false immediately.
+                default:
+                    return false;
             }
-            return isSame;
+
         }
 
         /// <summary>
@@ -176,7 +177,7 @@ namespace NumSharp.Core
             var shapePuffer = new Shape(this.shape);
             shapePuffer.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
 
-            puffer.Storage.Allocate(this.dtype, shapePuffer, this.Storage.TensorLayout );
+            puffer.Storage.Allocate(this.dtype, shapePuffer, this.Storage.TensorLayout);
 
             puffer.Storage.SetData(this.Storage.CloneData());
 
