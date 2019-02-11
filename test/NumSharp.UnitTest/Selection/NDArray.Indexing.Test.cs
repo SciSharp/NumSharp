@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Selection
             var nd = np.arange(4).reshape(2, 2);
 
             var row1 = nd[0];
-            Assert.AreEqual(row1.GetType(), typeof(NDArray));
+            // Assert.AreEqual(row1.GetType(), typeof(NDArray));
             // Assert.AreEqual(row1[0][0], 0);
             // Assert.AreEqual(row1[0][1], 1);
         }
