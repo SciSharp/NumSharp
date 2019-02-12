@@ -100,3 +100,7 @@ Welcome to fork and pull request to add more APIs, and make reference list longe
 <img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
 
 Star me on [Github](https://gitter.im/sci-sharp/community) if you like it.
+
+Scan QR code to join TIM group:
+
+![SciSharp STACK](https://raw.githubusercontent.com/SciSharp/TensorFlow.NET/master/docs/TIM.png)

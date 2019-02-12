@@ -24,11 +24,10 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp.Core;
-using NumSharp.Core.Interfaces;
 
 namespace NumSharp.Generic
 {
-    public class NDArray<T> : NumSharp.Core.NDArray where T : struct
+    public class NDArray<T> : NDArray where T : struct
     {
         public NDArray()
         {

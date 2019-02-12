@@ -37,6 +37,22 @@ namespace NumSharp.Core
             return nd.Data<string>(0);
         }
 
+        public static implicit operator NDArray(bool d)
+        {
+            var ndArray = new NDArray(typeof(bool), new int[0]);
+            ndArray.Storage.SetData(new bool[] { d });
+
+            return ndArray;
+        }
+
+        public static implicit operator bool(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<bool>(0);
+        }
+
         public static implicit operator NDArray(float d)
         {
             var ndArray = new NDArray(typeof(float), new int[0]);
