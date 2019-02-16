@@ -367,10 +367,6 @@ namespace NumSharp.Core
                 element = _values.GetValue(Shape.GetIndexInShape(indexes));
             else if (Shape.Dimensions.Last() == 1)
                 element = _values.GetValue(Shape.GetIndexInShape(indexes));
-            else if(indexes.Length == 1)
-            {
-                element = _values.GetValue(indexes[0]);
-            }
             else if(indexes.Length == Shape.NDim - 1)
             {
                 var offset = new int[Shape.NDim];

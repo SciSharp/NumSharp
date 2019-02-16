@@ -10,7 +10,7 @@
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="6.1.2">
         <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="NumSharp" Version="0.6.5" />
+    <PackageReference Include="NumSharp" Version="0.7.1" />
     <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
   </ItemGroup>
 
