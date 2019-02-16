@@ -371,6 +371,21 @@ namespace NumSharp.Core
             {
                 element = _values.GetValue(indexes[0]);
             }
+            else if(indexes.Length == Shape.NDim - 1)
+            {
+                var offset = new int[Shape.NDim];
+                for (int i = 0; i < Shape.NDim - 1; i++)
+                    offset[i] = indexes[i];
+
+                NDArray nd = new NDArray(DType, Shape.Dimensions[Shape.NDim - 1]);
+                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 1]; i++)
+                {
+                    offset[offset.Length - 1] = i;
+                    nd[i] = _values.GetValue(Shape.GetIndexInShape(offset));
+                }
+                    
+                return nd;
+            }
             else 
                 throw new Exception("indexes must be equal to number of dimension.");
             return element;
