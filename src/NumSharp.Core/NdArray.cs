@@ -32,7 +32,7 @@ namespace NumSharp.Core
     /// A powerful N-dimensional array object
     /// Inspired from https://www.numpy.org/devdocs/user/quickstart.html
     /// </summary>
-    public partial class NDArray : ICloneable
+    public partial class NDArray : ICloneable, IEnumerable
     {
         /// <summary>
         /// Data type of NDArray
@@ -69,6 +69,8 @@ namespace NumSharp.Core
         public T Data<T>(int index) => Storage.GetData<T>()[index];
 
         public Array Data() => Storage.GetData(dtype);
+
+        public T Max<T>() => Data<T>().Max();
 
         /// <summary>
         /// Default constructor 
@@ -182,6 +184,24 @@ namespace NumSharp.Core
             puffer.Storage.SetData(this.Storage.CloneData());
 
             return puffer;
+        }
+
+        public IEnumerator GetEnumerator()
+        {
+            switch (dtype.Name)
+            {
+                case "Int32":
+                    for (int i = 0; i < size; i++)
+                        yield return Data<int>(i);
+                    break;
+                case "Single":
+                    for (int i = 0; i < size; i++)
+                        yield return Data<float>(i);
+                    break;
+                default:
+                    throw new NotImplementedException("ndarray.GetEnumerator");
+            }
+            
         }
     }
 }
