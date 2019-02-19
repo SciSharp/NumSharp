@@ -41,7 +41,6 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void DotTwoScalar()
         {
-
             int sca1 = 2;
             int sca2 = 3;
             var sca3 = np.dot(sca1, sca2);

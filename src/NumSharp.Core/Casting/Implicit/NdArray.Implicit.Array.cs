@@ -52,6 +52,16 @@ namespace NumSharp.Core
         }
         public static implicit operator NDArray(string str)
         {
+            // process "[1, 2, 3]" 
+            if(new Regex(@"^\[[\d,\s\.]+\]$").IsMatch(str))
+            {
+                var data = str.Substring(1, str.Length - 2)
+                    .Split(',')
+                    .Select(x => double.Parse(x)).ToArray();
+                var nd = new NDArray(data, new Shape(data.Length));
+                return nd;
+            }
+
             Regex reg = new Regex(@"\[((\d,?)+|;)+\]");
 
             if (reg.IsMatch(str))

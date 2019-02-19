@@ -94,6 +94,15 @@ namespace NumSharp.UnitTest
                 for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
                     Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
         }
+
+        [TestMethod]
+        public void StringCast3()
+        {
+            NDArray nd = "[3,1,1,2]";
+            var intMatr = new int[] { 3, 1, 1, 2 };
+
+            Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<int>()));
+        }
     }
 
 }

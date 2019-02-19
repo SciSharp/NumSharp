@@ -98,7 +98,7 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="values"></param>
         /// <returns>Array with values</returns>
-        public NDArray(Array values ) : this(values.GetType().GetElementType())
+        public NDArray(Array values, Shape shape = null) : this(values.GetType().GetElementType())
         {
             int[] strgDim = new int[values.Rank];
 
@@ -114,7 +114,10 @@ namespace NumSharp.Core
                     Storage.SetData(values);
                     break;
                 }
-            } 
+            }
+
+            if (!(shape is null))
+                Storage.Reshape(shape);
         }
 
         /// <summary>
