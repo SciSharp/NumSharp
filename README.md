@@ -103,4 +103,4 @@ Star me on [Github](https://gitter.im/sci-sharp/community) if you like it.
 
 Scan QR code to join TIM group:
 
-![SciSharp STACK](https://raw.githubusercontent.com/SciSharp/TensorFlow.NET/master/docs/TIM.)
+![SciSharp STACK](https://raw.githubusercontent.com/SciSharp/TensorFlow.NET/master/docs/TIM.jpg)
