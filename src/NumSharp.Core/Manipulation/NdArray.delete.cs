@@ -9,8 +9,9 @@ namespace NumSharp.Core
     {
         public NDArray ravel()
         {
-            Storage.Reshape(Storage.Shape.Size);
-            return this;
+            var nd = copy();
+            nd.reshape(Storage.Shape.Size);
+            return nd;
         }
     }
 }

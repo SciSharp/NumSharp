@@ -464,10 +464,7 @@ namespace NumSharp.Core
                 _Shape = new Shape(dimensions);
                 _Shape.ChangeTensorLayout(2);
                 ChangeTensorLayout(1);
-                
             }    
-            
-            
         }
         public object Clone()
         {
