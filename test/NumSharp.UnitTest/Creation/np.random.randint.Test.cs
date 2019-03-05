@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Creation
 {
     [TestClass]
     public class NdArrayRandomRandIntTest

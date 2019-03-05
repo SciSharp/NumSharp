@@ -5,7 +5,7 @@ using System.Text;
 using System.Linq;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Creation
 {
     [TestClass]
     public class NdArrayZerosTest

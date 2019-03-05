@@ -6,7 +6,7 @@ using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Creation
 {
     [TestClass]
     public class NumPyRandomNormalTest
