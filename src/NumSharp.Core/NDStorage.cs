@@ -367,7 +367,7 @@ namespace NumSharp.Core
                 element = _values.GetValue(Shape.GetIndexInShape(indexes));
             else if (Shape.Dimensions.Last() == 1)
                 element = _values.GetValue(Shape.GetIndexInShape(indexes));
-            else if(indexes.Length == Shape.NDim - 1)
+            else if (indexes.Length == Shape.NDim - 1)
             {
                 var offset = new int[Shape.NDim];
                 for (int i = 0; i < Shape.NDim - 1; i++)
@@ -379,10 +379,28 @@ namespace NumSharp.Core
                     offset[offset.Length - 1] = i;
                     nd[i] = _values.GetValue(Shape.GetIndexInShape(offset));
                 }
-                    
+
                 return nd;
             }
-            else 
+            // 3 Dim
+            else if (indexes.Length == Shape.NDim - 2)
+            {
+                var offset = new int[Shape.NDim];
+                NDArray nd = new NDArray(DType, new int[]{ Shape.Dimensions[Shape.NDim - 2] , Shape.Dimensions[Shape.NDim - 1] });
+                
+                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 2]; i++)
+                {
+                    for (int j = 0; j < Shape.Dimensions[Shape.NDim - 1]; j++)
+                    {
+                        offset[0] = 0;
+                        offset[1] = i;
+                        offset[2] = j;
+                        nd[i,j] = _values.GetValue(Shape.GetIndexInShape(offset));
+                    }
+                }
+                return nd;
+            }
+            else
                 throw new Exception("indexes must be equal to number of dimension.");
             return element;
         }
