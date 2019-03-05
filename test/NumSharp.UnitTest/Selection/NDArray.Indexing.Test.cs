@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace NumSharp.UnitTest.Selection
@@ -24,6 +25,21 @@ namespace NumSharp.UnitTest.Selection
             var row1 = nd[0] as NDArray;
             Assert.AreEqual(row1[0], 0);
             Assert.AreEqual(row1[1], 1);
+        }
+
+        [TestMethod]
+        public void NDArrayAccess3Dim()
+        {
+            NDArray nd = np.arange(1, 18, 1).reshape(3,3,2);
+            var row1 = nd[0] as NDArray;
+            Assert.AreEqual(row1[0,0], 1);
+            Assert.AreEqual(row1[0,1], 2);
+            Assert.AreEqual(row1[1,0], 3);
+            Assert.AreEqual(row1[1,1], 4);
+            Assert.AreEqual(row1[2,0], 5);
+            Assert.AreEqual(row1[2,1], 6);
+
+
         }
 
         [TestMethod]
