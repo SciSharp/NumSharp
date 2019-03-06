@@ -62,6 +62,24 @@ namespace NumSharp.Core
             return nd;
         }
 
+        public static NDArray array<T>(T[,,] data)
+        {
+            var nd = new NDArray(typeof(T), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
+
+            for (int dim0 = 0; dim0 < data.GetLength(0); dim0++)
+            {
+                for (int dim1 = 0; dim1 < data.GetLength(1); dim1++)
+                {
+                    for (int dim2 = 0; dim2 < data.GetLength(2); dim2++)
+                    {
+                        nd[dim0,dim1,dim2] = data[dim0, dim1, dim2];
+                    }
+                }
+            }
+
+            return nd;
+        }
+
         public static NDArray array<T>(params T[] data)
         {
             var nd = new NDArray(typeof(T), data.Length);
