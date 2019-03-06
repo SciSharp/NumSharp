@@ -19,8 +19,8 @@ namespace NumSharp.UnitTest.Creation
            var c = new float[][] { new float[] { 1.3f, 2.3f }, new float[] { 3.3f, 4.3f } };
            var d = new float[][] { new float[] { 5.3f, 5.3f } };
 
-           var e = new float[][] { new double[] { 3.6, 8.7  }, new double[] { 5.7, 8.9 } };
-           var f = new float[][] { new double[] { 5.3, 5.3 } };
+           var e = new double[][] { new double[] { 3.6, 8.7  }, new double[] { 5.7, 8.9 } };
+           var f = new double[][] { new double[] { 5.3, 5.3 } };
 
             var nd = np.concatenate(new int[][][] { a, b }, axis: 0);
             Assert.AreEqual(nd.shape[0], 3);
