@@ -6,7 +6,7 @@ using NumSharp.Core.Extensions;
 using System.Linq;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
     public class NdArrayInvTest

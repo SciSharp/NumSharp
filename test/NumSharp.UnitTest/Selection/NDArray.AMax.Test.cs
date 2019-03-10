@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
     public class NDArrayAMaxTest
