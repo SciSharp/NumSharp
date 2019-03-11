@@ -7,7 +7,7 @@ using System.Linq;
 using System.Numerics;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Maths
 {
     [TestClass]
     public class NDArraySqrtTest

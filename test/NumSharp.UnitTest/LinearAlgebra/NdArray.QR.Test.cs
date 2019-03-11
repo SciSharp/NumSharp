@@ -7,7 +7,7 @@ using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.LinearAlgebra
 {
     /// <summary>
     /// Test concolve with standard example from 

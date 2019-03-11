@@ -339,7 +339,7 @@ namespace NumSharp.Core
             if (typeof(T) != this._DType)
                 this.ChangeDataType(typeof(T));
             
-            return (_values as T[]);
+            return _values as T[];
         }
         /// <summary>
         /// Get all elements from cloned storage as T[] and cast dtype
@@ -353,7 +353,7 @@ namespace NumSharp.Core
             if (puffer.GetType().GetElementType() != typeof(T))
                 puffer = _ChangeTypeOfArray(puffer,typeof(T));
 
-            return (puffer as T[]);
+            return puffer as T[];
         }
         /// <summary>
         /// Get single value from internal storage and do not cast dtype

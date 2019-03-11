@@ -11,12 +11,13 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Added np.squeeze, np.argsort.</PackageReleaseNotes>
-    <AssemblyVersion>0.7.3.0</AssemblyVersion>
-    <FileVersion>0.7.3.0</FileVersion>
+    <PackageReleaseNotes>Add np.frombuffer
+Add np.prod</PackageReleaseNotes>
+    <AssemblyVersion>0.7.5.0</AssemblyVersion>
+    <FileVersion>0.7.5.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <Version>0.7.3</Version>
+    <Version>0.7.5</Version>
     <PackageLicenseUrl>LICENSE</PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>

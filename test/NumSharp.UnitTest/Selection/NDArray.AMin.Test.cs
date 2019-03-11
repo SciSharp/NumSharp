@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using NumSharp.Core;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
     public class NDArrayAMinTest
