@@ -9,16 +9,14 @@ namespace NumSharp.Core
     {
         public static NDArray[] broadcast_arrays(NDArray nd1, NDArray nd2, bool subok = false)
         {
-            NDArray args1 = np.array(nd1);
-            NDArray args2 = np.array(nd2);
-            var shape = _broadcast_shape(args1, args2);
+            var shape = _broadcast_shape(nd1, nd2);
 
             if (nd1.shape == shape && nd2.shape == shape)
             {
                 return new NDArray[] { nd1, nd2 };
             }
 
-            return new NDArray[] { _broadcast_to(nd1, shape, subok, false) };
+            return new NDArray[] { _broadcast_to(nd1, shape, subok, false), _broadcast_to(nd2, shape, subok, false) };
         }
 
         private static Shape _broadcast_shape(NDArray nd1, NDArray nd2)
@@ -36,7 +34,7 @@ namespace NumSharp.Core
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = (double)nd.Storage.GetData(0, j); 
+                        table[i, j] = Convert.ToDouble(nd.Storage.GetData(0, j)); 
                     }
                 }
             }
@@ -46,11 +44,11 @@ namespace NumSharp.Core
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = (double)nd.Storage.GetData(i, 0);
+                        table[i, j] = Convert.ToDouble(nd.Storage.GetData(i, 0));
                     }
                 }
             }
-            return new NDArray(table);
+            return np.array<double>(table);
         }
     }
 }
