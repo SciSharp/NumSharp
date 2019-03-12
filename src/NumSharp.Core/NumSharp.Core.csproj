@@ -60,6 +60,14 @@ Add np.prod</PackageReleaseNotes>
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Operations\NdArray.ElementsWise.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Operations\NdArray.ElementsWise.tt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.5.0" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
   </ItemGroup>
@@ -76,22 +84,7 @@ Add np.prod</PackageReleaseNotes>
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Operations\NdArray.ElementsWise.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>NdArray.ElementsWise.cs</LastGenOutput>
-    </None>
-  </ItemGroup>
-
-  <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="Operations\NdArray.ElementsWise.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>NdArray.ElementsWise.tt</DependentUpon>
-    </Compile>
   </ItemGroup>
 
 </Project>
