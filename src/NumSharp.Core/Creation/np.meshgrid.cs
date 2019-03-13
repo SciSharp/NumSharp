@@ -19,6 +19,12 @@ namespace NumSharp.Core
         /// <returns></returns>
         public static (NDArray, NDArray) meshgrid(NDArray x1, NDArray x2, Kwargs kwargs =null)
         {
+            int index1 = Array.IndexOf(x1.shape, 1);
+            int index2 = Array.IndexOf(x2.shape, 1);
+            if (index1 == -1 || index2 == -1)
+            {
+                throw new Exception("x1 and x2 must be 1-D arrays representing the coordinates of a grid");
+            }
             if (kwargs == null)
             {
                 kwargs = new Kwargs();
