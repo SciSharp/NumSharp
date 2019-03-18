@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest
   public class NumpyLoad
   {
     [TestMethod]
-    static void NumpyLoadTest()
+    public void NumpyLoadTest()
     {
       int[] a = { 1, 2, 3, 4, 5 };
       byte[] mem = np.Save(a);

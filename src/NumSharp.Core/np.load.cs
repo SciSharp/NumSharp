@@ -95,11 +95,7 @@ namespace NumSharp.Core
       Buffer.BlockCopy(matrix, 0, buffer, 0, buffer.Length);
       reader.Write(buffer, 0, buffer.Length);
 
-#if NETSTANDARD1_4
-            return (ulong)buffer.Length;
-#else
       return (ulong)buffer.LongLength;
-#endif
     }
 
     static IEnumerable<T> Enumerate<T>(Array a, int[] dimensions, int pos)
@@ -129,11 +125,7 @@ namespace NumSharp.Core
         Array.Clear(buffer, arr.Length, buffer.Length - buffer.Length);
         Buffer.BlockCopy(arr, 0, buffer, 0, buffer.Length);
         reader.Write(buffer, 0, buffer.Length);
-#if NETSTANDARD1_4
-                writtenBytes += (ulong)buffer.Length;
-#else
         writtenBytes += (ulong)buffer.LongLength;
-#endif
       }
 
       return writtenBytes;
@@ -170,11 +162,7 @@ namespace NumSharp.Core
               reader.Write(empty, 0, bytes);
             }
 
-#if NETSTANDARD1_4
-                        writtenBytes += (ulong)buffer.Length;
-#else
             writtenBytes += (ulong)buffer.LongLength;
-#endif
           }
         }
       }
