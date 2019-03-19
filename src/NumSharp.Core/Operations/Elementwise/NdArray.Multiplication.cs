@@ -66,8 +66,7 @@ namespace NumSharp.Core
 
             switch (np3SysArr)
             {
-            
-				case System.Int32[] resArr : 
+                case System.Int32[] resArr : 
 				{
 				    System.Int32[] np1Array = np1SysArr as System.Int32[];
 				    System.Int32[] np2Array = np2SysArr as System.Int32[];
