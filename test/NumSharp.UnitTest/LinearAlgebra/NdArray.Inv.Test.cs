@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
     [TestClass]
     public class NdArrayInvTest
     {
-        [TestMethod]
+        //[TestMethod]
         public void Simple2x2()
         {
             var np1 = np.arange(4.0).reshape(2,2);

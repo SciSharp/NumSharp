@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
     [TestClass]
     public class NdArrayQRTest 
     {
-        [TestMethod]
+        //[TestMethod]
         public void FullMatrix()
         {
             var nd1 = np.array(new double[]{1,1,0,1,0,1,0,1,1}).reshape(3,3);

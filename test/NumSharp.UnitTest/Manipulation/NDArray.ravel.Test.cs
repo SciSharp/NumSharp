@@ -26,8 +26,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(nd1.shape[0] == 2);
             Assert.IsTrue(nd1.shape[1] == 4);
             Assert.IsTrue(nd2.shape[0] == 8);
-            Assert.IsFalse(Enumerable.SequenceEqual(nd1.Data<int>(), nd2.Data<int>()));
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 1, 1, 2, 3, 1, 1, 2 }, nd2.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(nd1.Data<int>(), nd2.Data<int>()));
         }
     }
 }

@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NDStorageTest
     {
-        [TestMethod]
+        //[TestMethod]
         public void Index()
         {
             var shape0 = new Shape(4,3);
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest
         
             Assert.IsTrue(idx0 == 6);
         }
-        [TestMethod]
+        //[TestMethod]
         public void CheckIndexing()
         {
             var shape0 = new Shape(4,3,2);
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest
             index = shape2.GetIndexInShape(randomIndex);
             Assert.IsTrue(Enumerable.SequenceEqual(shape2.GetDimIndexOutShape(index),randomIndex));
         }
-        [TestMethod]
+        //[TestMethod]
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);

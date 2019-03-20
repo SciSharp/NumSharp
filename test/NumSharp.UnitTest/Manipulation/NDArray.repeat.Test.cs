@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest
             });
 
             var nd = np.repeat(x, 2);
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 1, 1, 3, 3, 2, 2, 4, 4 }, nd.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 1, 1, 2, 2, 3, 3, 4, 4 }, nd.Data<int>()));
         }
     }
 }

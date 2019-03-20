@@ -68,6 +68,8 @@ namespace NumSharp.Core
 
         public T Data<T>(int index) => Storage.GetData<T>()[index];
 
+        public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
+
         public Array Data() => Storage.GetData(dtype);
 
         public T Max<T>() => Data<T>().Max();

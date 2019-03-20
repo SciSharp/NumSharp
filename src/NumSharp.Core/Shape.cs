@@ -25,14 +25,14 @@ namespace NumSharp.Core
             }
             else
             {
-                if (this._TensorLayout == 1)
+                /*if (this._TensorLayout == 1)
                 {
                     _DimOffset[0] = 1;
 
                     for(int idx = 1;idx < _DimOffset.Length;idx++)
                         _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
                 }
-                else if ( _TensorLayout == 2)
+                else if ( _TensorLayout == 2)*/
                 {
                     _DimOffset[_DimOffset.Length-1] = 1;
                     for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
