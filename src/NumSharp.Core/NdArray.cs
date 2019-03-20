@@ -74,6 +74,8 @@ namespace NumSharp.Core
 
         public T Max<T>() => Data<T>().Max();
 
+        public void astype(Type dtype) => Storage.ChangeDataType(dtype);
+
         /// <summary>
         /// Default constructor 
         /// Create a 1D double array with 1 element
