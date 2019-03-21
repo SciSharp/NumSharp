@@ -4,267 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO.Compression;
 
 namespace NumSharp.Core
 {
   public static partial class np
   {
-    #region Writer
+    #region NpyFormat
 
-    /// <summary>
-    ///   Saves the specified array to an array of bytes.
-    /// </summary>
-    /// 
-    /// <param name="array">The array to be saved to the array of bytes.</param>
-    /// 
-    /// <returns>A byte array containig the saved array.</returns>
-    /// 
-    public static byte[] Save(Array array)
-    {
-      using (var stream = new MemoryStream())
-      {
-        Save(array, stream);
-        return stream.ToArray();
-      }
-    }
-
-    /// <summary>
-    ///   Saves the specified array to the disk using the npy format.
-    /// </summary>
-    /// 
-    /// <param name="array">The array to be saved to disk.</param>
-    /// <param name="path">The disk path under which the file will be saved.</param>
-    /// 
-    /// <returns>The number of bytes written when saving the file to disk.</returns>
-    /// 
-    public static ulong Save(Array array, string path)
-    {
-      using (var stream = new FileStream(path, FileMode.Create))
-        return Save(array, stream);
-    }
-
-    /// <summary>
-    ///   Saves the specified array to a stream using the npy format.
-    /// </summary>
-    /// 
-    /// <param name="array">The array to be saved to disk.</param>
-    /// <param name="stream">The stream to which the file will be saved.</param>
-    /// 
-    /// <returns>The number of bytes written when saving the file to disk.</returns>
-    /// 
-    public static ulong Save(Array array, Stream stream)
-    {
-      using (var writer = new BinaryWriter(stream
-#if !NET35 && !NET40
-                , System.Text.Encoding.ASCII, leaveOpen: true
-#endif
-                ))
-      {
-        Type type;
-        int maxLength;
-        string dtype = GetDtypeFromType(array, out type, out maxLength);
-
-        int[] shape = Enumerable.Range(0, array.Rank).Select(d => array.GetLength(d)).ToArray();
-
-        ulong bytesWritten = (ulong)writeHeader(writer, dtype, shape);
-
-        if (array.GetType().GetElementType().IsArray || array.GetType().GetElementType() == typeof(string))
-        {
-          if (type == typeof(String))
-            return bytesWritten + writeStringMatrix(writer, array, maxLength, shape);
-          return bytesWritten + writeValueJagged(writer, array, maxLength, shape);
-        }
-        else
-        {
-          if (type == typeof(String))
-            return bytesWritten + writeStringMatrix(writer, array, maxLength, shape);
-          return bytesWritten + writeValueMatrix(writer, array, maxLength, shape);
-        }
-      }
-    }
-
-    private static ulong writeValueMatrix(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-    {
-      int total = 1;
-      for (int i = 0; i < shape.Length; i++)
-        total *= shape[i];
-      var buffer = new byte[bytes * total];
-
-      Buffer.BlockCopy(matrix, 0, buffer, 0, buffer.Length);
-      reader.Write(buffer, 0, buffer.Length);
-
-      return (ulong)buffer.LongLength;
-    }
-
-    static IEnumerable<T> Enumerate<T>(Array a, int[] dimensions, int pos)
-    {
-      if (pos == dimensions.Length - 1)
-      {
-        for (int i = 0; i < dimensions[pos]; i++)
-          yield return (T)a.GetValue(i);
-      }
-      else
-      {
-        for (int i = 0; i < dimensions[pos]; i++)
-          foreach (var subArray in Enumerate<T>(a.GetValue(i) as Array, dimensions, pos + 1))
-            yield return subArray;
-      }
-    }
-
-    private static ulong writeValueJagged(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-    {
-      int last = shape[shape.Length - 1];
-      byte[] buffer = new byte[bytes * last];
-      int[] first = shape.Take(shape.Length - 1).ToArray();
-
-      ulong writtenBytes = 0;
-      foreach (Array arr in Enumerate<Array>(matrix, first, 0))
-      {
-        Array.Clear(buffer, arr.Length, buffer.Length - buffer.Length);
-        Buffer.BlockCopy(arr, 0, buffer, 0, buffer.Length);
-        reader.Write(buffer, 0, buffer.Length);
-        writtenBytes += (ulong)buffer.LongLength;
-      }
-
-      return writtenBytes;
-    }
-
-    private static ulong writeStringMatrix(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-    {
-      var buffer = new byte[bytes];
-      var empty = new byte[bytes];
-      empty[0] = byte.MinValue;
-      for (int i = 1; i < empty.Length; i++)
-        empty[i] = byte.MaxValue;
-
-      ulong writtenBytes = 0;
-
-      unsafe
-      {
-        fixed (byte* b = buffer)
-        {
-          foreach (String s in Enumerate<String>(matrix, shape, 0))
-          {
-            if (s != null)
-            {
-              int c = 0;
-              for (int i = 0; i < s.Length; i++)
-                b[c++] = (byte)s[i];
-              for (; c < buffer.Length; c++)
-                b[c] = byte.MinValue;
-
-              reader.Write(buffer, 0, bytes);
-            }
-            else
-            {
-              reader.Write(empty, 0, bytes);
-            }
-
-            writtenBytes += (ulong)buffer.LongLength;
-          }
-        }
-      }
-
-      return writtenBytes;
-    }
-
-    private static int writeHeader(BinaryWriter writer, string dtype, int[] shape)
-    {
-      // The first 6 bytes are a magic string: exactly "x93NUMPY"
-
-      char[] magic = { 'N', 'U', 'M', 'P', 'Y' };
-      writer.Write((byte)147);
-      writer.Write(magic);
-      writer.Write((byte)1); // major
-      writer.Write((byte)0); // minor;
-
-      string tuple = String.Join(", ", shape.Select(i => i.ToString()).ToArray());
-      string header = "{{'descr': '{0}', 'fortran_order': False, 'shape': ({1}), }}";
-      header = String.Format(header, dtype, tuple);
-      int preamble = 10; // magic string (6) + 4
-
-      int len = header.Length + 1; // the 1 is to account for the missing \n at the end
-      int headerSize = len + preamble;
-
-      int pad = 16 - (headerSize % 16);
-      header = header.PadRight(header.Length + pad);
-      header += "\n";
-      headerSize = header.Length + preamble;
-
-      if (headerSize % 16 != 0)
-        throw new Exception();
-
-      writer.Write((ushort)header.Length);
-      for (int i = 0; i < header.Length; i++)
-        writer.Write((byte)header[i]);
-
-      return headerSize;
-    }
-
-    static Type GetInnerMostType(Type arrayType)
-    {
-      if (arrayType.GetElementType().IsArray)
-        return GetInnerMostType(arrayType.GetElementType());
-      return arrayType.GetElementType();
-    }
-
-    private static string GetDtypeFromType(Array array, out Type type, out int bytes)
-    {
-      type = GetInnerMostType(array.GetType());
-
-      bytes = 1;
-
-      if (type == typeof(String))
-      {
-        int[] shape = Enumerable.Range(0, array.Rank).Select(d => array.GetLength(d)).ToArray();
-        foreach (String s in Enumerate<String>(array, shape, 0))
-        {
-          if (s.Length > bytes)
-            bytes = s.Length;
-        }
-      }
-      else if (type == typeof(bool))
-      {
-        bytes = 1;
-      }
-      else
-      {
-#pragma warning disable 618 // SizeOf would be Obsolete
-        bytes = Marshal.SizeOf(type);
-#pragma warning restore 618 // SizeOf would be Obsolete
-      }
-
-      if (type == typeof(bool))
-        return "|b1";
-      if (type == typeof(Byte))
-        return "|i1";
-      if (type == typeof(Int16))
-        return "<i2";
-      if (type == typeof(Int32))
-        return "<i4";
-      if (type == typeof(Int64))
-        return "<i8";
-      if (type == typeof(String))
-        return "|S" + bytes;
-
-      throw new NotSupportedException();
-    }
-
-    #endregion
-
-    #region Reader
-
-    /// <summary>
-    ///   Loads an array of the specified type from a byte array.
-    /// </summary>
-    /// 
-    /// <typeparam name="T">The type to be loaded from the npy-formatted file.</typeparam>
-    /// <param name="bytes">The bytes that contain the matrix to be loaded.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
     public static T Load<T>(byte[] bytes)
         where T : class,
 #if !NETSTANDARD1_4
@@ -280,17 +27,6 @@ namespace NumSharp.Core
       return LoadMatrix(bytes) as T;
     }
 
-    /// <summary>
-    ///   Loads an array of the specified type from a file in the disk.
-    /// </summary>
-    /// 
-    /// <typeparam name="T">The type to be loaded from the npy-formatted file.</typeparam>
-    /// <param name="bytes">The bytes that contain the matrix to be loaded.</param>
-    /// <param name="value">The object to be read. This parameter can be used to avoid the
-    ///   need of specifying a generic argument to this function.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
     public static T Load<T>(byte[] bytes, out T value)
         where T : class,
 #if !NETSTANDARD1_4
@@ -304,17 +40,7 @@ IList, ICollection, IEnumerable
       return value = Load<T>(bytes);
     }
 
-    /// <summary>
-    ///   Loads an array of the specified type from a file in the disk.
-    /// </summary>
-    /// 
-    /// <typeparam name="T">The type to be loaded from the npy-formatted file.</typeparam>
-    /// <param name="path">The path to the file containing the matrix to be loaded.</param>
-    /// <param name="value">The object to be read. This parameter can be used to avoid the
-    ///   need of specifying a generic argument to this function.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
+
     public static T Load<T>(string path, out T value)
         where T : class,
 #if !NETSTANDARD1_4
@@ -328,17 +54,6 @@ IList, ICollection, IEnumerable
       return value = Load<T>(path);
     }
 
-    /// <summary>
-    ///   Loads an array of the specified type from a stream.
-    /// </summary>
-    /// 
-    /// <typeparam name="T">The type to be loaded from the npy-formatted file.</typeparam>
-    /// <param name="stream">The stream containing the matrix to be loaded.</param>
-    /// <param name="value">The object to be read. This parameter can be used to avoid the
-    ///   need of specifying a generic argument to this function.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
     public static T Load<T>(Stream stream, out T value)
         where T : class,
 #if !NETSTANDARD1_4
@@ -352,14 +67,7 @@ IList, ICollection, IEnumerable
       return value = Load<T>(stream);
     }
 
-    /// <summary>
-    ///   Loads an array of the specified type from a file in the disk.
-    /// </summary>
-    /// 
-    /// <param name="path">The path to the file containing the matrix to be loaded.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
+
     public static T Load<T>(string path)
         where T : class,
 #if !NETSTANDARD1_4
@@ -374,15 +82,7 @@ IList, ICollection, IEnumerable
         return Load<T>(stream);
     }
 
-    /// <summary>
-    ///   Loads an array of the specified type from a stream.
-    /// </summary>
-    /// 
-    /// <typeparam name="T">The type to be loaded from the npy-formatted file.</typeparam>
-    /// <param name="stream">The stream containing the matrix to be loaded.</param>
-    /// 
-    /// <returns>The array to be returned.</returns>
-    /// 
+
     public static T Load<T>(Stream stream)
         where T : class,
 #if !NETSTANDARD1_4
@@ -398,70 +98,32 @@ IList, ICollection, IEnumerable
       return LoadMatrix(stream) as T;
     }
 
-    /// <summary>
-    ///   Loads a multi-dimensional array from an array of bytes.
-    /// </summary>
-    /// 
-    /// <param name="bytes">The bytes that contain the matrix to be loaded.</param>
-    /// 
-    /// <returns>A multi-dimensional array containing the values available in the given stream.</returns>
-    /// 
     public static Array LoadMatrix(byte[] bytes)
     {
       using (var stream = new MemoryStream(bytes))
         return LoadMatrix(stream);
     }
 
-    /// <summary>
-    ///   Loads a multi-dimensional array from a file in the disk.
-    /// </summary>
-    /// 
-    /// <param name="path">The path to the file containing the matrix to be loaded.</param>
-    /// 
-    /// <returns>A multi-dimensional array containing the values available in the given stream.</returns>
-    /// 
+
     public static Array LoadMatrix(string path)
     {
       using (var stream = new FileStream(path, FileMode.Open))
         return LoadMatrix(stream);
     }
 
-    /// <summary>
-    ///   Loads a jagged array from an array of bytes.
-    /// </summary>
-    /// 
-    /// <param name="bytes">The bytes that contain the matrix to be loaded.</param>
-    /// 
-    /// <returns>A jagged array containing the values available in the given stream.</returns>
-    /// 
+
     public static Array LoadJagged(byte[] bytes)
     {
       using (var stream = new MemoryStream(bytes))
         return LoadJagged(stream);
     }
 
-    /// <summary>
-    ///   Loads a jagged array from a file in the disk.
-    /// </summary>
-    /// 
-    /// <param name="path">The path to the file containing the matrix to be loaded.</param>
-    /// 
-    /// <returns>A jagged array containing the values available in the given stream.</returns>
-    /// 
     public static Array LoadJagged(string path)
     {
       using (var stream = new FileStream(path, FileMode.Open))
         return LoadJagged(stream);
     }
 
-    /// <summary>
-    ///   Loads a multi-dimensional array from a stream.
-    /// </summary>
-    /// 
-    /// <param name="stream">The stream containing the matrix to be loaded.</param>
-    /// 
-    /// <returns>A multi-dimensional array containing the values available in the given stream.</returns>
-    /// 
     public static Array LoadMatrix(Stream stream)
     {
       using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
@@ -484,15 +146,7 @@ IList, ICollection, IEnumerable
       }
     }
 
-    /// <summary>
-    ///   Loads a jagged array from a stream.
-    /// </summary>
-    /// 
-    /// <param name="stream">The stream containing the matrix to be loaded.</param>
-    /// <param name="trim">Pass true to remove null or empty elements from the loaded array.</param>
-    /// 
-    /// <returns>A jagged array containing the values available in the given stream.</returns>
-    /// 
+
     public static Array LoadJagged(Stream stream, bool trim = true)
     {
       using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
@@ -726,5 +380,125 @@ IList, ICollection, IEnumerable
     }
     #endregion
 
+    #region NpzFormat
+    public static void Load_Npz<T>(byte[] bytes, out T value)
+    where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      using (var dict = Load_Npz<T>(bytes))
+      {
+        value = dict.Values.First();
+      }
+    }
+
+    public static void Load_Npz<T>(string path, out T value)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      using (var dict = Load_Npz<T>(path))
+      {
+        value = dict.Values.First();
+      }
+    }
+
+    public static void Load_Npz<T>(Stream stream, out T value)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      using (var dict = Load_Npz<T>(stream))
+      {
+        value = dict.Values.First();
+      }
+    }
+
+    public static NpzDictionary<T> Load_Npz<T>(byte[] bytes)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      return Load_Npz<T>(new MemoryStream(bytes));
+    }
+
+    public static NpzDictionary<T> Load_Npz<T>(string path, out NpzDictionary<T> value)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      return value = Load_Npz<T>(new FileStream(path, FileMode.Open));
+    }
+
+    public static NpzDictionary<T> Load_Npz<T>(Stream stream, out NpzDictionary<T> value)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      return value = Load_Npz<T>(stream);
+    }
+
+    public static NpzDictionary<T> Load_Npz<T>(string path)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      return Load_Npz<T>(new FileStream(path, FileMode.Open));
+    }
+
+    public static NpzDictionary<T> Load_Npz<T>(Stream stream)
+        where T : class,
+#if !NETSTANDARD1_4
+            ICloneable,
+#endif
+            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+    {
+      return new NpzDictionary<T>(stream);
+    }
+
+    public static NpzDictionary<Array> LoadMatrix_Npz(byte[] bytes)
+    {
+      return LoadMatrix_Npz(new MemoryStream(bytes));
+    }
+
+    public static NpzDictionary<Array> LoadMatrix_Npz(string path)
+    {
+      return LoadMatrix_Npz(new FileStream(path, FileMode.Open));
+    }
+
+    public static NpzDictionary<Array> LoadMatrix_Npz(Stream stream)
+    {
+      return new NpzDictionary(stream, jagged: false);
+    }
+
+    public static NpzDictionary<Array> LoadJagged_Npz(byte[] bytes)
+    {
+      return LoadJagged_Npz(new MemoryStream(bytes));
+    }
+
+    public static NpzDictionary<Array> LoadJagged_Npz(string path)
+    {
+      return LoadJagged_Npz(new FileStream(path, FileMode.Open));
+    }
+
+    public static NpzDictionary<Array> LoadJagged_Npz(Stream stream, bool trim = true)
+    {
+      return new NpzDictionary(stream, jagged: true);
+    }
+    #endregion
   }
 }
