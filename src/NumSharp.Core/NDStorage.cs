@@ -28,7 +28,7 @@ namespace NumSharp.Core
         protected Type _DType;
         protected Shape _Shape;
         protected int _TensorLayout;
-        protected void _ChangeRowToColumnLayout()
+        /*protected void _ChangeRowToColumnLayout()
         {
             if ( _Shape.NDim == 1 )
             {
@@ -93,7 +93,7 @@ namespace NumSharp.Core
             }
             _TensorLayout = 1;
             Shape.ChangeTensorLayout(1);
-        }
+        }*/
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
             Array newValues = null;
@@ -203,28 +203,28 @@ namespace NumSharp.Core
             _DType = np.float64;
             _values = new double[1];
             _Shape = new Shape(1);
-            _TensorLayout = 1;
+            //_TensorLayout = 1;
         }
         public NDStorage(Type dtype)
         {
             _DType = dtype;
             _values = Array.CreateInstance(dtype,1);
             _Shape = new Shape(1);
-            _TensorLayout = 1;
+            //_TensorLayout = 1;
         }
         public NDStorage(double[] values)
         {
             _DType = typeof(double);
             _Shape = new Shape(values.Length);
             _values = values;
-            _TensorLayout = 1;
+            //_TensorLayout = 1;
         }
         public NDStorage(object[] values)
         {
             _DType = values.GetType().GetElementType();
             _Shape = new Shape(values.Length);
             _values = values;
-            _TensorLayout = 1;
+            //_TensorLayout = 1;
         }
         /// <summary>
         /// Allocate memory by dtype, shape, tensororder (default column wise)
@@ -242,7 +242,7 @@ namespace NumSharp.Core
                 elementNumber *= shape.Dimensions[idx];
 
             _values = Array.CreateInstance(dtype,elementNumber);
-            _TensorLayout = tensorOrder;
+            //_TensorLayout = tensorOrder;
         }
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
@@ -251,7 +251,7 @@ namespace NumSharp.Core
         /// <param name="tensorOrder">row or column wise</param>
         public void Allocate(Array values, int tensorOrder = 1)
         {
-            _TensorLayout = tensorOrder;
+            //_TensorLayout = tensorOrder;
             int[] dim = new int[values.Rank];
             for (int idx = 0; idx < dim.Length;idx++)
                 dim[idx] = values.GetLength(idx);
@@ -270,8 +270,8 @@ namespace NumSharp.Core
         /// <returns>reference to storage (transformed or not)</returns>
         public IStorage GetColumWiseStorage()
         {
-            if ( _TensorLayout != 2 )
-                this._ChangeRowToColumnLayout();
+            //if ( _TensorLayout != 2 )
+                //this._ChangeRowToColumnLayout();
             
             return this;
         }
@@ -282,8 +282,8 @@ namespace NumSharp.Core
         /// <returns>reference to storage (transformed or not)</returns>
         public IStorage GetRowWiseStorage()
         {
-            if ( _TensorLayout != 1 )
-                this._ChangeColumnToRowLayout();
+            //if ( _TensorLayout != 1 )
+                //this._ChangeColumnToRowLayout();
             
             return this;
         }
@@ -355,6 +355,7 @@ namespace NumSharp.Core
 
             return puffer as T[];
         }
+
         /// <summary>
         /// Get single value from internal storage and do not cast dtype
         /// </summary>
@@ -404,6 +405,7 @@ namespace NumSharp.Core
                 throw new Exception("indexes must be equal to number of dimension.");
             return element;
         }
+
         /// <summary>
         /// Get single value from internal storage as type T and cast dtype to T
         /// </summary>
@@ -412,11 +414,11 @@ namespace NumSharp.Core
         /// <returns>element from internal storage</returns>
         public T GetData<T>(params int[] indexes)
         {
-            this.ChangeDataType(this.DType);
             T[] values = this.GetData() as T[];
 
             return values[Shape.GetIndexInShape(indexes)];
         }
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>
@@ -472,17 +474,17 @@ namespace NumSharp.Core
         }
         public void Reshape(params int[] dimensions)
         {
-            if (_TensorLayout == 2)
+            //if (_TensorLayout == 2)
             {
                 _Shape = new Shape(dimensions);
             }
-            else
+            /*else
             {   
                 ChangeTensorLayout(2);
                 _Shape = new Shape(dimensions);
                 _Shape.ChangeTensorLayout(2);
                 ChangeTensorLayout(1);
-            }    
+            }*/    
         }
         public object Clone()
         {
@@ -499,11 +501,11 @@ namespace NumSharp.Core
         /// <returns>success or not</returns>
         public void ChangeTensorLayout(int layout)
         {
-            if (layout != _TensorLayout)
+            /*if (layout != _TensorLayout)
                 if (_TensorLayout == 1)
                     _ChangeRowToColumnLayout();
                 else
-                    _ChangeColumnToRowLayout();
+                    _ChangeColumnToRowLayout();*/
         }
     }
 }

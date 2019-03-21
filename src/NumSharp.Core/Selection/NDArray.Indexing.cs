@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace NumSharp.Core
 {
@@ -53,21 +54,27 @@ namespace NumSharp.Core
                     }
                     case 2 :
                     {
-                        
-                        
+                            selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1]));
+                            for (int row = 0; row < selectedValues.shape[0]; row++)
+                                for (int col = 0; col < selectedValues.shape[1]; col++)
+                                    selectedValues[row, col] = this[indexes.Data<int>(row), col];
+
+                            break;
+                    }
+                    case 4:
+                    {
+                        selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
+
+                        Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+                        {
+                            for (int row = 0; row < selectedValues.shape[1]; row++)
+                                for (int col = 0; col < selectedValues.shape[2]; col++)
+                                    for (int channel = 0; channel < selectedValues.shape[3]; channel++)
+                                        selectedValues[item, row, col, channel] = this[indexes.Data<int>(item), row, col, channel];
+                        });
 
                         break;
                     }
-                }
-
-
-                if (this.ndim == 1)
-                {
-                    
-                }
-                else
-                {
-
                 }
 
                 return selectedValues;

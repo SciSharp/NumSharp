@@ -53,13 +53,13 @@ namespace NumSharp.Core.Interfaces
         /// By this method the layout is changed if layout is not columnwise
         /// </summary>
         /// <returns>reference to storage (transformed or not)</returns>
-        IStorage GetColumWiseStorage();
+        //IStorage GetColumWiseStorage();
         /// <summary>
         /// Get Back Storage with row wise tensor Layout
         /// By this method the layout is changed if layout is not row wise
         /// </summary>
         /// <returns>reference to storage (transformed or not)</returns>
-        IStorage GetRowWiseStorage();
+        //IStorage GetRowWiseStorage();
         /// <summary>
         /// Get reference to internal data storage
         /// </summary>
