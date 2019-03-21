@@ -54,26 +54,34 @@ namespace NumSharp.Core
                     }
                     case 2 :
                     {
+                            var buf = Data<int>();
                             selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1]));
-                            for (int row = 0; row < selectedValues.shape[0]; row++)
+                            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
+                            {
                                 for (int col = 0; col < selectedValues.shape[1]; col++)
-                                    selectedValues[row, col] = this[indexes.Data<int>(row), col];
+                                    selectedValues[row, col] = buf[Storage.Shape.GetIndexInShape(indexes.Data<int>(row), col)];
+                            });
 
                             break;
                     }
                     case 4:
                     {
-                        selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
+                            int pos = -1;
+                            var buf = Data<int>();
+                            selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
 
-                        Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
-                        {
-                            for (int row = 0; row < selectedValues.shape[1]; row++)
-                                for (int col = 0; col < selectedValues.shape[2]; col++)
-                                    for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                                        selectedValues[item, row, col, channel] = this[indexes.Data<int>(item), row, col, channel];
-                        });
+                            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+                            {
+                                for (int row = 0; row < selectedValues.shape[1]; row++)
+                                    for (int col = 0; col < selectedValues.shape[2]; col++)
+                                        for (int channel = 0; channel < selectedValues.shape[3]; channel++)
+                                        {
+                                            pos = Storage.Shape.GetIndexInShape(indexes.Data<int>(item), row, col, channel);
+                                            selectedValues[item, row, col, channel] = buf[pos];
+                                        }
+                            });
 
-                        break;
+                            break;
                     }
                 }
 
