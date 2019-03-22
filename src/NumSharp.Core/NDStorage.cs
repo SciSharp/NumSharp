@@ -144,13 +144,13 @@ namespace NumSharp.Core
                             newValues.SetValue(new System.Numerics.Complex((double)arrayVar.GetValue(idx),0),idx);
                         break;
                     }
-                    else if ( dtype == typeof(System.Numerics.Quaternion) )
+                    /*else if ( dtype == typeof(System.Numerics.Quaternion) )
                     {
                         newValues = new System.Numerics.Quaternion[arrayVar.Length];
                         for(int idx = 0;idx < arrayVar.Length;idx++)
                             newValues.SetValue(new System.Numerics.Quaternion(new System.Numerics.Vector3(0,0,0) , (float)arrayVar.GetValue(idx)),idx);
                         break;
-                    }
+                    }*/
                     else 
                     {
                         newValues = new object[arrayVar.Length];

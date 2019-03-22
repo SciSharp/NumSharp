@@ -30,7 +30,7 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public static NDArray array(System.Drawing.Bitmap image)
+        /*public static NDArray array(System.Drawing.Bitmap image)
         {
             var imageArray = new NDArray(typeof(Byte));
 
@@ -45,7 +45,7 @@ namespace NumSharp.Core
             imageArray.Storage.SetData(bytes);
             
             return imageArray;
-        }
+        }*/
 
         public static NDArray array<T>(T[][] data)
         {

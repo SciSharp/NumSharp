@@ -54,12 +54,12 @@ namespace NumSharp.Core
                         dataArray[idx] = (Complex)doubleArray[idx];
                     break;
                 }
-                case Quaternion[] dataArray : 
+                /*case Quaternion[] dataArray : 
                 {
                     for(int idx = 0; idx < dataArray.Length;idx++)
                         dataArray[idx] = new Quaternion(new Vector3(0,0,0),(float)doubleArray[idx]);
                     break;
-                }
+                }*/
                 default : 
                 {
                     throw new IncorrectTypeException();

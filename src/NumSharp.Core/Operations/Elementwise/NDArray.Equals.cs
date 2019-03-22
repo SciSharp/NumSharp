@@ -64,7 +64,7 @@ namespace NumSharp.Core
                     }
                     break;
                 }
-                case Quaternion[] values :
+                /*case Quaternion[] values :
                 {
                     Quaternion value = (Quaternion) obj;                 
                     for(int idx =0; idx < bools.Length;idx++)
@@ -73,7 +73,7 @@ namespace NumSharp.Core
                             bools[idx] = true;
                     }
                     break;
-                }
+                }*/
                 default :
                 {
                     throw new IncorrectTypeException();

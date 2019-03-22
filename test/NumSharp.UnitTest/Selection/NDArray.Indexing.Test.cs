@@ -87,6 +87,7 @@ namespace NumSharp.UnitTest.Selection
             var a = A[A == -2 | A > 5];
 
         }
+
         [TestMethod]
         public void NDArrayByNDArray()
         {
@@ -100,6 +101,32 @@ namespace NumSharp.UnitTest.Selection
             double[] b = {2,4,6};
 
             Assert.IsTrue(Enumerable.SequenceEqual(a,b)); 
+        }
+
+        [TestMethod]
+        public void Filter1D()
+        {
+            var nd = np.array(new int[] { 3, 1, 1, 2, 3, 1 });
+            var filter = np.array(new int[] { 0, 2, 5 });
+            var result = nd[filter];
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 1, 1 }, result.Data<int>()));
+        }
+
+        [TestMethod]
+        public void Filter2D()
+        {
+            var nd = np.array(new int[][]
+            {
+                new int[]{ 3, 1, 1, 2},
+                new int[]{ 1, 2, 2, 3},
+                new int[]{ 2, 1, 1, 3},
+            });
+            var filter = np.array(new int[] { 0, 2});
+            var result = nd[filter];
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 1, 1, 2 }, (result[0] as NDArray).Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 1, 1, 3 }, (result[1] as NDArray).Data<int>()));
         }
     }
 }

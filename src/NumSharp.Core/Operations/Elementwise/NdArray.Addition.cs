@@ -192,7 +192,7 @@ namespace NumSharp.Core
 				    break;
 				}
 
-				case System.Numerics.Quaternion[] resArr : 
+				/*case System.Numerics.Quaternion[] resArr : 
 				{
 				    System.Numerics.Quaternion[] np1Array = np1SysArr as System.Numerics.Quaternion[];
 				    System.Numerics.Quaternion[] np2Array = np2SysArr as System.Numerics.Quaternion[];
@@ -215,7 +215,7 @@ namespace NumSharp.Core
 				            resArr[idx] = np1Array[idx] + scalar;
 				    }
 				    break;
-				}
+				}*/
                 default : 
                 {
                     throw new IncorrectTypeException();
