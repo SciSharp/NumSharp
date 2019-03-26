@@ -51,23 +51,36 @@ namespace NumSharp.Core
             
         }
 
+        /// <summary>
+        /// get store position by shape
+        /// [[1, 2, 3], [4, 5, 6]]
+        /// GetIndexInShape(0, 1) = 1
+        /// GetIndexInShape(1, 1) = 5
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public int GetIndexInShape(params int[] select)
         {
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
-            {
                 idx += _DimOffset[i] * select[i];
-            }
-
             return idx;
         }
 
+        /// <summary>
+        /// get position in shape by store position
+        /// [[1, 2, 3], [4, 5, 6]]
+        /// GetDimIndexOutShape(1) = (0, 1)
+        /// GetDimIndexOutShape(4) = (1, 1)
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public int[] GetDimIndexOutShape(int select)
         {
             int[] dimIndexes = null;
             if (this._DimOffset.Length == 1)
                 dimIndexes = new int[] {select};
-            else if (this._TensorLayout == 1)
+            /*else if (this._TensorLayout == 1)
             {
                 int counter = select;
                 dimIndexes = new int[_DimOffset.Length];
@@ -78,7 +91,7 @@ namespace NumSharp.Core
                     counter -= dimIndexes[idx] * _DimOffset[idx];
                 }
             }
-            else
+            else*/
             {
                 int counter = select;
                 dimIndexes = new int[_DimOffset.Length];
