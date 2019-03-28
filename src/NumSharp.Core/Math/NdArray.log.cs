@@ -30,7 +30,7 @@ namespace NumSharp.Core
                 }
                 case float[] logData : 
                 {
-                    double[] npData = dataSysArr as double[];
+                    float[] npData = dataSysArr as float[];
 
                     for (int idx = 0; idx < npData.Length;idx++)
                     {
