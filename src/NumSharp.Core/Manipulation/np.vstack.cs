@@ -7,6 +7,7 @@ namespace NumSharp.Core
 {
     public static partial class np
     {
+        /*
         /// <summary>
         /// Stack arrays in sequence vertically (row wise).
         /// </summary>
@@ -37,5 +38,6 @@ namespace NumSharp.Core
             }
             return np;
         }
+        */
     }
 }

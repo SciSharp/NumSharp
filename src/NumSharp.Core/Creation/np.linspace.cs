@@ -13,6 +13,13 @@ namespace NumSharp.Core
 
             return new NDArray(dtype).linspace(start,stop,num,entdpoint);
         }
+        public static NDArray linspace(float start, float stop, int num, bool entdpoint = true, Type dtype = null)
+        {
+            dtype = (dtype == null) ? typeof(float) : dtype;
+
+            return new NDArray(dtype).linspace(start, stop, num, entdpoint);
+        }
+
         public static NDArray linspace<T>(double start, double stop, int num, bool entdpoint = true)
         {
             double steps = (stop - start) / ((entdpoint) ? (double)num - 1.0 : (double)num);

@@ -16,7 +16,19 @@ namespace NumSharp.Core
                 return new NDArray[] { nd1, nd2 };
             }
 
-            return new NDArray[] { _broadcast_to(nd1, shape, subok, false), _broadcast_to(nd2, shape, subok, false) };
+            if (nd1.dtype == typeof(float))
+            {
+                return new NDArray[] { _broadcast_to<float>(nd1, shape, subok, false), _broadcast_to<float>(nd2, shape, subok, false) };
+            }
+
+            else if (nd1.dtype == typeof(double))
+            {
+                return new NDArray[] { _broadcast_to<double>(nd1, shape, subok, false), _broadcast_to<double>(nd2, shape, subok, false) };
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         private static Shape _broadcast_shape(NDArray nd1, NDArray nd2)
@@ -25,16 +37,16 @@ namespace NumSharp.Core
             return b.shape;
         }
 
-        private static NDArray _broadcast_to(NDArray nd, Shape shape, bool subok, bool rdonly)
+        private static NDArray _broadcast_to<T>(NDArray nd, Shape shape, bool subok, bool rdonly)
         {
-            double[,] table = new double[shape.Dimensions[0], shape.Dimensions[1]];
+            T[,] table = new T[shape.Dimensions[0], shape.Dimensions[1]];
             if (nd.shape[0] == 1) 
             {// (1,2,3)
                 for (int i = 0; i < shape.Dimensions[0]; i++)
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = Convert.ToDouble(nd.Storage.GetData(0, j)); 
+                        table[i, j] = (T)nd.Storage.GetData(0, j); 
                     }
                 }
             }
@@ -44,11 +56,11 @@ namespace NumSharp.Core
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = Convert.ToDouble(nd.Storage.GetData(i, 0));
+                        table[i, j] = (T)nd.Storage.GetData(i, 0);
                     }
                 }
             }
-            return np.array<double>(table);
+            return np.array<T>(table);
         }
     }
 }
