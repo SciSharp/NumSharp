@@ -18,7 +18,27 @@ namespace NumSharp.Core
         /// <returns>Scalarproduct or matrix prod</returns>
         public NDArray dot(NDArray nd2)
         {
-            if(ndim == 2 && nd2.ndim == 1)
+            if (ndim == 0 && nd2.ndim == 0)
+            {
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        return nd2.Data<int>(0) * Data<int>(0);
+                }
+            }
+            else if (ndim == 1 && nd2.ndim == 1)
+            {
+                int sum = 0;
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        for (int i = 0; i < size; i++)
+                            sum += Data<int>(i) * nd2.Data<int>(i);
+                        break;
+                }
+                return sum;
+            }
+            else if (ndim == 2 && nd2.ndim == 1)
             {
                 var nd = new NDArray(dtype, new Shape(shape[0]));
                 switch (dtype.Name)
@@ -33,16 +53,7 @@ namespace NumSharp.Core
             }
             else if (ndim == 2 && nd2.ndim == 2)
             {
-                var nd = new NDArray(dtype, new Shape(shape[0], nd2.shape[1]));
-                switch (dtype.Name)
-                {
-                    case "Int32":
-                        for (int i = 0; i < shape[1]; i++)
-                            for (int j = 0; j < nd2.shape[0]; j++)
-                                nd[i, j] = nd.Data<int>(i, j) + Data<int>(i, j) * nd2.Data<int>(j);
-                        break;
-                }
-                return nd;
+                return np.matmul(this, nd2);
             }
 
             throw new NotImplementedException($"dot {ndim} * {nd2.ndim}");

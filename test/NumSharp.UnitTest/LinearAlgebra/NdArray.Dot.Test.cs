@@ -39,28 +39,26 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(yArray[3], 13);
         }
 
-        //[TestMethod]
+        [TestMethod]
         public void DotTwoScalar()
         {
             int sca1 = 2;
             int sca2 = 3;
-            var sca3 = np.dot(sca1, sca2);
+            int sca3 = np.dot(sca1, sca2);
 
-            Assert.AreEqual(sca3.Data<int>()[0], 6);
+            Assert.AreEqual(sca3, 6);
         }
 
-        //[TestMethod]
-        public void DotTwo1DDouble()
+        [TestMethod]
+        public void DotTwo1DInt()
         {
-            
-            var series1 = np.arange(1.0,4.0,1.0) ;
-            
-            var series2 = new NDArray(typeof(double),new Shape(3));
-            series2.Storage.SetData(new double[]{0, 1, 0.5});
-            
-            var innerProduct = series1.dot(series2);
-            Assert.IsTrue(innerProduct.Storage.GetData<double>()[0] == 3.5);
+            var nd1 = np.arange(3);
+            var nd2 = np.arange(3, 6);
+
+            int nd3 = np.dot(nd1, nd2);
+            Assert.IsTrue(nd3 == 14);
         }
+
         //[TestMethod]
         public void MatrixMutliplyDifferentDataLength()
         {
@@ -75,6 +73,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsTrue(Enumerable.SequenceEqual(new double[]{7,8,9,10,11,12,13,21,26,31,36,41,46,51,35,44,53,62,71,80,89},C.Storage.GetData<double>()));
 
         }
+
         //[TestMethod]
         public void MatrixMultiplyDouble()
         {   
@@ -109,6 +108,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsTrue(matrix4[2,2] == (int) matrix3[2,2]);
             
         }
+
         //[TestMethod]
         public void MatrixMultiplyComplex()
         {
@@ -154,7 +154,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Complex[] expectedResult = new Complex[]{new Complex(-13,0)};
 
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<Complex>(),expectedResult));
-            
         }
         
     }

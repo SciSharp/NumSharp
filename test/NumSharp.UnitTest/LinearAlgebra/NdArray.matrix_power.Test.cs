@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
                 for(int jdx = 0; jdx < 3;jdx++)
                     Assert.IsTrue(expected[idx,jdx] == onces[idx,jdx]);
         }
-        [TestMethod]
+        //[TestMethod]
         public void PowerOf3Test()
         {
             var nd1 = np.arange(9).reshape(3,3).MakeGeneric<double>();

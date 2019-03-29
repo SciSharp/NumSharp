@@ -15,12 +15,14 @@ namespace NumSharp.Core
             {
                 return new NDArray[] { nd1, nd2 };
             }
-
-            if (nd1.dtype == typeof(float))
+            else if (nd1.dtype == typeof(int))
+            {
+                return new NDArray[] { _broadcast_to<int>(nd1, shape, subok, false), _broadcast_to<int>(nd2, shape, subok, false) };
+            }
+            else if (nd1.dtype == typeof(float))
             {
                 return new NDArray[] { _broadcast_to<float>(nd1, shape, subok, false), _broadcast_to<float>(nd2, shape, subok, false) };
             }
-
             else if (nd1.dtype == typeof(double))
             {
                 return new NDArray[] { _broadcast_to<double>(nd1, shape, subok, false), _broadcast_to<double>(nd2, shape, subok, false) };
