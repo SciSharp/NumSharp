@@ -103,6 +103,7 @@ namespace NumSharp.Backends.ManagedArray
 
             return newValues;
         }
+
         /// <summary>
         /// Data Type of stored elements
         /// </summary>
@@ -128,11 +129,7 @@ namespace NumSharp.Backends.ManagedArray
         /// </summary>
         /// <value>numpys equal shape</value>
         public Shape Shape {get {return _Shape;}}
-        /// <summary>
-        /// column wise or row wise order
-        /// </summary>
-        /// <value>0 row wise, 1 column wise</value>
-        public int TensorLayout {get {return _TensorLayout;}}
+
         public ManagedArrayEngine()
         {
             _DType = np.float64;
@@ -144,22 +141,22 @@ namespace NumSharp.Backends.ManagedArray
             _DType = dtype;
             _values = Array.CreateInstance(dtype,1);
             _Shape = new Shape(1);
-            //_TensorLayout = 1;
         }
+
         public ManagedArrayEngine(double[] values)
         {
             _DType = typeof(double);
             _Shape = new Shape(values.Length);
             _values = values;
-            //_TensorLayout = 1;
         }
+
         public ManagedArrayEngine(object[] values)
         {
             _DType = values.GetType().GetElementType();
             _Shape = new Shape(values.Length);
             _values = values;
-            //_TensorLayout = 1;
         }
+
         /// <summary>
         /// Allocate memory by dtype, shape, tensororder (default column wise)
         /// </summary>
@@ -175,8 +172,8 @@ namespace NumSharp.Backends.ManagedArray
                 elementNumber *= shape.Dimensions[idx];
 
             _values = Array.CreateInstance(dtype,elementNumber);
-            //_TensorLayout = tensorOrder;
         }
+
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
@@ -195,6 +192,7 @@ namespace NumSharp.Backends.ManagedArray
             
             _DType = elementType;
         }
+
         /// <summary>
         /// Get Back Storage with Columnwise tensor Layout
         /// By this method the layout is changed if layout is not columnwise
@@ -207,18 +205,7 @@ namespace NumSharp.Backends.ManagedArray
             
             return this;
         }
-        /// <summary>
-        /// Get Back Storage with row wise tensor Layout
-        /// By this method the layout is changed if layout is not row wise
-        /// </summary>
-        /// <returns>reference to storage (transformed or not)</returns>
-        public IStorage GetRowWiseStorage()
-        {
-            //if ( _TensorLayout != 1 )
-                //this._ChangeColumnToRowLayout();
-            
-            return this;
-        }
+
         /// <summary>
         /// Get reference to internal data storage
         /// </summary>
@@ -227,6 +214,7 @@ namespace NumSharp.Backends.ManagedArray
         {
             return _values;
         }
+
         /// <summary>
         /// Clone internal storage and get reference to it
         /// </summary>
@@ -235,6 +223,7 @@ namespace NumSharp.Backends.ManagedArray
         {
             return (Array) _values.Clone();
         }
+
         /// <summary>
         /// Get reference to internal data storage and cast elements to new dtype
         /// </summary>
@@ -247,6 +236,7 @@ namespace NumSharp.Backends.ManagedArray
 
             return (Array) genMethods.Invoke(this,null);
         }
+
         /// <summary>
         /// Clone internal storage and cast elements to new dtype
         /// </summary>
@@ -261,6 +251,7 @@ namespace NumSharp.Backends.ManagedArray
 
             return puffer;
         }
+
         /// <summary>
         /// Get reference to internal data storage and cast elements to new dtype
         /// </summary>
@@ -273,6 +264,7 @@ namespace NumSharp.Backends.ManagedArray
             
             return _values as T[];
         }
+
         /// <summary>
         /// Get all elements from cloned storage as T[] and cast dtype
         /// </summary>
@@ -360,6 +352,7 @@ namespace NumSharp.Backends.ManagedArray
             _values = values;
             this.ChangeDataType(this._DType);
         }
+
         /// <summary>
         /// Set 1 single value to internal storage and keep dtype
         /// </summary>
@@ -369,6 +362,7 @@ namespace NumSharp.Backends.ManagedArray
         {
             _values.SetValue(value,_Shape.GetIndexInShape(indexes));
         }
+
         /// <summary>
         /// Set a 1D Array of type T to internal storage and cast dtype
         /// </summary>
@@ -390,6 +384,7 @@ namespace NumSharp.Backends.ManagedArray
             _values = values;
             this.ChangeDataType(dtype);
         } 
+
         /// <summary>
         /// Change dtype of elements
         /// </summary>
@@ -401,10 +396,12 @@ namespace NumSharp.Backends.ManagedArray
                 _values = this._ChangeTypeOfArray(_values,dtype);
             _DType = dtype;
         }
+
         public void SetNewShape(params int[] dimensions)
         {
             _Shape = new Shape(dimensions);
         }
+
         public void Reshape(params int[] dimensions)
         {
             _Shape = new Shape(dimensions);
@@ -417,6 +414,11 @@ namespace NumSharp.Backends.ManagedArray
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
+        }
+
+        public void SetData<T>(T value, int offset)
+        {
+            throw new NotImplementedException();
         }
     }
 }

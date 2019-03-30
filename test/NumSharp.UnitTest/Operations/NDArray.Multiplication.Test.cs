@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 6, 12 }, np3.Storage.GetData<double>()));
         }
 
-        [TestMethod]
+        /*[TestMethod]
         public void ComplexTwo1D_NDArrayMultiplication()
         {
             var np1 = new NDArray(typeof(Complex),2);
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Operations
 
             Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(-7, 16), new Complex(-11, 52) }, np3.Storage.GetData<Complex>()));
 
-        }
+        }*/
 
         [TestMethod]
         public void Double1DPlusOffset_NDArrayMultiplication()
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Storage.GetData<double>()));
         }
 
-        [TestMethod]
+        /*[TestMethod]
         public void Complex1DPlusOffset_NDArrayMultiplication()
         {
             var np1 = new NDArray(typeof(Complex),2);
@@ -57,6 +57,6 @@ namespace NumSharp.UnitTest.Operations
             var np2 = np1 * new Complex(1, 2);
 
             Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(-3, 4), new Complex(-5, 10) }, np2.Storage.GetData<Complex>()));
-        }
+        }*/
     }
 }

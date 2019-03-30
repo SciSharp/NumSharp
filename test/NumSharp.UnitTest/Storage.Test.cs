@@ -121,32 +121,16 @@ namespace NumSharp.UnitTest
         {
             var strg2DCpy = (ManagedArrayEngine) strg2D.Clone();
 
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            
-            Assert.IsTrue(strg2DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,3,6,1,4,7,2,5,8} ));
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2D.GetData<Int64>() ));
 
             strg2DCpy = (ManagedArrayEngine) strg2DNonFull.Clone();
 
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            
-            Assert.IsTrue(strg2DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,5,1,6,2,7,3,8,4,9} ));
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2DNonFull.GetData<Int64>() ));
@@ -163,39 +147,21 @@ namespace NumSharp.UnitTest
         {
             var strg3DCpy = (ManagedArrayEngine) strg3D.Clone();
 
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            
-            Assert.IsTrue(strg3DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), new Complex[]{1,5,3,7,2,6,4,8} ));
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), strg3D.GetData<Complex>() ));
 
             strg3DCpy = (ManagedArrayEngine) strg3DNonFull.Clone();
 
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            
-            Assert.IsTrue(strg3DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 2);
-
             var expectedValues = new Complex[]{1,7,13,19, 3,9,15,21, 5,11,17,23, 2,8,14,20, 4,10,16,22, 6,12,18,24 };
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,3,4}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), expectedValues ));
 
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 1);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,3,4}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), strg3DNonFull.GetData<Complex>() ));
-
         }
-
     }
 }

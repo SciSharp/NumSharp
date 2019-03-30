@@ -50,8 +50,8 @@ namespace NumSharp
             int index = 0;
 
             var nd = new NDArray(np.int32, new Shape(length));
-
-            if(nd.Storage.GetData<int>() is int[] a)
+            
+            if (nd.Storage.GetData<int>() is int[] a)
             {
                 for (int i = start; i < stop; i += step)
                     a[index++] = i;

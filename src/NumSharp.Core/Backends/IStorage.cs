@@ -112,6 +112,8 @@ namespace NumSharp.Interfaces
 
         void SetData<T>(Array values);
 
+        void SetData<T>(T value, int offset);
+
         /// <summary>
         /// Set 1 single value to internal storage and keep dtype
         /// </summary>

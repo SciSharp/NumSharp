@@ -48,7 +48,6 @@ namespace NumSharp
                     for (int k = 0; k < npAll.Length; k++)
                     {
                         var pufferShape = new Shape(npAll[k].shape);
-                        pufferShape.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
                         int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.DimOffset[0];
                         for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
                         {
@@ -108,7 +107,6 @@ namespace NumSharp
                     for (int k = 0; k < npAll.Length; k++)
                     {
                         var pufferShape = new Shape(npAll[k].shape);
-                        pufferShape.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
                         int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.DimOffset[0];
                         for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
                         {

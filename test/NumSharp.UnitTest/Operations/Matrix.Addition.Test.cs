@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Storage.GetData<double>()));
         }
 
-        [TestMethod]
+        /*[TestMethod]
         public void ComplexTwo2D_MatrixAddition()
         {
             var np1 = np.array(new Complex[] { new Complex(1, 2), new Complex(3, 4) });
@@ -31,6 +31,6 @@ namespace NumSharp.UnitTest.Operations
             var np3 = np1 + np2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Storage.GetData<Complex>()));
-        }
+        }*/
     }
 }

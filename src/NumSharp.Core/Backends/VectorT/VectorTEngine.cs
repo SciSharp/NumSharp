@@ -1,6 +1,7 @@
 ﻿using NumSharp.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Text;
 
 namespace NumSharp.Backends.VectorT
@@ -8,19 +9,21 @@ namespace NumSharp.Backends.VectorT
     /// <summary>
     /// 
     /// </summary>
-    public class VectorTEngine : IStorage
+    public class VectorTEngine<Td> : IStorage where Td : struct
     {
-        public Type DType => throw new NotImplementedException();
+        private Vector<Td> vectors;
 
-        public Shape Shape => throw new NotImplementedException();
+        public Type DType { get; set; }
 
-        public int TensorLayout => throw new NotImplementedException();
+        public Shape Shape { get; set; }
 
         public int DTypeSize => throw new NotImplementedException();
 
         public void Allocate(Type dtype, Shape shape)
         {
-            throw new NotImplementedException();
+            DType = dtype;
+            Shape = shape;
+            vectors = Vector<Td>.Zero;
         }
 
         public void Allocate(Array values)
@@ -104,6 +107,11 @@ namespace NumSharp.Backends.VectorT
         }
 
         public void SetData<T>(Array values)
+        {
+            
+        }
+
+        public void SetData<T>(T value, int offset)
         {
             throw new NotImplementedException();
         }

@@ -20,7 +20,8 @@ namespace NumSharp.UnitTest.Maths
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Storage.GetData<double>(), new double[] { 1, 2, 3 }));
         }
-        [TestMethod]
+
+        /*[TestMethod]
         public void ComplexSqrtTest()
         {
             var np = new NDArray(typeof(Complex),3);
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.Maths
             expected[2] = new Complex(1, 2);
 
             Assert.IsTrue(Enumerable.SequenceEqual(actual, expected));
-        }
+        }*/
 
     }
 }

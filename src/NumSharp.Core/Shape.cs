@@ -6,10 +6,8 @@ using System.Linq;
 
 namespace NumSharp
 {
-    public partial class Shape : IShape
+    public partial class Shape
     {
-        protected int _TensorLayout;
-        public int TensorLayout {get {return _TensorLayout;}}
         protected int[] _Dimensions;
         protected int[] _DimOffset;
         protected int _size;
@@ -102,7 +100,6 @@ namespace NumSharp
 
             layout = (layout == 0) ? 1 : layout;
             
-            _TensorLayout = layout;
             _SetDimOffset();
         }
 
@@ -110,7 +107,6 @@ namespace NumSharp
         {
             this._Dimensions = dims;
             this._DimOffset = new int[this._Dimensions.Length];
-            this._TensorLayout = 1;
 
             this._size = 1;
 

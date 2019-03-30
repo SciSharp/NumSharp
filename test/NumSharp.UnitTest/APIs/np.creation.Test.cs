@@ -13,12 +13,9 @@ namespace NumSharp.UnitTest.APIs
         [TestMethod]
         public void arange()
         {
-            var np1 = new NDArray(typeof(int)).arange(4, 1);
-            var np2 = new NDArray(typeof(int)).arange(5, 2);
-
-            var np3 = np1 + np2;
-
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 5, 7 }, np3.Storage.GetData<int>()));
+            //np.BackendEngine = BackendType.VectorT;
+            var nd = np.arange(3);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<int>(), new int[] { 0, 1, 2 }));
         }
     }
 }

@@ -85,7 +85,7 @@ namespace NumSharp
         /// </summary>
         public NDArray()
         {
-            Storage = BackendFactory.GetEngine(np.BackendEngine);
+            Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
         }
 
         /// <summary>
@@ -95,7 +95,23 @@ namespace NumSharp
         /// <param name="dtype">Data type of elements</param>
         public NDArray(Type dtype)
         {
-            Storage = BackendFactory.GetEngine(np.BackendEngine);
+            switch (dtype.Name)
+            {
+                case "Object":
+                    Storage = BackendFactory.GetEngine<object>(np.BackendEngine);
+                    break;
+                case "Int32":
+                    Storage = BackendFactory.GetEngine<int>(np.BackendEngine);
+                    break;
+                case "Single":
+                    Storage = BackendFactory.GetEngine<float>(np.BackendEngine);
+                    break;
+                case "Double":
+                    Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
+                    break;
+                default:
+                    throw new NotImplementedException($"{dtype.Name}");
+            }
             Storage.ChangeDataType(dtype);
         }
 
@@ -135,7 +151,32 @@ namespace NumSharp
         /// <param name="shape">Shape of NDArray</param>
         public NDArray(Type dtype, Shape shape)
         {
-            Storage = BackendFactory.GetEngine(np.BackendEngine);
+            switch (dtype.Name)
+            {
+                case "Boolean":
+                    Storage = BackendFactory.GetEngine<bool>(np.BackendEngine);
+                    break;
+                case "Byte":
+                    Storage = BackendFactory.GetEngine<byte>(np.BackendEngine);
+                    break;
+                case "Int32":
+                    Storage = BackendFactory.GetEngine<int>(np.BackendEngine);
+                    break;
+                case "Single":
+                    Storage = BackendFactory.GetEngine<float>(np.BackendEngine);
+                    break;
+                case "Double":
+                    Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
+                    break;
+                case "Decimal":
+                    Storage = BackendFactory.GetEngine<decimal>(np.BackendEngine);
+                    break;
+                case "String":
+                    Storage = BackendFactory.GetEngine<string>(np.BackendEngine);
+                    break;
+                default:
+                    throw new NotImplementedException($"{dtype.Name}");
+            }
             Storage.Allocate(dtype, shape);
         }
 
@@ -187,7 +228,6 @@ namespace NumSharp
         {
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
-            shapePuffer.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
 
             puffer.Storage.Allocate(this.dtype, shapePuffer);
 
