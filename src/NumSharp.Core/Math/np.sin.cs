@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class np
     {

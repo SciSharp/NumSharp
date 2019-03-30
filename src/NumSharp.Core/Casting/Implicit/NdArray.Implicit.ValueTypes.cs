@@ -25,7 +25,7 @@ using System.Globalization;
 using System.Collections;
 using System.Numerics;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

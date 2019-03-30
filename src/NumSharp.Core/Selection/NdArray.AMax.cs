@@ -1,9 +1,10 @@
-﻿using System;
+﻿using NumSharp.Backends.ManagedArray;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -17,9 +18,6 @@ namespace NumSharp.Core
         {
             var res = new NDArray(dtype);
 
-            int oldLayout = this.Storage.TensorLayout;
-
-            this.Storage.ChangeTensorLayout(2);
             double[] npArr = this.Storage.GetData<double>();
 
             if (axis == null)
@@ -28,8 +26,8 @@ namespace NumSharp.Core
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Max(min, npArr[i]);
 
-                res.Storage  = new NDStorage(); 
-                res.Storage.Allocate(dtype,new Shape(1),1);
+                res.Storage  = new ManagedArrayEngine(); 
+                res.Storage.Allocate(dtype,new Shape(1));
                 res.Storage.SetData( new double[1] {min});             
             }
             else
@@ -80,12 +78,10 @@ namespace NumSharp.Core
                         resData[index++] = min;
                     }
                 }
-                res.Storage = new NDStorage();
-                res.Storage.Allocate(this.dtype, new Shape(resShapes),2); // (resData);
+                res.Storage = new ManagedArrayEngine();
+                res.Storage.Allocate(this.dtype, new Shape(resShapes)); // (resData);
                 res.Storage.SetData(resData);
-                res.Storage.ChangeTensorLayout(1);
             }
-            this.Storage.ChangeTensorLayout(oldLayout);
             return res;
         }
     }

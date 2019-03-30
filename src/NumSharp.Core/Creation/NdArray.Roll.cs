@@ -1,6 +1,6 @@
 using System;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -63,10 +63,6 @@ namespace NumSharp.Core
         {
             shift = (-1) * shift;
 
-            int tensorLayout = this.Storage.TensorLayout;
-
-            this.Storage.ChangeTensorLayout(2);
-
             Array cpy = Array.CreateInstance(this.dtype, this.size);
 
             shift = ((shift % this.size) < 0) ? shift+this.size : shift; 
@@ -82,11 +78,9 @@ namespace NumSharp.Core
 
             var returnValue = new NDArray(this.dtype);
 
-            returnValue.Storage.Allocate(dtype, new Shape(this.shape), 1);
+            returnValue.Storage.Allocate(dtype, new Shape(this.shape));
 
             returnValue.Storage.SetData(cpy);
-
-            this.Storage.ChangeTensorLayout(tensorLayout);
 
             return returnValue;
         }

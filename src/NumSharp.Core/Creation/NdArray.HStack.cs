@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -40,8 +40,6 @@ namespace NumSharp.Core
             }
             else
             {
-                for (int idx = 0; idx < npAll.Length; idx++)
-                    npAll[idx].Storage.ChangeTensorLayout(2);
                 int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
                 var list = new List<object>(); 
 
@@ -67,10 +65,8 @@ namespace NumSharp.Core
                 else
                     shapes[1] = npAll.Sum(x => x.shape[1]);
 
-                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes), 2);
+                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes));
                 nd.Storage.SetData(list.ToArray());
-                nd.Storage.ChangeTensorLayout(1);
-
             }
 
             return nd;
@@ -104,8 +100,6 @@ namespace NumSharp.Core
             }
             else
             {
-                for (int idx = 0; idx < npAll.Length; idx++)
-                    npAll[idx].Storage.ChangeTensorLayout(2);
                 int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
                 var list = new List<T>();
 
@@ -131,10 +125,8 @@ namespace NumSharp.Core
                 else
                     shapes[1] = npAll.Sum(x => x.shape[1]);
 
-                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes), 2);
+                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes));
                 nd.Storage.SetData(list.ToArray());
-                nd.Storage.ChangeTensorLayout(1);
-
             }
 
             return nd;

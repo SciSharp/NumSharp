@@ -1,6 +1,6 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using NumSharp.Core;
+using NumSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;

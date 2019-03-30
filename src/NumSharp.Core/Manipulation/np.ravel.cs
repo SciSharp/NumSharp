@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core.Manipulation
+namespace NumSharp.Manipulation
 {
     public partial class NumPy
     {

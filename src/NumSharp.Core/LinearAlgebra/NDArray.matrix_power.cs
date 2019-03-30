@@ -1,6 +1,6 @@
 using System;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

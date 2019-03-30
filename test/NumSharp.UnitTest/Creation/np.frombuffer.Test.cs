@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -19,8 +19,8 @@ namespace NumSharp.UnitTest.Creation
             Buffer.BlockCopy(ints, 0, bytes, 0, bytes.Length);
 
             var nd = np.frombuffer(bytes, np.int32);
-            Assert.AreEqual((int)nd[0], 100);
-            Assert.AreEqual((int)nd[4], 500);
+            Assert.AreEqual(nd.Data<int>(0), 100);
+            Assert.AreEqual(nd.Data<int>(4), 500);
         }
     }
 }

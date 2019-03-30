@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Operations
 {

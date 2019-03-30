@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
@@ -68,8 +68,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var C = A.dot(B);
 
-            C.Storage.ChangeTensorLayout(2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(new double[]{7,8,9,10,11,12,13,21,26,31,36,41,46,51,35,44,53,62,71,80,89},C.Storage.GetData<double>()));
 
         }
@@ -109,39 +107,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
             
         }
 
-        //[TestMethod]
-        public void MatrixMultiplyComplex()
-        {
-            var matrix1 = new NDArray(typeof(Complex), new Shape(3, 2));
-            matrix1.Storage.ChangeTensorLayout(2);
-            matrix1.Storage.SetData(new Complex[] {new Complex(1,-1),new Complex(2,-2), new Complex(3,0),new Complex(4,0), 5, 6}); 
-            matrix1.Storage.ChangeTensorLayout(1);
-
-            var matrix2 = new NDArray(typeof(Complex), new Shape(2, 3));
-            matrix2.Storage.ChangeTensorLayout(2);
-            matrix2.Storage.SetData(new Complex[] {7,8,9,new Complex(10,-10),11, new Complex(12,-12)});
-            matrix2.Storage.ChangeTensorLayout(1);
-            
-            var matrix3 = matrix1.dot(matrix2);
-
-            var matrix4 = new NDArray(typeof(Complex), new Shape(3, 3));
-            matrix4.Storage.ChangeTensorLayout(2);
-            matrix4.Storage.SetData(new Complex[9]);
-            var mat4 = matrix4.Storage.GetData<Complex>();
-            mat4[0] = new Complex(7,-47);
-            mat4[1] = new Complex(30,-30);
-            mat4[2] = new Complex(9,-57);
-            mat4[3] = new Complex(61,-40);
-            mat4[4] = new Complex(68,0);
-            mat4[5] = new Complex(75,-48);
-            mat4[6] = new Complex(95,-60);
-            mat4[7] = new Complex(106,0);
-            mat4[8] = new Complex(117,-72);
-
-            matrix4.Storage.ChangeTensorLayout(1);
-
-            Assert.IsTrue(Enumerable.SequenceEqual(matrix4.Storage.GetData<Complex>(),matrix3.Storage.GetData<Complex>()));
-        }
         //[TestMethod]
         public void DotTwo1DComplex()
         {

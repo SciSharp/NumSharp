@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -27,7 +27,7 @@ namespace NumSharp.Core
                     sum += Math.Pow(Convert.ToDouble(data.GetValue(idx)) - mean,2);
                 
                 double stdValue = Math.Sqrt(sum / this.size);
-                stdArr.Storage.Allocate(dtype,new Shape(1),1);
+                stdArr.Storage.Allocate(dtype, new Shape(1));
                 var puffer = Array.CreateInstance(dtype,1);
                 puffer.SetValue(stdValue,0);
                 stdArr.Storage.SetData(puffer);
@@ -72,7 +72,7 @@ namespace NumSharp.Core
                 {
                     throw new NotImplementedException();
                 }
-                stdArr.Storage.Allocate(dtype,new Shape(stdValue.Length),1);
+                stdArr.Storage.Allocate(dtype, new Shape(stdValue.Length));
                 stdArr.Storage.SetData(stdValue);
             }
             return stdArr;

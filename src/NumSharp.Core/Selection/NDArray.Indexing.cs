@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

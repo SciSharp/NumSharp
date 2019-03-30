@@ -2,9 +2,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {

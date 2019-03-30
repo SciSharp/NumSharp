@@ -1,10 +1,10 @@
-﻿using NumSharp.Core;
+﻿using NumSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core.Sparse
+namespace NumSharp.Sparse
 {
     public partial class _cs_matrix
     {

@@ -1,10 +1,11 @@
+using NumSharp.Backends.ManagedArray;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -47,7 +48,7 @@ namespace NumSharp.Core
                         }
                     }
 
-                    numSharpReturn.Storage = new NDStorage();
+                    numSharpReturn.Storage = new ManagedArrayEngine();
                     numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
 
@@ -73,8 +74,8 @@ namespace NumSharp.Core
                         }
                     }
 
-                    numSharpReturn.Storage = new NDStorage();
-                    numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length),1);
+                    numSharpReturn.Storage = new ManagedArrayEngine();
+                    numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
                     
                     break;

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.IO.Compression;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
   public static partial class np
   {

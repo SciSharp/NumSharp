@@ -2,7 +2,7 @@
 using NumSharp;
 using System.Linq;
 using System.Collections.Generic;
-using NumSharp.Core;
+using NumSharp;
 
 public static partial class numpy 
 {

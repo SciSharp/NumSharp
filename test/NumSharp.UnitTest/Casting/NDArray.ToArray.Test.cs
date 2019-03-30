@@ -2,8 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
-using NumSharp.Core;
+using NumSharp.Extensions;
+using NumSharp;
 using System.Linq;
 
 namespace NumSharp.UnitTest

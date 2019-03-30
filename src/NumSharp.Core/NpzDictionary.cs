@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.IO.Compression;
 using System.Data;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
   public class NpzDictionary<T> : IDisposable, IReadOnlyDictionary<string, T>, ICollection<T>
    where T : class,

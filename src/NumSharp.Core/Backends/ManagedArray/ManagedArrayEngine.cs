@@ -1,11 +1,11 @@
 ﻿using NumSharp;
-using NumSharp.Core.Interfaces;
-using NumSharp.Core;
+using NumSharp.Interfaces;
+using NumSharp;
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Core
+namespace NumSharp.Backends.ManagedArray
 {
     /// <summary>
     /// Storage
@@ -22,78 +22,13 @@ namespace NumSharp.Core
     ///  - CloneData<T> clone storage and cast this clone 
     ///     
     /// </summary>
-    public class NDStorage : IStorage
+    public class ManagedArrayEngine : IStorage
     {
         protected Array _values;
         protected Type _DType;
         protected Shape _Shape;
         protected int _TensorLayout;
-        /*protected void _ChangeRowToColumnLayout()
-        {
-            if ( _Shape.NDim == 1 )
-            {
-
-            }
-            else if (_Shape.NDim == 2)
-            {
-                var puffer = Array.CreateInstance(_values.GetType().GetElementType(),_values.Length);
-
-                var pufferShape = new Shape(_Shape.Dimensions);
-                pufferShape.ChangeTensorLayout(2);
-
-                for(int idx = 0; idx < _values.Length;idx++)
-                    puffer.SetValue(_values.GetValue(idx),pufferShape.GetIndexInShape(Shape.GetDimIndexOutShape(idx)));
-                
-                _values = puffer;
-            }
-            else
-            {
-                var puffer = Array.CreateInstance(_values.GetType().GetElementType(),_values.Length);
-
-                var pufferShape = new Shape(_Shape.Dimensions);
-                pufferShape.ChangeTensorLayout(2);
-
-                for(int idx = 0; idx < _values.Length;idx++)
-                    puffer.SetValue(_values.GetValue(idx),pufferShape.GetIndexInShape(Shape.GetDimIndexOutShape(idx)));
-                
-                _values = puffer;
-            }
-            Shape.ChangeTensorLayout(2);
-            _TensorLayout = 2;
-        }
-        protected void _ChangeColumnToRowLayout()
-        {
-            if ( _Shape.NDim == 1 )
-            {
-
-            } 
-            else if (_Shape.NDim == 2)
-            {
-                var puffer = Array.CreateInstance(_values.GetType().GetElementType(),_values.Length);
-
-                var pufferShape = new Shape(_Shape.Dimensions);
-                pufferShape.ChangeTensorLayout(1);
-
-                for(int idx = 0; idx < _values.Length;idx++)
-                    puffer.SetValue(_values.GetValue(idx),pufferShape.GetIndexInShape(Shape.GetDimIndexOutShape(idx)));
-                
-                _values = puffer;
-            }
-            else
-            {
-                var puffer = Array.CreateInstance(_values.GetType().GetElementType(),_values.Length);
-
-                var pufferShape = new Shape(_Shape.Dimensions);
-                pufferShape.ChangeTensorLayout(1);
-
-                for(int idx = 0; idx < _values.Length;idx++)
-                    puffer.SetValue(_values.GetValue(idx),pufferShape.GetIndexInShape(Shape.GetDimIndexOutShape(idx)));
-                
-                _values = puffer;
-            }
-            _TensorLayout = 1;
-            Shape.ChangeTensorLayout(1);
-        }*/
+        
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
             Array newValues = null;
@@ -198,28 +133,27 @@ namespace NumSharp.Core
         /// </summary>
         /// <value>0 row wise, 1 column wise</value>
         public int TensorLayout {get {return _TensorLayout;}}
-        public NDStorage()
+        public ManagedArrayEngine()
         {
             _DType = np.float64;
             _values = new double[1];
             _Shape = new Shape(1);
-            //_TensorLayout = 1;
         }
-        public NDStorage(Type dtype)
+        public ManagedArrayEngine(Type dtype)
         {
             _DType = dtype;
             _values = Array.CreateInstance(dtype,1);
             _Shape = new Shape(1);
             //_TensorLayout = 1;
         }
-        public NDStorage(double[] values)
+        public ManagedArrayEngine(double[] values)
         {
             _DType = typeof(double);
             _Shape = new Shape(values.Length);
             _values = values;
             //_TensorLayout = 1;
         }
-        public NDStorage(object[] values)
+        public ManagedArrayEngine(object[] values)
         {
             _DType = values.GetType().GetElementType();
             _Shape = new Shape(values.Length);
@@ -231,12 +165,11 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
-        /// <param name="tensorOrder">row or column wise</param>
-        public void Allocate(Type dtype, Shape shape, int tensorOrder = 1)
+        public void Allocate(Type dtype, Shape shape)
         {
             _DType = dtype;
             _Shape = shape;
-            _Shape.ChangeTensorLayout(tensorOrder);
+            _Shape.ChangeTensorLayout(1);
             int elementNumber = 1;
             for(int idx = 0; idx < shape.Dimensions.Length;idx++)
                 elementNumber *= shape.Dimensions[idx];
@@ -248,8 +181,7 @@ namespace NumSharp.Core
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
         /// <param name="values">elements to store</param>
-        /// <param name="tensorOrder">row or column wise</param>
-        public void Allocate(Array values, int tensorOrder = 1)
+        public void Allocate(Array values)
         {
             //_TensorLayout = tensorOrder;
             int[] dim = new int[values.Rank];
@@ -447,6 +379,7 @@ namespace NumSharp.Core
             _values = values;
             this.ChangeDataType(typeof(T));
         }
+
         /// <summary>
         /// Set an Array to internal storage, cast it to new dtype and change dtype  
         /// </summary>
@@ -474,38 +407,16 @@ namespace NumSharp.Core
         }
         public void Reshape(params int[] dimensions)
         {
-            //if (_TensorLayout == 2)
-            {
-                _Shape = new Shape(dimensions);
-            }
-            /*else
-            {   
-                ChangeTensorLayout(2);
-                _Shape = new Shape(dimensions);
-                _Shape.ChangeTensorLayout(2);
-                ChangeTensorLayout(1);
-            }*/    
+            _Shape = new Shape(dimensions);
         }
+
         public object Clone()
         {
-            var puffer = new NDStorage();
-            puffer.Allocate(_DType, new Shape(_Shape.Dimensions), _TensorLayout);
+            var puffer = new ManagedArrayEngine();
+            puffer.Allocate(_DType, new Shape(_Shape.Dimensions));
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
-        }
-        /// <summary>
-        /// Cange layout to 0 row wise or 1 colum wise
-        /// </summary>
-        /// <param name="order">0 or 1</param>
-        /// <returns>success or not</returns>
-        public void ChangeTensorLayout(int layout)
-        {
-            /*if (layout != _TensorLayout)
-                if (_TensorLayout == 1)
-                    _ChangeRowToColumnLayout();
-                else
-                    _ChangeColumnToRowLayout();*/
         }
     }
 }

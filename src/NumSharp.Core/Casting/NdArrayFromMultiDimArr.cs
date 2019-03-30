@@ -23,9 +23,10 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp;
+using NumSharp.Backends.ManagedArray;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -39,8 +40,8 @@ namespace NumSharp.Core
             for(int idx = 0; idx < dims.Length;idx++)
                 dims[idx] = dotNetArray.GetLength(idx);
             
-            Storage = new NDStorage();
-            Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims),1);
+            Storage = new ManagedArrayEngine();
+            Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims));
 
             Array internalStrg = Storage.GetData();
 

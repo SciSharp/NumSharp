@@ -23,10 +23,12 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core.Interfaces;
-using NumSharp.Core;
+using NumSharp.Interfaces;
+using NumSharp;
+using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     /// <summary>
     /// A powerful N-dimensional array object
@@ -57,7 +59,7 @@ namespace NumSharp.Core
         /// The internal storage for elements of NDArray
         /// </summary>
         /// <value>Internal Storage</value>
-        public NDStorage Storage { get; set; }
+        public IStorage Storage { get; set; }
 
         /// <summary>
         /// Shortcut for access internal elements
@@ -83,7 +85,7 @@ namespace NumSharp.Core
         /// </summary>
         public NDArray()
         {
-            Storage = new NDStorage();
+            Storage = BackendFactory.GetEngine(np.BackendEngine);
         }
 
         /// <summary>
@@ -93,7 +95,8 @@ namespace NumSharp.Core
         /// <param name="dtype">Data type of elements</param>
         public NDArray(Type dtype)
         {
-            Storage = new NDStorage(dtype);
+            Storage = BackendFactory.GetEngine(np.BackendEngine);
+            Storage.ChangeDataType(dtype);
         }
 
         /// <summary>
@@ -109,7 +112,7 @@ namespace NumSharp.Core
             for(int idx = 0; idx < strgDim.Length;idx++)
                 strgDim[idx] = values.GetLength(idx);
             
-            Storage.Allocate(Storage.DType,new Shape(strgDim),1);
+            Storage.Allocate(Storage.DType,new Shape(strgDim));
 
             switch( values.Rank )
             {
@@ -132,8 +135,8 @@ namespace NumSharp.Core
         /// <param name="shape">Shape of NDArray</param>
         public NDArray(Type dtype, Shape shape)
         {
-            Storage = new NDStorage();
-            Storage.Allocate(dtype, shape, 1);
+            Storage = BackendFactory.GetEngine(np.BackendEngine);
+            Storage.Allocate(dtype, shape);
         }
 
         public override int GetHashCode()
@@ -186,7 +189,7 @@ namespace NumSharp.Core
             var shapePuffer = new Shape(this.shape);
             shapePuffer.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
 
-            puffer.Storage.Allocate(this.dtype, shapePuffer, this.Storage.TensorLayout);
+            puffer.Storage.Allocate(this.dtype, shapePuffer);
 
             puffer.Storage.SetData(this.Storage.CloneData());
 

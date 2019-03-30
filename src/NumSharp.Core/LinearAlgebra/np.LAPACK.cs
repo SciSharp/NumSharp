@@ -2,17 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core.LAPACKProvider
+namespace NumSharp
 {
-    public enum LAPACKProvider
+    public enum LAPACKProviderType
     {
-        NetLib    
+        NetLib
     }
-}
-namespace NumSharp.Core
-{
+
     public static partial class np
     {
-        public static NumSharp.Core.LAPACKProvider.LAPACKProvider LAPACKProvider = NumSharp.Core.LAPACKProvider.LAPACKProvider.NetLib;
+        public static LAPACKProviderType LAPACKProvider = LAPACKProviderType.NetLib;
     }
 }

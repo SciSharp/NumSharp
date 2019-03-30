@@ -1,10 +1,10 @@
 ﻿using System;
-using NumSharp.Core.Interfaces;
+using NumSharp.Interfaces;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class Shape : IShape
     {
@@ -25,19 +25,9 @@ namespace NumSharp.Core
             }
             else
             {
-                /*if (this._TensorLayout == 1)
-                {
-                    _DimOffset[0] = 1;
-
-                    for(int idx = 1;idx < _DimOffset.Length;idx++)
-                        _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
-                }
-                else if ( _TensorLayout == 2)*/
-                {
-                    _DimOffset[_DimOffset.Length-1] = 1;
-                    for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
-                        _DimOffset[idx-1] = _DimOffset[idx] * this._Dimensions[idx];
-                }
+                _DimOffset[_DimOffset.Length - 1] = 1;
+                for (int idx = _DimOffset.Length - 1; idx >= 1; idx--)
+                    _DimOffset[idx - 1] = _DimOffset[idx] * this._Dimensions[idx];
             }
         }
 

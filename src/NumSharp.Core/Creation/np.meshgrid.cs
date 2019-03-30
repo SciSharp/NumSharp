@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
-    static partial class np
+    public static partial class np
     {
         /// <summary>
         /// Return coordinate matrices from coordinate vectors.

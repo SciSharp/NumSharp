@@ -31,7 +31,7 @@ for($idx = 0; $idx -lt $operationFiles.Length;$idx++)
         'using System.Linq;'  >> $newFile.FullName;
         'using System.Text;'  >> $newFile.FullName;
         '' >> $newFile.FullName;
-        'namespace NumSharp.Core.Shared' >> $newFile.FullName;
+        'namespace NumSharp.Shared' >> $newFile.FullName;
         '{' >> $newFile.FullName;
         ('   internal static partial class ' + [string]($newFile.Name.Split('.')[1])) >> $newFile.FullName;
         '   {' >> $newFile.FullName;

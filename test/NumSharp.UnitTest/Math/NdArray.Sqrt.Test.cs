@@ -2,10 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {

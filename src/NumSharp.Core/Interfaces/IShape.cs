@@ -2,7 +2,7 @@ using NumSharp;
 using System;
 using System.Collections.Generic;
 
-namespace NumSharp.Core.Interfaces
+namespace NumSharp.Interfaces
 {
     public interface IShape
     {

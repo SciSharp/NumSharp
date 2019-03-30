@@ -1,14 +1,17 @@
-﻿using System;
+﻿using NumSharp.Backends;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     /// <summary>
     /// API bridge between NumSharp and Python NumPy
     /// </summary>
     public static partial class np
     {
+        public static BackendType BackendEngine { get; set; }
+
         // https://docs.scipy.org/doc/numpy-1.15.0/user/basics.types.html
         public static Type uint8 => typeof(byte);
         public static Type int16 => typeof(short);

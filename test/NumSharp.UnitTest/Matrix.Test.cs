@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest
 {

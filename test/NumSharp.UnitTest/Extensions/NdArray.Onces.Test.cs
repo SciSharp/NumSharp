@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 
 namespace NumSharp.UnitTest.Extensions
@@ -15,23 +15,23 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void SimpleInt1D()
         {
-            var np = Core.np.ones(new Shape(5));
+            var np1 = np.ones(new Shape(5));
 
-            Assert.IsTrue(np.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 5);
+            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 5);
         }
         [TestMethod]
         public void SimpleInt2D()
         {
-            var np = Core.np.ones(new Shape(5,5));
+            var np1 = np.ones(new Shape(5,5));
 
-            Assert.IsTrue(np.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 25);
+            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 25);
         }
         [TestMethod]
         public void SimpleDouble3D()
         {
-            var np = Core.np.ones(new Shape(5,5,5));
+            var np1 = np.ones(new Shape(5,5,5));
 
-            Assert.IsTrue(np.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 125);
+            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 125);
         }
     }
 }

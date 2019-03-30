@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Creation;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest
 {

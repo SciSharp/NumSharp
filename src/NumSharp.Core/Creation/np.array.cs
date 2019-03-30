@@ -4,8 +4,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
- 
-namespace NumSharp.Core
+using NumSharp.Backends.ManagedArray;
+
+namespace NumSharp
 {
 	public static partial class np
 	{
@@ -17,8 +18,8 @@ namespace NumSharp.Core
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.Storage = new NDStorage(dtype);
-                nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }),1);
+                nd.Storage = new ManagedArrayEngine(dtype);
+                nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }));
 
                 nd.Storage.SetData(array); 
             }

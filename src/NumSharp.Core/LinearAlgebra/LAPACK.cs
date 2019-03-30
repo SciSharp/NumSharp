@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using NumSharp.Core.LAPACKProvider;
-using NumSharp.Core;
+using NumSharp.LAPACKProvider;
+using NumSharp;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class LAPACK
     {
@@ -11,7 +11,7 @@ namespace NumSharp.Core
         {
             switch (np.LAPACKProvider)
             {
-                case LAPACKProvider.LAPACKProvider.NetLib :
+                case LAPACKProviderType.NetLib :
                 {
                     LAPACKProvider.NetLib.dgesv_(ref n, ref nrhs, a, ref lda, ipiv, b, ref ldb, ref info);
                     break;
@@ -22,7 +22,7 @@ namespace NumSharp.Core
         {
             switch (np.LAPACKProvider)
             {
-                case LAPACKProvider.LAPACKProvider.NetLib :
+                case LAPACKProviderType.NetLib :
                 {
                     LAPACKProvider.NetLib.dgeqrf_(ref m, ref n, a, ref lda, tau, work, ref lwork, ref info);
                     break;
@@ -33,7 +33,7 @@ namespace NumSharp.Core
         {
             switch (np.LAPACKProvider)
             {
-                case LAPACKProvider.LAPACKProvider.NetLib :
+                case LAPACKProviderType.NetLib :
                 {
                     LAPACKProvider.NetLib.dorgqr_(ref m, ref n,ref k, a, ref lda, tau, work, ref lwork, ref info);
                     break;
@@ -44,7 +44,7 @@ namespace NumSharp.Core
         {
             switch (np.LAPACKProvider)
             {
-                case LAPACKProvider.LAPACKProvider.NetLib :
+                case LAPACKProviderType.NetLib :
                 {
                     LAPACKProvider.NetLib.dgelss_(ref m, ref n, ref nrhs, a, ref lda, b, ref ldb, s, ref rcond, ref rank, work, ref lwork, ref info);
                     break;
@@ -55,7 +55,7 @@ namespace NumSharp.Core
         {
             switch (np.LAPACKProvider)
             {
-                case LAPACKProvider.LAPACKProvider.NetLib :
+                case LAPACKProviderType.NetLib :
                 {
                     LAPACKProvider.NetLib.dgesvd_(JOBU, JOBVT, ref M, ref N, A, ref LDA, S, U, ref LDU, VT, ref LDVT, WORK, ref LWORK, ref INFO);
                     break;

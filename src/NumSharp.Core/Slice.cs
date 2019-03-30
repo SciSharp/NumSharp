@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     /// <summary>
     /// ndarray can be indexed using slicing

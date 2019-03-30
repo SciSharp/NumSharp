@@ -1,7 +1,7 @@
 using NumSharp;
 using System;
 
-namespace NumSharp.Core.Interfaces
+namespace NumSharp.Interfaces
 {
     /// <summary>
     /// An abstract interface as design basis for the true Storage
@@ -24,30 +24,27 @@ namespace NumSharp.Core.Interfaces
         /// Data Type of stored elements
         /// </summary>
         /// <value>numpys equal dtype</value>
-        Type DType {get;}
+        Type DType { get; }
+
+        int DTypeSize { get; }
+
         /// <summary>
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
         Shape Shape {get;}
-        /// <summary>
-        /// column wise or row wise order
-        /// </summary>
-        /// <value>0 row wise, 1 column wise</value>
-        int TensorLayout {get;}
+
         /// <summary>
         /// Allocate memory by dtype, shape, tensororder (default column wise)
         /// </summary>
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
-        /// <param name="tensorOrder">row or column wise</param>
-        void Allocate(Type dtype, Shape shape, int tensorOrder = 1);
+        void Allocate(Type dtype, Shape shape);
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
         /// <param name="values">elements to store</param>
-        /// <param name="tensorOrder">row or column wise</param>
-        void Allocate(Array values, int tensorOrder = 1);
+        void Allocate(Array values);
         /// <summary>
         /// Get Back Storage with Columnwise tensor Layout
         /// By this method the layout is changed if layout is not columnwise
@@ -112,6 +109,9 @@ namespace NumSharp.Core.Interfaces
         /// </summary>
         /// <param name="values"></param>
         void SetData(Array values);
+
+        void SetData<T>(Array values);
+
         /// <summary>
         /// Set 1 single value to internal storage and keep dtype
         /// </summary>
@@ -130,12 +130,7 @@ namespace NumSharp.Core.Interfaces
         /// <param name="dtype">new storage data type</param>
         /// <returns>sucess or not</returns>
         void ChangeDataType(Type dtype);   
-        /// <summary>
-        /// Cange layout to 0 row wise or 1 colum wise
-        /// </summary>
-        /// <param name="order">0 or 1</param>
-        /// <returns>success or not</returns>
-        void ChangeTensorLayout(int order);
+
         void Reshape(params int[] dimensions);
     }
 }

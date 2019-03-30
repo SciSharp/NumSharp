@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest
 {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Numerics;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

@@ -1,6 +1,7 @@
+using NumSharp.Backends.ManagedArray;
 using System;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -17,7 +18,7 @@ namespace NumSharp.Core
             for (int idx = 0; idx < dataLength;idx++)
                 dataArray.SetValue(1,idx);
             
-            this.Storage = new NDStorage(dtype);
+            this.Storage = new ManagedArrayEngine(dtype);
             this.Storage.Allocate(dtype,new Shape(shapes));
             
             this.Storage.SetData(dataArray);

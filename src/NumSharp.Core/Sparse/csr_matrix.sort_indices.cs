@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core.Sparse
+namespace NumSharp.Sparse
 {
     public partial class csr_matrix
     {

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core.Casting
+namespace NumSharp.Casting
 {
     public class Broadcast
     {

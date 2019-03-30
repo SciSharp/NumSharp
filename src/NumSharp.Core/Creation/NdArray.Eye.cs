@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

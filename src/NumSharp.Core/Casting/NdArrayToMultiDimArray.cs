@@ -23,9 +23,9 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

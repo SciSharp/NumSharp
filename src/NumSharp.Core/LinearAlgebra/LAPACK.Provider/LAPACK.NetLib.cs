@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Core.LAPACKProvider
+namespace NumSharp.LAPACKProvider
 {
     public static partial class NetLib
     {

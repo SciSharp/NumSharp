@@ -1,5 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
+using NumSharp;
 using System.Collections.Generic;
 using System.Linq;
 

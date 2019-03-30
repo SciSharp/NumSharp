@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class np
     {

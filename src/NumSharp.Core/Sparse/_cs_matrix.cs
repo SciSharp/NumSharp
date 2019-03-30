@@ -1,9 +1,9 @@
-﻿using NumSharp.Core;
+﻿using NumSharp;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core.Sparse
+namespace NumSharp.Sparse
 {
     /// <summary>
     /// base matrix class for compressed row and column oriented matrices
