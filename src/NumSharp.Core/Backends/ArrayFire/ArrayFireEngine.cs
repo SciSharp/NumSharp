@@ -15,6 +15,7 @@ namespace NumSharp.Backends
 
         public override NDArray Dot(NDArray x, NDArray y)
         {
+            return base.Dot(x, y);
             if (x.ndim == 2 && y.ndim == 2)
             {
                 var dx = Data.CreateArray(x.ToMuliDimArray<int>() as int[,]);

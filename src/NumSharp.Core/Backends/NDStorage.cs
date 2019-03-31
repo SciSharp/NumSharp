@@ -241,12 +241,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public Array CloneData(Type dtype)
         {
-            var puffer = (Array) this.GetData().Clone();
-
-            if (puffer.GetType().GetElementType() != dtype)
-                puffer = _ChangeTypeOfArray(puffer,dtype);
-
-            return puffer;
+            return (Array) this.GetData().Clone();
         }
 
         /// <summary>
