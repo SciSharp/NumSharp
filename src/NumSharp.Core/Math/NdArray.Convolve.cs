@@ -1,4 +1,4 @@
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -48,7 +48,7 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new ManagedArrayEngine();
+                    numSharpReturn.Storage = new DefaultEngine();
                     numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
 
@@ -74,7 +74,7 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new ManagedArrayEngine();
+                    numSharpReturn.Storage = new DefaultEngine();
                     numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
                     

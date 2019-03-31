@@ -1,4 +1,4 @@
-﻿using NumSharp.Backends.ManagedArray;
+﻿using NumSharp.Backends;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +26,7 @@ namespace NumSharp
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Max(min, npArr[i]);
 
-                res.Storage  = new ManagedArrayEngine(); 
+                res.Storage  = new DefaultEngine(); 
                 res.Storage.Allocate(dtype,new Shape(1));
                 res.Storage.SetData( new double[1] {min});             
             }
@@ -78,7 +78,7 @@ namespace NumSharp
                         resData[index++] = min;
                     }
                 }
-                res.Storage = new ManagedArrayEngine();
+                res.Storage = new DefaultEngine();
                 res.Storage.Allocate(this.dtype, new Shape(resShapes)); // (resData);
                 res.Storage.SetData(resData);
             }

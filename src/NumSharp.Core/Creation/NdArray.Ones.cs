@@ -1,4 +1,4 @@
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 using System;
 
 namespace NumSharp
@@ -18,7 +18,7 @@ namespace NumSharp
             for (int idx = 0; idx < dataLength;idx++)
                 dataArray.SetValue(1,idx);
             
-            this.Storage = new ManagedArrayEngine(dtype);
+            this.Storage = new DefaultEngine(dtype);
             this.Storage.Allocate(dtype,new Shape(shapes));
             
             this.Storage.SetData(dataArray);

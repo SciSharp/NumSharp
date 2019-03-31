@@ -23,8 +23,7 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp;
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
 namespace NumSharp.Generic
 {
@@ -32,12 +31,12 @@ namespace NumSharp.Generic
     {
         public NDArray()
         {
-            Storage = new ManagedArrayEngine(typeof(T));
+            Storage = new DefaultEngine(typeof(T));
             Storage.Allocate(this.dtype,new Shape(1));
         }
         public NDArray(Shape shape) : this()
         {
-            Storage = new ManagedArrayEngine(typeof(T));
+            Storage = new DefaultEngine(typeof(T));
             Storage.Allocate(this.dtype, shape);
         }
         /// <summary>

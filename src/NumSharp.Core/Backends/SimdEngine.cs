@@ -4,26 +4,19 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
 
-namespace NumSharp.Backends.VectorT
+namespace NumSharp.Backends
 {
-    /// <summary>
-    /// 
-    /// </summary>
-    public class VectorTEngine<Td> : IStorage where Td : struct
+    public class SimdEngine : IStorage
     {
-        private Vector<Td> vectors;
-
-        public Type DType { get; set; }
-
-        public Shape Shape { get; set; }
+        public Type DType => throw new NotImplementedException();
 
         public int DTypeSize => throw new NotImplementedException();
 
+        public Shape Shape => throw new NotImplementedException();
+
         public void Allocate(Type dtype, Shape shape)
         {
-            DType = dtype;
-            Shape = shape;
-            vectors = Vector<Td>.Zero;
+            throw new NotImplementedException();
         }
 
         public void Allocate(Array values)
@@ -32,11 +25,6 @@ namespace NumSharp.Backends.VectorT
         }
 
         public void ChangeDataType(Type dtype)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ChangeTensorLayout(int order)
         {
             throw new NotImplementedException();
         }
@@ -59,6 +47,22 @@ namespace NumSharp.Backends.VectorT
         public T[] CloneData<T>()
         {
             throw new NotImplementedException();
+        }
+
+        public NDArray Dot(NDArray x, NDArray y)
+        {
+            var dtype = x.dtype;
+
+            switch (dtype.Name)
+            {
+                case "Int32":
+                    var vx = new Vector<int>(x.Data<int>());
+                    var vy = new Vector<int>(y.Data<int>());
+                    Vector.Dot(vx, vy);
+                    break;
+            }
+
+            throw new NotImplementedException("SimdEngine.dot");
         }
 
         public Array GetData()
@@ -96,22 +100,17 @@ namespace NumSharp.Backends.VectorT
             throw new NotImplementedException();
         }
 
+        public void SetData<T>(Array values)
+        {
+            throw new NotImplementedException();
+        }
+
         public void SetData(object value, params int[] indexes)
         {
             throw new NotImplementedException();
         }
 
         public void SetData(Array values, Type dtype)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetData<T>(Array values)
-        {
-            
-        }
-
-        public void SetData<T>(T value, int offset)
         {
             throw new NotImplementedException();
         }

@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Extensions;
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -16,7 +15,7 @@ namespace NumSharp
 
             if (ndim == 1)
             {
-                nd.Storage = new ManagedArrayEngine(dtype);
+                nd.Storage = new DefaultEngine(dtype);
                 nd.Storage.Allocate(dtype, new Shape(1, shape[0]));
             }
             else if (ndim == 2)

@@ -5,37 +5,37 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest
 {
     [TestClass]
     public class StorageTester
     {
-        public ManagedArrayEngine strg1D;
-        public ManagedArrayEngine strg2D;
-        public ManagedArrayEngine strg2DNonFull;
-        public ManagedArrayEngine strg3D;
-        public ManagedArrayEngine strg3DNonFull;
+        public DefaultEngine strg1D;
+        public DefaultEngine strg2D;
+        public DefaultEngine strg2DNonFull;
+        public DefaultEngine strg3D;
+        public DefaultEngine strg3DNonFull;
         public StorageTester()
         {
-            strg1D = new ManagedArrayEngine(np.float64);
+            strg1D = new DefaultEngine(np.float64);
             strg1D.Allocate(np.float64,new Shape(10));
             strg1D.SetData(new double[]{0,1,2,3,4,5,6,7,8,9});
 
-            strg2D = new ManagedArrayEngine(np.int64);
+            strg2D = new DefaultEngine(np.int64);
             strg2D.Allocate(np.int64,new Shape(3,3));
             strg2D.SetData(new Int64[]{0,1,2,3,4,5,6,7,8});
 
-            strg2DNonFull = new ManagedArrayEngine(np.float32);
+            strg2DNonFull = new DefaultEngine(np.float32);
             strg2DNonFull.Allocate(np.float32,new Shape(5,2));
             strg2DNonFull.SetData(new float[]{0,1,2,3,4,5,6,7,8,9});
 
-            strg3D = new ManagedArrayEngine(typeof(Complex));
+            strg3D = new DefaultEngine(typeof(Complex));
             strg3D.Allocate(typeof(Complex),new Shape(2,2,2));
             strg3D.SetData(new Complex[]{1,2,3,4,5,6,7,8});
 
-            strg3DNonFull = new ManagedArrayEngine(typeof(Complex));
+            strg3DNonFull = new DefaultEngine(typeof(Complex));
             strg3DNonFull.Allocate(typeof(Complex),new Shape(2,3,4));
             var puffer = new Complex[24];
             for(int idx = 1;idx < 25;idx++)
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CloneCheck()
         {
-            var strg1DCpy = (ManagedArrayEngine) strg1D.Clone();
+            var strg1DCpy = (DefaultEngine) strg1D.Clone();
 
             Assert.IsTrue(strg1DCpy.DType == strg1DCpy.GetData().GetType().GetElementType());
             Assert.IsFalse(strg1D.GetData() == strg1DCpy.GetData());
@@ -119,7 +119,7 @@ namespace NumSharp.UnitTest
         //[TestMethod]
         public void CheckChangeTensorLayout2D()
         {
-            var strg2DCpy = (ManagedArrayEngine) strg2D.Clone();
+            var strg2DCpy = (DefaultEngine) strg2D.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,3,6,1,4,7,2,5,8} ));
@@ -127,7 +127,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2D.GetData<Int64>() ));
 
-            strg2DCpy = (ManagedArrayEngine) strg2DNonFull.Clone();
+            strg2DCpy = (DefaultEngine) strg2DNonFull.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,5,1,6,2,7,3,8,4,9} ));
@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2DNonFull.GetData<Int64>() ));
 
-            strg2DCpy = new ManagedArrayEngine();
+            strg2DCpy = new DefaultEngine();
             strg2DCpy.Allocate(typeof(Int64),new Shape(5,2));
 
             strg2DCpy.SetData(strg2DNonFull.GetData());
@@ -145,7 +145,7 @@ namespace NumSharp.UnitTest
         //[TestMethod]
         public void CheckChangeTensorLayout3D()
         {
-            var strg3DCpy = (ManagedArrayEngine) strg3D.Clone();
+            var strg3DCpy = (DefaultEngine) strg3D.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), new Complex[]{1,5,3,7,2,6,4,8} ));
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), strg3D.GetData<Complex>() ));
 
-            strg3DCpy = (ManagedArrayEngine) strg3DNonFull.Clone();
+            strg3DCpy = (DefaultEngine) strg3DNonFull.Clone();
 
             var expectedValues = new Complex[]{1,7,13,19, 3,9,15,21, 5,11,17,23, 2,8,14,20, 4,10,16,22, 6,12,18,24 };
 

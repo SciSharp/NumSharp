@@ -7,17 +7,16 @@ namespace NumSharp.Backends
 {
     public class BackendFactory
     {
-        public static IStorage GetEngine<T>(BackendType backendType)
+        public static IStorage GetEngine(BackendType backendType = BackendType.Default)
         {
-            //if (backendType == 0)
-                backendType = BackendType.ManagedArray;
-
             switch (backendType)
             {
-                case BackendType.ManagedArray:
-                    return new ManagedArray.ManagedArrayEngine();
-                case BackendType.VectorT:
-                    return new VectorT.VectorTEngine<int>();
+                case BackendType.Default:
+                    return new DefaultEngine();
+                case BackendType.SIMD:
+                    return new SimdEngine();
+                case BackendType.ArrayFire:
+                    return new ArrayFireEngine();
             }
 
             throw new NotImplementedException($"Storage {backendType} not found.");

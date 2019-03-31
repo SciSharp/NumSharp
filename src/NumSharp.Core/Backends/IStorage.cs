@@ -1,4 +1,5 @@
 using NumSharp;
+using NumSharp.Backends;
 using System;
 
 namespace NumSharp.Interfaces
@@ -112,7 +113,7 @@ namespace NumSharp.Interfaces
 
         void SetData<T>(Array values);
 
-        void SetData<T>(T value, int offset);
+        // void SetData<T>(T value, int offset);
 
         /// <summary>
         /// Set 1 single value to internal storage and keep dtype
@@ -134,5 +135,8 @@ namespace NumSharp.Interfaces
         void ChangeDataType(Type dtype);   
 
         void Reshape(params int[] dimensions);
+
+
+        NDArray Dot(NDArray x, NDArray y);
     }
 }

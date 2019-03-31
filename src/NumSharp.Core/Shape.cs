@@ -68,28 +68,15 @@ namespace NumSharp
             int[] dimIndexes = null;
             if (this._DimOffset.Length == 1)
                 dimIndexes = new int[] {select};
-            /*else if (this._TensorLayout == 1)
-            {
-                int counter = select;
-                dimIndexes = new int[_DimOffset.Length];
 
-                for (int idx = _DimOffset.Length-1; idx > -1;idx--)
-                {
-                    dimIndexes[idx] = counter / _DimOffset[idx];
-                    counter -= dimIndexes[idx] * _DimOffset[idx];
-                }
-            }
-            else*/
-            {
-                int counter = select;
-                dimIndexes = new int[_DimOffset.Length];
+            int counter = select;
+            dimIndexes = new int[_DimOffset.Length];
 
-                for (int idx = 0; idx < _DimOffset.Length;idx++)
-                {
-                    dimIndexes[idx] = counter / _DimOffset[idx];
-                    counter -= dimIndexes[idx] * _DimOffset[idx];
-                }    
-            }
+            for (int idx = 0; idx < _DimOffset.Length;idx++)
+            {
+                dimIndexes[idx] = counter / _DimOffset[idx];
+                counter -= dimIndexes[idx] * _DimOffset[idx];
+            }    
 
             return dimIndexes;
         }

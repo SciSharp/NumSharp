@@ -11,7 +11,7 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Add multiple backend (ManagedArray, VectorT)</PackageReleaseNotes>
+    <PackageReleaseNotes>Add VectorT as a backend</PackageReleaseNotes>
     <AssemblyVersion>0.9.0.0</AssemblyVersion>
     <FileVersion>0.9.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
@@ -78,9 +78,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.Numerics.Vectors">
-      <HintPath>C:\Program Files\dotnet\sdk\NuGetFallbackFolder\microsoft.netcore.app\2.2.0\ref\netcoreapp2.2\System.Numerics.Vectors.dll</HintPath>
-    </Reference>
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
   </ItemGroup>
 
   <ItemGroup>

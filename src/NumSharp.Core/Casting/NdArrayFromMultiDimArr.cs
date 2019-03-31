@@ -23,8 +23,7 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp;
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -40,7 +39,7 @@ namespace NumSharp
             for(int idx = 0; idx < dims.Length;idx++)
                 dims[idx] = dotNetArray.GetLength(idx);
             
-            Storage = new ManagedArrayEngine();
+            Storage = new DefaultEngine();
             Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims));
 
             Array internalStrg = Storage.GetData();

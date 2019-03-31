@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var nd2 = nd1.matrix_power(3).MakeGeneric<double>();
 
-            var nd3 = nd1.dot(nd1).dot(nd1).MakeGeneric<double>();
+            var nd3 = np.dot(np.dot(nd1, nd1), nd1).MakeGeneric<double>();
 
             for(int idx = 0; idx < 3;idx++)
                 for(int jdx = 0; jdx < 3;jdx++)

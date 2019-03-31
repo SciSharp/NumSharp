@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Numerics;
 using NumSharp.Extensions;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -32,11 +33,11 @@ namespace NumSharp
                 if (this.shape[1] != np2.shape[0])
                     throw new IncorrectShapeException();
             
-            var prod = this.dot(np2Multi[0]);
+            var prod = BackendFactory.GetEngine().Dot(this, np2Multi[0]);
 
             for(int idx = 1;idx < np2Multi.Length;idx++)
             {
-                prod = prod.dot(np2Multi[idx]);
+                prod = BackendFactory.GetEngine().Dot(prod, np2Multi[idx]);
             }
             
             return prod;

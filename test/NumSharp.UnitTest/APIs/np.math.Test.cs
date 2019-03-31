@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.APIs
         [TestMethod]
         public void add()
         {
-            np.BackendEngine = BackendType.VectorT;
+            // np.BackendEngine = BackendType.VectorT;
             var n = np.arange(3);
         }
     }

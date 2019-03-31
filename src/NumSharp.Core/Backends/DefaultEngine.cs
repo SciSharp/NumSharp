@@ -1,11 +1,9 @@
-﻿using NumSharp;
-using NumSharp.Interfaces;
-using NumSharp;
+﻿using NumSharp.Interfaces;
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Backends.ManagedArray
+namespace NumSharp.Backends
 {
     /// <summary>
     /// Storage
@@ -22,7 +20,7 @@ namespace NumSharp.Backends.ManagedArray
     ///  - CloneData<T> clone storage and cast this clone 
     ///     
     /// </summary>
-    public class ManagedArrayEngine : IStorage
+    public class DefaultEngine : IStorage
     {
         protected Array _values;
         protected Type _DType;
@@ -130,27 +128,27 @@ namespace NumSharp.Backends.ManagedArray
         /// <value>numpys equal shape</value>
         public Shape Shape {get {return _Shape;}}
 
-        public ManagedArrayEngine()
+        public DefaultEngine()
         {
             _DType = np.float64;
             _values = new double[1];
             _Shape = new Shape(1);
         }
-        public ManagedArrayEngine(Type dtype)
+        public DefaultEngine(Type dtype)
         {
             _DType = dtype;
             _values = Array.CreateInstance(dtype,1);
             _Shape = new Shape(1);
         }
 
-        public ManagedArrayEngine(double[] values)
+        public DefaultEngine(double[] values)
         {
             _DType = typeof(double);
             _Shape = new Shape(values.Length);
             _values = values;
         }
 
-        public ManagedArrayEngine(object[] values)
+        public DefaultEngine(object[] values)
         {
             _DType = values.GetType().GetElementType();
             _Shape = new Shape(values.Length);
@@ -409,7 +407,7 @@ namespace NumSharp.Backends.ManagedArray
 
         public object Clone()
         {
-            var puffer = new ManagedArrayEngine();
+            var puffer = new DefaultEngine();
             puffer.Allocate(_DType, new Shape(_Shape.Dimensions));
             puffer.SetData((Array)_values.Clone());
 
@@ -419,6 +417,51 @@ namespace NumSharp.Backends.ManagedArray
         public void SetData<T>(T value, int offset)
         {
             throw new NotImplementedException();
+        }
+
+        public NDArray Dot(NDArray x, NDArray y)
+        {
+            var dtype = x.dtype;
+
+            if (x.ndim == 0 && y.ndim == 0)
+            {
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        return y.Data<int>(0) * x.Data<int>(0);
+                }
+            }
+            else if (x.ndim == 1 && x.ndim == 1)
+            {
+                int sum = 0;
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        for (int i = 0; i < x.size; i++)
+                            sum += x.Data<int>(i) * y.Data<int>(i);
+                        break;
+                }
+                return sum;
+            }
+            else if (x.ndim == 2 && y.ndim == 1)
+            {
+                var nd = new NDArray(dtype, new Shape(x.shape[0]));
+                switch (dtype.Name)
+                {
+                    case "Int32":
+                        for (int i = 0; i < x.shape[0]; i++)
+                            for (int j = 0; j < y.shape[0]; j++)
+                                nd.Data<int>()[i] += x.Data<int>(i, j) * y.Data<int>(j);
+                        break;
+                }
+                return nd;
+            }
+            else if (x.ndim == 2 && y.ndim == 2)
+            {
+                return np.matmul(x, y);
+            }
+
+            throw new NotImplementedException($"dot {x.ndim} * {y.ndim}");
         }
     }
 }

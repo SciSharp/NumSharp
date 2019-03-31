@@ -24,8 +24,6 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp.Interfaces;
-using NumSharp;
-using NumSharp.Backends.ManagedArray;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -85,7 +83,7 @@ namespace NumSharp
         /// </summary>
         public NDArray()
         {
-            Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
+            Storage = BackendFactory.GetEngine();
         }
 
         /// <summary>
@@ -95,23 +93,7 @@ namespace NumSharp
         /// <param name="dtype">Data type of elements</param>
         public NDArray(Type dtype)
         {
-            switch (dtype.Name)
-            {
-                case "Object":
-                    Storage = BackendFactory.GetEngine<object>(np.BackendEngine);
-                    break;
-                case "Int32":
-                    Storage = BackendFactory.GetEngine<int>(np.BackendEngine);
-                    break;
-                case "Single":
-                    Storage = BackendFactory.GetEngine<float>(np.BackendEngine);
-                    break;
-                case "Double":
-                    Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
-                    break;
-                default:
-                    throw new NotImplementedException($"{dtype.Name}");
-            }
+            Storage = BackendFactory.GetEngine();
             Storage.ChangeDataType(dtype);
         }
 
@@ -151,32 +133,7 @@ namespace NumSharp
         /// <param name="shape">Shape of NDArray</param>
         public NDArray(Type dtype, Shape shape)
         {
-            switch (dtype.Name)
-            {
-                case "Boolean":
-                    Storage = BackendFactory.GetEngine<bool>(np.BackendEngine);
-                    break;
-                case "Byte":
-                    Storage = BackendFactory.GetEngine<byte>(np.BackendEngine);
-                    break;
-                case "Int32":
-                    Storage = BackendFactory.GetEngine<int>(np.BackendEngine);
-                    break;
-                case "Single":
-                    Storage = BackendFactory.GetEngine<float>(np.BackendEngine);
-                    break;
-                case "Double":
-                    Storage = BackendFactory.GetEngine<double>(np.BackendEngine);
-                    break;
-                case "Decimal":
-                    Storage = BackendFactory.GetEngine<decimal>(np.BackendEngine);
-                    break;
-                case "String":
-                    Storage = BackendFactory.GetEngine<string>(np.BackendEngine);
-                    break;
-                default:
-                    throw new NotImplementedException($"{dtype.Name}");
-            }
+            Storage = BackendFactory.GetEngine();
             Storage.Allocate(dtype, shape);
         }
 

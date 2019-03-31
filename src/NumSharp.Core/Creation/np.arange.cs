@@ -51,12 +51,11 @@ namespace NumSharp
 
             var nd = new NDArray(np.int32, new Shape(length));
             
-            if (nd.Storage.GetData<int>() is int[] a)
-            {
-                for (int i = start; i < stop; i += step)
-                    a[index++] = i;
-            }
-            
+            var a = new int[length];
+            for (int i = start; i < stop; i += step)
+                a[index++] = i;
+            nd.Storage.SetData(a);
+
             return nd;
         }
     }

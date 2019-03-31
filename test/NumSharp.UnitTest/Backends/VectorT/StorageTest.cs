@@ -36,9 +36,6 @@ namespace NumSharp.UnitTest.Backends.VectorT
                     for (int i = 0; i < N; ++i) r[i] = x[i] + y[i];
                 }
 
-                //Console.WriteLine(String.Join(" ", x.Take(10)));
-                //Console.WriteLine(String.Join(" ", y.Take(10)));
-                //Console.WriteLine(String.Join(" ", r.Take(10)));
                 Console.WriteLine($"Elapsed {sw.ElapsedMilliseconds,6} ms");
             };
 
@@ -59,35 +56,6 @@ namespace NumSharp.UnitTest.Backends.VectorT
                     }
                 }
 
-                //Console.WriteLine(String.Join(" ", x.Take(10)));
-                //Console.WriteLine(String.Join(" ", y.Take(10)));
-                //Console.WriteLine(String.Join(" ", r.Take(10)));
-                Console.WriteLine($"Elapsed {sw.ElapsedMilliseconds,6} ms");
-            };
-
-
-            Action<int, int> bench3 = (K, N) =>
-            {
-                sw.Restart();
-                int[] xb = genRandomIntArray2(N);
-                short[] x = xb.Select(ix => (short)ix).ToArray();
-                int[] yb = genRandomIntArray2(N);
-                short[] y = yb.Select(ix => (short)ix).ToArray();
-                short[] r = new short[N];
-                Vector<short> v0 = Vector<short>.Zero;
-
-                for (int k = 0; k < K; ++k)
-                {
-                    for (int i = 0; i < N; i += Vector<short>.Count)
-                    {
-                        v0 = new Vector<short>(x, i) + new Vector<short>(y, i);
-                        v0.CopyTo(r, i);
-                    }
-                }
-
-                //Console.WriteLine(String.Join(" ", x.Take(10)));
-                //Console.WriteLine(String.Join(" ", y.Take(10)));
-                //Console.WriteLine(String.Join(" ", r.Take(10)));
                 Console.WriteLine($"Elapsed {sw.ElapsedMilliseconds,6} ms");
             };
 
@@ -101,10 +69,6 @@ namespace NumSharp.UnitTest.Backends.VectorT
 
             Console.WriteLine("#### SIMD Computation");
             for (int i = 0; i < m0; ++i) bench2(m1, m2);
-            Console.WriteLine();
-
-            Console.WriteLine("#### SIMD Computation 2");
-            for (int i = 0; i < m0; ++i) bench3(m1, m2);
             Console.WriteLine();
         }
 

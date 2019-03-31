@@ -66,7 +66,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var B = np.arange(14).reshape(2,7);
 
-            var C = A.dot(B);
+            var C = np.dot(A, B);
 
             Assert.IsTrue(Enumerable.SequenceEqual(new double[]{7,8,9,10,11,12,13,21,26,31,36,41,46,51,35,44,53,62,71,80,89},C.Storage.GetData<double>()));
 
@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             
             var matrix2 = np.arange(7,13,1).reshape(2,3);
         
-            var matrix3 = matrix1.dot(matrix2);
+            var matrix3 = np.dot(matrix1, matrix2);
             
             var matrix4 = new int[3,3];
 
@@ -114,7 +114,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             
             var series2 = np.array(new Complex[]{new Complex(0,2),new Complex(0,3)});
         
-            var series3 = series1.dot(series2);
+            var series3 = np.dot(series1, series2);
 
             Complex[] expectedResult = new Complex[]{new Complex(-13,0)};
 

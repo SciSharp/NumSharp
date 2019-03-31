@@ -6,14 +6,13 @@ namespace NumSharp
 {
     public enum BackendType
     {
-        /// <summary>
-        /// Managed Array
-        /// </summary>
-        ManagedArray = 1,
+        Default = 1,
 
         /// <summary>
         /// Managed SIMD
         /// </summary>
-        VectorT = 2
+        SIMD = 2,
+
+        ArrayFire = 4
     }
 }

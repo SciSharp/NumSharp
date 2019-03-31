@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
-using NumSharp.Backends.ManagedArray;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -18,7 +18,7 @@ namespace NumSharp
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.Storage = new ManagedArrayEngine(dtype);
+                nd.Storage = new DefaultEngine(dtype);
                 nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }));
 
                 nd.Storage.SetData(array); 

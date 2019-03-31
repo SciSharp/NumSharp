@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             for(int idx = 0; idx < 5;idx++)
                 sMAtrix[idx,idx] = s[idx];
 
-            var ACreated = u.dot(sMAtrix).dot(vt);
+            var ACreated = np.dot(np.dot(u, sMAtrix), vt);
 
             var error = A - ACreated;
 
