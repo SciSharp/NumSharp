@@ -59,6 +59,8 @@ namespace NumSharp
         /// <value>Internal Storage</value>
         public IStorage Storage { get; set; }
 
+        public ITensorEngine TensorEngine { get; set; }
+
         /// <summary>
         /// Shortcut for access internal elements
         /// </summary>
@@ -83,7 +85,8 @@ namespace NumSharp
         /// </summary>
         public NDArray()
         {
-            Storage = BackendFactory.GetEngine();
+            Storage = new NDStorage();
+            TensorEngine = BackendFactory.GetEngine();
         }
 
         /// <summary>
@@ -93,8 +96,8 @@ namespace NumSharp
         /// <param name="dtype">Data type of elements</param>
         public NDArray(Type dtype)
         {
-            Storage = BackendFactory.GetEngine();
-            Storage.ChangeDataType(dtype);
+            TensorEngine = BackendFactory.GetEngine();
+            Storage = new NDStorage(dtype);
         }
 
         /// <summary>
@@ -109,8 +112,9 @@ namespace NumSharp
 
             for(int idx = 0; idx < strgDim.Length;idx++)
                 strgDim[idx] = values.GetLength(idx);
-            
-            Storage.Allocate(Storage.DType,new Shape(strgDim));
+
+            Storage = new NDStorage(dtype);
+            Storage.Allocate(dtype, new Shape(strgDim));
 
             switch( values.Rank )
             {
@@ -133,7 +137,8 @@ namespace NumSharp
         /// <param name="shape">Shape of NDArray</param>
         public NDArray(Type dtype, Shape shape)
         {
-            Storage = BackendFactory.GetEngine();
+            TensorEngine = BackendFactory.GetEngine();
+            Storage = new NDStorage(dtype);
             Storage.Allocate(dtype, shape);
         }
 

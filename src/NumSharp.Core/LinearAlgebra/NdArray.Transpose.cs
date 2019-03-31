@@ -15,7 +15,7 @@ namespace NumSharp
 
             if (ndim == 1)
             {
-                nd.Storage = new DefaultEngine(dtype);
+                nd.Storage = new NDStorage(dtype);
                 nd.Storage.Allocate(dtype, new Shape(1, shape[0]));
             }
             else if (ndim == 2)

@@ -16,9 +16,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var n = np.zeros(3);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<float>(), new float[] { 0, 0, 0 }));
-
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<int>(), new int[] { 0, 0, 0 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<double>(), new double[] { 0, 0, 0 }));
         }
     }
 }

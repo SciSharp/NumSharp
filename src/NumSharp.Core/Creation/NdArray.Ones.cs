@@ -18,7 +18,7 @@ namespace NumSharp
             for (int idx = 0; idx < dataLength;idx++)
                 dataArray.SetValue(1,idx);
             
-            this.Storage = new DefaultEngine(dtype);
+            this.Storage = new NDStorage();
             this.Storage.Allocate(dtype,new Shape(shapes));
             
             this.Storage.SetData(dataArray);

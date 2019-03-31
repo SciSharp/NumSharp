@@ -14,7 +14,6 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCheck()
         {
-            
             var nd =  np.arange(9.0).reshape(3,3).MakeGeneric<double>();
 
             var random = new Random();
@@ -28,14 +27,8 @@ namespace NumSharp.UnitTest
             var stringOfNp = nd.ToString();
 
             Assert.IsTrue(stringOfNp.Contains("[["));
-
-            nd = np.arange(9).reshape(3,3).MakeGeneric<double>();
-
-            stringOfNp = nd.ToString();        
-
-            Assert.IsTrue(stringOfNp.Contains("([[ 0,"));
-            
         }
+
         [TestMethod]
         public void CheckVectorString()
         {

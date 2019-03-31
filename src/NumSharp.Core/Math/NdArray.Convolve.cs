@@ -48,7 +48,7 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new DefaultEngine();
+                    numSharpReturn.Storage = new NDStorage();
                     numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
 
@@ -74,7 +74,7 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new DefaultEngine();
+                    numSharpReturn.Storage = new NDStorage();
                     numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
                     

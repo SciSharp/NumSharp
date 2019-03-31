@@ -135,8 +135,5 @@ namespace NumSharp.Interfaces
         void ChangeDataType(Type dtype);   
 
         void Reshape(params int[] dimensions);
-
-
-        NDArray Dot(NDArray x, NDArray y);
     }
 }

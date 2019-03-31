@@ -5,7 +5,7 @@ using System.Text;
 
 namespace NumSharp.Backends
 {
-    public class ArrayFireEngine : IStorage
+    public class ArrayFireEngine : ITensorEngine
     {
         public Type DType => throw new NotImplementedException();
 

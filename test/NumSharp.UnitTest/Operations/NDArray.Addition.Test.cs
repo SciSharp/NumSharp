@@ -46,11 +46,11 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void Double1DPlusOffset_NDArrayAddition()
         {
-            var np1 = new NDArray(typeof(int)).arange(4, 1);
+            var np1 = np.arange(4);
 
             var np3 = np1 + 2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 3, 4, 5 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 3, 4, 5 }, np3.Data<int>()));
         }
 
         /*[TestMethod]

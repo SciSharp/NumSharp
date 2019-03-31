@@ -60,15 +60,15 @@ namespace NumSharp.UnitTest.Selection
         {
             NDArray A = new double[] {1,2,3};
 
-            NDArray booleanArr = new bool[]{false,false,true};
+            NDArray booleanArr = new bool[] { false, false, true };
 
             A[booleanArr.MakeGeneric<bool>()] = 1;
 
-            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<int>(),new int[] {1,2,1} ));
+            Assert.IsTrue(System.Linq.Enumerable.SequenceEqual(A.Data<double>(), new double[] { 1, 2, 1 }));
 
             A = new double[,] {{1,2,3},{4,5,6}};
 
-            booleanArr = new bool[,] {{true,false,true},{false,true,false}};
+            booleanArr = new bool[,] { { true, false, true }, { false, true, false } };
 
             A[booleanArr.MakeGeneric<bool>()] = -2;
 

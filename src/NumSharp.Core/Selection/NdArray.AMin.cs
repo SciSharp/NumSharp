@@ -18,17 +18,17 @@ namespace NumSharp
         {
             var res = new NDArray(dtype);
 
-            double[] npArr = this.Storage.GetData<double>();
+            var npArr = this.Storage.GetData<int>();
 
             if (axis == null)
             {
-                double min = npArr[0];
+                int min = npArr[0];
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage  = new DefaultEngine(); 
-                res.Storage.Allocate(dtype,new Shape(1));
-                res.Storage.SetData( new double[1] {min});                
+                res.Storage  = new NDStorage();
+                res.Storage.Allocate(dtype, new Shape(1));
+                res.Storage.SetData(new int[1] { min });            
             }
             else
             {
@@ -61,9 +61,9 @@ namespace NumSharp
                 index = 0; //index for result data set
                 int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
                 int increments = cur * post;
-                double[] resData = new double[size];  //res.Data = new double[size];
+                var resData = new int[size];  //res.Data = new double[size];
                 int start = 0;
-                double min = 0;
+                int min = 0;
                 for (int i = 0; i < this.size; i += increments)
                 {
                     for (int j = i; j < i + post; j++)

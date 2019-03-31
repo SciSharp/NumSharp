@@ -18,7 +18,7 @@ namespace NumSharp
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.Storage = new DefaultEngine(dtype);
+                nd.Storage = new NDStorage(dtype);
                 nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }));
 
                 nd.Storage.SetData(array); 

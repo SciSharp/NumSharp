@@ -99,9 +99,9 @@ namespace NumSharp.UnitTest
         public void StringCast3()
         {
             NDArray nd = "[3,1,1,2]";
-            var intMatr = new int[] { 3, 1, 1, 2 };
+            var intMatr = new double[] { 3, 1, 1, 2 };
 
-            Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<double>()));
         }
     }
 

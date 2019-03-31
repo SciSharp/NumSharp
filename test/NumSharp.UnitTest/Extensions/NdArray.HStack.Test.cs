@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Extensions
             var n1 = np.array(new double[] { 1, 2, 3 });
             var n2 = np.array(new double[] { 2, 3, 4 });
 
-            var n = np.hstack(n1, n2).MakeGeneric<double>();
+            var n = np.hstack<double>(n1, n2).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.Extensions
             var n3 = np.array(new double[][] { new double[] { 7 }, new double[] { 8 }, new double[] { 9 } });
 
 
-             n = np.hstack(n1, n2, n3).MakeGeneric<double>();
+             n = np.hstack<double>(n1, n2, n3).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size + n3.size));
 
@@ -49,8 +49,8 @@ namespace NumSharp.UnitTest.Extensions
 
             Assert.IsTrue(n[0, 2] == 7);
 
-            var nn = np.hstack(n1, n2).MakeGeneric<double>();
-            nn = nn.hstack(n3).MakeGeneric<double>();
+            var nn = np.hstack<double>(n1, n2).MakeGeneric<double>();
+            nn = nn.hstack<double>(n3).MakeGeneric<double>();
 
             Assert.IsTrue(nn[0, 0] == 1);
             Assert.IsTrue(nn[1, 0] == 2);
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest.Extensions
             n1 = np.array(new double[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }).reshape(2, 3, 2);
             n2 = np.array(new double[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }).reshape(2, 3, 2);
 
-            n = np.hstack(n1, n2).MakeGeneric<double>();
+            n = np.hstack<double>(n1, n2).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
@@ -75,11 +75,11 @@ namespace NumSharp.UnitTest.Extensions
             ////4D
             n1 = np.arange(24 * 100).reshape(2, 30, 20, 2);
             n2 = np.arange(24 * 100).reshape(2, 30, 20, 2);
-            n = np.hstack(n1, n2).MakeGeneric<double>();
+            var n4 = np.hstack<int>(n1, n2).MakeGeneric<int>();
 
-            Assert.IsTrue(n.size == (n1.size + n2.size));
-            Assert.IsTrue(n[0, 0, 0, 0] == 0);
-            Assert.IsTrue(n[0, 0, 0, 1] == 1);
+            Assert.IsTrue(n4.size == (n1.size + n2.size));
+            Assert.IsTrue(n4[0, 0, 0, 0] == 0);
+            Assert.IsTrue(n4[0, 0, 0, 1] == 1);
         }
     }
 }

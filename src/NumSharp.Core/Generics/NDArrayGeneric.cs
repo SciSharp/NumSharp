@@ -31,12 +31,12 @@ namespace NumSharp.Generic
     {
         public NDArray()
         {
-            Storage = new DefaultEngine(typeof(T));
+            Storage = new NDStorage(typeof(T));
             Storage.Allocate(this.dtype,new Shape(1));
         }
         public NDArray(Shape shape) : this()
         {
-            Storage = new DefaultEngine(typeof(T));
+            Storage = new NDStorage(typeof(T));
             Storage.Allocate(this.dtype, shape);
         }
         /// <summary>

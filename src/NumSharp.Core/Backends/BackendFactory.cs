@@ -7,7 +7,7 @@ namespace NumSharp.Backends
 {
     public class BackendFactory
     {
-        public static IStorage GetEngine(BackendType backendType = BackendType.Default)
+        public static ITensorEngine GetEngine(BackendType backendType = BackendType.Default)
         {
             switch (backendType)
             {

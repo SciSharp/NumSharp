@@ -38,8 +38,8 @@ namespace NumSharp
 
             for(int idx = 0; idx < dims.Length;idx++)
                 dims[idx] = dotNetArray.GetLength(idx);
-            
-            Storage = new DefaultEngine();
+
+            Storage = new NDStorage();
             Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims));
 
             Array internalStrg = Storage.GetData();

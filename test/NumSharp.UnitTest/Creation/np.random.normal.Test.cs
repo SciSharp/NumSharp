@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Creation
             var s = np.random.normal(mu, sigma, 10, 100);
 
             var mean = np.mean(s);
-            Assert.IsTrue(Math.Abs(mu - mean.Data<float>()[0]) < 0.01);
+            Assert.IsTrue(Math.Abs(mu - mean.Data<double>()[0]) < 0.01);
 
             var std = s.std();
             Assert.IsTrue(Math.Abs(sigma - std.Data<double>()[0] )  < 0.01);
