@@ -8,6 +8,27 @@ namespace NumSharp.Backends
 {
     public class SimdEngine : ITensorEngine
     {
+        public NDArray Add(NDArray x, NDArray y)
+        {
+            int[] lhs = x.Data<int>();
+            int[] rhs = x.Data<int>();
+
+            var simdLength = Vector<int>.Count;
+            var result = new int[lhs.Length];
+            var i = 0;
+            for (i = 0; i <= lhs.Length - simdLength; i += simdLength)
+            {
+                var va = new Vector<int>(lhs, i);
+                var vb = new Vector<int>(rhs, i);
+                (va + vb).CopyTo(result, i);
+            }
+
+            for (; i < lhs.Length; ++i)
+                result[i] = lhs[i] + rhs[i];
+
+            return result;
+        }
+
         public NDArray Dot(NDArray x, NDArray y)
         {
             var dtype = x.dtype;

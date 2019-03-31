@@ -52,7 +52,7 @@ namespace NumSharp
             int[] dims = dimList.ToArray();
 
             Shape shape = new Shape(dims);
-            shape.ChangeTensorLayout(1);
+            shape.ChangeTensorLayout();
 
             NDArray nd = new NDArray(elementType,shape);
 

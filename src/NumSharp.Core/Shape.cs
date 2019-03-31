@@ -81,12 +81,9 @@ namespace NumSharp
             return dimIndexes;
         }
 
-        public void  ChangeTensorLayout(int layout)
+        public void  ChangeTensorLayout()
         {
             _DimOffset = new int[this._Dimensions.Length];
-
-            layout = (layout == 0) ? 1 : layout;
-            
             _SetDimOffset();
         }
 

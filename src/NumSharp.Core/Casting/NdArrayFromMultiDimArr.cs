@@ -45,7 +45,7 @@ namespace NumSharp
             Array internalStrg = Storage.GetData();
 
             var pufferShape = new Shape(dims);
-            pufferShape.ChangeTensorLayout(2); 
+            pufferShape.ChangeTensorLayout(); 
 
             int[] idxDims = null;
             object valueIdx = null;

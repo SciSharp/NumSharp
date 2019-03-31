@@ -165,7 +165,7 @@ namespace NumSharp.Backends
         {
             _DType = dtype;
             _Shape = shape;
-            _Shape.ChangeTensorLayout(1);
+            _Shape.ChangeTensorLayout();
             int elementNumber = 1;
             for(int idx = 0; idx < shape.Dimensions.Length;idx++)
                 elementNumber *= shape.Dimensions[idx];

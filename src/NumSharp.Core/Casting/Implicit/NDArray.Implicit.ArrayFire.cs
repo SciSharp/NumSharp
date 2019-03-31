@@ -24,32 +24,29 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp;
+using System.Text.RegularExpressions;
+using Array = ArrayFire.Array;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public Array ToMuliDimArray<T>()
+        public static implicit operator Array(NDArray nd)
         {
-            Array dotNetArray = Array.CreateInstance(typeof(T), this.shape);
-
-            var pufferShape = new Shape(shape);
-            pufferShape.ChangeTensorLayout();
-
-            int[] indexes = null;
-            object idxValue = null;
-
-            T[] array = Storage.GetData<T>();
-
-            for(int idx = 0; idx < this.size;idx++)
+            switch (nd.ndim)
             {
-                indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[Storage.Shape.GetIndexInShape(indexes)];
-                dotNetArray.SetValue(idxValue,indexes);
+                case 1:
+                    return ArrayFire.Data.CreateArray(nd.Data<int>());
+                case 2:
+                    return ArrayFire.Data.CreateArray(nd.ToMuliDimArray<int>() as int[,]);
             }
 
-            return dotNetArray;
+            throw new NotImplementedException("");
         }
-        
+
+        public static implicit operator NDArray(Array array)
+        {
+            throw new NotImplementedException("");
+        }
     }
 }

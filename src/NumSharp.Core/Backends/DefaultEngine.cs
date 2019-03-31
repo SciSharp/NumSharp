@@ -22,6 +22,11 @@ namespace NumSharp.Backends
     /// </summary>
     public class DefaultEngine : ITensorEngine
     {
+        public NDArray Add(NDArray x, NDArray y)
+        {
+            return x + y;
+        }
+
         public NDArray Dot(NDArray x, NDArray y)
         {
             var dtype = x.dtype;
