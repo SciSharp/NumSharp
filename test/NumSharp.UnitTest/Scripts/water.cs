@@ -13,7 +13,6 @@ namespace NumSharp.UnitTest
         public double g;
         public double dt;
 
-
         [TestMethod]
         public void Water()
         {

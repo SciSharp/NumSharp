@@ -9,6 +9,7 @@ namespace NumSharp.Backends
     {
         public override NDArray Add(NDArray x, NDArray y)
         {
+            return base.Add(x, y);
             int[] lhs = x.Data<int>();
             int[] rhs = x.Data<int>();
 
@@ -28,8 +29,9 @@ namespace NumSharp.Backends
             return result;
         }
 
-        public NDArray Dot(NDArray x, NDArray y)
+        public override NDArray Dot(NDArray x, NDArray y)
         {
+            return base.Dot(x, y);
             var dtype = x.dtype;
 
             switch (dtype.Name)

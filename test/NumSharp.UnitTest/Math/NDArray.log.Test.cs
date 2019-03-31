@@ -3,9 +3,7 @@ using System;
 using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Extensions;
 using System.Linq;
-using NumSharp;
 
 namespace NumSharp.UnitTest
 {

@@ -3,8 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Extensions;
-using NumSharp;
 
 namespace NumSharp.UnitTest
 {
@@ -31,6 +29,7 @@ namespace NumSharp.UnitTest
                 for (int jdx = 0; jdx < 2;jdx++)
                     Assert.IsTrue(c[idx,jdx] == a[idx][jdx]);
         }
+
         [TestMethod]
         public void FromDotNetVector()
         {
@@ -41,6 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(((double)nd[2]) == 3);
             Assert.IsTrue(((double)nd[3]) == 4);
         }
+
         [TestMethod]
         public void FromDotNetMatrix()
         {

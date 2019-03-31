@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Extensions;
 using System.Linq;
-using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
@@ -49,16 +46,12 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var y = np.array(new int[] { 2, 3 });
 
-            for(int i = 0; i< 100000; i++)
-            {
-                var z = np.dot(x, y);
-            }
-            
+            var z = np.dot(x, y);
 
-            /*Assert.AreEqual(z.Data<int>(0), 5);
+            Assert.AreEqual(z.Data<int>(0), 5);
             Assert.AreEqual(z.Data<int>(1), 8);
             Assert.AreEqual(z.Data<int>(2), 10);
-            Assert.AreEqual(z.Data<int>(3), 13);*/
+            Assert.AreEqual(z.Data<int>(3), 13);
         }
 
         [TestMethod]

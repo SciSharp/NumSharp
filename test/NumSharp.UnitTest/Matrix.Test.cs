@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp;
 
 namespace NumSharp.UnitTest
 {
@@ -19,7 +18,6 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(matrixAsString.Contains("matrix([[1, 2, 3]"));
             Assert.IsTrue(matrixAsString.Contains("[4, 5, 6]"));
             Assert.IsTrue(matrixAsString.Contains("[7, 8, 9]"));
-
         }
     }
 }
