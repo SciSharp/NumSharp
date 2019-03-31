@@ -12,10 +12,13 @@ namespace NumSharp
         /// if both NDArrays are 1D, scalar product is returned independend of shape
         /// if both NDArrays are 2D matrix product is returned.
         /// </summary>
-        /// <param name="a"></param>
-        /// <param name="b"></param>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
         /// <returns></returns>
-        public static NDArray dot(NDArray a, NDArray b)
-            => BackendFactory.GetEngine().Dot(a, b);
+        public static NDArray dot(NDArray x, NDArray y)
+            => BackendFactory.GetEngine().Dot(x, y);
+
+        public static NDArray matmul(NDArray x, NDArray y)
+            => BackendFactory.GetEngine().MatMul(x, y);
     }
 }

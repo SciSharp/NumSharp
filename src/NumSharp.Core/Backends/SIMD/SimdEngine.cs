@@ -6,9 +6,9 @@ using System.Text;
 
 namespace NumSharp.Backends
 {
-    public class SimdEngine : ITensorEngine
+    public class SimdEngine : DefaultEngine
     {
-        public NDArray Add(NDArray x, NDArray y)
+        public override NDArray Add(NDArray x, NDArray y)
         {
             int[] lhs = x.Data<int>();
             int[] rhs = x.Data<int>();
@@ -36,9 +36,13 @@ namespace NumSharp.Backends
             switch (dtype.Name)
             {
                 case "Int32":
-                    var vx = new Vector<int>(x.Data<int>());
-                    var vy = new Vector<int>(y.Data<int>());
-                    Vector.Dot(vx, vy);
+                    if(x.ndim == 2 && y.ndim == 2)
+                    {
+                        var vx = new Vector<int>(x.Data<int>());
+                        var vy = new Vector<int>(y.Data<int>());
+                        var vec = Vector.Dot(vx, vy);
+                    }
+
                     break;
             }
 

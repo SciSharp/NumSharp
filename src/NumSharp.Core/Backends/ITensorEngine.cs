@@ -6,7 +6,9 @@ namespace NumSharp.Backends
 {
     public interface ITensorEngine
     {
-        NDArray Dot(NDArray x, NDArray y);
         NDArray Add(NDArray x, NDArray y);
+        NDArray Dot(NDArray x, NDArray y);
+        NDArray Log(NDArray nd);
+        NDArray MatMul(NDArray x, NDArray y);
     }
 }

@@ -11,7 +11,8 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Add VectorT as a backend</PackageReleaseNotes>
+    <PackageReleaseNotes>Support multiple backends.
+Change NumSharp.Core namespace to NumSharp.</PackageReleaseNotes>
     <AssemblyVersion>0.9.0.0</AssemblyVersion>
     <FileVersion>0.9.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>

@@ -1,18 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using NumSharp.Interfaces;
+using System;
 using System.Linq;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public static partial class np
+    public abstract partial class DefaultEngine
     {
-        public static NDArray matmul(NDArray a, NDArray b)
+        public virtual NDArray MatMul(NDArray x, NDArray y)
         {
-            if (a.ndim == b.ndim && a.ndim == 2)
+            if (x.ndim == 2 && y.ndim == 2)
             {
-                var nd = new NDArray(a.dtype, new Shape(a.shape[0], b.shape[1]));
+                var nd = new NDArray(x.dtype, new Shape(x.shape[0], y.shape[1]));
                 switch (nd.dtype.Name)
                 {
                     case "Int32":
@@ -22,7 +22,7 @@ namespace NumSharp
                             {
                                 int sum = 0;
                                 for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += a.Data<int>(row, s) * b.Data<int>(s, col);
+                                    sum += x.Data<int>(row, s) * y.Data<int>(s, col);
                                 nd[row, col] = sum;
                             }
                         });
@@ -35,7 +35,7 @@ namespace NumSharp
                             {
                                 float sum = 0;
                                 for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += a.Data<float>(row, s) * b.Data<float>(s, col);
+                                    sum += x.Data<float>(row, s) * y.Data<float>(s, col);
                                 nd[row, col] = sum;
                             }
                         });
@@ -48,7 +48,7 @@ namespace NumSharp
                             {
                                 double sum = 0;
                                 for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += a.Data<double>(row, s) * b.Data<double>(s, col);
+                                    sum += x.Data<double>(row, s) * y.Data<double>(s, col);
                                 nd[row, col] = sum;
                             }
                         });

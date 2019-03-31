@@ -7,12 +7,11 @@ namespace NumSharp.Backends
 {
     public class BackendFactory
     {
-        public static ITensorEngine GetEngine(BackendType backendType = BackendType.Default)
+        public static ITensorEngine GetEngine(BackendType backendType = BackendType.SIMD)
         {
             switch (backendType)
             {
-                case BackendType.Default:
-                    return new DefaultEngine();
+                case BackendType.MKL:
                 case BackendType.SIMD:
                     return new SimdEngine();
                 case BackendType.ArrayFire:
