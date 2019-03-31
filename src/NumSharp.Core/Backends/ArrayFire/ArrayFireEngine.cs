@@ -1,5 +1,4 @@
 ﻿using ArrayFire;
-using NumSharp.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;

@@ -2,7 +2,7 @@ using NumSharp;
 using NumSharp.Backends;
 using System;
 
-namespace NumSharp.Interfaces
+namespace NumSharp
 {
     /// <summary>
     /// An abstract interface as design basis for the true Storage

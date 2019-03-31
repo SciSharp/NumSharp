@@ -23,7 +23,6 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Interfaces;
 using NumSharp.Backends;
 
 namespace NumSharp

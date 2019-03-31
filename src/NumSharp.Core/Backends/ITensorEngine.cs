@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public interface ITensorEngine
     {
