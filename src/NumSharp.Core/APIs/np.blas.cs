@@ -16,7 +16,7 @@ namespace NumSharp
         /// <param name="y"></param>
         /// <returns></returns>
         public static NDArray dot(NDArray x, NDArray y)
-            => BackendFactory.GetEngine(BackendType.ArrayFire).Dot(x, y);
+            => BackendFactory.GetEngine().Dot(x, y);
 
         public static NDArray matmul(NDArray x, NDArray y)
             => BackendFactory.GetEngine().MatMul(x, y);

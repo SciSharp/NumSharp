@@ -8,18 +8,18 @@ namespace NumSharp
     public partial class NDArray
     {
         public NDArray log()
-             => BackendFactory.GetEngine().Log(this);
+             => np.log(this);
 
         public static NDArray operator +(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Add(x, y);
+            => np.add(x, y);
 
         public static NDArray operator -(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Sub(x, y);
+            => np.subtract(x, y);
 
         public static NDArray operator *(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Multiply(x, y);
+            => np.multiply(x, y);
 
         public static NDArray operator /(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Divide(x, y);
+            => np.divide(x, y);
     }
 }
