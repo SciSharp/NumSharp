@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Linq;
-using BenchmarkDotNet.Attributes;
+using System.Reflection;
 using BenchmarkDotNet.Running;
 
 namespace NumSharp.Benchmark
@@ -14,11 +13,19 @@ namespace NumSharp.Benchmark
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            for(int i = 0; i < args.Length; i++)
+
+            if (args?.Length > 0)
             {
-                string method = $"NumSharp.Benchmark.{args[i]}";
-                Type type = Type.GetType(method);
-                BenchmarkRunner.Run(type);
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string method = $"NumSharp.Benchmark.{args[i]}";
+                    var type = Type.GetType(method);
+                    BenchmarkRunner.Run(type);
+                }
+            }
+            else
+            {
+                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run();
             }
         }
     }
