@@ -13,9 +13,15 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void amax()
         {
+            //default type
+            var n = np.arange(0, 12, 0.1);
+            var d1 = np.amax(n);
+            Assert.IsTrue(d1[0].Equals(11.9));
+
             //no axis
-            var n = np.arange(4).reshape(2, 2);
-            var n1 = np.amax(n).MakeGeneric<int>();
+            n = np.arange(4).reshape(2, 2);
+            var n1 = np.amax(n).MakeGeneric<double>();
+
             Assert.IsTrue(n1[0] == 3);
 
             //2D with axis
