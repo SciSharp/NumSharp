@@ -25,6 +25,16 @@ namespace NumSharp.UnitTest.Creation
 
             n = np.arange(0, 11, 3);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<int>(), new int[] { 0, 3, 6, 9 }));
+
+            // Test increments < 1
+            var startd = 0.0;
+            var stopd = 12.0;
+            var incrementd = 0.1;
+            n = np.arange(startd, stopd, incrementd);
+            var r = n.Storage.GetData<double>();
+            var t = Enumerable.Repeat(0, (int)((stopd - startd) / incrementd)).Select((tr, ti) => tr + incrementd * ti);
+            Assert.IsTrue(r.Length == 120);
+            Assert.IsTrue(Enumerable.SequenceEqual(r, t));
         }
     }
 }

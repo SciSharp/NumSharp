@@ -22,14 +22,16 @@ namespace NumSharp.Core
             }
 
             int length = (int)Math.Ceiling((stop - start + 0.0) / step);
-            int index = 0;
 
-            var nd = new NDArray(typeof(double), new Shape(length) );
+            var nd = new NDArray(typeof(double), new Shape(length));
 
             double[] puffer = nd.Storage.GetData() as double[];
 
-            for (double i = start; i < stop; i += step)
-                puffer[index++] = i;
+            for (int index = 0; index < length; index++)
+            {
+                double value = start + index * step;
+                puffer[index] = value;
+            }
 
             return nd;
         }
