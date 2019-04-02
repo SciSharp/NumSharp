@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class matrix: NDArray
     {
@@ -34,7 +34,7 @@ namespace NumSharp.Core
 
             var shape = new Shape( new int[] { dim0, dim1 });
 
-            this.Storage.Allocate(dtype,shape,1);
+            this.Storage.Allocate(dtype,shape);
 
             switch (this.dtype.Name)
             {

@@ -1,6 +1,6 @@
 using System;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -9,34 +9,59 @@ namespace NumSharp.Core
             if (axis > this.ndim)
                 throw new IncorrectShapeException();
             
-            Array data = this.Storage.GetData();
-            Array result = this.Storage.CloneData();
-
             shift = (axis == 0) ? (-1) * shift : shift;
 
-            shift = ((shift % this.shape[axis]) < 0) ? shift+this.shape[axis] : shift; 
+            shift = ((shift % this.shape[axis]) < 0) ? shift+this.shape[axis] : shift;
 
-            for ( int idx = 0; idx < this.size;idx++)
+            switch (dtype.Name)
             {
-                int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
-                indexes[axis] = ( indexes[axis] + shift) % this.shape[axis];
+                case "Int32":
+                    {
+                        var data = this.Data<int>();
+                        var newData = new int[this.size];
+                        for (int idx = 0; idx < this.size; idx++)
+                        {
+                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                            newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        }
+                        return new NDArray(newData, this.shape);
+                    }
 
-                result.SetValue(data.GetValue(idx),this.Storage.Shape.GetIndexInShape(indexes));
+                case "Single":
+                    {
+                        var data = this.Data<float>();
+                        var newData = new float[this.size];
+                        for (int idx = 0; idx < this.size; idx++)
+                        {
+                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                            newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        }
+                        return new NDArray(newData, this.shape);
+                    }
+
+                case "Double":
+                    {
+                        var data = this.Data<double>();
+                        var newData = new double[this.size];
+                        for (int idx = 0; idx < this.size; idx++)
+                        {
+                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                            newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        }
+                        return new NDArray(newData, this.shape);
+                    }
+
+                default:
+                    throw new NotImplementedException($"NDArray.roll {dtype.Name}");
             }
-            
-            NDArray resultNDArray = new NDArray(this.dtype,this.shape);
-
-            resultNDArray.Storage.SetData(result);
-
-            return resultNDArray;
         }
+
         public NDArray roll(int shift)
         {
             shift = (-1) * shift;
-
-            int tensorLayout = this.Storage.TensorLayout;
-
-            this.Storage.ChangeTensorLayout(2);
 
             Array cpy = Array.CreateInstance(this.dtype, this.size);
 
@@ -53,11 +78,9 @@ namespace NumSharp.Core
 
             var returnValue = new NDArray(this.dtype);
 
-            returnValue.Storage.Allocate(dtype, new Shape(this.shape), 1);
+            returnValue.Storage.Allocate(dtype, new Shape(this.shape));
 
             returnValue.Storage.SetData(cpy);
-
-            this.Storage.ChangeTensorLayout(tensorLayout);
 
             return returnValue;
         }

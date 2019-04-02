@@ -3,8 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Core.Extensions;
-using NumSharp.Core;
 
 namespace NumSharp.UnitTest
 {
@@ -31,6 +29,7 @@ namespace NumSharp.UnitTest
                 for (int jdx = 0; jdx < 2;jdx++)
                     Assert.IsTrue(c[idx,jdx] == a[idx][jdx]);
         }
+
         [TestMethod]
         public void FromDotNetVector()
         {
@@ -41,6 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(((double)nd[2]) == 3);
             Assert.IsTrue(((double)nd[3]) == 4);
         }
+
         [TestMethod]
         public void FromDotNetMatrix()
         {
@@ -99,9 +99,9 @@ namespace NumSharp.UnitTest
         public void StringCast3()
         {
             NDArray nd = "[3,1,1,2]";
-            var intMatr = new int[] { 3, 1, 1, 2 };
+            var intMatr = new double[] { 3, 1, 1, 2 };
 
-            Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<double>()));
         }
     }
 

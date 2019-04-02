@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -44,24 +44,25 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void DoubleMatrix2DiagonalLeft()
         {
-            var np = new NDArray().eye(5,-2).MakeGeneric<int>();
+            var np = new NDArray().eye(5,-2).MakeGeneric<double>();
 
             Assert.IsTrue(np[2,0] == 1);
             Assert.IsTrue(np[3,1] == 1);
             Assert.IsTrue(np[4,2] == 1);
 
-            Assert.IsTrue(np.Storage.GetData<int>().Where(x => x ==0).ToArray().Length ==22);        
+            Assert.IsTrue(np.Data<double>().Where(x => x ==0).ToArray().Length ==22);        
         }
+
         [TestMethod]
         public void DoubleMatrix2DiagonalRight()
         {
-            var np = new NDArray().eye(5,2).MakeGeneric<int>();
+            var np = new NDArray().eye(5,2).MakeGeneric<double>();
 
             Assert.IsTrue(np[0,2] == 1);
             Assert.IsTrue(np[1,3] == 1);
             Assert.IsTrue(np[2,4] == 1);
 
-            Assert.IsTrue(np.Storage.GetData<int>().Where(x => x ==0).ToArray().Length ==22);        
+            Assert.IsTrue(np.Storage.GetData<double>().Where(x => x ==0).ToArray().Length ==22);        
         }
 
     }

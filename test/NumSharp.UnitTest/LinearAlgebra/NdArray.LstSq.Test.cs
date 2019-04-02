@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
     public  class NDArrayLinSqTester
     {
-        [TestMethod]
+        //[TestMethod]
         public void DefaultTest()
         {
             NDArray A = new double[,] {{0.0,1.0},{1.0,1.0},{2.0,1.0},{3.0,1.0}};  

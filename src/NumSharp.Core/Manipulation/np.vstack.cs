@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class np
     {
+        /*
         /// <summary>
         /// Stack arrays in sequence vertically (row wise).
         /// </summary>
@@ -37,5 +38,6 @@ namespace NumSharp.Core
             }
             return np;
         }
+        */
     }
 }

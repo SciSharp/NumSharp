@@ -23,18 +23,18 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
         public Array ToMuliDimArray<T>()
         {
-            Array dotNetArray = Array.CreateInstance(typeof(T),this.shape);
+            Array dotNetArray = Array.CreateInstance(typeof(T), this.shape);
 
             var pufferShape = new Shape(shape);
-            pufferShape.ChangeTensorLayout(2);
+            pufferShape.ChangeTensorLayout();
 
             int[] indexes = null;
             object idxValue = null;

@@ -1,13 +1,13 @@
-﻿using NumSharp.Core.Extensions;
+﻿using NumSharp.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray hstack(params NDArray[] nps)
+        public static NDArray hstack<T>(params NDArray[] nps)
         {
             var np1 = nps[0];
 
@@ -15,7 +15,7 @@ namespace NumSharp.Core
             for (int idx = 1;idx < nps.Length;idx++)
                 npn[idx-1] = nps[idx];
 
-            return np1.hstack(npn);
+            return np1.hstack<T>(npn);
         }
     }
 }

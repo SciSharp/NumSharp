@@ -1,9 +1,10 @@
-﻿using System;
+﻿using NumSharp.Backends;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -17,20 +18,17 @@ namespace NumSharp.Core
         {
             var res = new NDArray(dtype);
 
-            int oldLayout = this.Storage.TensorLayout;
-
-            this.Storage.ChangeTensorLayout(2);
-            double[] npArr = this.Storage.GetData<double>();
+            var npArr = this.Storage.GetData<int>();
 
             if (axis == null)
             {
-                double min = npArr[0];
+                int min = npArr[0];
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage  = new NDStorage(); 
-                res.Storage.Allocate(dtype,new Shape(1),1);
-                res.Storage.SetData( new double[1] {min});                
+                res.Storage  = new NDStorage();
+                res.Storage.Allocate(dtype, new Shape(1));
+                res.Storage.SetData(new int[1] { min });            
             }
             else
             {
@@ -63,9 +61,9 @@ namespace NumSharp.Core
                 index = 0; //index for result data set
                 int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
                 int increments = cur * post;
-                double[] resData = new double[size];  //res.Data = new double[size];
+                var resData = new int[size];  //res.Data = new double[size];
                 int start = 0;
-                double min = 0;
+                int min = 0;
                 for (int i = 0; i < this.size; i += increments)
                 {
                     for (int j = i; j < i + post; j++)
@@ -81,11 +79,9 @@ namespace NumSharp.Core
                     }
                 }
 
-                res.Storage.Allocate(res.dtype,new Shape(resShapes),2);
+                res.Storage.Allocate(res.dtype,new Shape(resShapes));
                 res.Storage.SetData(resData); 
-                res.Storage.ChangeTensorLayout(1);
             }
-            this.Storage.ChangeTensorLayout(oldLayout);
             return res;
         }
     }

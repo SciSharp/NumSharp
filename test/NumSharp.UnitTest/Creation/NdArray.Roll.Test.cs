@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -24,7 +24,6 @@ namespace NumSharp.UnitTest.Creation
             double[] nd1_ = (Array) nd1 as double[];
             double[] nd2_ = (Array) nd2 as double[];
 
-
             Assert.IsTrue(Enumerable.SequenceEqual(nd1_,expNd1));
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_,expNd2));
 
@@ -40,8 +39,8 @@ namespace NumSharp.UnitTest.Creation
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1_,expNd1));
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_,expNd2));
-
         }
+
         [TestMethod]
         public void Base2DTest()
         {
@@ -51,31 +50,31 @@ namespace NumSharp.UnitTest.Creation
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1.shape,nd2.shape));
 
-
             var nd3 = nd1.roll(-2);
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1.shape,nd3.shape));
         }
+
         [TestMethod]
         public void RollWithAxis()
         {
             var x = np.arange(10);
-            var x2 = x.reshape(2,5);
+            var x2 = x.reshape(2, 5);
 
-            var x3 = x2.roll(1,0);
-            var x4 = x2.roll(1,1);
+            var x3 = x2.roll(1, 0);
+            var x4 = x2.roll(1, 1);
 
-            int[,] x3_ = (Array) x3 as int[,];
-            int[,] x4_ = (Array) x4 as int[,];
+            int[,] x3_ = (Array)x3 as int[,];
+            int[,] x4_ = (Array)x4 as int[,];
 
-            int[,] expX3 = {{5,6,7,8,9},{0,1,2,3,4}};
-            int[,] expX4 = {{4,0,1,2,3},{9,5,6,7,8}};
+            int[,] expX3 = { { 5, 6, 7, 8, 9 }, { 0, 1, 2, 3, 4 } };
+            int[,] expX4 = { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } };
 
-            for(int idx = 0; idx < expX3.GetLength(0);idx++)
-                for(int jdx = 0; jdx < expX3.GetLength(1);jdx++)
-                {    
-                    Assert.IsTrue(x3_[idx,jdx] == expX3[idx,jdx]);
-                    Assert.IsTrue(x4_[idx,jdx] == expX4[idx,jdx]);
+            for (int idx = 0; idx < expX3.GetLength(0); idx++)
+                for (int jdx = 0; jdx < expX3.GetLength(1); jdx++)
+                {
+                    Assert.IsTrue(x3_[idx, jdx] == expX3[idx, jdx]);
+                    Assert.IsTrue(x4_[idx, jdx] == expX4[idx, jdx]);
                 }
         }
     }

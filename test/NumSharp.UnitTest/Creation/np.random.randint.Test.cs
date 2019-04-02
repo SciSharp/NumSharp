@@ -1,6 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
-using NumSharp.Core.Extensions;
+using NumSharp;
+using NumSharp.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void randint()
         {
-            var a = new NumSharp.Core.NumPyRandom().randint(low: 0, high: 10, shape: new Shape(5, 5));
+            var a = new NumPyRandom().randint(low: 0, high: 10, shape: new Shape(5, 5));
             Assert.IsTrue(a.Storage.GetData<int>().Count(x => x < 10) == 25);
         }
     }

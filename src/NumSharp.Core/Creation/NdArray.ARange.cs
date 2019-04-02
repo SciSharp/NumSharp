@@ -5,7 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -53,12 +53,12 @@ namespace NumSharp.Core
                         dataArray = list.Select(x => (Complex)x).ToArray();
                         break;
                     }
-                case Quaternion[] dataArray:
+                /*case Quaternion[] dataArray:
                     {
                         // no performance critial operation
                         dataArray = list.Select(x => new Quaternion(new Vector3(0, 0, 0), x)).ToArray();
                         break;
-                    }
+                    }*/
                 default:
                     {
                         throw new IncorrectTypeException();

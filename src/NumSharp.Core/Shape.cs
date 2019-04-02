@@ -1,15 +1,12 @@
 ﻿using System;
-using NumSharp.Core.Interfaces;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
-    public partial class Shape : IShape
+    public partial class Shape
     {
-        protected int _TensorLayout;
-        public int TensorLayout {get {return _TensorLayout;}}
         protected int[] _Dimensions;
         protected int[] _DimOffset;
         protected int _size;
@@ -25,19 +22,9 @@ namespace NumSharp.Core
             }
             else
             {
-                if (this._TensorLayout == 1)
-                {
-                    _DimOffset[0] = 1;
-
-                    for(int idx = 1;idx < _DimOffset.Length;idx++)
-                        _DimOffset[idx] = _DimOffset[idx-1] * this._Dimensions[idx-1];
-                }
-                else if ( _TensorLayout == 2)
-                {
-                    _DimOffset[_DimOffset.Length-1] = 1;
-                    for(int idx = _DimOffset.Length-1;idx >= 1;idx--)
-                        _DimOffset[idx-1] = _DimOffset[idx] * this._Dimensions[idx];
-                }
+                _DimOffset[_DimOffset.Length - 1] = 1;
+                for (int idx = _DimOffset.Length - 1; idx >= 1; idx--)
+                    _DimOffset[idx - 1] = _DimOffset[idx] * this._Dimensions[idx];
             }
         }
 
@@ -51,55 +38,51 @@ namespace NumSharp.Core
             
         }
 
+        /// <summary>
+        /// get store position by shape
+        /// [[1, 2, 3], [4, 5, 6]]
+        /// GetIndexInShape(0, 1) = 1
+        /// GetIndexInShape(1, 1) = 5
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public int GetIndexInShape(params int[] select)
         {
             int idx = 0;
             for (int i = 0; i < select.Length; i++)
-            {
                 idx += _DimOffset[i] * select[i];
-            }
-
             return idx;
         }
 
+        /// <summary>
+        /// get position in shape by store position
+        /// [[1, 2, 3], [4, 5, 6]]
+        /// GetDimIndexOutShape(1) = (0, 1)
+        /// GetDimIndexOutShape(4) = (1, 1)
+        /// </summary>
+        /// <param name="select"></param>
+        /// <returns></returns>
         public int[] GetDimIndexOutShape(int select)
         {
             int[] dimIndexes = null;
             if (this._DimOffset.Length == 1)
                 dimIndexes = new int[] {select};
-            else if (this._TensorLayout == 1)
-            {
-                int counter = select;
-                dimIndexes = new int[_DimOffset.Length];
 
-                for (int idx = _DimOffset.Length-1; idx > -1;idx--)
-                {
-                    dimIndexes[idx] = counter / _DimOffset[idx];
-                    counter -= dimIndexes[idx] * _DimOffset[idx];
-                }
-            }
-            else
-            {
-                int counter = select;
-                dimIndexes = new int[_DimOffset.Length];
+            int counter = select;
+            dimIndexes = new int[_DimOffset.Length];
 
-                for (int idx = 0; idx < _DimOffset.Length;idx++)
-                {
-                    dimIndexes[idx] = counter / _DimOffset[idx];
-                    counter -= dimIndexes[idx] * _DimOffset[idx];
-                }    
-            }
+            for (int idx = 0; idx < _DimOffset.Length;idx++)
+            {
+                dimIndexes[idx] = counter / _DimOffset[idx];
+                counter -= dimIndexes[idx] * _DimOffset[idx];
+            }    
 
             return dimIndexes;
         }
 
-        public void  ChangeTensorLayout(int layout)
+        public void  ChangeTensorLayout()
         {
             _DimOffset = new int[this._Dimensions.Length];
-
-            layout = (layout == 0) ? 1 : layout;
-            
-            _TensorLayout = layout;
             _SetDimOffset();
         }
 
@@ -107,7 +90,6 @@ namespace NumSharp.Core
         {
             this._Dimensions = dims;
             this._DimOffset = new int[this._Dimensions.Length];
-            this._TensorLayout = 1;
 
             this._size = 1;
 

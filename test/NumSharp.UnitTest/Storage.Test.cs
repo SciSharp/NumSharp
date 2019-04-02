@@ -1,10 +1,11 @@
-using NumSharp.Core;
+using NumSharp;
 using System;
 using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest
 {
@@ -19,15 +20,15 @@ namespace NumSharp.UnitTest
         public StorageTester()
         {
             strg1D = new NDStorage(np.float64);
-            strg1D.Allocate(np.float64,new Shape(10),1);
+            strg1D.Allocate(np.float64,new Shape(10));
             strg1D.SetData(new double[]{0,1,2,3,4,5,6,7,8,9});
 
             strg2D = new NDStorage(np.int64);
-            strg2D.Allocate(np.int64,new Shape(3,3),1);
+            strg2D.Allocate(np.int64,new Shape(3,3));
             strg2D.SetData(new Int64[]{0,1,2,3,4,5,6,7,8});
 
             strg2DNonFull = new NDStorage(np.float32);
-            strg2DNonFull.Allocate(np.float32,new Shape(5,2),1);
+            strg2DNonFull.Allocate(np.float32,new Shape(5,2));
             strg2DNonFull.SetData(new float[]{0,1,2,3,4,5,6,7,8,9});
 
             strg3D = new NDStorage(typeof(Complex));
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(strg2D.GetData().Length == 9);
             Assert.IsTrue(strg2DNonFull.GetData().Length == 10);
         }
-        [TestMethod]
+        //[TestMethod]
         public void IndexingCheck()
         {
             var element1D = strg1D.GetData<double>(0);
@@ -101,7 +102,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CloneCheck()
         {
-            var strg1DCpy = (NDStorage) strg1D.Clone();
+            var strg1DCpy = (NDStorage)strg1D.Clone();
 
             Assert.IsTrue(strg1DCpy.DType == strg1DCpy.GetData().GetType().GetElementType());
             Assert.IsFalse(strg1D.GetData() == strg1DCpy.GetData());
@@ -115,105 +116,52 @@ namespace NumSharp.UnitTest
             double[] arr1 = strg1D.GetData<double>();
 
         }
-        [TestMethod]
+        //[TestMethod]
         public void CheckChangeTensorLayout2D()
         {
             var strg2DCpy = (NDStorage) strg2D.Clone();
 
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            
-            strg2DCpy.ChangeTensorLayout(2);
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,3,6,1,4,7,2,5,8} ));
-
-            strg2DCpy.ChangeTensorLayout(1);
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2D.GetData<Int64>() ));
 
             strg2DCpy = (NDStorage) strg2DNonFull.Clone();
 
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            
-            strg2DCpy.ChangeTensorLayout(2);
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,5,1,6,2,7,3,8,4,9} ));
-
-            strg2DCpy.ChangeTensorLayout(1);
-
-            Assert.IsTrue(strg2DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg2DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2DNonFull.GetData<Int64>() ));
 
             strg2DCpy = new NDStorage();
-            strg2DCpy.Allocate(typeof(Int64),new Shape(5,2),2);
+            strg2DCpy.Allocate(typeof(Int64),new Shape(5,2));
 
             strg2DCpy.SetData(strg2DNonFull.GetData());
 
-            strg2DCpy.ChangeTensorLayout(1);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(),new Int64[]{0,2,4,6,8,1,3,5,7,9}));
-
         }
-        [TestMethod]
+        //[TestMethod]
         public void CheckChangeTensorLayout3D()
         {
             var strg3DCpy = (NDStorage) strg3D.Clone();
 
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            
-            strg3DCpy.ChangeTensorLayout(2);
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), new Complex[]{1,5,3,7,2,6,4,8} ));
-
-            strg3DCpy.ChangeTensorLayout(1);
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,2,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), strg3D.GetData<Complex>() ));
 
-            strg3DCpy = (NDStorage) strg3DNonFull.Clone();
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            
-            strg3DCpy.ChangeTensorLayout(2);
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 2);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 2);
+            strg3DCpy = (NDStorage)strg3DNonFull.Clone();
 
             var expectedValues = new Complex[]{1,7,13,19, 3,9,15,21, 5,11,17,23, 2,8,14,20, 4,10,16,22, 6,12,18,24 };
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,3,4}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), expectedValues ));
 
-            strg3DCpy.ChangeTensorLayout(1);
-
-            Assert.IsTrue(strg3DCpy.TensorLayout == 1);
-            Assert.IsTrue(strg3DCpy.Shape.TensorLayout == 1);
-
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.Shape.Dimensions,new int[]{2,3,4}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg3DCpy.GetData<Complex>(), strg3DNonFull.GetData<Complex>() ));
-
         }
-
     }
 }

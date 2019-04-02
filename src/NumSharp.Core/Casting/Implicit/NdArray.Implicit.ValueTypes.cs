@@ -25,7 +25,7 @@ using System.Globalization;
 using System.Collections;
 using System.Numerics;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -141,12 +141,12 @@ namespace NumSharp.Core
             return ndArray;
         }
 
-        public static implicit operator NDArray(Quaternion d)
+        /*public static implicit operator NDArray(Quaternion d)
         {
             var ndArray = new NDArray(typeof(Quaternion),new int[0]);
             ndArray.Storage.SetData(new Quaternion[]{d});
 
             return ndArray;
-        }
+        }*/
     }
 }

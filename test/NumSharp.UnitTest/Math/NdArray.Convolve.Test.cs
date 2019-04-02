@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Core;
 
 namespace NumSharp.UnitTest
 {
@@ -27,6 +25,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
         }
+
         [TestMethod]
         public void ConvoleValid()
         {
@@ -39,6 +38,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
         }
+
         [TestMethod]
         public void ConvoleSame()
         {
@@ -51,6 +51,5 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
         }
-        
     }
 }

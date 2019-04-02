@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ArrayImage()
         {
-            var relativePath = string.Empty;
+            /*var relativePath = string.Empty;
 #if NETFRAMEWORK
             relativePath = "../../../..";
 #else
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.Creation
                 Assert.IsTrue(imageNDArray.Storage.GetData<byte>()[1] == 253 );
                 Assert.IsTrue(imageNDArray.Storage.GetData<byte>()[2] == 252 );
 
-            }
+            }*/
         }
     }
 }

@@ -1,7 +1,7 @@
 using System;
-using NumSharp.Core;
+using NumSharp;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     class IncorrectTypeException : System.Exception
     {

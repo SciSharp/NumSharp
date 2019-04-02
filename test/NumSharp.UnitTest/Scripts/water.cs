@@ -2,7 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest
 {
@@ -12,7 +12,6 @@ namespace NumSharp.UnitTest
         public double grid_spacing;
         public double g;
         public double dt;
-
 
         [TestMethod]
         public void Water()
@@ -32,7 +31,7 @@ namespace NumSharp.UnitTest
 
             var rr = (x-droplet_x)*(x-droplet_x) + (y-droplet_y)*(y-droplet_y);
 
-            eta[rr<100] = 1.1; //# add a perturbation in pressure surface
+            eta[rr < 100] = 1.1; //# add a perturbation in pressure surface
 
             grid_spacing =  1.0*box_size  * (1 / n);
             g = 1.0;
@@ -91,11 +90,7 @@ namespace NumSharp.UnitTest
             while(true)
             {
                 trajectory.MoveNext();
-
-                 (eta_, u_, v_, time ) = trajectory.Current;
-
-
-
+                (eta_, u_, v_, time) = trajectory.Current;
             }
         }
     }

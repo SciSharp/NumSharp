@@ -4,8 +4,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
- 
-namespace NumSharp.Core
+using NumSharp.Backends;
+
+namespace NumSharp
 {
 	public static partial class np
 	{
@@ -18,7 +19,7 @@ namespace NumSharp.Core
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
                 nd.Storage = new NDStorage(dtype);
-                nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }),1);
+                nd.Storage.Allocate(dtype, new Shape(new int[] { array.Length }));
 
                 nd.Storage.SetData(array); 
             }
@@ -30,7 +31,7 @@ namespace NumSharp.Core
             return nd;
         }
 
-        public static NDArray array(System.Drawing.Bitmap image)
+        /*public static NDArray array(System.Drawing.Bitmap image)
         {
             var imageArray = new NDArray(typeof(Byte));
 
@@ -45,7 +46,7 @@ namespace NumSharp.Core
             imageArray.Storage.SetData(bytes);
             
             return imageArray;
-        }
+        }*/
 
         public static NDArray array<T>(T[][] data)
         {
@@ -56,6 +57,21 @@ namespace NumSharp.Core
                 for (int col = 0; col < data[row].Length; col++)
                 {
                     nd[row,col] = data[row][col];
+                }
+            }
+
+            return nd;
+        }
+
+        public static NDArray array<T>(T[,] data)
+        {
+            var nd = new NDArray(typeof(T), new Shape(data.GetLength(0), data.GetLength(1)));
+
+            for (int dim0 = 0; dim0 < data.GetLength(0); dim0++)
+            {
+                for (int dim1 = 0; dim1 < data.GetLength(1); dim1++)
+                {
+                    nd[dim0, dim1] = data[dim0, dim1];
                 }
             }
 

@@ -19,29 +19,11 @@ NumSharp has implemented the arange, array, max, min, reshape, normalize, unique
 
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
-* NumPy
-  * absolute
-  * amax
-  * amin
-  * arange
-  * array
-  * hstack
-  * linspace
-  * max
-  * power
-  * random
-    * normal
-    * randint
-    * randn
-    * stardard_normal
-  * reshape
-  * sin
-  * vstack
-  * zeros
-  
+Check the code: [src\NumSharp.Core\APIs](src\NumSharp.Core\APIs)
+
 ### How to use
 ```cs
-using NumSharp.Core;
+using NumSharp;
 ```
 ```cs
 // create a vector

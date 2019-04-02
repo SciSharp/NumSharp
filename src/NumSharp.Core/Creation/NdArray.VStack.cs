@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray vstack(params NDArray[] nps)
+        public NDArray vstack<T>(params NDArray[] nps)
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");
-            
-            List<object> list = this.Storage.GetData<object>().ToList();
+
+            var list = this.Storage.GetData<T>().ToList();
 
             NDArray np = new NDArray(dtype);
 
@@ -21,7 +21,7 @@ namespace NumSharp.Core
                 if (nps[0].shape != ele.shape)
                     throw new Exception("Arrays mush have same shapes");
                 
-                list.AddRange(ele.Storage.GetData<object>());
+                list.AddRange(ele.Storage.GetData<T>());
             }
 
             np.Storage.SetData(list.ToArray());

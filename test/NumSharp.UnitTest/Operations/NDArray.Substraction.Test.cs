@@ -3,9 +3,9 @@ using System;
 using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Operations
 {
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new double[]{0,2,4},np2.Storage.GetData<double>()));
         }
 
-        [TestMethod]
+        /*[TestMethod]
         public void Complex1DPlusOffset_NDArraySubtraction()
         {
             var np1 = np.array(new Complex[] { new Complex(6, 8), new Complex(10, 12) });
@@ -57,6 +57,6 @@ namespace NumSharp.UnitTest.Operations
             var np3 = np1 - np2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new Complex[]{new Complex(1,2),new Complex(3,4)},np3.Storage.GetData<Complex>()));
-        }
+        }*/
     }
 }

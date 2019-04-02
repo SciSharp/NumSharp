@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Core.Shared;
+using NumSharp.Shared;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -44,9 +44,8 @@ namespace NumSharp.Core
 
             var Q = new NDArray(typeof(double), new Shape(tau.Length, tau.Length));
 
-            Q.Storage.Allocate(Q.Storage.DType,Q.Storage.Shape,2);
+            Q.Storage.Allocate(Q.Storage.DType,Q.Storage.Shape);
             Q.Storage.SetData(a);
-            Q.Storage.ChangeTensorLayout(1);
 
             return (Q,R);
         }

@@ -3,19 +3,14 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Core.Shared;
+using NumSharp.Shared;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
-        
         public (NDArray,NDArray,NDArray) svd()
         {
-            int tensorLayout = this.Storage.TensorLayout;
-
-            this.Storage.ChangeTensorLayout(1);
-
             double[] A = this.Storage.CloneData<double>();
 
             int m = this.shape[0];
@@ -53,11 +48,7 @@ namespace NumSharp.Core
             vtNDArr.Storage.SetData(vt);
             sNDArr.Storage.SetData(s);
 
-            this.Storage.ChangeTensorLayout(tensorLayout);
-
             return (uNDArr,sNDArr,vtNDArr);
-
         }
-        
     }
 }

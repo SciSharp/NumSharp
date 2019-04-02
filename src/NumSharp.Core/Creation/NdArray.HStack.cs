@@ -1,9 +1,10 @@
-﻿using System;
+﻿using NumSharp.Generic;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -12,7 +13,7 @@ namespace NumSharp.Core
         /// </summary>
         /// <param name="nps"></param>
         /// <returns></returns>
-        public NDArray hstack(params NDArray[] nps)
+        public NDArray hstack<T>(params NDArray[] nps)
         {
             if (nps == null || nps.Length == 0)
                 throw new Exception("Input arrays can not be empty");
@@ -31,29 +32,26 @@ namespace NumSharp.Core
             // easy 1D case
             if (this.ndim == 1)
             {
-                var list1D = new List<object>();
+                var list1D = new List<T>();
                 for (int idx = 0; idx < npAll.Length; idx++)
-                    list1D.AddRange(npAll[idx].Storage.GetData<object>().ToList());
+                    list1D.AddRange(npAll[idx].Data<T>().ToList());
 
                 nd = np.array(list1D.ToArray(), this.dtype);
             }
             else
             {
-                for (int idx = 0; idx < npAll.Length; idx++)
-                    npAll[idx].Storage.ChangeTensorLayout(2);
                 int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
-                var list = new List<object>(); 
+                var list = new List<T>(); 
 
                 for (int i = 0; i < total; i++)
                 {
                     for (int k = 0; k < npAll.Length; k++)
                     {
                         var pufferShape = new Shape(npAll[k].shape);
-                        pufferShape.ChangeTensorLayout(this.Storage.Shape.TensorLayout);
                         int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.DimOffset[0];
                         for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
                         {
-                            var ele = npAll[k].Storage.GetData<object>()[j];
+                            var ele = npAll[k].Data<T>()[j];
                             list.Add(ele);
                         }
                     }
@@ -66,10 +64,8 @@ namespace NumSharp.Core
                 else
                     shapes[1] = npAll.Sum(x => x.shape[1]);
 
-                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes), 2);
+                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes));
                 nd.Storage.SetData(list.ToArray());
-                nd.Storage.ChangeTensorLayout(1);
-
             }
 
             return nd;

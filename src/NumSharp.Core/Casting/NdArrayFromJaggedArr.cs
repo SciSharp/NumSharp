@@ -23,9 +23,9 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -52,24 +52,27 @@ namespace NumSharp.Core
             int[] dims = dimList.ToArray();
 
             Shape shape = new Shape(dims);
-            shape.ChangeTensorLayout(1);
+            shape.ChangeTensorLayout();
 
             NDArray nd = new NDArray(elementType,shape);
 
             Array ndStrg = nd.Storage.GetData();
 
-            for (int idx = 0; idx < shape.Size;idx++)
+            if(dims.Length == 1)
             {
-                int[] indexes = shape.GetDimIndexOutShape(idx);
-
-                Array puffer = (Array) dotNetArray.GetValue(indexes[0]);
-
-                for (int jdx = 1; jdx < indexes.Length-1;jdx++)
+                throw new NotImplementedException("FromJaggedArray dims.Length == 1");
+            }
+            else if (dims.Length == 2)
+            {
+                switch (dotNetArray)
                 {
-                    puffer = (Array) puffer.GetValue(indexes[jdx]);
+                    case double[][] array:
+                        for (int i = 0; i < dims[0]; i++)
+                            for (int j = 0; j < dims[1]; j++)
+                                nd[i, j] = array[i][j];
+                        break;
                 }
-
-                ndStrg.SetValue(puffer.GetValue(indexes[indexes.Length-1]),nd.Storage.Shape.GetIndexInShape(indexes));
+                
             }
 
             this.Storage = nd.Storage;

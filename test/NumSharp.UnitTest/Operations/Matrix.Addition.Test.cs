@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Operations
 {
@@ -19,20 +19,7 @@ namespace NumSharp.UnitTest.Operations
 
             var np3 = np1 + np2;
 
-            np3.Storage.ChangeTensorLayout(2);
-
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Storage.GetData<double>()));
-        }
-
-        [TestMethod]
-        public void ComplexTwo2D_MatrixAddition()
-        {
-            var np1 = np.array(new Complex[] { new Complex(1, 2), new Complex(3, 4) });
-            var np2 = np.array(new Complex[] { new Complex(5, 6), new Complex(7, 8) });
-
-            var np3 = np1 + np2;
-
-            Assert.IsTrue(Enumerable.SequenceEqual(new Complex[] { new Complex(6, 8), new Complex(10, 12) }, np3.Storage.GetData<Complex>()));
         }
     }
 }

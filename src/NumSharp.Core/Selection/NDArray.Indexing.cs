@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using System.Threading.Tasks;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -30,49 +31,118 @@ namespace NumSharp.Core
         {
             get
             {
-                if(!(indexes.ndim == 1))
-                            throw new IncorrectShapeException();
-
-                Array indexesArr = indexes.Storage.GetData();
-                Array thisArr = this.Storage.GetData();
-                
                 NDArray selectedValues = null;
 
-                switch (this.ndim)
+                switch (ndim)
                 {
-                    case 1 :
-                    {
-                        selectedValues = new NDArray(this.dtype, indexes.size);
-
-                        Array selValArr = selectedValues.Storage.GetData();
-                    
-                        for(int idx = 0; idx < indexesArr.Length;idx++)
-                            selValArr.SetValue(thisArr.GetValue(Convert.ToInt32(indexesArr.GetValue(idx))),idx);
-                    
+                    case 1:
+                        if (dtype.Name == "Byte")
+                            selectedValues = setValue1D<byte>(indexes);
+                        if (dtype.Name == "Int32")
+                            selectedValues = setValue1D<int>(indexes);
+                        if (dtype.Name == "Single")
+                            selectedValues = setValue1D<float>(indexes);
+                        else if (dtype.Name == "Double")
+                            selectedValues = setValue1D<double>(indexes);
                         break;
-                    }
-                    case 2 :
-                    {
-                        
-                        
-
+                    case 2:
+                        if (dtype.Name == "Byte")
+                            selectedValues = setValue2D<byte>(indexes);
+                        if (dtype.Name == "Int32")
+                            selectedValues = setValue2D<int>(indexes);
+                        if (dtype.Name == "Single")
+                            selectedValues = setValue2D<float>(indexes);
+                        else if (dtype.Name == "Double")
+                            selectedValues = setValue2D<double>(indexes);
                         break;
-                    }
-                }
-
-
-                if (this.ndim == 1)
-                {
-                    
-                }
-                else
-                {
-
+                    case 3:
+                        if (dtype.Name == "Byte")
+                            selectedValues = setValue3D<byte>(indexes);
+                        if (dtype.Name == "Int32")
+                            selectedValues = setValue3D<int>(indexes);
+                        if (dtype.Name == "Single")
+                            selectedValues = setValue3D<float>(indexes);
+                        else if (dtype.Name == "Double")
+                            selectedValues = setValue3D<double>(indexes);
+                        break;
+                    case 4:
+                        if (dtype.Name == "Byte")
+                            selectedValues = setValue4D<byte>(indexes);
+                        if (dtype.Name == "Int32")
+                            selectedValues = setValue4D<int>(indexes);
+                        if (dtype.Name == "Single")
+                            selectedValues = setValue4D<float>(indexes);
+                        else if (dtype.Name == "Double")
+                            selectedValues = setValue4D<double>(indexes);
+                        break;
                 }
 
                 return selectedValues;
             }
         }
+
+        private NDArray setValue1D<T>(NDArray indexes)
+        {
+            var buf = Data<T>();
+            var idx = indexes.Data<int>();
+            var values = new T[indexes.size];
+
+            Parallel.ForEach(Enumerable.Range(0, indexes.size), (row) =>
+            {
+                values[row] = buf[idx[row]];
+            });
+
+            return new NDArray(values, indexes.size);
+        }
+
+        private NDArray setValue2D<T>(NDArray indexes)
+        {
+            var buf = Data<T>();
+            var idx = indexes.Data<int>();
+            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1]));
+
+            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
+            {
+                for (int col = 0; col < selectedValues.shape[1]; col++)
+                    selectedValues[row, col] = buf[Storage.Shape.GetIndexInShape(idx[row], col)];
+            });
+
+            return selectedValues;
+        }
+
+        private NDArray setValue3D<T>(NDArray indexes)
+        {
+            var buf = Data<T>();
+            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2]));
+            var idx = indexes.Data<int>();
+
+            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+            {
+                for (int row = 0; row < selectedValues.shape[1]; row++)
+                    for (int col = 0; col < selectedValues.shape[2]; col++)
+                            selectedValues[item, row, col] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col)];
+            });
+
+            return selectedValues;
+        }
+
+        private NDArray setValue4D<T>(NDArray indexes)
+        {
+            var buf = Data<T>();
+            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
+            var idx = indexes.Data<int>();
+
+            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+            {
+                for (int row = 0; row < selectedValues.shape[1]; row++)
+                    for (int col = 0; col < selectedValues.shape[2]; col++)
+                        for (int channel = 0; channel < selectedValues.shape[3]; channel++)
+                            selectedValues[item, row, col, channel] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)];
+            });
+
+            return selectedValues;
+        }
+
         public NDArray this[NumSharp.Generic.NDArray<bool> booleanArray]
         {
             get

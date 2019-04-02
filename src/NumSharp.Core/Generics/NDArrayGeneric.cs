@@ -23,7 +23,7 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp.Backends;
 
 namespace NumSharp.Generic
 {
@@ -32,12 +32,12 @@ namespace NumSharp.Generic
         public NDArray()
         {
             Storage = new NDStorage(typeof(T));
-            Storage.Allocate(this.dtype,new Shape(1),1);
+            Storage.Allocate(this.dtype,new Shape(1));
         }
         public NDArray(Shape shape) : this()
         {
             Storage = new NDStorage(typeof(T));
-            Storage.Allocate(this.dtype, shape,1);
+            Storage.Allocate(this.dtype, shape);
         }
         /// <summary>
         /// indexing of generic - overridden on purpose

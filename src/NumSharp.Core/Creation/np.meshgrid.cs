@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
-    static partial class np
+    public static partial class np
     {
         /// <summary>
         /// Return coordinate matrices from coordinate vectors.
@@ -25,7 +25,7 @@ namespace NumSharp.Core
             }
             int ndim = 2;
             var s0 = (1,1);
-            var output = new NDArray[]{ np.asanyarray(x1).reshape(-1,1), np.asanyarray(x2).reshape(1,-1)};
+            var output = new NDArray[]{ x1.reshape(-1,1), x2.reshape(1,-1)};
 
             if (kwargs.indexing == "xy" && ndim > 1)
             {

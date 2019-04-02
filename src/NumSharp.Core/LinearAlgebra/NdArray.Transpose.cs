@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Core.Extensions;
+using NumSharp.Backends;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -16,7 +16,7 @@ namespace NumSharp.Core
             if (ndim == 1)
             {
                 nd.Storage = new NDStorage(dtype);
-                nd.Storage.Allocate(dtype, new Shape(1, shape[0]),1);
+                nd.Storage.Allocate(dtype, new Shape(1, shape[0]));
             }
             else if (ndim == 2)
             {

@@ -2,9 +2,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Creation
             var s = np.random.normal(mu, sigma, 10, 100);
 
             var mean = np.mean(s);
-            Assert.IsTrue(Math.Abs(mu - mean.Data<float>()[0]) < 0.01);
+            Assert.IsTrue(Math.Abs(mu - mean.Data<double>()[0]) < 0.01);
 
             var std = s.std();
             Assert.IsTrue(Math.Abs(sigma - std.Data<double>()[0] )  < 0.01);

@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest
 {
@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
         {
             var nd = np.arange(3);
             
-            var nd1 = nd.power(2).MakeGeneric<double>();
+            var nd1 = nd.power(2).MakeGeneric<int>();
             
             Assert.IsTrue(nd1[0] == 0);
             Assert.IsTrue(nd1[1] == 1);

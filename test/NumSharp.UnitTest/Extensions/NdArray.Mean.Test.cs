@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -14,23 +14,23 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void MeanAxis0()
         {
-            var np = Core.np.array(new double[]{1,2,3,4}).reshape(2,2);
+            var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np.mean(0).Storage.GetData<double>(), new double[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(0).Storage.GetData<double>(), new double[] { 2, 3 }));
         }
         [TestMethod]
         public void MeanAxis1()
         {
-            var np = Core.np.array(new double[]{1,2,3,4}).reshape(2,2);
+            var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
             
-            Assert.IsTrue(Enumerable.SequenceEqual(np.mean(1).Storage.GetData<double>(), new double[] { 1.5, 3.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(1).Storage.GetData<double>(), new double[] { 1.5, 3.5 }));
         }
         [TestMethod]
         public void MeanAxisMinus1()
         {
-            var np = Core.np.array(new double[]{1,2,3,4}).reshape(2,2);
+            var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np.mean().Storage.GetData<double>(), new double[] { 2.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean().Storage.GetData<double>(), new double[] { 2.5 }));
             
         }
     }

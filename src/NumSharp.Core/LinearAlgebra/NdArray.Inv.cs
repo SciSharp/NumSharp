@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Core.Shared;
+using NumSharp.Shared;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {

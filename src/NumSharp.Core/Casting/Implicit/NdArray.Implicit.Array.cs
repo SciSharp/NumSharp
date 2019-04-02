@@ -23,10 +23,10 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
-using NumSharp.Core;
+using NumSharp;
 using System.Text.RegularExpressions;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -93,7 +93,7 @@ namespace NumSharp.Core
 
                 nd = new NDArray(typeof(double));
 
-                nd.Storage.Allocate(nd.dtype, shape, 1);
+                nd.Storage.Allocate(nd.dtype, shape);
 
                 for (int idx = 0; idx < splitted.Length; idx++)
                 {

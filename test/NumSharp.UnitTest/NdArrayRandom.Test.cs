@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core;
 
 namespace NumSharp.UnitTest
 {
@@ -12,13 +11,13 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void randn()
         {
-            var n = new NumSharp.Core.NumPyRandom().randn(5, 2);
+            var n = new NumPyRandom().randn(5, 2);
         }
 
         [TestMethod]
         public void normal()
         {
-            var n = new NumSharp.Core.NumPyRandom().normal(0, 1, 5);
+            var n = new NumPyRandom().normal(0, 1, 5);
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Operations
 {
@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.Storage.GetData<double>()));
         }
 
-        [TestMethod]
+        /*[TestMethod]
         public void ComplexTwo2D_MatrixSubstraction()
         {
             var np1 = new matrix(np.array(new Complex[] { new Complex(1, 2), new Complex(3, 4), new Complex(5, 6), new Complex(7, 8) }));
@@ -34,6 +34,6 @@ namespace NumSharp.UnitTest.Operations
             var expArray = new Complex[] { new Complex(-7, -5), new Complex(-3, -1), new Complex(1, 3), new Complex(5, 7) };
 
             Assert.IsTrue(Enumerable.SequenceEqual(expArray, np3.Storage.GetData<Complex>()));
-        }
+        }*/
     }
 }

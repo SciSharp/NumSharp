@@ -5,7 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public static partial class np
     {
@@ -52,13 +52,12 @@ namespace NumSharp.Core
             int index = 0;
 
             var nd = new NDArray(np.int32, new Shape(length));
-
-            if(nd.Storage.GetData<int>() is int[] a)
-            {
-                for (int i = start; i < stop; i += step)
-                    a[index++] = i;
-            }
             
+            var a = new int[length];
+            for (int i = start; i < stop; i += step)
+                a[index++] = i;
+            nd.Storage.SetData(a);
+
             return nd;
         }
     }

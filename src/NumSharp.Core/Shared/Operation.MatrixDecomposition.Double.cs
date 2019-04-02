@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using System.Linq;
 
-namespace NumSharp.Core.Shared
+namespace NumSharp.Shared
 {
     internal static partial class MatrixDecomposition
     {

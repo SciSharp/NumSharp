@@ -2,9 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Core.Extensions;
+using NumSharp.Extensions;
 using System.Linq;
-using NumSharp.Core;
+using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -16,9 +16,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var n = np.zeros(3);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<float>(), new float[] { 0, 0, 0 }));
-
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<int>(), new int[] { 0, 0, 0 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<double>(), new double[] { 0, 0, 0 }));
         }
     }
 }

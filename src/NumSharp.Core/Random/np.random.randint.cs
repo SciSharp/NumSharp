@@ -4,7 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace NumSharp.Core
+namespace NumSharp
 {
     public partial class NumPyRandom
     {
