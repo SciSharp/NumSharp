@@ -18,22 +18,36 @@ namespace NumSharp
         {
             var res = new NDArray(dtype);
 
-            int[] npArr = this.Storage.GetData<int>();
-
             if (axis == null)
             {
-                int min = npArr[0];
-                for (int i = 0; i < npArr.Length; i++)
-                    min = Math.Max(min, npArr[i]);
+                switch(dtype.Name)
+                {
+                    case "Int32":
+                        {
+                            var npArr = Data<int>();
+                            var max = npArr[0];
+                            for (int i = 0; i < npArr.Length; i++)
+                                max = Math.Max(max, npArr[i]);
+                            return max;
+                        }
 
-                res.Storage  = new NDStorage(); 
-                res.Storage.Allocate(dtype,new Shape(1));
-                res.Storage.SetData(new int[1] { min });       
+                    case "Double":
+                        {
+                            var npArr = Data<double>();
+                            var max = npArr[0];
+                            for (int i = 0; i < npArr.Length; i++)
+                                max = Math.Max(max, npArr[i]);
+                            return max;
+                        }
+                }
             }
             else
             {
                 if (axis < 0 || axis >= this.ndim)
                     throw new Exception("Invalid input: axis");
+
+                var npArr = this.Storage.GetData<int>();
+
                 int[] resShapes = new int[this.shape.Length - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
