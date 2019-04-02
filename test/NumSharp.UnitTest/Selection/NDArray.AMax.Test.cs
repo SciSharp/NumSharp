@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.Selection
         {
             //default type
             var n = np.arange(0, 12, 0.1);
-            var d1 = n.amax();
+            var d1 = np.amax(n);
             Assert.IsTrue(d1[0].Equals(11.9));
 
             //no axis
