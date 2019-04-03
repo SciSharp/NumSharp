@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
@@ -57,13 +57,13 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void Dot2x2()
         {
-            var x = np.array(new int[,]
+            var x = np.array(new float[,]
             {
                 { 3, 1 },
                 { 1, 2 }
             });
 
-            var y = np.array(new int[,]
+            var y = np.array(new float[,]
             {
                 { 2, 3 },
                 { 1, 2 }
@@ -71,10 +71,10 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var z = np.dot(x, y);
 
-            Assert.AreEqual(z.Data<int>(0), 7);
-            Assert.AreEqual(z.Data<int>(1), 11);
-            Assert.AreEqual(z.Data<int>(2), 4);
-            Assert.AreEqual(z.Data<int>(3), 7);
+            Assert.AreEqual(z.Data<float>(0), 7);
+            Assert.AreEqual(z.Data<float>(1), 11);
+            Assert.AreEqual(z.Data<float>(2), 4);
+            Assert.AreEqual(z.Data<float>(3), 7);
         }
     }
 }

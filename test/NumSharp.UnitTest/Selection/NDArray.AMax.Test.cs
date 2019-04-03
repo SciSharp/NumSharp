@@ -9,14 +9,19 @@ namespace NumSharp.UnitTest.Selection
     [TestClass]
     public class NDArrayAMaxTest
     {
-        
         [TestMethod]
         public void amax()
         {
+            //default type
+            var n = np.arange(0, 12, 0.1);
+            double d1 = np.amax(n);
+            Assert.IsTrue(d1.Equals(11.9));
+
             //no axis
-            var n = np.arange(4).reshape(2, 2);
+            n = np.arange(4).reshape(2, 2);
             var n1 = np.amax(n).MakeGeneric<int>();
-            Assert.IsTrue(n1[0] == 3);
+
+            Assert.IsTrue((int)n1 == 3);
 
             //2D with axis
             n1 = np.amax(n, 0).MakeGeneric<int>();
