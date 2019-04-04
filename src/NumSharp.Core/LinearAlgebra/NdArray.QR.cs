@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -44,7 +44,7 @@ namespace NumSharp
 
             var Q = new NDArray(typeof(double), new Shape(tau.Length, tau.Length));
 
-            Q.Storage.Allocate(Q.Storage.DType,Q.Storage.Shape);
+            Q.Storage.Allocate(Q.Storage.Shape);
             Q.Storage.SetData(a);
 
             return (Q,R);

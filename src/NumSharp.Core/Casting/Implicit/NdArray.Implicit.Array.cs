@@ -34,7 +34,7 @@ namespace NumSharp
         //  User-defined conversion from double to Digit
         public static implicit operator NDArray(Array d)
         {
-            var ndArray = new NDArray();
+            var ndArray = new NDArray(d.GetType().GetElementType());
 
             if (d.GetType().GetElementType().IsArray)
                 ndArray.FromJaggedArray(d);
@@ -93,7 +93,7 @@ namespace NumSharp
 
                 nd = new NDArray(typeof(double));
 
-                nd.Storage.Allocate(nd.dtype, shape);
+                nd.Storage.Allocate(shape);
 
                 for (int idx = 0; idx < splitted.Length; idx++)
                 {

@@ -28,6 +28,7 @@ namespace NumSharp.Backends
         
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
+            _DType = dtype;
             Array newValues = null;
 
             switch (Type.GetTypeCode(dtype)) 
@@ -92,10 +93,9 @@ namespace NumSharp.Backends
                     }
                     
                 }
-                default : 
-                {
-                        break;
-                }
+                default :
+                    newValues = arrayVar;
+                    break;
             }
 
             return newValues;
@@ -127,13 +127,6 @@ namespace NumSharp.Backends
         /// <value>numpys equal shape</value>
         public Shape Shape {get {return _Shape;}}
 
-        public NDStorage()
-        {
-            _DType = np.float64;
-            _values = new double[0];
-            _Shape = new Shape(0);
-        }
-
         public NDStorage(Type dtype)
         {
             _DType = dtype;
@@ -160,16 +153,17 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
-        public void Allocate(Type dtype, Shape shape)
+        public void Allocate(Shape shape, Type dtype = null)
         {
-            _DType = dtype;
             _Shape = shape;
             _Shape.ChangeTensorLayout();
             int elementNumber = 1;
             for(int idx = 0; idx < shape.Dimensions.Length;idx++)
                 elementNumber *= shape.Dimensions[idx];
 
-            _values = Array.CreateInstance(dtype,elementNumber);
+            if (dtype != null)
+                _DType = dtype;
+            _values = Array.CreateInstance(_DType, elementNumber);
         }
 
         /// <summary>
@@ -251,6 +245,12 @@ namespace NumSharp.Backends
         /// <returns>reference to internal (casted) storage as T[]</returns>
         public T[] GetData<T>()
         {
+            if (typeof(T).Name != _DType.Name)
+            {
+                throw new Exception($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
+                //return new T[_values.Length];
+            }
+                
             return _values as T[];
         }
 
@@ -338,8 +338,14 @@ namespace NumSharp.Backends
         /// <param name="values"></param>
         public void SetData(Array values)
         {
-            _values = values;
-            this.ChangeDataType(this._DType);
+            if (_DType != values.GetType().GetElementType())
+            {
+                _values = _ChangeTypeOfArray(values, _DType);
+            }
+            else
+            {
+                _values = values;
+            }
         }
 
         /// <summary>
@@ -349,7 +355,7 @@ namespace NumSharp.Backends
         /// <param name="indexes"></param>
         public void SetData(object value, params int[] indexes)
         {
-            _values.SetValue(value,_Shape.GetIndexInShape(indexes));
+            _values.SetValue(value, _Shape.GetIndexInShape(indexes));
         }
 
         /// <summary>
@@ -359,8 +365,7 @@ namespace NumSharp.Backends
         /// <typeparam name="T"></typeparam>
         public void SetData<T>(Array values)
         {
-            _values = values;
-            this.ChangeDataType(typeof(T));
+            _values = _ChangeTypeOfArray(values, typeof(T));
         }
 
         /// <summary>
@@ -370,19 +375,8 @@ namespace NumSharp.Backends
         /// <param name="dtype"></param>
         public void SetData(Array values, Type dtype)
         {
-            _values = values;
-            this.ChangeDataType(dtype);
+            _values = _ChangeTypeOfArray(values, dtype);
         } 
-
-        /// <summary>
-        /// Change dtype of elements
-        /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>sucess or not</returns>
-        public void ChangeDataType(Type dtype)
-        {
-            _DType = dtype;
-        }
 
         public void SetNewShape(params int[] dimensions)
         {
@@ -396,8 +390,8 @@ namespace NumSharp.Backends
 
         public object Clone()
         {
-            var puffer = new NDStorage();
-            puffer.Allocate(_DType, new Shape(_Shape.Dimensions));
+            var puffer = new NDStorage(_DType);
+            puffer.Allocate(new Shape(_Shape.Dimensions));
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
@@ -406,51 +400,6 @@ namespace NumSharp.Backends
         public void SetData<T>(T value, int offset)
         {
             throw new NotImplementedException();
-        }
-
-        public NDArray Dot(NDArray x, NDArray y)
-        {
-            var dtype = x.dtype;
-
-            if (x.ndim == 0 && y.ndim == 0)
-            {
-                switch (dtype.Name)
-                {
-                    case "Int32":
-                        return y.Data<int>(0) * x.Data<int>(0);
-                }
-            }
-            else if (x.ndim == 1 && x.ndim == 1)
-            {
-                int sum = 0;
-                switch (dtype.Name)
-                {
-                    case "Int32":
-                        for (int i = 0; i < x.size; i++)
-                            sum += x.Data<int>(i) * y.Data<int>(i);
-                        break;
-                }
-                return sum;
-            }
-            else if (x.ndim == 2 && y.ndim == 1)
-            {
-                var nd = new NDArray(dtype, new Shape(x.shape[0]));
-                switch (dtype.Name)
-                {
-                    case "Int32":
-                        for (int i = 0; i < x.shape[0]; i++)
-                            for (int j = 0; j < y.shape[0]; j++)
-                                nd.Data<int>()[i] += x.Data<int>(i, j) * y.Data<int>(j);
-                        break;
-                }
-                return nd;
-            }
-            else if (x.ndim == 2 && y.ndim == 2)
-            {
-                return np.matmul(x, y);
-            }
-
-            throw new NotImplementedException($"dot {x.ndim} * {y.ndim}");
         }
     }
 }

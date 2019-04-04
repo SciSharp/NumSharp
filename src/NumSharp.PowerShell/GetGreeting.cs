@@ -1,4 +1,4 @@
-using System.Management.Automation;
+﻿using System.Management.Automation;
 using System.Collections.Generic;
 using System.Linq;
 using NumSharp;
@@ -23,7 +23,7 @@ namespace NumSharp.PowerShell
                 case "float" : 
                 {
                     float[] array = Array.Select(x => (float) x).ToArray();
-                    _NDArray = new NDArray();
+                    _NDArray = new NDArray(np.float32);
                     _NDArray.Data = array;
                     _NDArray.Shape = new Shape(array.Length);
                     break;
@@ -31,7 +31,7 @@ namespace NumSharp.PowerShell
                 case "double" : 
                 {
                     double[] array = Array.Select(x => (double) x).ToArray();
-                    _NDArray = new NDArray();
+                    _NDArray = new NDArray(np.float64);
                     _NDArray.Data = array;
                     _NDArray.Shape = new Shape(array.Length);
                     break;

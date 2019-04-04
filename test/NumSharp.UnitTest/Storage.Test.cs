@@ -1,4 +1,4 @@
-using NumSharp;
+﻿using NumSharp;
 using System;
 using System.Numerics;
 using System.Collections.Generic;
@@ -20,23 +20,23 @@ namespace NumSharp.UnitTest
         public StorageTester()
         {
             strg1D = new NDStorage(np.float64);
-            strg1D.Allocate(np.float64,new Shape(10));
+            strg1D.Allocate(new Shape(10));
             strg1D.SetData(new double[]{0,1,2,3,4,5,6,7,8,9});
 
             strg2D = new NDStorage(np.int64);
-            strg2D.Allocate(np.int64,new Shape(3,3));
+            strg2D.Allocate(new Shape(3,3));
             strg2D.SetData(new Int64[]{0,1,2,3,4,5,6,7,8});
 
             strg2DNonFull = new NDStorage(np.float32);
-            strg2DNonFull.Allocate(np.float32,new Shape(5,2));
+            strg2DNonFull.Allocate(new Shape(5,2));
             strg2DNonFull.SetData(new float[]{0,1,2,3,4,5,6,7,8,9});
 
             strg3D = new NDStorage(typeof(Complex));
-            strg3D.Allocate(typeof(Complex),new Shape(2,2,2));
+            strg3D.Allocate(new Shape(2,2,2));
             strg3D.SetData(new Complex[]{1,2,3,4,5,6,7,8});
 
             strg3DNonFull = new NDStorage(typeof(Complex));
-            strg3DNonFull.Allocate(typeof(Complex),new Shape(2,3,4));
+            strg3DNonFull.Allocate(new Shape(2,3,4));
             var puffer = new Complex[24];
             for(int idx = 1;idx < 25;idx++)
                 puffer[idx-1] = new Complex(idx,0);
@@ -135,8 +135,8 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), strg2DNonFull.GetData<Int64>() ));
 
-            strg2DCpy = new NDStorage();
-            strg2DCpy.Allocate(typeof(Int64),new Shape(5,2));
+            strg2DCpy = new NDStorage(typeof(Int64));
+            strg2DCpy.Allocate(new Shape(5,2));
 
             strg2DCpy.SetData(strg2DNonFull.GetData());
 

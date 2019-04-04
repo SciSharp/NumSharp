@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace NumSharp
 {
@@ -78,7 +78,7 @@ namespace NumSharp
 
             var returnValue = new NDArray(this.dtype);
 
-            returnValue.Storage.Allocate(dtype, new Shape(this.shape));
+            returnValue.Storage.Allocate(new Shape(this.shape));
 
             returnValue.Storage.SetData(cpy);
 

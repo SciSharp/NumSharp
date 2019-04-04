@@ -1,4 +1,4 @@
-using NumSharp.Backends;
+﻿using NumSharp.Backends;
 using System;
 
 namespace NumSharp
@@ -18,8 +18,8 @@ namespace NumSharp
             for (int idx = 0; idx < dataLength;idx++)
                 dataArray.SetValue(1,idx);
             
-            this.Storage = new NDStorage();
-            this.Storage.Allocate(dtype,new Shape(shapes));
+            this.Storage = new NDStorage(dtype);
+            this.Storage.Allocate(new Shape(shapes));
             
             this.Storage.SetData(dataArray);
 

@@ -12,7 +12,9 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReShape()
         {
-            var n = np.reshape(np.arange(6), 3, 2).MakeGeneric<int>();
+            var nd = np.arange(6);
+            var n1 = np.reshape(nd, 3, 2);
+            var n = n1.MakeGeneric<int>();
 
             Assert.IsTrue(n[0, 0] == 0);
             Assert.IsTrue(n[1, 1] == 3);

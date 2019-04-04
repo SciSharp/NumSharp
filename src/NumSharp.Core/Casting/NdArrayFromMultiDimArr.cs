@@ -39,8 +39,8 @@ namespace NumSharp
             for(int idx = 0; idx < dims.Length;idx++)
                 dims[idx] = dotNetArray.GetLength(idx);
 
-            Storage = new NDStorage();
-            Storage.Allocate(dotNetArray.GetType().GetElementType(),new Shape(dims));
+            Storage = new NDStorage(dotNetArray.GetType().GetElementType());
+            Storage.Allocate(new Shape(dims));
 
             Array internalStrg = Storage.GetData();
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,7 +27,7 @@ namespace NumSharp
                     sum += Math.Pow(Convert.ToDouble(data.GetValue(idx)) - mean,2);
                 
                 double stdValue = Math.Sqrt(sum / this.size);
-                stdArr.Storage.Allocate(dtype, new Shape(1));
+                stdArr.Storage.Allocate(new Shape(1));
                 var puffer = Array.CreateInstance(dtype,1);
                 puffer.SetValue(stdValue,0);
                 stdArr.Storage.SetData(puffer);
@@ -72,7 +72,7 @@ namespace NumSharp
                 {
                     throw new NotImplementedException();
                 }
-                stdArr.Storage.Allocate(dtype, new Shape(stdValue.Length));
+                stdArr.Storage.Allocate(new Shape(stdValue.Length));
                 stdArr.Storage.SetData(stdValue);
             }
             return stdArr;

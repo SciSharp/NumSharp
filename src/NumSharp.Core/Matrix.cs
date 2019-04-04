@@ -1,21 +1,21 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace NumSharp
 {
     public partial class matrix: NDArray
     {
-        public matrix(NDArray data, Type dtype = null)
+        public matrix(NDArray data) : base(data.dtype)
         {
             this.Storage = data.Storage;
         }
 
-        public matrix(string matrixString, Type dtype = null)
+        public matrix(string matrixString, Type dtype) : base(dtype)
         {
             string[][] splitted = null;
 
             dtype = (dtype == null) ? np.float64 : dtype;
-
+            
             if (matrixString.Contains(","))
             {
                 splitted = matrixString.Split(';')
@@ -34,12 +34,17 @@ namespace NumSharp
 
             var shape = new Shape( new int[] { dim0, dim1 });
 
-            this.Storage.Allocate(dtype,shape);
+            this.Storage.Allocate(shape, dtype);
 
             switch (this.dtype.Name)
             {
-                case "Double": StringToDoubleMatrix(splitted); break;
-                case "Float": ; break;
+                case "Double":
+                    StringToDoubleMatrix(splitted);
+                    break;
+                case "Float":
+                    break;
+                default:
+                    throw new NotImplementedException($"matrix {this.dtype.Name}");
             }
             
         }

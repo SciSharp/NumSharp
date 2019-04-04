@@ -27,7 +27,7 @@ namespace NumSharp
                 else
                     npAll[idx + 1] = nps[idx];
 
-            NDArray nd = new NDArray();
+            var nd = new NDArray(typeof(T));
 
             // easy 1D case
             if (this.ndim == 1)
@@ -64,7 +64,7 @@ namespace NumSharp
                 else
                     shapes[1] = npAll.Sum(x => x.shape[1]);
 
-                nd.Storage.Allocate(nd.Storage.DType, new Shape(shapes));
+                nd.Storage.Allocate(new Shape(shapes));
                 nd.Storage.SetData(list.ToArray());
             }
 

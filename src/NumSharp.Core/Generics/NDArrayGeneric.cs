@@ -29,16 +29,15 @@ namespace NumSharp.Generic
 {
     public class NDArray<T> : NDArray where T : struct
     {
-        public NDArray()
+        public NDArray() : base(typeof(T))
         {
-            Storage = new NDStorage(typeof(T));
-            Storage.Allocate(this.dtype,new Shape(1));
         }
-        public NDArray(Shape shape) : this()
+
+        public NDArray(Shape shape) : base(typeof(T))
         {
-            Storage = new NDStorage(typeof(T));
-            Storage.Allocate(this.dtype, shape);
+            Storage.Allocate(shape);
         }
+
         /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
@@ -57,4 +56,3 @@ namespace NumSharp.Generic
         }
     }
 }
- 
