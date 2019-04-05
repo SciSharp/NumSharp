@@ -21,6 +21,14 @@ namespace NumSharp
                                 nd2[i * repeats + j] = nd.Data<int>(i);
                         return nd2;
                     }
+                case "Boolean":
+                    {
+                        var nd2 = new NDArray(new bool[size], new Shape(size));
+                        for (int i = 0; i < nd.size; i++)
+                            for (int j = 0; j < repeats; j++)
+                                nd2[i * repeats + j] = nd.Data<bool>(i);
+                        return nd2;
+                    }
             }
 
             throw new NotImplementedException("np.repeat");
