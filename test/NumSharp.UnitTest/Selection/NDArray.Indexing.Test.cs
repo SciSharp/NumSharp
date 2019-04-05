@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Selection
 
             A[booleanArr.MakeGeneric<bool>()] = -2;
 
-            //Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<int>(),new int[] {-2,4,2,-2, -2,6} ));
+            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<double>(),new double[] {-2,2,-2,4, -2,6} ));
 
         }
         [TestMethod]
@@ -81,11 +81,15 @@ namespace NumSharp.UnitTest.Selection
             NDArray A = new double[,] {{1,2,3},{4,5,6}};
 
             NumSharp.Generic.NDArray<bool> boolArr = (A < 3);
+            Assert.IsTrue(Enumerable.SequenceEqual(boolArr.Data<bool>(), new [] { true, true, false, false, false, false }));
 
             A[A < 3] = -2;
+            Assert.IsTrue(Enumerable.SequenceEqual(A.Data<double>(), new double[] { -2, -2, 3, 4, 5, 6 }));
 
             var a = A[A == -2 | A > 5];
 
+            // TODO: something goes wrong here. a.Data<double>() does return null because the data array internally is an array of objects!
+            Assert.IsTrue(Enumerable.SequenceEqual(a.Data<object>().OfType<double>(), new double[]{-2,-2,6}));
         }
 
         [TestMethod]

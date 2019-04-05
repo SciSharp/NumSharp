@@ -10,7 +10,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
-    public class NdArrayOncesTest
+    public class np_ones_Test
     {
         [TestMethod]
         public void SimpleInt1D()

@@ -38,6 +38,10 @@ namespace NumSharp.Generic
             Storage.Allocate(shape);
         }
 
+        public NDArray(Array array, Shape shape) : this(shape)
+        {
+            Storage.SetData(array);
+        }
         /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
