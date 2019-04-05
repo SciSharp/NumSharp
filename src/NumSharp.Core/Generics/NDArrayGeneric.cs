@@ -39,6 +39,11 @@ namespace NumSharp.Generic
             Storage = new NDStorage(typeof(T));
             Storage.Allocate(this.dtype, shape);
         }
+
+        public NDArray(Array array, Shape shape) : this(shape)
+        {
+            Storage.SetData(array);
+        }
         /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
@@ -57,4 +62,3 @@ namespace NumSharp.Generic
         }
     }
 }
- 
