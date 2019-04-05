@@ -31,6 +31,14 @@ namespace NumSharp
 
             return nd;
         }
+
+        /// <summary>
+        /// Shortcut for transpose() that is also equal to Python notation
+        /// </summary>
+        public NDArray T
+        {
+            get { return transpose(); }
+        }
     }
 
 }
