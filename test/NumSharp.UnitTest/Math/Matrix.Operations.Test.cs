@@ -167,9 +167,7 @@ namespace NumSharp.UnitTest.Maths
         [TestMethod]
         public void Double1DPlusOffset_NDArrayMultiplication()
         {
-            var np1 = new NDArray(typeof(double), 3);
-            np1.Storage.SetData(new double[] { 1, 2, 3 });
-
+            var np1 = new NDArray(new double[] { 1, 2, 3 });
             var np3 = np1 * 2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Storage.GetData<double>()));

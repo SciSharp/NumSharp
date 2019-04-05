@@ -28,7 +28,7 @@ namespace NumSharp.Backends
         
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
-            if (dtype == _DType) return arrayVar;
+            if (dtype == arrayVar.GetType().GetElementType()) return arrayVar;
 
             _DType = dtype;
             Array newValues = null;
@@ -264,9 +264,7 @@ namespace NumSharp.Backends
         public T[] CloneData<T>()
         {
             var puffer = (Array) this.GetData().Clone();
-
-            if (puffer.GetType().GetElementType() != typeof(T))
-                puffer = _ChangeTypeOfArray(puffer,typeof(T));
+            puffer = _ChangeTypeOfArray(puffer, typeof(T));
 
             return puffer as T[];
         }
