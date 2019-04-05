@@ -28,6 +28,8 @@ namespace NumSharp.Backends
         
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
+            if (dtype == _DType) return arrayVar;
+
             _DType = dtype;
             Array newValues = null;
 

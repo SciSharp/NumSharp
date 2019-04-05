@@ -208,5 +208,17 @@ namespace NumSharp
             }
             
         }
+
+        /// <summary>
+        /// New view of array with the same data.
+        /// </summary>
+        /// <returns></returns>
+        public NDArray view(Type dtype = null)
+        {
+            if (dtype != null && dtype != this.dtype)
+                Storage.SetData(Data(), dtype);
+
+            return new NDArray(Data(), shape);
+        }
     }
 }
