@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void SimpleDoubleMatrix()
         {
-            var np = new NDArray().eye(5).MakeGeneric<double>();
+            var np = new NDArray(typeof(double)).eye(5).MakeGeneric<double>();
 
             Assert.IsTrue(np[0,0] == 1);
             Assert.IsTrue(np[1,1] == 1);
@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void DoubleMatrix2DiagonalLeft()
         {
-            var np = new NDArray().eye(5,-2).MakeGeneric<double>();
+            var np = new NDArray(typeof(double)).eye(5,-2).MakeGeneric<double>();
 
             Assert.IsTrue(np[2,0] == 1);
             Assert.IsTrue(np[3,1] == 1);
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void DoubleMatrix2DiagonalRight()
         {
-            var np = new NDArray().eye(5,2).MakeGeneric<double>();
+            var np = new NDArray(typeof(double)).eye(5,2).MakeGeneric<double>();
 
             Assert.IsTrue(np[0,2] == 1);
             Assert.IsTrue(np[1,3] == 1);

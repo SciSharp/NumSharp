@@ -1,4 +1,4 @@
-using NumSharp.Backends;
+﻿using NumSharp.Backends;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -48,8 +48,8 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new NDStorage();
-                    numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
+                    numSharpReturn.Storage = new NDStorage(numSharpReturn.dtype);
+                    numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
 
                     break;
@@ -74,8 +74,8 @@ namespace NumSharp
                         }
                     }
 
-                    numSharpReturn.Storage = new NDStorage();
-                    numSharpReturn.Storage.Allocate(numSharpReturn.dtype, new Shape(outArray.Length));
+                    numSharpReturn.Storage = new NDStorage(numSharpReturn.dtype);
+                    numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
                     numSharpReturn.Storage.SetData(outArray);
                     
                     break;

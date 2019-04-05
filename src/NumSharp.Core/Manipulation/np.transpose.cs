@@ -11,21 +11,17 @@ namespace NumSharp
     {
         public static NDArray transpose(NDArray nd)
         {
-            var np = new NDArray(nd.dtype);
-
-            if (nd.ndim == 1)
+            if (nd.ndim == 2)
             {
-                np.Storage.Reshape(1, np.shape[0]);
-            }
-            else 
-            {
-                np.Storage.Reshape(np.shape.Reverse().ToArray());
+                var np = new NDArray(nd.dtype, nd.shape.Reverse().ToArray());
                 for (int idx = 0;idx < np.shape[0];idx++)
                     for (int jdx = 0;jdx < np.shape[1];jdx++)
                         np[idx,jdx] = nd[jdx,idx];
+
+                return np;
             }
             
-            return np;
+            return nd;
         }
     }
 }

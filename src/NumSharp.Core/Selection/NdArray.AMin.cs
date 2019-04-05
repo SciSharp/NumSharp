@@ -26,8 +26,8 @@ namespace NumSharp
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage  = new NDStorage();
-                res.Storage.Allocate(dtype, new Shape(1));
+                res.Storage  = new NDStorage(dtype);
+                res.Storage.Allocate(new Shape(1));
                 res.Storage.SetData(new int[1] { min });            
             }
             else
@@ -79,7 +79,7 @@ namespace NumSharp
                     }
                 }
 
-                res.Storage.Allocate(res.dtype,new Shape(resShapes));
+                res.Storage.Allocate(new Shape(resShapes));
                 res.Storage.SetData(resData); 
             }
             return res;

@@ -75,18 +75,12 @@ namespace NumSharp
 
         public T Max<T>() => Data<T>().Max();
 
-        public void astype(Type dtype) => Storage.ChangeDataType(dtype);
+        public void astype(Type dtype) => Storage.SetData(Storage.GetData(), dtype);
 
-        /// <summary>
-        /// Default constructor 
-        /// Create a 1D double array with 1 element
-        /// one element is 1
-        /// </summary>
-        public NDArray()
+        /*public NDArray()
         {
-            Storage = new NDStorage();
-            TensorEngine = BackendFactory.GetEngine();
-        }
+            throw new Exception("Don't use 0 parameter constructor.");
+        }*/
 
         /// <summary>
         /// Constructor for init data type
@@ -113,7 +107,7 @@ namespace NumSharp
                 strgDim[idx] = values.GetLength(idx);
 
             Storage = new NDStorage(dtype);
-            Storage.Allocate(dtype, new Shape(strgDim));
+            Storage.Allocate(new Shape(strgDim));
 
             switch( values.Rank )
             {
@@ -138,7 +132,7 @@ namespace NumSharp
         {
             TensorEngine = BackendFactory.GetEngine();
             Storage = new NDStorage(dtype);
-            Storage.Allocate(dtype, shape);
+            Storage.Allocate(shape);
         }
 
         public override int GetHashCode()
@@ -190,7 +184,7 @@ namespace NumSharp
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
 
-            puffer.Storage.Allocate(this.dtype, shapePuffer);
+            puffer.Storage.Allocate(shapePuffer);
 
             puffer.Storage.SetData(this.Storage.CloneData());
 

@@ -92,8 +92,8 @@ namespace NumSharp
                         resData[index++] = min;
                     }
                 }
-                res.Storage = new NDStorage();
-                res.Storage.Allocate(this.dtype, new Shape(resShapes)); // (resData);
+                res.Storage = new NDStorage(dtype);
+                res.Storage.Allocate(new Shape(resShapes)); // (resData);
                 res.Storage.SetData(resData);
             }
             return res;

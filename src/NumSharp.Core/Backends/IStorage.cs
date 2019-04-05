@@ -1,4 +1,4 @@
-using NumSharp;
+﻿using NumSharp;
 using NumSharp.Backends;
 using System;
 
@@ -40,7 +40,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
-        void Allocate(Type dtype, Shape shape);
+        void Allocate(Shape shape, Type dtype = null);
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
@@ -127,12 +127,6 @@ namespace NumSharp
         /// <param name="values"></param>
         /// <param name="dtype"></param>
         void SetData(Array values, Type dtype);
-        /// <summary>
-        /// Change dtype of elements
-        /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>sucess or not</returns>
-        void ChangeDataType(Type dtype);   
 
         void Reshape(params int[] dimensions);
     }

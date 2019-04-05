@@ -27,6 +27,7 @@ namespace NumSharp
                 Storage.SetData(value, select);
             }
         }
+        
         public NDArray this[NDArray indexes]
         {
             get

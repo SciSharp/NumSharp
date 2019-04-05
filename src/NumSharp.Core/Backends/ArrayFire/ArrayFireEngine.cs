@@ -21,19 +21,22 @@ namespace NumSharp.Backends
 
         public override NDArray Dot(NDArray x, NDArray y)
         {
-            return base.Dot(x, y);
-            /*if (x.ndim == 2 && y.ndim == 2)
+            if (x.ndim == 2 && y.ndim == 2)
             {
+                x = np.transpose(x);
+                y = np.transpose(y);
                 var dx = Data.CreateArray(x.ToMuliDimArray<float>() as float[,]);
                 var dy = Data.CreateArray(y.ToMuliDimArray<float>() as float[,]);
-                var dot = Vector.MatMul(dx, dy);
 
-                return Data.GetData<float>(dot);
+                var dot = Matrix.MatMul(dx, dy);
+
+                var z = Data.GetData2D<float>(dot);
+                return np.transpose(z);
             }
             else
             {
                 return base.Dot(x, y);
-            }*/
+            }
         }
 
         public override NDArray Multiply(NDArray x, NDArray y)
