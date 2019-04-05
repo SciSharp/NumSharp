@@ -8,8 +8,7 @@ namespace NumSharp
     {
         public static NDArray reshape(NDArray nd, params int[] shape)
         {
-            nd.reshape(shape);
-            return nd;
+            return nd.reshape(shape);
         }
     }
 }

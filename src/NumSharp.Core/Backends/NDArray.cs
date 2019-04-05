@@ -101,25 +101,12 @@ namespace NumSharp
         /// <returns>Array with values</returns>
         public NDArray(Array values, Shape shape = null) : this(values.GetType().GetElementType())
         {
-            int[] strgDim = new int[values.Rank];
-
-            for(int idx = 0; idx < strgDim.Length;idx++)
-                strgDim[idx] = values.GetLength(idx);
+            if (shape is null)
+                shape = new Shape(values.Length);
 
             Storage = new NDStorage(dtype);
-            Storage.Allocate(new Shape(strgDim));
-
-            switch( values.Rank )
-            {
-                case 1 :
-                {
-                    Storage.SetData(values);
-                    break;
-                }
-            }
-
-            if (!(shape is null))
-                Storage.Reshape(shape);
+            Storage.Allocate(new Shape(shape));
+            Storage.SetData(values);
         }
 
         /// <summary>

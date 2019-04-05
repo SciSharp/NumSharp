@@ -15,18 +15,9 @@ namespace NumSharp
 
         public NDArray reshape(params int[] shape)
         {
-            var count = shape.Length;
-            var idx = NDArray.FindNegativeIndex(shape);
-
-            var pufferShape = this.Storage.Shape.Dimensions;
-
-            if (idx == -1)
-                this.Storage.Reshape(shape);
-            else
-                this.Storage.Reshape(CalculateNegativeShape(idx, this.shape.ToList(), shape));
-
-            return this;
+            return new NDArray(Data(), shape);
         }
+
         protected static int FindNegativeIndex(params int[] shape)
         {
             var count = shape.Length;
@@ -96,4 +87,3 @@ namespace NumSharp
 
     }
 }
-   

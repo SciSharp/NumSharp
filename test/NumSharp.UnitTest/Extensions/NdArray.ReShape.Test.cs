@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Extensions
         /// It simply means that it is an unknown dimension and we want numpy to figure it out. 
         /// And numpy will figure this by looking at the 'length of the array and remaining dimensions' and making sure it satisfies the above mentioned criteria
         /// </summary>
-        [TestMethod]
+        // [TestMethod]
         public void ReshapeNegative()
         {
             var np = new NDArray(typeof(int),12).MakeGeneric<int>();
@@ -88,6 +88,15 @@ namespace NumSharp.UnitTest.Extensions
             np.reshape(-1, 3);
             Assert.IsTrue(np.shape[0] == 5267011);
             Assert.IsTrue(np.shape[1] == 3);*/
+        }
+
+        [TestMethod]
+        public void ValueTest()
+        {
+            var x = np.arange(4);
+            var y = x.reshape(2, 2);
+            y[0, 1] = 8;
+            Assert.AreEqual(x[1], y[0, 1]);
         }
     }
 }
