@@ -194,14 +194,32 @@ namespace NumSharp
                     if (boolDotNetArray[idx])
                     {
                         int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        data.SetValue(scalarObj,this.Storage.Shape.GetIndexInShape(indexes));
+                        data.SetValue(scalarObj, this.Storage.Shape.GetIndexInShape(indexes));
                     }
                 }
-
-            } 
+            }
         }
-      
+
+        /// <summary>
+        /// Return a slice of the array or matrix that is a view of the original data.
+        ///  </summary>
+        /// <param name="slice_notation">use the same slice notation as in numpy "start:stop:step, ..." to access parts of the array.</param>
+        public NDArray this[string slice_notation]
+        {
+            get { return this[Slice.ParseSlices(slice_notation)]; }
+        }
+
+        /// <summary>
+        /// Return a view of a slice of the array or matrix
+        ///  </summary>
+        /// <param name="slices">one slice parameter for every dimension. i.e. Slice.All is the same as : in Python</param>
+        public NDArray this[params Slice[] slices]
+        {
+            get
+            {
+                throw new NotImplementedException("return a sliced view of this array");
+            }
+        }
     }
 
-    
 }
