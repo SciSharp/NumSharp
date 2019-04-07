@@ -21,5 +21,19 @@ namespace NumSharp
 
         public static NDArray subtract(NDArray x, NDArray y)
             => BackendFactory.GetEngine().Sub(x, y);
+
+        public static NDArray sqrt(NDArray x) => x.sqrt();
+
+        public static T amax<T>(NDArray nd)
+            => nd.amax<T>();
+
+        public static NDArray amax(NDArray nd, int axis)
+            => nd.amax(axis);
+
+        public static int argmax(NDArray nd)
+            => nd.argmax();
+
+        public static NDArray max(NDArray nd, int axis)
+            => nd.max(axis);
     }
 }

@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NumSharp.Manipulation
+namespace NumSharp
 {
-    public partial class NumPy
+    public static partial class np
     {
-        public NDArray ravel(matrix mx)
+        public static NDArray ravel(matrix mx)
         {
             var nd = new NDArray(mx.dtype, mx.size);
 

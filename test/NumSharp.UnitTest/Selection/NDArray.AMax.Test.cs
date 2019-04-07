@@ -14,17 +14,17 @@ namespace NumSharp.UnitTest.Selection
         {
             //default type
             var n = np.arange(0, 12, 0.1);
-            double d1 = np.amax(n);
+            double d1 = np.amax<double>(n);
             Assert.IsTrue(d1.Equals(11.9));
 
             //no axis
             n = np.arange(4).reshape(2, 2);
-            var n1 = np.amax(n).MakeGeneric<int>();
+            var max = np.amax<int>(n);
 
-            Assert.IsTrue((int)n1 == 3);
+            Assert.IsTrue(max == 3);
 
             //2D with axis
-            n1 = np.amax(n, 0).MakeGeneric<int>();
+            var n1 = np.amax(n, 0).MakeGeneric<int>();
             Assert.IsTrue(n1[0] == 2);
             Assert.IsTrue(n1[1] == 3);
             n1 = np.amax(n, 1).MakeGeneric<int>();
