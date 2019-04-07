@@ -7,6 +7,9 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        /// Trigonometric sine, element-wise.
+        /// </summary>
         public NDArray sin()
         {
             var sinArray = new NDArray(this.dtype,this.shape);

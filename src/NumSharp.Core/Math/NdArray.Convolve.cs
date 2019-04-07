@@ -10,13 +10,16 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Convolution of 2 series  
+        /// Returns the discrete, linear convolution of two one-dimensional sequences.
+        ///
+        /// The convolution operator is often seen in signal processing, where it models the effect of a linear time-invariant system on a signal[1]. In probability theory, the sum of two independent random variables is distributed according to the convolution of their individual distributions.
+        /// 
+        /// If v is longer than a, the arrays are swapped before computation.
         /// </summary>
-        /// <param name="numSharpArray1"></param>
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public NDArray Convolve(NDArray numSharpArray2, string mode = "full" )
+        public NDArray convolve(NDArray numSharpArray2, string mode = "full" )
         {
             int nf = this.shape[0];
             int ng = numSharpArray2.shape[0];
@@ -117,7 +120,7 @@ namespace NumSharp
 
                     var numSharpNew = np.array(np1New,dtype);
 
-                    numSharpReturn = numSharpNew.Convolve(numSharpArray2,"valid");
+                    numSharpReturn = numSharpNew.convolve(numSharpArray2,"valid");
                     break;
                 }
 
