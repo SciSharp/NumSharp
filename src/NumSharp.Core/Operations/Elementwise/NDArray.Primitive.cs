@@ -7,8 +7,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray log()
-             => np.log(this);
 
         public static NDArray operator +(NDArray x, NDArray y)
             => np.add(x, y);

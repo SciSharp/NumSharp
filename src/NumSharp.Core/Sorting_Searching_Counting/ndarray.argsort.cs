@@ -8,6 +8,11 @@ namespace NumSharp
     public partial class NDArray
     {
 
+        /// <summary>
+        /// Returns the indices that would sort an array.
+        ///
+        /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
+        /// </summary>
         public NDArray argsort<T>(int axis = -1)
         {
             if (ndim < axis + 1) {

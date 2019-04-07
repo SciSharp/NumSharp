@@ -5,10 +5,10 @@ using System.Text;
 using NumSharp.Generic;
 
 namespace NumSharp
-{
-    public static partial class np
-    {
+{        
 
+    public partial class NDArray
+    {
         /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
         /// tolerance.
@@ -35,7 +35,6 @@ namespace NumSharp
         /// `atol` should be carefully selected for the use case at hand. A zero value
         /// for `atol` will result in `False` if either `a` or `b` is zero.
         /// </summary>
-        /// <param name="a">Input array to compare with b</param>
         /// <param name="b">Input array to compare with a.</param>
         /// <param name="rtol">The relative tolerance parameter(see Notes)</param>
         /// <param name="atol">The absolute tolerance parameter(see Notes)</param>
@@ -46,13 +45,14 @@ namespace NumSharp
         /// given tolerance.If both `a` and `b` are scalars, returns a single
         /// boolean value.
         ///</returns>
-        public static NDArray<bool> isclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
+        public NDArray<bool> isclose(NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
+            NDArray a = this;
             if (a.size > b.size)
                 throw new ArgumentException("Array a must not be larger in size than array b");
             var result = new NDArray<bool>(a.shape);
             var rdata = result.Storage.GetData() as bool[];
-            if (a.dtype== uint8 || a.dtype == int16 || a.dtype == int32 || a.dtype == int64 && b.dtype==typeof(double) || b.dtype==typeof(float))
+            if (a.dtype == np.uint8 || a.dtype == np.int16 || a.dtype == np.int32 || a.dtype == np.int64 && b.dtype == typeof(double) || b.dtype == typeof(float))
             {
                 //  convert both to double and compare
                 double[] a_arr = a.Data<double>();
@@ -83,10 +83,10 @@ namespace NumSharp
                         break;
                     }
                 default:
-                {
-                    throw new IncorrectTypeException();
-                }
-            }        
+                    {
+                        throw new IncorrectTypeException();
+                    }
+            }
             return result;
         }
 

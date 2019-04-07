@@ -4,10 +4,17 @@ using System.Text;
 
 namespace NumSharp
 {
-    public static partial class np
+    public partial class NDArray
     {
-        public static NDArray prod(NDArray nd, int axis = -1, Type dtype = null)
+        /// <summary>
+        /// Return the product of array elements over a given axis.
+        /// </summary>
+        /// <param name="axis"></param>
+        /// <param name="dtype"></param>
+        /// <returns></returns>
+        public NDArray prod(int axis = -1, Type dtype = null)
         {
+            var nd = this;
             NDArray result = null;
             if (nd.size == 0) return 1;
 

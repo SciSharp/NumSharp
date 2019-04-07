@@ -7,6 +7,9 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        /// Returns the index of the maximum value of the array.
+        /// </summary>
         public int argmax()
         {
             var data = this.Storage.GetData();
@@ -49,6 +52,9 @@ namespace NumSharp
             return index;
         }
 
+        /// <summary>
+        /// Returns the index of the maximum value of the array.
+        /// </summary>
         public int argmax<T>()
         {
             var max = Storage.GetData<T>().Max();

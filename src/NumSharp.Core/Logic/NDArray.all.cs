@@ -6,16 +6,17 @@ using NumSharp.Generic;
 
 namespace NumSharp
 {
-    public static partial class np
+
+    public partial class NDArray
     {
 
         /// <summary>
         /// Test whether all array elements evaluate to True.
         /// </summary>
-        /// <param name="nd"></param>
-        /// <returns></returns>
-        public static bool all(NDArray nd)
+        public bool all()
         {
+            var nd = this;
+            // TODO: support boolena evaluation of other types like int
             var data = nd.Storage.GetData<bool>();
             for (int i = 0; i < data.Length; i++)
             {
@@ -31,9 +32,10 @@ namespace NumSharp
         /// <param name="nd"></param>
         /// <param name="axis"></param>
         /// <returns>Returns an array of bools</returns>
-        public static NDArray<bool> all(NDArray nd, int axis)
+        public NDArray<bool> all( int axis)
         {
             throw new NotImplementedException($"np.all axis {axis}");
         }
     }
+
 }
