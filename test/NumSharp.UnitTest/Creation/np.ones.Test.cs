@@ -17,21 +17,21 @@ namespace NumSharp.UnitTest.Extensions
         {
             var np1 = np.ones(new Shape(5));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 5);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 5);
         }
         [TestMethod]
         public void SimpleInt2D()
         {
             var np1 = np.ones(new Shape(5,5));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 25);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 25);
         }
         [TestMethod]
         public void SimpleDouble3D()
         {
             var np1 = np.ones(new Shape(5,5,5));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==1).ToArray().Length == 125);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 125);
         }
     }
 }

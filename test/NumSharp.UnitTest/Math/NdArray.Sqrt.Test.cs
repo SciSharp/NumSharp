@@ -16,9 +16,9 @@ namespace NumSharp.UnitTest.Maths
         public void DoubleSqrtTest()
         {
             var nd = new NDArray(np.float64,3);
-            nd.Storage.SetData(new double[]{1,4,9});
+            nd.SetData(new double[] { 1, 4, 9 });
 
-            Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Storage.GetData<double>(), new double[] { 1, 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Data<double>(), new double[] { 1, 2, 3 }));
         }
 
         /*[TestMethod]

@@ -7,7 +7,8 @@ namespace NumSharp
     {
         public matrix(NDArray data) : base(data.dtype)
         {
-            this.Storage = data.Storage;
+            Storage.SetData(data.Array);
+            Storage.Reshape(data.shape);
         }
 
         public matrix(string matrixString, Type dtype) : base(dtype)
@@ -71,19 +72,28 @@ namespace NumSharp
             int dim0 = shape[0];
             int dim1 = shape[1];
 
-            for (int idx = 0; idx < (dim0-1);idx++)
+            switch (dtype.Name)
             {
-                for (int jdx = 0;jdx < (dim1-1);jdx++)
-                {
-                    returnValue += (this[idx,jdx] + ", ");
-                }
-                returnValue += (this[idx,dim1-1] + "],   \n        [");
+                case "Double":
+                    {
+                        for (int idx = 0; idx < (dim0 - 1); idx++)
+                        {
+                            for (int jdx = 0; jdx < (dim1 - 1); jdx++)
+                            {
+                                returnValue += Data<double>(idx, jdx) + ", ";
+                            }
+                            returnValue += Data<double>(idx, dim1 - 1) + "],   \n        [";
+                        }
+
+                        for (int jdx = 0; jdx < (dim1 - 1); jdx++)
+                        {
+                            returnValue += Data<double>(dim0 - 1, jdx) + ", ";
+                        }
+
+                        returnValue += Data<double>(dim0 - 1, dim1 - 1) + "]])";
+                    }
+                    break;
             }
-            for (int jdx = 0; jdx < (dim1-1);jdx++)
-            {
-                returnValue += (this[dim0-1,jdx] + ", ");
-            }
-            returnValue += (this[dim0-1,dim1-1] + "]])");
 
             return returnValue;    
         }

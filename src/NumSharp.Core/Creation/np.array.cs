@@ -13,13 +13,12 @@ namespace NumSharp
         public static NDArray array(Array array, Type dtype = null, int ndim = 1)
         {
             dtype = (dtype == null) ? array.GetType().GetElementType() : dtype;
-            
-			var nd = new NDArray(dtype);
+
+            var nd = new NDArray(dtype, new Shape(new int[] { array.Length }));
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.Storage.Allocate(new Shape(new int[] { array.Length }));
-                nd.Storage.SetData(array); 
+                nd.SetData(array); 
             }
             else 
             {
@@ -54,7 +53,7 @@ namespace NumSharp
             {
                 for (int col = 0; col < data[row].Length; col++)
                 {
-                    nd[row,col] = data[row][col];
+                    nd.SetData(data[row][col], row, col);
                 }
             }
 
@@ -69,7 +68,7 @@ namespace NumSharp
             {
                 for (int dim1 = 0; dim1 < data.GetLength(1); dim1++)
                 {
-                    nd[dim0, dim1] = data[dim0, dim1];
+                    nd.SetData(data[dim0, dim1], dim0, dim1);
                 }
             }
 
@@ -86,7 +85,7 @@ namespace NumSharp
                 {
                     for (int dim2 = 0; dim2 < data.GetLength(2); dim2++)
                     {
-                        nd[dim0,dim1,dim2] = data[dim0, dim1, dim2];
+                        nd.SetData(data[dim0, dim1, dim2], dim0, dim1, dim2);
                     }
                 }
             }
@@ -98,7 +97,7 @@ namespace NumSharp
         {
             var nd = new NDArray(typeof(T), data.Length);
 
-            nd.Storage.SetData<T>(data);
+            nd.Array = data;
 
             return nd;
         }

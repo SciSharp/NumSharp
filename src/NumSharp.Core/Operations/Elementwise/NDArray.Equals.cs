@@ -2,12 +2,41 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Numerics;
+using NumSharp.Generic;
+using System.Linq;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public static NumSharp.Generic.NDArray<bool> operator ==(NDArray np, object obj)
+        /// <summary>
+        /// Determines if NDArray references are the same
+        /// </summary>
+        /// <param name="obj">NDArray to compare</param>
+        /// <returns>if reference is same</returns>
+        public override bool Equals(object obj)
+        {
+            switch (obj)
+            {
+                case NDArray safeCastObj:
+                    {
+                        var thatData = safeCastObj.Storage?.GetData();
+                        if (thatData == null)
+                        {
+                            return false;
+                        }
+
+                        var thisData = this.Storage?.GetData();
+                        return thisData == thatData && safeCastObj.shape == this.shape;
+                    }
+                // Other object is not of Type NDArray, return false immediately.
+                default:
+                    return false;
+            }
+
+        }
+
+        public static NDArray<bool> operator ==(NDArray np, object obj)
         {
             var boolTensor = new NDArray(typeof(bool),np.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];

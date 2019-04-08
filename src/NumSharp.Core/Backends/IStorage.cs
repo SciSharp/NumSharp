@@ -97,7 +97,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indexes">indexes</param>
         /// <returns>element from internal storage</returns>
-        object GetData(params int[] indexes);
+        NDArray GetData(params int[] indexes);
         /// <summary>
         /// Get single value from internal storage as type T and cast dtype to T
         /// </summary>
@@ -120,7 +120,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        void SetData(object value, params int[] indexes);
+        void SetData<T>(T value, Shape indexes);
+
         /// <summary>
         /// Set an Array to internal storage, cast it to new dtype and change dtype  
         /// </summary>

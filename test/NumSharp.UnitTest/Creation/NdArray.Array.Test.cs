@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Creation
             var list = new int[] { 1, 2, 3 };
             var n = np.array(list);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(n.Storage.GetData<int>(), new int[] { 1, 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] { 1, 2, 3 }));
         }
 
         [TestMethod]
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Creation
 
             var n = np.array(list);
 
-            Assert.IsTrue(n.Storage.GetData<int>(1, 0) == 3);
+            Assert.IsTrue(n.Data<int>(1, 0) == 3);
         }
 
         [TestMethod]
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.Creation
             var nd = np.arange(9.0).reshape(3, 3).MakeGeneric<double>();
 
             var random = new Random();
-            nd.Storage.SetData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
+            nd.SetData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             nd[1, 0] = 1.0;
             nd[0, 0] = 9.0;
             nd[2, 2] = 7.0;
@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.Creation
             var np = new NDArray(typeof(double)).arange(9).MakeGeneric<double>();
 
             var random = new Random();
-            np.Storage.SetData(np.Storage.GetData<double>().Select(x => x + random.NextDouble()).ToArray());
+            np.SetData(np.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             np[1] = 1;
             np[2] -= 4;
             np[3] -= 20;
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.Creation
 
             double[] np1_ = (double[])np1.ToMuliDimArray<double>();
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1_, np1.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1_, np1.Data<double>()));
         }
 
         [TestMethod]

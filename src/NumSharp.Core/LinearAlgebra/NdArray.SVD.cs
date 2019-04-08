@@ -50,5 +50,10 @@ namespace NumSharp
 
             return (uNDArr,sNDArr,vtNDArr);
         }
+
+        public void SetData(object p)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

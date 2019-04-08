@@ -25,13 +25,13 @@ namespace NumSharp
             }
             int ndim = 2;
             var s0 = (1,1);
-            var output = new NDArray[]{ x1.reshape(-1,1), x2.reshape(1,-1)};
+            var output = new NDArray[] { x1.reshape(x1.size, 1), x2.reshape(1, x2.size) };
 
             if (kwargs.indexing == "xy" && ndim > 1)
             {
                 // Switch first and second axis
-                output[0].reshape(1,-1);
-                output[1].reshape(-1, 1);
+                output[0].reshape(1, x2.size);
+                output[1].reshape(x1.size, 1);
             }
 
             if (!kwargs.sparse)

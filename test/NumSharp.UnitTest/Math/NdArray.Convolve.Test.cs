@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest
             
             double[] expectedResult = new double[]{0, 1, 2.5, 4, 1.5};
 
-            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
         [TestMethod]
@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest
             
             double[] expectedResult = new double[]{2.5};
 
-            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
         [TestMethod]
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest
             
             double[] expectedResult = new double[]{1, 2.5, 4};
 
-            Assert.IsTrue(Enumerable.SequenceEqual(series3.Storage.GetData<double>(), expectedResult));
+            Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
     }
 }

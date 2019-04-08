@@ -46,7 +46,7 @@ namespace NumSharp
                     {
                         for(int jdx =0; jdx < this.shape[0];jdx++)
                         {
-                            sum[idx] += Math.Pow(Convert.ToDouble(this[jdx,idx]) - mean[idx],2); 
+                            sum[idx] += Math.Pow(Data<double>(jdx,idx) - mean[idx],2); 
                         }
                         stdValue[idx] = Math.Sqrt(sum[idx] / this.shape[0]);
                     }
@@ -63,7 +63,7 @@ namespace NumSharp
                     {
                         for(int jdx =0; jdx < this.shape[1];jdx++)
                         {
-                            sum[idx] += Math.Pow(Convert.ToDouble(this[idx,jdx]) - mean[idx],2); 
+                            sum[idx] += Math.Pow(Data<double>(idx,jdx) - mean[idx],2); 
                         }
                         stdValue[idx] = Math.Sqrt(sum[idx] / this.shape[1]);
                     }

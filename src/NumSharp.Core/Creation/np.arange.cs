@@ -25,7 +25,7 @@ namespace NumSharp
 
             var nd = new NDArray(typeof(double), new Shape(length));
 
-            double[] puffer = nd.Storage.GetData() as double[];
+            double[] puffer = nd.Array as double[];
 
             for (int index = 0; index < length; index++)
             {
@@ -56,7 +56,7 @@ namespace NumSharp
             var a = new int[length];
             for (int i = start; i < stop; i += step)
                 a[index++] = i;
-            nd.Storage.SetData(a);
+            nd.SetData(a);
 
             return nd;
         }

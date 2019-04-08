@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Enumerate()
         {
-            var npStorage = np.arange(12).reshape(2, 3, 2).Storage;
+            // var npStorage = np.arange(12).reshape(2, 3, 2).Storage;
             
             /// not longer for ndarray
             /*

@@ -51,7 +51,7 @@ namespace NumSharp
             if (a.size > b.size)
                 throw new ArgumentException("Array a must not be larger in size than array b");
             var result = new NDArray<bool>(a.shape);
-            var rdata = result.Storage.GetData() as bool[];
+            var rdata = result.Array as bool[];
             if (a.dtype== uint8 || a.dtype == int16 || a.dtype == int32 || a.dtype == int64 && b.dtype==typeof(double) || b.dtype==typeof(float))
             {
                 //  convert both to double and compare
@@ -60,19 +60,19 @@ namespace NumSharp
                 for (int i = 0; i < a_arr.Length; i++)
                     rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
             }
-            var adata = a.Storage.GetData();
+            var adata = a.Array;
             switch (adata)
             {
                 case double[] a_arr:
                     {
-                        var b_arr = b.Storage.GetData<double>();
+                        var b_arr = b.Data<double>();
                         for (int i = 0; i < a_arr.Length; i++)
                             rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
                         break;
                     }
                 case float[] a_arr:
                     {
-                        var b_arr = b.Storage.GetData<float>();
+                        var b_arr = b.Data<float>();
                         for (int i = 0; i < a_arr.Length; i++)
                             rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
                         break;

@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Extensions
         {
             var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531,2081));
 
-            Assert.IsTrue(npRealWorldBitmap.Storage.GetData<byte>().Length == (2531 * 2081));
+            Assert.IsTrue(npRealWorldBitmap.Data<byte>().Length == (2531 * 2081));
         }
 
         /// <summary>
@@ -93,8 +93,8 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ValueTest()
         {
-            var x = np.arange(4);
-            var y = x.reshape(2, 2);
+            var x = np.arange(4).MakeGeneric<int>();
+            var y = x.reshape(2, 2).MakeGeneric<int>();
             y[0, 1] = 8;
             Assert.AreEqual(x[1], y[0, 1]);
         }

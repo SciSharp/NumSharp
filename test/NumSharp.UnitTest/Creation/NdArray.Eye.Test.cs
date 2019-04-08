@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np[3,3] == 1);
             Assert.IsTrue(np[4,4] == 1);
 
-            int[] elementsZero = np.Storage.GetData<int>().Where((x) => x == 0 ).ToArray();
+            int[] elementsZero = np.Data<int>().Where((x) => x == 0 ).ToArray();
 
             Assert.IsTrue(elementsZero.Length == 20);
         }
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np[3,3] == 1);
             Assert.IsTrue(np[4,4] == 1);
 
-            double[] elementsZero = np.Storage.GetData<double>().Where((x) => x == 0.0 ).ToArray();
+            double[] elementsZero = np.Data<double>().Where((x) => x == 0.0 ).ToArray();
 
             Assert.IsTrue(elementsZero.Length == 20);
         }
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np[1,3] == 1);
             Assert.IsTrue(np[2,4] == 1);
 
-            Assert.IsTrue(np.Storage.GetData<double>().Where(x => x ==0).ToArray().Length ==22);        
+            Assert.IsTrue(np.Data<double>().Where(x => x ==0).ToArray().Length ==22);        
         }
 
     }

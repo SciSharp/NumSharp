@@ -14,7 +14,7 @@ namespace NumSharp
 
             var np = new NDArray(typeof(int)).arange(max);
 
-            int[] npData = np.Storage.GetData<int>();
+            int[] npData = np.Data<int>();
 
             for(int i = 0; i < max; i++)
             {

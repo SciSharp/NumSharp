@@ -15,7 +15,7 @@ namespace NumSharp
 
         public NDArray reshape(params int[] shape)
         {
-            return new NDArray(Data(), shape);
+            return new NDArray(Array, shape);
         }
 
         protected static int FindNegativeIndex(params int[] shape)

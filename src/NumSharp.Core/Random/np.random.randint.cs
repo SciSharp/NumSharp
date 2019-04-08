@@ -18,7 +18,7 @@ namespace NumSharp
             }
 
             var np = new NDArray(typeof(int), size);
-            np.Storage.SetData(data);
+            np.SetData(data);
 
             return np;
         }
@@ -41,7 +41,7 @@ namespace NumSharp
             }
 
             var np = new NDArray(typeof(int), shape.Dimensions.ToArray());
-            np.Storage.SetData(data);
+            np.SetData(data);
 
             return np;
         }

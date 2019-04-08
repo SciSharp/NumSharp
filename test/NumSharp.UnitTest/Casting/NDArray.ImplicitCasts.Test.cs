@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest
         {
             NDArray nd = "hello";
 
-            var a = (string) nd.Storage.GetData().GetValue(0);
+            var a = (string) nd.Array.GetValue(0);
 
             Assert.IsTrue(a == "hello");
         }
@@ -92,7 +92,10 @@ namespace NumSharp.UnitTest
 
             for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
                 for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
-                    Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
+                {
+                    var val = (double)nd[idx, jdx];
+                    Assert.IsTrue(val == doubleMatr[idx, jdx]);
+                }
         }
 
         [TestMethod]

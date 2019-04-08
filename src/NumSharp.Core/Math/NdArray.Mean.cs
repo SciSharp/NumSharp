@@ -11,19 +11,19 @@ namespace NumSharp.Extensions
         {
             var mean = new NDArray(typeof(double));
 
-            mean.Storage.SetData(new double[0]);
+            mean.SetData(new double[0]);
 
             // axis == -1: DEFAULT; to compute the mean of the flattened array.
             if (axis == -1)
             {
-                var data = np.Storage.GetData();
+                var data = np.Array;
 
                 double sum = 0;
 
                 for (int idx =0; idx < data.Length;idx++)
                     sum += Convert.ToDouble(data.GetValue(idx)); 
 
-                mean.Storage.SetData(new double[] { sum / np.size});
+                mean.SetData(new double[] { sum / np.size});
             }
             // to compute mean by compressing row and row
             else if (axis == 0)
@@ -34,22 +34,22 @@ namespace NumSharp.Extensions
                 {
                     for (int p = 0; p < np.shape[1]; p++)
                     {
-                        sumVec[p] += Convert.ToDouble(np[d,p]);
+                        sumVec[p] += np.Data<double>(d,p);
                     }
                 }
-                var puffer = mean.Storage.CloneData<double>().ToList();
+                var puffer = mean.CloneData<double>().ToList();
 
                 for (int d = 0; d < np.shape[1]; d++)
                 {
                     puffer.Add(sumVec[d] / np.shape[0]);
                 }
-                mean.Storage.SetData(puffer.ToArray());
+                mean.SetData(puffer.ToArray());
 
-                mean.Storage.Reshape(mean.Storage.GetData().Length);
+                mean.reshape(mean.Array.Length);
             }
             else if (axis == 1)
             {
-                var puffer = mean.Storage.GetData<double>().ToList();
+                var puffer = mean.Data<double>().ToList();
 
                 for (int d = 0; d < np.shape[0]; d++)
                 {
@@ -57,14 +57,14 @@ namespace NumSharp.Extensions
                     
                     for (int p = 0; p < np.shape[1]; p++)
                     {
-                        rowSum += Convert.ToDouble(np[d,p]);
+                        rowSum += np.Data<double>(d,p);
                     }
                     puffer.Add(rowSum / np.shape[1]);
                 }
 
-                mean.Storage.SetData(puffer.ToArray());
+                mean.SetData(puffer.ToArray());
                 
-                mean.Storage.Reshape(mean.Storage.GetData().Length);
+                mean.reshape(mean.Array.Length);
             }
 
             return mean;

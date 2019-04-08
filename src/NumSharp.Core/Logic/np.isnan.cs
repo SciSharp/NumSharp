@@ -17,8 +17,8 @@ namespace NumSharp
         public static NDArray<bool> isnan(NDArray a)
         {
             NDArray<bool> result = new NDArray<bool>(a.shape);
-            Array data = a.Storage.GetData();
-            var res = result.Storage.GetData() as bool[];
+            Array data = a.Array;
+            var res = result.Array as bool[];
 
             switch (data)
             {

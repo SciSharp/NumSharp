@@ -24,13 +24,13 @@ namespace NumSharp
             }
 
             puffer.Storage.SetData(Array.CreateInstance(dtype,puffer.size));
-             
+
             if (diagonalIndex >= 0)
-                for(int idx = 0; idx < noOfDiagElement;idx++ )
-                   puffer.Storage.SetData(1,idx,idx+diagonalIndex);
-            else 
-                for(int idx = puffer.Storage.Shape.Dimensions[0]-1; idx > puffer.Storage.Shape.Dimensions[0]-1 - noOfDiagElement;idx-- )
-                   puffer.Storage.SetData(1,idx,idx+diagonalIndex);
+                for (int idx = 0; idx < noOfDiagElement; idx++)
+                    puffer.SetData(1, idx, idx + diagonalIndex);
+            else
+                for (int idx = puffer.Storage.Shape.Dimensions[0] - 1; idx > puffer.Storage.Shape.Dimensions[0] - 1 - noOfDiagElement; idx--)
+                    puffer.SetData(1, idx, idx + diagonalIndex);
             
             return puffer;
         }

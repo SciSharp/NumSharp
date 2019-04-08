@@ -13,7 +13,7 @@ namespace NumSharp
             var rng = new Random();
             var count = list.size;
 
-            Array listArr = list.Storage.GetData();
+            Array listArr = list.Array;
 
             while (count > 1)
             {

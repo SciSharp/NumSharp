@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Numerics;
 using System.Collections.Generic;
@@ -15,9 +15,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void TwoxThree()
         {
-            NDArray np1 = np.arange(6).reshape(3,2);
+            var np1 = np.arange(6).reshape(3,2).MakeGeneric<int>();
             
-            var np1Transposed = np1.transpose();
+            var np1Transposed = np1.transpose().MakeGeneric<int>();
 
             Assert.AreEqual(np1Transposed[0,0], 0);
             Assert.AreEqual(np1Transposed[0,1], 2);

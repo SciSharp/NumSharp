@@ -48,7 +48,7 @@ namespace NumSharp
                         
                     for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
                         for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
-                            dotNetArrayPuffer[idx][jdx] = (T) this[idx,jdx];
+                            dotNetArrayPuffer[idx][jdx] = Data<T>(idx,jdx);
                     
                     dotNetArray = dotNetArrayPuffer;
                     
@@ -64,11 +64,11 @@ namespace NumSharp
                         for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
                             dotNetArrayPuffer[idx][jdx] = new T[shape[2]];
                     }
-                    
-                    for (int idx = 0; idx < shape[0];idx++)
-                        for (int jdx = 0;jdx < shape[1];jdx++)
-                            for(int kdx = 0; kdx < shape[2];kdx++)
-                                dotNetArrayPuffer[idx][jdx][kdx] = (T) this[idx,jdx,kdx];
+
+                    for (int idx = 0; idx < shape[0]; idx++)
+                        for (int jdx = 0; jdx < shape[1]; jdx++)
+                            for (int kdx = 0; kdx < shape[2]; kdx++)
+                                dotNetArrayPuffer[idx][jdx][kdx] = Data<T>(idx, jdx, kdx);
                      
                     dotNetArray = dotNetArrayPuffer;
                     

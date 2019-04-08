@@ -50,7 +50,7 @@ namespace NumSharp.Generic
         {
             get
             {
-                return (T) Storage.GetData(select);
+                return Storage.GetData<T>(select);
             }
 
             set

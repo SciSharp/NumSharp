@@ -12,8 +12,6 @@ namespace NumSharp.Extensions
         {
             var npAsMatrix = new matrix(nd);
 
-            npAsMatrix.reshape(nd.shape);
-
             return npAsMatrix;
         }
     }

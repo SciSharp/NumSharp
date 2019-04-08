@@ -14,8 +14,8 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.Storage.GetData<int>(1, 1) == 5);
-            Assert.IsTrue(nd.Storage.GetData<int>(2, 0) == 8);
+            Assert.IsTrue(nd.Data<int>(1, 1) == 5);
+            Assert.IsTrue(nd.Data<int>(2, 0) == 8);
         }
 
         [TestMethod]
@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(4).reshape(2, 2);
 
-            var row1 = nd[0] as NDArray;
+            var row1 = (nd[0] as NDArray).MakeGeneric<int>();
             Assert.AreEqual(row1[0], 0);
             Assert.AreEqual(row1[1], 1);
         }
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.Selection
         public void NDArrayAccess3Dim()
         {
             NDArray nd = np.arange(1, 18, 1).reshape(3,3,2);
-            var row1 = nd[0] as NDArray;
+            var row1 = (nd[0] as NDArray).MakeGeneric<int>();
             Assert.AreEqual(row1[0,0], 1);
             Assert.AreEqual(row1[0,1], 2);
             Assert.AreEqual(row1[1,0], 3);
@@ -48,13 +48,13 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.Storage.GetData<int>(0, 3) == 3);
-            Assert.IsTrue(nd.Storage.GetData<int>(1, 3) == 7);
+            Assert.IsTrue(nd.Data<int>(0, 3) == 3);
+            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
 
             // set value
-            nd.Storage.SetData(10, 0, 0);
-            Assert.IsTrue(nd.Storage.GetData<int>(0, 0) == 10);
-            Assert.IsTrue(nd.Storage.GetData<int>(1, 3) == 7);
+            nd.SetData(10, 0, 0);
+            Assert.IsTrue(nd.Data<int>(0, 0) == 10);
+            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
         }
         [TestMethod]
         public void BoolArray()
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest.Selection
 
             A[booleanArr.MakeGeneric<bool>()] = -2;
 
-            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Storage.GetData<double>(),new double[] {-2,2,-2,4, -2,6} ));
+            Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Data<double>(),new double[] {-2,2,-2,4, -2,6} ));
 
         }
         [TestMethod]

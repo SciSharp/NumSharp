@@ -45,7 +45,7 @@ namespace NumSharp
             var array = new NDArray(typeof(double), new Shape(dims));
             Random rand = new Random(); //reuse this if you are generating many
 
-            double[] arr = array.Storage.GetData<double>();
+            double[] arr = array.Data<double>();
 
             for (int i = 0; i < array.size; i++)
             {
@@ -57,7 +57,7 @@ namespace NumSharp
                 arr[i] = randNormal;
             }
 
-            array.Storage.SetData(arr);
+            array.SetData(arr);
 
             return array;
         }

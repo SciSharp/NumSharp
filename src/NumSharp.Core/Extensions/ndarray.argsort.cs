@@ -98,7 +98,7 @@ namespace NumSharp
         /// <returns>Sorted Data</returns>
         private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex)
         {
-            var sort = accessIndex.Select((x, index) => new { Data = (T)this[x.ToArray()], Index = index });
+            var sort = accessIndex.Select((x, index) => new { Data = this[x.ToArray()], Index = index });
             return sort.OrderBy(a => a.Data).Select(a =>a.Index);
         }
 

@@ -9,9 +9,9 @@ namespace NumSharp.Extensions
     {
         public static int ArgMax<T>(this NDArray np )
         {
-            var max = np.Storage.GetData<T>().Max();
+            var max = np.Data<T>().Max();
 
-            return np.Storage.GetData<T>().ToList().IndexOf(max);
+            return np.Data<T>().ToList().IndexOf(max);
         }
     }
 }

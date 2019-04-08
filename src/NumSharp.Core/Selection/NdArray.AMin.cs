@@ -16,24 +16,37 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray amin(int? axis = null)
         {
-            var res = new NDArray(dtype);
+            switch (dtype.Name)
+            {
+                case "Int32":
+                    return AminImpl<int>(axis);
+                case "Single":
+                    return AminImpl<float>(axis);
+            }
 
-            var npArr = this.Storage.GetData<int>();
+            throw new NotImplementedException("amin");
+        }
+
+        private NDArray AminImpl<T>(int? axis = null) where T : struct
+        {
+            var res = new NDArray(dtype);
 
             if (axis == null)
             {
+                var npArr = this.Storage.GetData<int>();
                 int min = npArr[0];
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage  = new NDStorage(dtype);
+                res.Storage = new NDStorage(dtype);
                 res.Storage.Allocate(new Shape(1));
-                res.Storage.SetData(new int[1] { min });            
+                res.Storage.SetData(new int[1] { min });
             }
             else
             {
                 if (axis < 0 || axis >= this.ndim)
                     throw new Exception("Invalid input: axis");
+                
                 int[] resShapes = new int[this.shape.Length - 1];
                 int index = 0; //index for result shape set
                 //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
@@ -56,31 +69,65 @@ namespace NumSharp
                             post *= this.shape[i];
                     }
                 }
-                
+
                 //Fill in data
                 index = 0; //index for result data set
                 int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
                 int increments = cur * post;
-                var resData = new int[size];  //res.Data = new double[size];
-                int start = 0;
-                int min = 0;
-                for (int i = 0; i < this.size; i += increments)
+                
+                switch (typeof(T).Name)
                 {
-                    for (int j = i; j < i + post; j++)
-                    {
-                        start = j;
-                        min = npArr[start];
-                        for (int k = 0; k < cur; k++)
+                    case "Int32":
                         {
-                            min = Math.Min(min, npArr[start]);
-                            start += sameSetOffset;
+                            var resData = new int[size];  //res.Data = new double[size];
+                            var npArr = Data<int>();
+                            int start = 0;
+                            int min = 0;
+                            for (int i = 0; i < this.size; i += increments)
+                            {
+                                for (int j = i; j < i + post; j++)
+                                {
+                                    start = j;
+                                    min = npArr[start];
+                                    for (int k = 0; k < cur; k++)
+                                    {
+                                        min = Math.Min(min, npArr[start]);
+                                        start += sameSetOffset;
+                                    }
+                                    resData[index++] = min;
+                                }
+                            }
+                            res.Storage.Allocate(new Shape(resShapes));
+                            res.Storage.SetData(resData);
                         }
-                        resData[index++] = min;
-                    }
+                        break;
+                    case "Single":
+                        {
+                            var resData = new float[size];  //res.Data = new double[size];
+                            var npArr = Data<float>();
+                            int start = 0;
+                            float min = 0;
+                            for (int i = 0; i < this.size; i += increments)
+                            {
+                                for (int j = i; j < i + post; j++)
+                                {
+                                    start = j;
+                                    min = npArr[start];
+                                    for (int k = 0; k < cur; k++)
+                                    {
+                                        min = Math.Min(min, npArr[start]);
+                                        start += sameSetOffset;
+                                    }
+                                    resData[index++] = min;
+                                }
+                            }
+                            res.Storage.Allocate(new Shape(resShapes));
+                            res.Storage.SetData(resData);
+                        }
+                        break;
                 }
 
-                res.Storage.Allocate(new Shape(resShapes));
-                res.Storage.SetData(resData); 
+                
             }
             return res;
         }

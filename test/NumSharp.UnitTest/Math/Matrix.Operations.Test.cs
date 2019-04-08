@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 - np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 5, 7 }, np3.Storage.GetData<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 5, 7 }, np3.Data<int>()));
         }
 
         /*[TestMethod]
@@ -119,17 +119,17 @@ namespace NumSharp.UnitTest.Maths
         public void Double2DArray_NDArrayAddition()
         {
             var np1 = new NDArray(typeof(double), new Shape(2, 3));
-            np1.Storage.SetData(new double[] { 1, 2, 3, 4, 5, 6 });
+            np1.SetData(new double[] { 1, 2, 3, 4, 5, 6 });
 
             var np2 = new NDArray(typeof(double), new Shape(2, 3));
-            np2.Storage.SetData(new double[] { 9, 8, 7, 6, 5, 4 });
+            np2.SetData(new double[] { 9, 8, 7, 6, 5, 4 });
 
             var np3 = np1 + np2;
 
             // expected
             var np4 = new double[] { 10, 10, 10, 10, 10, 10 };
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np3.Storage.GetData<double>(), np4));
+            Assert.IsTrue(Enumerable.SequenceEqual(np3.Data<double>(), np4));
         }
 
         [TestMethod]
@@ -140,7 +140,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 - np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 2, 3 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 2, 3 }, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -150,7 +150,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np2 = np1 - 3;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 2, 4 }, np2.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 2, 4 }, np2.Data<double>()));
         }
 
         [TestMethod]
@@ -161,7 +161,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 * np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 6, 12 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 6, 12 }, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -170,7 +170,7 @@ namespace NumSharp.UnitTest.Maths
             var np1 = new NDArray(new double[] { 1, 2, 3 });
             var np3 = np1 * 2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Data<double>()));
         }
     }
 }

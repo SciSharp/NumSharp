@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.View
 
             v[0] = 1;
 
-            Assert.AreEqual(x[0], v[0]);
+            Assert.IsTrue((int)x[0] == (int)v[0]);
         }
     }
 }

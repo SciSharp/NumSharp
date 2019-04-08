@@ -250,7 +250,6 @@ namespace NumSharp.Backends
             if (typeof(T).Name != _DType.Name)
             {
                 throw new Exception($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
-                //return new T[_values.Length];
             }
                 
             return _values as T[];
@@ -274,24 +273,42 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="indexes">indexes</param>
         /// <returns>element from internal storage</returns>
-        public object GetData(params int[] indexes)
+        public NDArray GetData(params int[] indexes)
         {
-            object element = null;
-            if (indexes.Length == Shape.NDim)
-                element = _values.GetValue(Shape.GetIndexInShape(indexes));
-            else if (Shape.Dimensions.Last() == 1)
-                element = _values.GetValue(Shape.GetIndexInShape(indexes));
+            if (indexes.Length == Shape.NDim ||
+                Shape.Dimensions.Last() == 1)
+            {
+                switch (DType.Name)
+                {
+                    case "Boolean":
+                        return GetData<bool>(indexes);
+                    case "Int16":
+                        return GetData<short>(indexes);
+                    case "Int32":
+                        return GetData<int>(indexes);
+                    case "Int64":
+                        return GetData<long>(indexes);
+                    case "Single":
+                        return GetData<float>(indexes);
+                    case "Double":
+                        return GetData<double>(indexes);
+                    case "Decimal":
+                        return GetData<decimal>(indexes);
+                    case "String":
+                        return GetData<string>(indexes);
+                }
+            }
             else if (indexes.Length == Shape.NDim - 1)
             {
                 var offset = new int[Shape.NDim];
                 for (int i = 0; i < Shape.NDim - 1; i++)
                     offset[i] = indexes[i];
 
-                NDArray nd = new NDArray(DType, Shape.Dimensions[Shape.NDim - 1]);
+                var nd = new NDArray(DType, Shape.Dimensions[Shape.NDim - 1]);
                 for (int i = 0; i < Shape.Dimensions[Shape.NDim - 1]; i++)
                 {
                     offset[offset.Length - 1] = i;
-                    nd[i] = _values.GetValue(Shape.GetIndexInShape(offset));
+                    nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i);
                 }
 
                 return nd;
@@ -300,7 +317,7 @@ namespace NumSharp.Backends
             else if (indexes.Length == Shape.NDim - 2)
             {
                 var offset = new int[Shape.NDim];
-                NDArray nd = new NDArray(DType, new int[]{ Shape.Dimensions[Shape.NDim - 2] , Shape.Dimensions[Shape.NDim - 1] });
+                var nd = new NDArray(DType, new int[]{ Shape.Dimensions[Shape.NDim - 2] , Shape.Dimensions[Shape.NDim - 1] });
                 
                 for (int i = 0; i < Shape.Dimensions[Shape.NDim - 2]; i++)
                 {
@@ -309,14 +326,14 @@ namespace NumSharp.Backends
                         offset[0] = 0;
                         offset[1] = i;
                         offset[2] = j;
-                        nd[i,j] = _values.GetValue(Shape.GetIndexInShape(offset));
+                        nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i, j);
                     }
                 }
+
                 return nd;
             }
-            else
-                throw new Exception("indexes must be equal to number of dimension.");
-            return element;
+
+            throw new Exception("NDStorage.GetData");
         }
 
         /// <summary>
@@ -353,9 +370,94 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        public void SetData(object value, params int[] indexes)
+        public void SetData<T>(T value, Shape indexes)
         {
-            _values.SetValue(value, _Shape.GetIndexInShape(indexes));
+            int idx = _Shape.GetIndexInShape(indexes);
+            switch (value)
+            {
+                case bool val:
+                    _values.SetValue(val, idx);
+                    break;
+                case bool[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case byte val:
+                    _values.SetValue(val, idx);
+                    break;
+                case byte[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case int val:
+                    _values.SetValue(val, idx);
+                    break;
+                case int[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case long val:
+                    _values.SetValue(val, idx);
+                    break;
+                case long[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case float val:
+                    _values.SetValue(val, idx);
+                    break;
+                case float[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case double val:
+                    _values.SetValue(val, idx);
+                    break;
+                case double[] values:
+                    if (indexes.NDim == 0)
+                        _values = values;
+                    else
+                        _values.SetValue(values, idx);
+                    break;
+                case NDArray nd:
+                    switch(nd.dtype.Name)
+                    {
+                        case "Int16":
+                            _values.SetValue(nd.Data<short>(0), idx);
+                            break;
+                        case "Int32":
+                            _values.SetValue(nd.Data<int>(0), idx);
+                            break;
+                        case "Int64":
+                            _values.SetValue(nd.Data<long>(0), idx);
+                            break;
+                        case "Single":
+                            _values.SetValue(nd.Data<float>(0), idx);
+                            break;
+                        case "Double":
+                            _values.SetValue(nd.Data<double>(0), idx);
+                            break;
+                        case "Decimal":
+                            _values.SetValue(nd.Data<decimal>(0), idx);
+                            break;
+                        default:
+                            throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
+                    }
+                    break;
+                default:
+                    throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
+            }
+                
         }
 
         /// <summary>
@@ -395,11 +497,6 @@ namespace NumSharp.Backends
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
-        }
-
-        public void SetData<T>(T value, int offset)
-        {
-            throw new NotImplementedException();
         }
     }
 }

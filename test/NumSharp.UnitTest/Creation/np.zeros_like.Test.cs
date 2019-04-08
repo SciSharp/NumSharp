@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest.Extensions
             // create same-shaped zeros from ones
             var np1 = np.zeros_like( np.ones(new Shape(5)));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==0).ToArray().Length == 5);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==0).ToArray().Length == 5);
         }
         [TestMethod]
         public void SimpleInt2D()
@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Extensions
             // create same-shaped zeros from ones
             var np1 = np.zeros_like(np.ones(new Shape(5,5)));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==0).ToArray().Length == 25);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==0).ToArray().Length == 25);
         }
         [TestMethod]
         public void SimpleDouble3D()
@@ -34,7 +34,7 @@ namespace NumSharp.UnitTest.Extensions
             // create same-shaped zeros from ones
             var np1 = np.zeros_like(np.ones(new Shape(5,5,5)));
 
-            Assert.IsTrue(np1.Storage.GetData<double>().Where(x => x==0).ToArray().Length == 125);
+            Assert.IsTrue(np1.Data<double>().Where(x => x==0).ToArray().Length == 125);
         }
     }
 }

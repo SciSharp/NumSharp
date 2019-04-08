@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var OncesMatrix = np.dot(np1, np1Inv);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{1,0,0,1},OncesMatrix.Storage.GetData<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[]{1,0,0,1},OncesMatrix.Data<double>()));
 
         }
         //[TestMethod]
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         {
             var np1 = new NDArray(typeof(double), new Shape(3, 3));
 
-            var np1Arr = np1.Storage.GetData<double>();
+            var np1Arr = np1.Data<double>();
 
             np1Arr[0] = 5;
             np1Arr[1] = 1;

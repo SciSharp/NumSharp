@@ -16,7 +16,7 @@ namespace NumSharp
         /// <returns></returns>
         public static bool all(NDArray nd)
         {
-            var data = nd.Storage.GetData<bool>();
+            var data = nd.Data<bool>();
             for (int i = 0; i < data.Length; i++)
             {
                 if (!data[i])

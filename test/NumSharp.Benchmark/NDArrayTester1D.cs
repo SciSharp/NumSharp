@@ -1,4 +1,4 @@
-
+﻿
 using System;
 using System.Numerics;
 using System.Linq;
@@ -26,19 +26,19 @@ namespace NumSharp.Benchmark
         {
             // first array
             np1 = new NDArray(new double[100000].Select((x, idx) => x + idx).ToArray());
-            np1Double = np1.Storage.GetData<double>();
+            np1Double = np1.Data<double>();
 
             // second array
             np2 = new NDArray(new double[100000].Select((x, idx) => x + idx).ToArray());
-            np2Double = np2.Storage.GetData<double>();
+            np2Double = np2.Data<double>();
 
             // result array
             np3 = new NDArray(new double[100000]);
-            np3Double = np3.Storage.GetData<double>();
+            np3Double = np3.Data<double>();
 
             // result array
             np3 = new NDArray(new double[100000]);
-            np3Double = np3.Storage.GetData<double>();
+            np3Double = np3.Data<double>();
         }
         [Benchmark]
         public void DirectAddition1D()

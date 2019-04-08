@@ -16,21 +16,21 @@ namespace NumSharp.UnitTest.Extensions
         {
             var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(0).Storage.GetData<double>(), new double[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(0).Data<double>(), new double[] { 2, 3 }));
         }
         [TestMethod]
         public void MeanAxis1()
         {
             var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
             
-            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(1).Storage.GetData<double>(), new double[] { 1.5, 3.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean(1).Data<double>(), new double[] { 1.5, 3.5 }));
         }
         [TestMethod]
         public void MeanAxisMinus1()
         {
             var np1 = np.array(new double[]{1,2,3,4}).reshape(2,2);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean().Storage.GetData<double>(), new double[] { 2.5 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.mean().Data<double>(), new double[] { 2.5 }));
             
         }
     }

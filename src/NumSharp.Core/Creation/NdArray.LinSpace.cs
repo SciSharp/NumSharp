@@ -18,55 +18,8 @@ namespace NumSharp
             for (int idx = 0; idx < doubleArray.Length;idx++)
                 doubleArray[idx] = start + idx * steps;
 
-            Storage.SetData(Array.CreateInstance(this.dtype,doubleArray.Length));
-
-            var data = Storage.GetData();
-
-            switch (data)
-            {
-                case int[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = (int)doubleArray[idx];
-                    break;
-                }
-                case long[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = (long) doubleArray[idx];
-                    break;
-                }
-                case double[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = doubleArray[idx];
-                    break;
-                }
-                case float[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = (float)doubleArray[idx];
-                    break;
-                }
-                case Complex[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = (Complex)doubleArray[idx];
-                    break;
-                }
-                /*case Quaternion[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = new Quaternion(new Vector3(0,0,0),(float)doubleArray[idx]);
-                    break;
-                }*/
-                default : 
-                {
-                    throw new IncorrectTypeException();
-                }
-            }
-
-            this.Storage.Reshape(doubleArray.Length);
+            Storage.SetData(doubleArray);
+            Storage.Reshape(doubleArray.Length);
 
             return this;
         }
@@ -80,55 +33,8 @@ namespace NumSharp
             for (int idx = 0; idx < floatArray.Length; idx++)
                 floatArray[idx] = start + idx * steps;
 
-            Storage.SetData(Array.CreateInstance(this.dtype, floatArray.Length));
-
-            var data = Storage.GetData();
-
-            switch (data)
-            {
-                case int[] dataArray:
-                    {
-                        for (int idx = 0; idx < dataArray.Length; idx++)
-                            dataArray[idx] = (int)floatArray[idx];
-                        break;
-                    }
-                case long[] dataArray:
-                    {
-                        for (int idx = 0; idx < dataArray.Length; idx++)
-                            dataArray[idx] = (long)floatArray[idx];
-                        break;
-                    }
-                case double[] dataArray:
-                    {
-                        for (int idx = 0; idx < dataArray.Length; idx++)
-                            dataArray[idx] = floatArray[idx];
-                        break;
-                    }
-                case float[] dataArray:
-                    {
-                        for (int idx = 0; idx < dataArray.Length; idx++)
-                            dataArray[idx] = (float)floatArray[idx];
-                        break;
-                    }
-                case Complex[] dataArray:
-                    {
-                        for (int idx = 0; idx < dataArray.Length; idx++)
-                            dataArray[idx] = (Complex)floatArray[idx];
-                        break;
-                    }
-                /*case Quaternion[] dataArray : 
-                {
-                    for(int idx = 0; idx < dataArray.Length;idx++)
-                        dataArray[idx] = new Quaternion(new Vector3(0,0,0),(float)doubleArray[idx]);
-                    break;
-                }*/
-                default:
-                    {
-                        throw new IncorrectTypeException();
-                    }
-            }
-
-            this.Storage.Reshape(floatArray.Length);
+            Storage.SetData(floatArray);
+            Storage.Reshape(floatArray.Length);
 
             return this;
         }

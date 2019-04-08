@@ -15,7 +15,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
-        public object this[params int[] select]
+        public NDArray this[params int[] select]
         {
             get
             {
@@ -105,7 +105,7 @@ namespace NumSharp
             Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
             {
                 for (int col = 0; col < selectedValues.shape[1]; col++)
-                    selectedValues[row, col] = buf[Storage.Shape.GetIndexInShape(idx[row], col)];
+                    selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], new Shape(row, col));
             });
 
             return selectedValues;
@@ -121,7 +121,7 @@ namespace NumSharp
             {
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
-                            selectedValues[item, row, col] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col)];
+                        selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], new Shape(item, row, col));
             });
 
             return selectedValues;
@@ -138,7 +138,7 @@ namespace NumSharp
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
                         for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                            selectedValues[item, row, col, channel] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)];
+                            selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], new Shape(item, row, col, channel));
             });
 
             return selectedValues;

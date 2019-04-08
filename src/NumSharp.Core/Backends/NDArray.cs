@@ -56,7 +56,7 @@ namespace NumSharp
         /// The internal storage for elements of NDArray
         /// </summary>
         /// <value>Internal Storage</value>
-        public IStorage Storage { get; set; }
+        protected IStorage Storage { get; set; }
 
         public ITensorEngine TensorEngine { get; set; }
 
@@ -71,7 +71,22 @@ namespace NumSharp
 
         public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
 
-        public Array Data() => Storage.GetData(dtype);
+        public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
+
+        public Array Array
+        {
+            get
+            {
+                 return Storage.GetData();
+            }
+
+            set
+            {
+                Storage.SetData(value);
+            }
+        }
+
+        public T[] CloneData<T>() => Storage.CloneData<T>();
 
         public T Max<T>() => Data<T>().Max();
 
@@ -134,34 +149,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Determines if NDArray references are the same
-        /// </summary>
-        /// <param name="obj">NDArray to compare</param>
-        /// <returns>if reference is same</returns>
-        public override bool Equals(object obj)
-        {
-            switch (obj)
-            {
-                case NDArray safeCastObj:
-                {
-                    var thatData = safeCastObj.Storage?.GetData();
-                    if (thatData == null)
-                    {
-                        return false;
-                    }
-
-                    var thisData = this.Storage?.GetData();
-                    return thisData == thatData && safeCastObj.shape == this.shape;
-
-                }
-                // Other object is not of Type NDArray, return false immediately.
-                default:
-                    return false;
-            }
-
-        }
-
-        /// <summary>
         /// Clone the whole NDArray
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
@@ -203,9 +190,9 @@ namespace NumSharp
         public NDArray view(Type dtype = null)
         {
             if (dtype != null && dtype != this.dtype)
-                Storage.SetData(Data(), dtype);
+                Storage.SetData(Array, dtype);
 
-            return new NDArray(Data(), shape);
+            return new NDArray(Array, shape);
         }
     }
 }

@@ -42,15 +42,15 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
-                    nd.Storage.SetData(Enumerable.Range(0, nd.size).Select(x => 1).ToArray());
+                    nd.SetData(Enumerable.Range(0, nd.size).Select(x => 1).ToArray());
                     break;
 
                 case "Double":
-                    nd.Storage.SetData(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
+                    nd.SetData(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
                     break;
 
                 case "Boolean":
-                   nd.Storage.SetData(Enumerable.Range(0, nd.size).Select(x => true).ToArray());
+                   nd.SetData(Enumerable.Range(0, nd.size).Select(x => true).ToArray());
                     break;
             }
 

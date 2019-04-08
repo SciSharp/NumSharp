@@ -72,7 +72,15 @@ namespace NumSharp
         public static implicit operator NDArray(double d)
         {
             var ndArray = new NDArray(typeof(double),new int[0]);
-            ndArray.Storage.SetData(new double[]{d});
+            ndArray.Storage.SetData(new double[] { d });
+
+            return ndArray;
+        }
+
+        public static implicit operator NDArray(decimal d)
+        {
+            var ndArray = new NDArray(typeof(double), new int[0]);
+            ndArray.Storage.SetData(new decimal[] { d });
 
             return ndArray;
         }

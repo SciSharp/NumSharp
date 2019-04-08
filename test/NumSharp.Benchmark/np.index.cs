@@ -46,7 +46,7 @@ namespace NumSharp.Benchmark
             {
                 for (int d2 = 0; d2 < shape.Dimensions[1]; d2++)
                 {
-                    a = nd.Storage.GetData<double>(d1, d2);
+                    a = nd.Data<double>(d1, d2);
                 }
             }
         }

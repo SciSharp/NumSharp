@@ -48,7 +48,7 @@ namespace NumSharp
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = (T)nd.Storage.GetData(0, j); 
+                        table[i, j] = nd.Data<T>(0, j); 
                     }
                 }
             }
@@ -58,7 +58,7 @@ namespace NumSharp
                 {
                     for (int j = 0; j < shape.Dimensions[1]; j++)
                     {
-                        table[i, j] = (T)nd.Storage.GetData(i, 0);
+                        table[i, j] = nd.Data<T>(i, 0);
                     }
                 }
             }

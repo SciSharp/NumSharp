@@ -16,18 +16,18 @@ namespace NumSharp
         public static NDArray power<T>(NDArray nd, T exponent)
         {
             var sinArray = new NDArray(nd.dtype);
-            sinArray.Storage.Reshape(nd.shape);
+            sinArray.reshape(nd.shape);
 
             switch (sinArray[0])
             {
-                case double[] sinData:
+                /*case double[] sinData:
                     {
                         for (int idx = 0; idx < sinData.Length; idx++)
                         {
                             sinArray[idx] = Math.Pow(sinData[idx], (double)(object)exponent);
                         }
                         break;
-                    }
+                    }*/
                 default:
                     {
                         throw new Exception("The operation is not implemented for the");
