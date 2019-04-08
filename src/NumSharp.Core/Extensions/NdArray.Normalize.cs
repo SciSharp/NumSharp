@@ -7,7 +7,12 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public void normalize()
+        /// <summary>
+        /// Normalizes all entries into the range between 0 and 1
+        /// 
+        /// Note: this is not a numpy function.
+        /// </summary>
+        public void Normalize()
         {
             var min = this.min(0);
             var max = this.max(0);

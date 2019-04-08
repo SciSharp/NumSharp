@@ -6,9 +6,10 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray max(int? axis = null)
-        {
-            return np.amax(this, axis);
-        }
+        public NDArray max(int axis)
+            => amax(axis);
+
+        public T max<T>()
+            => amax<T>();
     }
 }

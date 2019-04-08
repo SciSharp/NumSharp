@@ -1,17 +1,25 @@
 ﻿using System;
+using System.Collections;
+using System.Linq;
+using System.Text;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray roll(int shift, int axis )
+        /// <summary>
+        /// Roll array elements along a given axis.
+        /// 
+        /// Elements that roll beyond the last position are re-introduced at the first.
+        /// </summary>
+        public NDArray roll(int shift, int axis)
         {
             if (axis > this.ndim)
                 throw new IncorrectShapeException();
-            
+
             shift = (axis == 0) ? (-1) * shift : shift;
 
-            shift = ((shift % this.shape[axis]) < 0) ? shift+this.shape[axis] : shift;
+            shift = ((shift % this.shape[axis]) < 0) ? shift + this.shape[axis] : shift;
 
             switch (dtype.Name)
             {
@@ -65,16 +73,16 @@ namespace NumSharp
 
             Array cpy = Array.CreateInstance(this.dtype, this.size);
 
-            shift = ((shift % this.size) < 0) ? shift+this.size : shift; 
+            shift = ((shift % this.size) < 0) ? shift + this.size : shift;
 
             //shift = shift % this.size;
 
             var strg = this.Storage.GetData();
 
-            Array.Copy(strg,shift,cpy,0,this.size-shift);
+            Array.Copy(strg, shift, cpy, 0, this.size - shift);
 
-            for (int idx = 0; idx < shift;idx++)
-                cpy.SetValue( strg.GetValue(idx) ,this.size-shift+idx );
+            for (int idx = 0; idx < shift; idx++)
+                cpy.SetValue(strg.GetValue(idx), this.size - shift + idx);
 
             var returnValue = new NDArray(this.dtype);
 

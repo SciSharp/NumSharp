@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest
             var series1 = np.array(new double[]{1, 2, 3});
             var series2 = np.array(new double[]{0, 1, 0.5});
             
-            var series3 = series1.Convolve(series2);
+            var series3 = series1.convolve(series2);
             
             double[] expectedResult = new double[]{0, 1, 2.5, 4, 1.5};
 
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest
             var series1 = np.array(new double[]{1, 2, 3});
             var series2 = np.array(new double[]{0, 1, 0.5});
             
-            var series3 = series1.Convolve(series2, "valid");
+            var series3 = series1.convolve(series2, "valid");
             
             double[] expectedResult = new double[]{2.5};
 
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest
             var series1 = np.array(new double[]{1, 2, 3});
             var series2 = np.array(new double[]{0, 1, 0.5});
             
-            var series3 = series1.Convolve(series2, "same");
+            var series3 = series1.convolve(series2, "same");
             
             double[] expectedResult = new double[]{1, 2.5, 4};
 

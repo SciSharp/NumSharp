@@ -7,45 +7,14 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray delete(IEnumerable delete)
+        /// <summary>
+        /// Return a contiguous flattened array.
+        /// 
+        /// A 1-D array, containing the elements of the input, is returned.A copy is made only if needed.
+        /// </summary>
+        public NDArray ravel()
         {
-            var sysArr = this.Storage.GetData();
-
-            NDArray res = null;
-
-            switch( sysArr)
-            {
-                case double[] castedSysArr : 
-                {
-                    var castedDelete = delete as double[];
-
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
-
-                    break;
-                }
-                case float[] castedSysArr : 
-                {
-                    var castedDelete = delete as float[];
-
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
-
-                    break;
-                }
-                case int[] castedSysArr :
-                {
-                    var castedDelete = delete as int[];
-
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
-
-                    break;
-                }
-                default : 
-                {
-                    throw new IncorrectTypeException();
-                }
-            }
-            
-            return res;
+            return reshape(Storage.Shape.Size);
         }
     }
 }

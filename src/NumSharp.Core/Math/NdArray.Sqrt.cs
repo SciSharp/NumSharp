@@ -7,6 +7,9 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        /// Return the non-negative square-root of the array, element-wise.
+        /// </summary>
         public NDArray sqrt()
         {
             var sqrtArray = new NDArray(this.dtype,this.shape);

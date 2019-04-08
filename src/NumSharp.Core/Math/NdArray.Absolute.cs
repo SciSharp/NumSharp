@@ -8,6 +8,10 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        /// Calculate the absolute value element-wise.
+        /// </summary>
+        /// <returns></returns>
         public NDArray absolute()
         {
             NDArray res = new NDArray(this.dtype,this.Storage.Shape);
