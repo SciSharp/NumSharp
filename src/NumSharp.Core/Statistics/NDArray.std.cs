@@ -15,13 +15,12 @@ namespace NumSharp
             // in case have 1D array but user still using axis 0 ... can be used like -1
             axis = (axis == 0 && this.ndim == 1) ? -1 : axis;
 
-            Array data = this.Storage.GetData();
-
             NDArray stdArr = new NDArray(dtype);
 
             if (axis == -1)
             {
-                double mean = this.mean(axis).MakeGeneric<double>()[0];
+                Array data = this.Storage.GetData();
+                double mean = np.mean(axis).MakeGeneric<double>()[0];
                 double sum = 0;
                 for(int idx = 0; idx < data.Length;idx++)                
                     sum += Math.Pow(Convert.ToDouble(data.GetValue(idx)) - mean,2);
@@ -40,7 +39,7 @@ namespace NumSharp
                     double[] sum = new double[this.shape[1]];
                     stdValue = new double[sum.Length];
 
-                    double[] mean = this.mean(axis).Storage.GetData<double>();
+                    double[] mean = np.mean(axis).Storage.GetData<double>();
 
                     for (int idx = 0; idx < sum.Length;idx++)
                     {
@@ -57,7 +56,7 @@ namespace NumSharp
                     double[] sum = new double[this.shape[0]];
                     stdValue = new double[sum.Length];
 
-                    double[] mean = this.mean(axis).Storage.GetData<double>();
+                    double[] mean = np.mean(axis).Storage.GetData<double>();
 
                     for (int idx = 0; idx < sum.Length;idx++)
                     {

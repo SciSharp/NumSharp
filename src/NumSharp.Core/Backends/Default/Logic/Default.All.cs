@@ -1,20 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Text;
 using NumSharp.Generic;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public static partial class np
+    public abstract partial class DefaultEngine
     {
-
         /// <summary>
         /// Test whether all array elements evaluate to True.
         /// </summary>
         /// <param name="nd"></param>
         /// <returns></returns>
-        public static bool all(NDArray nd)
+        public bool All(NDArray nd)
         {
             var data = nd.Data<bool>();
             for (int i = 0; i < data.Length; i++)
@@ -31,7 +29,7 @@ namespace NumSharp
         /// <param name="nd"></param>
         /// <param name="axis"></param>
         /// <returns>Returns an array of bools</returns>
-        public static NDArray<bool> all(NDArray nd, int axis)
+        public NDArray<bool> All(NDArray nd, int axis)
         {
             throw new NotImplementedException($"np.all axis {axis}");
         }

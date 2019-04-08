@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Generic;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public partial class NDArray
+    public abstract partial class DefaultEngine
     {
         /// <summary>
         /// Returns True if two arrays are element-wise equal within a tolerance.
@@ -22,11 +23,10 @@ namespace NumSharp
         /// <param name="atol">The absolute tolerance parameter(see Notes)</param>
         /// <param name="equal_nan">Whether to compare NaN's as equal.  If True, NaN's in `a` will be
         ///considered equal to NaN's in `b` in the output array.</param>
-        public bool allclose( NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
+        public bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            bool result = np.all(np.isclose(this, b, rtol, atol, equal_nan));
+            bool result = np.all(np.isclose(a, b, rtol, atol, equal_nan));
             return result;
         }
     }
-
 }

@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Numerics;
 using System.Collections.Generic;
@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
         {
             var nd = np.arange(3);
             
-            var nd1 = nd.power(2).MakeGeneric<int>();
+            var nd1 = np.power(nd, 2).MakeGeneric<int>();
             
             Assert.IsTrue(nd1[0] == 0);
             Assert.IsTrue(nd1[1] == 1);

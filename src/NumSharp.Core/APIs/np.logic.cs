@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="nd"></param>
         /// <returns></returns>
         public static bool all(NDArray nd)
-            => nd.all();
+            => BackendFactory.GetEngine().All(nd);
 
         /// <summary>
         /// Test whether all array elements along a given axis evaluate to True.
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="axis"></param>
         /// <returns>Returns an array of bools</returns>
         public static NDArray<bool> all(NDArray nd, int axis)
-            => nd.all(axis);
+            => BackendFactory.GetEngine().All(nd, axis);
 
         /// <summary>
         /// Returns True if two arrays are element-wise equal within a tolerance.
@@ -44,7 +44,7 @@ namespace NumSharp
         ///considered equal to NaN's in `b` in the output array.</param>
         public static bool allclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => a.allclose(b, rtol, atol, equal_nan);
+            => BackendFactory.GetEngine().AllClose(a, b, rtol, atol, equal_nan);
 
         /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
@@ -85,7 +85,7 @@ namespace NumSharp
         ///</returns>
         public static NDArray<bool> isclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => a.isclose(b, rtol, atol, equal_nan);
+            => BackendFactory.GetEngine().IsClose(a, b, rtol, atol, equal_nan);
 
         /// <summary>
         /// Test element-wise for finiteness (not infinity or not Not a Number).
@@ -93,7 +93,7 @@ namespace NumSharp
         /// <param name="a"></param>
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isfinite(NDArray a)
-            => a.isfinite();
+            => BackendFactory.GetEngine().IsFinite(a);
 
         /// <summary>
         /// Test element-wise for Not a Number.
@@ -101,7 +101,7 @@ namespace NumSharp
         /// <param name="a"></param>
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isnan(NDArray a)
-            => a.isnan();
+            => BackendFactory.GetEngine().IsNan(a);
     }
 }
 

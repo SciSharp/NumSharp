@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Extensions
     [TestClass]
     public class NDArrayStdTest
     {
+        [Ignore]
         [TestMethod]
         public void StdTest()
         {

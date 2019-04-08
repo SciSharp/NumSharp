@@ -64,8 +64,8 @@ namespace NumSharp
         /// <summary>
         /// Array elements raised to given powers, element-wise.
         /// </summary>
-        public static NDArray power(NDArray nd, ValueType exponent)
-            => nd.power(exponent);
+        public static NDArray power(NDArray x, ValueType y)
+            => BackendFactory.GetEngine().Power(x, y);
 
         //public static NDArray power<T>(NDArray nd, T exponent)
         //    => nd.power<T>(exponent);

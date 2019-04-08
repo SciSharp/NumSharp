@@ -20,8 +20,6 @@ namespace NumSharp
             => nd.max(axis);
 
         public static NDArray mean(NDArray nd, int axis = -1)
-            => nd.mean(axis);
-
-
+            => BackendFactory.GetEngine().Mean(nd, axis);
     }
 }
