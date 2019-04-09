@@ -4,14 +4,16 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// Retrieve element
-        /// low performance, use generic Data<T> method for performance sensitive invoke
+        /// Get and set element wise data
+        /// Low performance
+        /// Use generic Data<T> and SetData<T>(value, shape) method for better performance
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
@@ -21,7 +23,7 @@ namespace NumSharp
             {
                 return Storage.GetData(select);
             }
-
+            
             set
             {
                 Storage.SetData(value, select);
@@ -46,6 +48,7 @@ namespace NumSharp
                         else if (dtype.Name == "Double")
                             selectedValues = setValue1D<double>(indexes);
                         break;
+
                     case 2:
                         if (dtype.Name == "Byte")
                             selectedValues = setValue2D<byte>(indexes);
@@ -56,6 +59,7 @@ namespace NumSharp
                         else if (dtype.Name == "Double")
                             selectedValues = setValue2D<double>(indexes);
                         break;
+
                     case 3:
                         if (dtype.Name == "Byte")
                             selectedValues = setValue3D<byte>(indexes);
@@ -66,6 +70,7 @@ namespace NumSharp
                         else if (dtype.Name == "Double")
                             selectedValues = setValue3D<double>(indexes);
                         break;
+
                     case 4:
                         if (dtype.Name == "Byte")
                             selectedValues = setValue4D<byte>(indexes);
@@ -100,12 +105,12 @@ namespace NumSharp
         {
             var buf = Data<T>();
             var idx = indexes.Data<int>();
-            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1]));
+            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1]));
 
             Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
             {
                 for (int col = 0; col < selectedValues.shape[1]; col++)
-                    selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], new Shape(row, col));
+                    selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
             });
 
             return selectedValues;
@@ -114,14 +119,14 @@ namespace NumSharp
         private NDArray setValue3D<T>(NDArray indexes)
         {
             var buf = Data<T>();
-            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2]));
+            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2]));
             var idx = indexes.Data<int>();
 
             Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
             {
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
-                        selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], new Shape(item, row, col));
+                        selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], item, row, col);
             });
 
             return selectedValues;
@@ -130,7 +135,7 @@ namespace NumSharp
         private NDArray setValue4D<T>(NDArray indexes)
         {
             var buf = Data<T>();
-            var selectedValues = new NDArray(this.dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
+            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
             var idx = indexes.Data<int>();
 
             Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
@@ -138,46 +143,44 @@ namespace NumSharp
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
                         for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                            selectedValues.Storage.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], new Shape(item, row, col, channel));
+                            selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
             });
 
             return selectedValues;
         }
 
-        public NDArray this[NumSharp.Generic.NDArray<bool> booleanArray]
+        public NDArray this[NDArray<bool> booleanArray]
         {
             get
             {
-                if (!Enumerable.SequenceEqual(this.shape,booleanArray.shape))
+                if (!Enumerable.SequenceEqual(shape,booleanArray.shape))
                 {
                     throw new IncorrectShapeException();
                 }
 
-                List<object> selectedList = new List<object>();
+                var selectedList = new List<object>();
 
                 bool[] boolDotNetArray = booleanArray.Storage.GetData() as bool[];
 
                 int elementsAmount = booleanArray.size;
-
-                Array data = this.Storage.GetData();
 
                 for(int idx = 0; idx < elementsAmount;idx++)
                 {
                     if (boolDotNetArray[idx])
                     {
                         int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        selectedList.Add(data.GetValue(this.Storage.Shape.GetIndexInShape(indexes)));
+                        selectedList.Add(Array.GetValue(Storage.Shape.GetIndexInShape(indexes)));
                     }
                 }
 
-                NDArray selected = new NDArray(this.dtype,selectedList.Count);
-                selected.Storage.SetData(selectedList.ToArray());
+                var selected = new NDArray(dtype,selectedList.Count);
+                selected.SetData(selectedList.ToArray());
 
                 return selected;
             }
             set
             {
-                if (!Enumerable.SequenceEqual(this.shape,booleanArray.shape))
+                if (!Enumerable.SequenceEqual(shape,booleanArray.shape))
                 {
                     throw new IncorrectShapeException();
                 }
@@ -187,14 +190,13 @@ namespace NumSharp
                 bool[] boolDotNetArray = booleanArray.Storage.GetData() as bool[];
 
                 int elementsAmount = booleanArray.size;
-                Array data = this.Storage.GetData();
 
                 for(int idx = 0; idx < elementsAmount;idx++)
                 {
                     if (boolDotNetArray[idx])
                     {
                         int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        data.SetValue(scalarObj,this.Storage.Shape.GetIndexInShape(indexes));
+                        Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(indexes));
                     }
                 }
 
