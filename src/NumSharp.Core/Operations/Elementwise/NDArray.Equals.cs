@@ -38,6 +38,10 @@ namespace NumSharp
 
         public static NDArray<bool> operator ==(NDArray np, object obj)
         {
+            if (obj is NDArray np2)
+            {
+                return array_equal(np, np2);
+            }
             var boolTensor = new NDArray(typeof(bool),np.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
 
@@ -112,13 +116,7 @@ namespace NumSharp
             return boolTensor.MakeGeneric<bool>();
         }
 
-        public static NDArray<bool> operator !=(NDArray np1, NDArray np2)
-        {
-            var res = np1 == np2;
-            return !res;
-        }
-
-        public static NDArray<bool> operator == (NDArray np1, NDArray np2)
+        public static NDArray<bool> array_equal(NDArray np1, NDArray np2)
         {
             var boolTensor = new NDArray(typeof(bool), np1.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
