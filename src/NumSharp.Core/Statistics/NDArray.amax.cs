@@ -45,14 +45,10 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray amax(int axis)
         {
-            var res = new NDArray(dtype);
-
-            if (axis < 0 || axis >= this.ndim)
+            if (axis < 0 || axis >= ndim)
                 throw new Exception("Invalid input: axis");
 
-            var npArr = this.Storage.GetData<int>();
-
-            int[] resShapes = new int[this.shape.Length - 1];
+            int[] resShapes = new int[shape.Length - 1];
             int index = 0; //index for result shape set
                            //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
             int prev = 1;
@@ -60,45 +56,79 @@ namespace NumSharp
             int post = 1;
             int size = 1; //total number of the elements for result
                           //Calculate new Shape
-            for (int i = 0; i < this.shape.Length; i++)
+
+            var res = new NDArray(dtype, resShapes);
+            for (int i = 0; i < shape.Length; i++)
             {
                 if (i == axis)
-                    cur = this.shape[i];
+                    cur = shape[i];
                 else
                 {
-                    resShapes[index++] = this.shape[i];
-                    size *= this.shape[i];
+                    resShapes[index++] = shape[i];
+                    size *= shape[i];
                     if (i < axis)
-                        prev *= this.shape[i];
+                        prev *= shape[i];
                     else
-                        post *= this.shape[i];
+                        post *= shape[i];
                 }
             }
 
             //Fill in data
             index = 0; //index for result data set
-            int sameSetOffset = this.Storage.Shape.DimOffset[axis];
+            int sameSetOffset = Storage.Shape.DimOffset[axis];
             int increments = cur * post;
-            int[] resData = new int[size];  //res.Data = new double[size];
-            int start = 0;
-            int min = 0;
-            for (int i = 0; i < this.size; i += increments)
+
+            switch (dtype.Name)
             {
-                for (int j = i; j < i + post; j++)
-                {
-                    start = j;
-                    min = npArr[start];
-                    for (int k = 0; k < cur; k++)
+                case "Int32":
                     {
-                        min = Math.Max(min, npArr[start]);
-                        start += sameSetOffset;
+                        int[] resData = new int[size];
+                        int start = 0;
+                        int min = 0;
+                        var npArr = Data<int>();
+                        for (int i = 0; i < this.size; i += increments)
+                        {
+                            for (int j = i; j < i + post; j++)
+                            {
+                                start = j;
+                                min = npArr[start];
+                                for (int k = 0; k < cur; k++)
+                                {
+                                    min = Math.Max(min, npArr[start]);
+                                    start += sameSetOffset;
+                                }
+                                resData[index++] = min;
+                            }
+                        }
+                        res.Array = resData;
                     }
-                    resData[index++] = min;
-                }
+                    break;
+
+                case "Single":
+                    {
+                        var resData = new float[size];
+                        int start = 0;
+                        float min = 0;
+                        var npArr = Data<float>();
+                        for (int i = 0; i < size; i += increments)
+                        {
+                            for (int j = i; j < i + post; j++)
+                            {
+                                start = j;
+                                min = npArr[start];
+                                for (int k = 0; k < cur; k++)
+                                {
+                                    min = Math.Max(min, npArr[start]);
+                                    start += sameSetOffset;
+                                }
+                                resData[index++] = min;
+                            }
+                        }
+                        res.Array = resData;
+                    }
+                    break;
             }
-            res.Storage = new NDStorage(dtype);
-            res.Storage.Allocate(new Shape(resShapes)); // (resData);
-            res.Storage.SetData(resData);
+
             return res;
         }
     }

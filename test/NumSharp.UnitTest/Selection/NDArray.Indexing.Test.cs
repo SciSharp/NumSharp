@@ -80,7 +80,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Compare()
         {
-            NDArray A = new double[,] {{1,2,3},{4,5,6}};
+            NDArray A = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
 
             var boolArr = A < 3;
             Assert.IsTrue(Enumerable.SequenceEqual(boolArr.Data<bool>(), new [] { true, true, false, false, false, false }));

@@ -432,6 +432,9 @@ namespace NumSharp.Backends
                 case NDArray nd:
                     switch(nd.dtype.Name)
                     {
+                        case "Boolean":
+                            _values.SetValue(nd.Data<bool>(0), idx);
+                            break;
                         case "Int16":
                             _values.SetValue(nd.Data<short>(0), idx);
                             break;
