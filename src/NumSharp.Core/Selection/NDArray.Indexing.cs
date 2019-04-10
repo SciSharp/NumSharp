@@ -158,25 +158,42 @@ namespace NumSharp
                     throw new IncorrectShapeException();
                 }
 
-                var selectedList = new List<object>();
+                var boolDotNetArray = booleanArray.Data<bool>();
 
-                bool[] boolDotNetArray = booleanArray.Storage.GetData() as bool[];
-
-                int elementsAmount = booleanArray.size;
-
-                for(int idx = 0; idx < elementsAmount;idx++)
+                switch (dtype.Name)
                 {
-                    if (boolDotNetArray[idx])
-                    {
-                        int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        selectedList.Add(Array.GetValue(Storage.Shape.GetIndexInShape(indexes)));
-                    }
+                    case "Int32":
+                        {
+                            var nd = new List<int>();
+
+                            for (int idx = 0; idx < boolDotNetArray.Length; idx++)
+                            {
+                                if (boolDotNetArray[idx])
+                                {
+                                    nd.Add(Data<int>(booleanArray.Storage.Shape.GetDimIndexOutShape(idx)));
+                                }
+                            }
+
+                            return new NDArray(nd.ToArray(), nd.Count);
+                        }
+                    case "Double":
+                        {
+                            var nd = new List<double>();
+
+                            for (int idx = 0; idx < boolDotNetArray.Length; idx++)
+                            {
+                                if (boolDotNetArray[idx])
+                                {
+                                    nd.Add(Data<double>(booleanArray.Storage.Shape.GetDimIndexOutShape(idx)));
+                                }
+                            }
+
+                            return new NDArray(nd.ToArray(), nd.Count);
+                        }
                 }
 
-                var selected = new NDArray(dtype,selectedList.Count);
-                selected.SetData(selectedList.ToArray());
+                throw new NotImplementedException("");
 
-                return selected;
             }
             set
             {
