@@ -9,9 +9,36 @@ namespace NumSharp
 {
     public static partial class np
     {
+        public static NDArray arange(float stop)
+        {
+            return arange(0, stop, 1);
+        }
+
         public static NDArray arange(double stop)
         {
             return arange(0, stop, 1);
+        }
+
+        public static NDArray arange(float start, float stop, float step = 1)
+        {
+            if (start > stop)
+            {
+                throw new Exception("parameters invalid, start is greater than stop.");
+            }
+
+            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+
+            var nd = new NDArray(typeof(float), new Shape(length));
+
+            float[] puffer = nd.Array as float[];
+
+            for (int index = 0; index < length; index++)
+            {
+                float value = start + index * step;
+                puffer[index] = value;
+            }
+
+            return nd;
         }
 
         public static NDArray arange(double start, double stop, double step = 1)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -10,9 +10,38 @@ namespace NumSharp
 {
   public static partial class np
   {
-    #region NpyFormat
+        #region NpyFormat
 
-    public static T Load<T>(byte[] bytes)
+        //Signature from numpy doc: 
+        //   numpy.load(file, mmap_mode=None, allow_pickle=True, fix_imports=True, encoding='ASCII')[source]
+        public static NDArray load(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open))
+                return load(stream);
+        }
+
+        public static NDArray load(Stream stream)
+        {
+            using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
+#if !NET35 && !NET40
+            , leaveOpen: true
+#endif
+            ))
+            {
+                int bytes;
+                Type type;
+                int[] shape;
+                if (!parseReader(reader, out bytes, out type, out shape))
+                    throw new FormatException();
+
+                Array array = Array.CreateInstance(type, shape.Aggregate((dims, dim) => dims*dim));
+
+                var result = new NDArray(readValueMatrix(reader, array, bytes, type, shape));
+                return result.reshape(shape);
+            }
+        }
+
+        public static T Load<T>(byte[] bytes)
         where T : class,
 #if !NETSTANDARD1_4
             ICloneable,
@@ -351,6 +380,10 @@ IList, ICollection, IEnumerable
         return typeof(Int32);
       if (typeCode == "i8")
         return typeof(Int64);
+      if (typeCode == "f4")
+        return typeof(Single);
+      if (typeCode == "f8")
+        return typeof(Double);
       if (typeCode.StartsWith("S"))
         return typeof(String);
 
