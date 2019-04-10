@@ -111,5 +111,29 @@ namespace NumSharp
 
             return boolTensor.MakeGeneric<bool>();
         }
+
+        public static NDArray<bool> operator !=(NDArray np1, NDArray np2)
+        {
+            var res = np1 == np2;
+            return !res;
+        }
+
+        public static NDArray<bool> operator == (NDArray np1, NDArray np2)
+        {
+            var boolTensor = new NDArray(typeof(bool), np1.shape);
+            bool[] bools = boolTensor.Storage.GetData() as bool[];
+
+            var values1 = np1.Storage.GetData();
+            var values2 = np2.Storage.GetData();
+            for (int idx = 0; idx < bools.Length; idx++)
+            {
+                var v1 = values1.GetValue(idx);// as IEqualityComparer;
+                var v2 = values2.GetValue(idx);
+                if (v1.Equals(v2))
+                    bools[idx] = true;
+            }
+            
+            return boolTensor.MakeGeneric<bool>();
+        }
     }
 }
