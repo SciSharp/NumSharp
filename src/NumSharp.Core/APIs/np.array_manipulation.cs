@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -21,6 +22,9 @@ namespace NumSharp
         /// </summary>
         public static NDArray ravel(NDArray a) 
             => a.ravel();
+
+        public static NDArray transpose(NDArray x, int[] axes = null)
+            => BackendFactory.GetEngine().Transpose(x, axes: axes);
 
         /// <summary>
         /// Find the unique elements of an array.

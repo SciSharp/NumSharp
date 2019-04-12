@@ -27,5 +27,9 @@ namespace NumSharp
         NDArray<bool> IsFinite(NDArray a);
         NDArray<bool> IsNan(NDArray a);
         #endregion
+
+        #region Array Manipulation
+        NDArray Transpose(NDArray nd, int[] axes = null); 
+        #endregion
     }
 }
