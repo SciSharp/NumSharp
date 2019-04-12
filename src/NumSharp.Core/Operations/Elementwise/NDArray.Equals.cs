@@ -40,7 +40,7 @@ namespace NumSharp
         {
             if (obj is NDArray np2)
             {
-                return array_equal(np, np2);
+                return equal(np, np2);
             }
             var boolTensor = new NDArray(typeof(bool),np.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
@@ -116,7 +116,8 @@ namespace NumSharp
             return boolTensor.MakeGeneric<bool>();
         }
 
-        public static NDArray<bool> array_equal(NDArray np1, NDArray np2)
+        // numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
+        public static NDArray<bool> equal(NDArray np1, NDArray np2)
         {
             var boolTensor = new NDArray(typeof(bool), np1.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
@@ -125,7 +126,7 @@ namespace NumSharp
             var values2 = np2.Storage.GetData();
             for (int idx = 0; idx < bools.Length; idx++)
             {
-                var v1 = values1.GetValue(idx);// as IEqualityComparer;
+                var v1 = values1.GetValue(idx);
                 var v2 = values2.GetValue(idx);
                 if (v1.Equals(v2))
                     bools[idx] = true;
@@ -133,5 +134,28 @@ namespace NumSharp
             
             return boolTensor.MakeGeneric<bool>();
         }
+
+        // numpy.array_equal(a1, a2)[source]
+        // True if two arrays have the same shape and elements, False otherwise.
+        public static bool array_equal(NDArray np1, NDArray np2)
+        {
+            if (!Enumerable.SequenceEqual(np1.shape, np2.shape))
+            {
+                return false;
+            }
+            var values1 = np1.Storage.GetData();
+            var values2 = np2.Storage.GetData();
+            for (int idx = 0; idx < values1.Length; idx++)
+            {
+                var v1 = values1.GetValue(idx);
+                var v2 = values2.GetValue(idx);
+                if (!v1.Equals(v2))
+                    return false;
+            }
+
+            return true;
+        }
+
+
     }
 }
