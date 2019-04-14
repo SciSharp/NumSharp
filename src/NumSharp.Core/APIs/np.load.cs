@@ -351,6 +351,10 @@ IList, ICollection, IEnumerable
         return typeof(Int32);
       if (typeCode == "i8")
         return typeof(Int64);
+      if (typeCode == "f4")
+        return typeof(Single);
+      if (typeCode == "f8")
+        return typeof(Double);
       if (typeCode.StartsWith("S"))
         return typeof(String);
 
