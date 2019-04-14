@@ -1,10 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp;
 using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.APIs
 {
     [TestClass]
     public class NumpyLoad
