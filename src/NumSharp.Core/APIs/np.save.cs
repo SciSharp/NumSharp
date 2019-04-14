@@ -232,6 +232,10 @@ namespace NumSharp
         return "<i4";
       if (type == typeof(Int64))
         return "<i8";
+      if (type == typeof(Single))
+        return "<f4";
+      if (type == typeof(Double))
+        return "<f8";
       if (type == typeof(String))
         return "|S" + bytes;
 
