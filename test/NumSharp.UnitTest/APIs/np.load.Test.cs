@@ -18,5 +18,15 @@ namespace NumSharp.UnitTest.APIs
 
             int[] b = np.Load<int[]>(mem);
         }
+
+        [TestMethod]
+        public void NumpyLoad1DimTest()
+        {
+            int[] arr = np.Load<int[]>(@"data/1-dim-int32_4_comma_empty.npy");
+            Assert.IsTrue(arr[0] == 0);
+            Assert.IsTrue(arr[1] == 1);
+            Assert.IsTrue(arr[2] == 2);
+            Assert.IsTrue(arr[3] == 3);
+        }
     }
 }
