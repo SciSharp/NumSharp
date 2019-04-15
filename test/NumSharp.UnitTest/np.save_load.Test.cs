@@ -21,6 +21,26 @@ namespace NumSharp.UnitTest
     }
 
     [TestMethod]
+    public void Float1DimArray()
+    {
+      float[] x = { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f };
+      np.Save(x, @"test_Float1DimArray.npy");
+      np.Save_Npz(x, @"test_Float1DimArray.npz");
+      np.Load<float[]>(@"test_Float1DimArray.npy");
+      np.Load_Npz<float[]>(@"test_Float1DimArray.npz");
+    }
+
+    [TestMethod]
+    public void Double1DimArray()
+    {
+      double[] x = { 1.0, 1.5, 2.0, 2.5, 3.0 };
+      np.Save(x, @"test_Double1DimArray.npy");
+      np.Save_Npz(x, @"test_Double1DimArray.npz");
+      np.Load<double[]>(@"test_Double1DimArray.npy");
+      np.Load_Npz<double[]>(@"test_Double1DimArray.npz");
+    }
+    
+    [TestMethod]
     public void SaveAndLoadMultiDimArray()
     {
       int[,] x =  { {1,2}, {3,4} };
