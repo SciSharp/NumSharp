@@ -51,7 +51,8 @@ namespace NumSharp.UnitTest.Extensions
         /// It simply means that it is an unknown dimension and we want numpy to figure it out. 
         /// And numpy will figure this by looking at the 'length of the array and remaining dimensions' and making sure it satisfies the above mentioned criteria
         /// </summary>
-        // [TestMethod]
+        [Ignore]
+        [TestMethod]
         public void ReshapeNegative()
         {
             var np = new NDArray(typeof(int),12).MakeGeneric<int>();

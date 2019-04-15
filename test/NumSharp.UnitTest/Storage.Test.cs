@@ -44,6 +44,7 @@ namespace NumSharp.UnitTest
             strg3DNonFull.SetData(puffer);
 
         }
+
         [TestMethod]
         public void Creation()
         {
@@ -52,6 +53,7 @@ namespace NumSharp.UnitTest
             Assert.IsNotNull(strg2DNonFull);
             Assert.IsNotNull(strg3D);
         }
+
         [TestMethod]
         public void InternalArrayCheck()
         {
@@ -59,7 +61,9 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(strg2D.GetData().Length == 9);
             Assert.IsTrue(strg2DNonFull.GetData().Length == 10);
         }
-        //[TestMethod]
+
+        [Ignore]
+        [TestMethod]
         public void IndexingCheck()
         {
             var element1D = strg1D.GetData<double>(0);
@@ -99,6 +103,7 @@ namespace NumSharp.UnitTest
             element3d = strg3D.GetData<Complex>(0,1,1);
             element3d = strg3D.GetData<Complex>(1,1,1);
         }
+
         [TestMethod]
         public void CloneCheck()
         {
@@ -110,16 +115,18 @@ namespace NumSharp.UnitTest
             
             Assert.IsTrue(Enumerable.SequenceEqual(strg1DCpy.GetData<double>(),strg1D.GetData<double>()));
         }
+
         [TestMethod]
         public void CastingViaGet()
         { 
             double[] arr1 = strg1D.GetData<double>();
-
         }
-        //[TestMethod]
+
+        [Ignore]
+        [TestMethod]
         public void CheckChangeTensorLayout2D()
         {
-            var strg2DCpy = (NDStorage) strg2D.Clone();
+            var strg2DCpy = (NDStorage)strg2D.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(), new Int64[]{0,3,6,1,4,7,2,5,8} ));
@@ -142,7 +149,9 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<Int64>(),new Int64[]{0,2,4,6,8,1,3,5,7,9}));
         }
-        //[TestMethod]
+
+        [Ignore]
+        [TestMethod]
         public void CheckChangeTensorLayout3D()
         {
             var strg3DCpy = (NDStorage) strg3D.Clone();
