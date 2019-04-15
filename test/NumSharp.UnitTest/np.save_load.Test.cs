@@ -39,5 +39,15 @@ namespace NumSharp.UnitTest
       np.Load<double[]>(@"test_Double1DimArray.npy");
       np.Load_Npz<double[]>(@"test_Double1DimArray.npz");
     }
+    
+    [TestMethod]
+    public void SaveAndLoadMultiDimArray()
+    {
+      int[,] x =  { {1,2}, {3,4} };
+      np.Save(x, @"test_SaveAndLoadMultiDimArray.npy");
+      np.Save_Npz(x, @"test_SaveAndLoadMultiDimArray.npz");
+      np.Load<int[,]>(@"test_SaveAndLoadMultiDimArray.npy");
+      np.Load_Npz<int[,]>(@"test_SaveAndLoadMultiDimArray.npz");
+    }
   }
 }
