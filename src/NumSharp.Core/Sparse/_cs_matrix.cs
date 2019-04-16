@@ -16,7 +16,7 @@ namespace NumSharp.Sparse
 
         public Type dtype => data.dtype;
 
-        public Shape shape => (Shape)data.shape;
+        public Shape shape => data.shape;
 
         public int maxprint { get; set; }
 

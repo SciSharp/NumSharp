@@ -117,6 +117,22 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
+        public void ReshapeLayout()
+        {
+            var x = np.arange(6).MakeGeneric<int>();
+            var y = x.reshape((3, 2), order: "F").MakeGeneric<int>();
+            string str = y.ToString();
+            Assert.AreEqual(y[1, 1], 4);
+            y[1, 1] = 8;
+            Assert.AreEqual(y[1, 1], 8);
+            Assert.AreEqual(x[4], 8);
+
+            x = np.arange(6).reshape(2, 3).MakeGeneric<int>();
+            y = x.reshape((3, 2), order: "F").MakeGeneric<int>();
+            Assert.AreEqual(y[0, 1], 4);
+        }
+
+        [TestMethod]
         public void CastingViaGet()
         { 
             double[] arr1 = strg1D.GetData<double>();

@@ -114,13 +114,16 @@ namespace NumSharp
         /// </summary>
         /// <param name="values"></param>
         /// <returns>Array with values</returns>
-        public NDArray(Array values, Shape shape = null) : this(values.GetType().GetElementType())
+        public NDArray(Array values, Shape shape = null, string order = "C") : this(values.GetType().GetElementType())
         {
             if (shape is null)
                 shape = new Shape(values.Length);
 
+            
+            shape.ChangeTensorLayout(order);
+
             Storage = new NDStorage(dtype);
-            Storage.Allocate(new Shape(shape));
+            Storage.Allocate(shape);
             Storage.SetData(values);
         }
 

@@ -24,7 +24,6 @@ namespace NumSharp.Backends
         protected Array _values;
         protected Type _DType;
         protected Shape _Shape;
-        protected int _TensorLayout;
         
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
@@ -158,14 +157,10 @@ namespace NumSharp.Backends
         public void Allocate(Shape shape, Type dtype = null)
         {
             _Shape = shape;
-            _Shape.ChangeTensorLayout();
-            int elementNumber = 1;
-            for(int idx = 0; idx < shape.Dimensions.Length;idx++)
-                elementNumber *= shape.Dimensions[idx];
 
             if (dtype != null)
                 _DType = dtype;
-            _values = Array.CreateInstance(_DType, elementNumber);
+            _values = Array.CreateInstance(_DType, shape.Size);
         }
 
         /// <summary>
@@ -344,7 +339,7 @@ namespace NumSharp.Backends
         /// <returns>element from internal storage</returns>
         public T GetData<T>(params int[] indexes)
         {
-            T[] values = this.GetData() as T[];
+            T[] values = GetData() as T[];
 
             return values[Shape.GetIndexInShape(indexes)];
         }

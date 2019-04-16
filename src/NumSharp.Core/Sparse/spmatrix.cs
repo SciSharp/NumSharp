@@ -9,7 +9,7 @@ namespace NumSharp.Sparse
     {
         public static matrix sum(_cs_matrix mx, int? axis = null, Type dtype = null)
         {
-            var (m, n) = mx.shape.BiShape;
+            var (m, n) = (mx.shape.Dimensions[0], mx.shape[1]);
             matrix ret = null;
 
             // sum over columns

@@ -8,9 +8,18 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray reshape(Shape shape)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="shape"></param>
+        /// <param name="order">
+        /// C: row major
+        /// F: column major
+        /// </param>
+        /// <returns></returns>
+        public NDArray reshape(Shape shape, string order = "C")
         {
-            return reshape(shape.Dimensions.ToArray());
+            return new NDArray(Array, shape: shape, order: order);
         }
 
         public NDArray reshape(params int[] shape)
