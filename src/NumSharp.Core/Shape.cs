@@ -14,6 +14,7 @@ namespace NumSharp
         /// 1: Column major
         /// </summary>
         private int layout;
+        public string Order => layout == 1 ? "F" : "C";
         
         public int NDim => dimensions.Length;
 

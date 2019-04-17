@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(n1[1] == 3);
 
             //3D
-            n = np.arange(24).reshape(4, 3, 2);
+            /*n = np.arange(24).reshape(4, 3, 2);
             n1 = np.amax(n, 0).MakeGeneric<int>();
             Assert.IsTrue(n1[0, 1] == 19);
             Assert.IsTrue(n1[2, 1] == 23);
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Selection
             n1 = np.amax(n, 3).MakeGeneric<int>();
             Assert.IsTrue(n1[0, 1, 1] == 7);
             Assert.IsTrue(n1[1, 1, 1] == 19);
-            Assert.IsTrue(n1[1, 2, 1] == 23);
+            Assert.IsTrue(n1[1, 2, 1] == 23);*/
         }
         
     }

@@ -52,6 +52,8 @@ namespace NumSharp
 
         public int dtypesize => Storage.DTypeSize;
 
+        public string order => Storage.Shape.Order;
+
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
@@ -119,10 +121,7 @@ namespace NumSharp
             if (shape is null)
                 shape = new Shape(values.Length);
 
-            
             shape.ChangeTensorLayout(order);
-
-            Storage = new NDStorage(dtype);
             Storage.Allocate(shape);
             Storage.SetData(values);
         }

@@ -93,17 +93,51 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
-                    string c1n = "[";
-                    for (int c1 = 0; c1 < shape[0]; c1++)
                     {
-                        string c2n = "[";
-                        for (int c2 = 0; c2 < shape[1]; c2++)
-                            c2n += (c2 == 0 ? "" : " ") + Data<int>(c1, c2).ToString();
-                        c2n += "]";
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + Data<int>(c1, c2).ToString();
+                            c2n += "]";
 
-                        c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
                     }
-                    returnValue += c1n + "]";
+                    break;
+
+                case "Single":
+                    {
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + Data<float>(c1, c2).ToString();
+                            c2n += "]";
+
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
+                    }
+                    break;
+
+                case "Double":
+                    {
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + Data<double>(c1, c2).ToString();
+                            c2n += "]";
+
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
+                    }
                     break;
             }
 

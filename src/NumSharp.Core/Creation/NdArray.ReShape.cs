@@ -19,6 +19,21 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray reshape(Shape shape, string order = "C")
         {
+            // have to update Array storage
+            if (ndim > 1 && order != this.order && shape != this.shape)
+            {
+                shape.ChangeTensorLayout(order);
+                if (ndim == 2)
+                {
+                    var nd = flatten(order);
+                    switch (dtype.Name)
+                    {
+                        case "Int32":
+                            return new NDArray(nd.Data<int>(), shape: shape, order: order);
+                    }
+                }
+            }
+
             return new NDArray(Array, shape: shape, order: order);
         }
 

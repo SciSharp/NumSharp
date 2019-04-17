@@ -7,6 +7,9 @@ namespace NumSharp
 {
     public static partial class np
     {
+        public static NDArray ndarray(Shape shape, Type dtype = null, Array buffer = null, string order = "F")
+            => BackendFactory.GetEngine().NDArray(shape, dtype: dtype, buffer: buffer, order: order);
+
         /// <summary>
         /// Roll array elements along a given axis.
         /// 

@@ -21,7 +21,14 @@ namespace NumSharp.Backends
     /// </summary>
     public class NDStorage : IStorage
     {
+        /// <summary>
+        /// storage, low performance when element-wise access
+        /// will refactor this seperate into dedicate typed 1-d array
+        /// </summary>
         protected Array _values;
+
+        protected int[] _arrayInt32;
+
         protected Type _DType;
         protected Shape _Shape;
         

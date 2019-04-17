@@ -29,6 +29,7 @@ namespace NumSharp
         #endregion
 
         #region Array Manipulation
+        NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
         NDArray Transpose(NDArray nd, int[] axes = null); 
         #endregion
     }
