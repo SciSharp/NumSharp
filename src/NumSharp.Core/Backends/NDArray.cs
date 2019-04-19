@@ -88,7 +88,7 @@ namespace NumSharp
             }
         }
 
-        public T[] CloneData<T>() => Storage.CloneData<T>();
+        public T[] CloneData<T>() => Storage.CloneData() as T[];
 
         public T Max<T>() => Data<T>().Max();
 
@@ -107,7 +107,8 @@ namespace NumSharp
         public NDArray(Type dtype)
         {
             TensorEngine = BackendFactory.GetEngine();
-            Storage = new NDStorage(dtype);
+            //Storage = new NDStorage(dtype);
+            Storage = new NDTypedStorage(dtype);
         }
 
         /// <summary>
@@ -132,10 +133,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
-        public NDArray(Type dtype, Shape shape)
+        public NDArray(Type dtype, Shape shape) : this(dtype)
         {
-            TensorEngine = BackendFactory.GetEngine();
-            Storage = new NDStorage(dtype);
             Storage.Allocate(shape);
         }
 
@@ -172,8 +171,22 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
-                    for (int i = 0; i < size; i++)
-                        yield return Data<int>(i);
+                    if (ndim == 0)
+                    {
+                        throw new Exception("Can't iterate scalar ndarray.");
+                    }
+                    if (ndim == 1)
+                    {
+                        var data = Data<int>();
+                        for (int i = 0; i < size; i++)
+                            yield return data[i];
+                    }
+                    else
+                    {
+                        for (int i = 0; i < shape[0]; i++)
+                            yield return this[i];
+                    }
+
                     break;
                 case "Single":
                     for (int i = 0; i < size; i++)

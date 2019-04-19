@@ -74,24 +74,14 @@ namespace NumSharp
         /// <param name="dtype">new storage data type</param>
         /// <returns>reference to internal (casted) storage as System.Array </returns>
         Array GetData(Type dtype);
-        /// <summary>
-        /// Clone internal storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">cloned storage data type</param>
-        /// <returns>reference to cloned storage as System.Array</returns>
-        Array CloneData(Type dtype);
+
         /// <summary>
         /// Get reference to internal data storage and cast elements to new dtype
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
         T[] GetData<T>();
-        /// <summary>
-        /// Get all elements from cloned storage as T[] and cast dtype
-        /// </summary>
-        /// <typeparam name="T">cloned storgae dtype</typeparam>
-        /// <returns>reference to cloned storage as T[]</returns>
-        T[] CloneData<T>();
+
         /// <summary>
         /// Get single value from internal storage and do not cast dtype
         /// </summary>
