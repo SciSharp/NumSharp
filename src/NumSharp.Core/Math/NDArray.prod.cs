@@ -25,16 +25,18 @@ namespace NumSharp
                     case "Int32":
                         {
                             int prod = 1;
+                            var data = nd.Data<int>();
                             for (int i = 0; i < nd.size; i++)
-                                prod *= nd.Data<int>(i);
+                                prod *= data[i];
                             result = prod;
                         }
                         break;
                     case "Int64":
                         {
                             long prod = 1;
+                            var data = nd.Data<long>();
                             for (int i = 0; i < nd.size; i++)
-                                prod *= nd.Data<long>(i);
+                                prod *= data[i];
                             result = prod;
                         }
                         break;

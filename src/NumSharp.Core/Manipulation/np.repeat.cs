@@ -16,17 +16,19 @@ namespace NumSharp
                 case "Int32":
                     {
                         var nd2 = new NDArray(new int[size], new Shape(size));
+                        var data = nd.Data<int>();
                         for (int i = 0; i < nd.size; i++)
                             for (int j = 0; j < repeats; j++)
-                                nd2[i * repeats + j] = nd.Data<int>(i);
+                                nd2.itemset(i * repeats + j, data[i]);
                         return nd2;
                     }
                 case "Boolean":
                     {
                         var nd2 = new NDArray(new bool[size], new Shape(size));
+                        var data = nd.Data<bool>();
                         for (int i = 0; i < nd.size; i++)
                             for (int j = 0; j < repeats; j++)
-                                nd2[i * repeats + j] = nd.Data<bool>(i);
+                                nd2.itemset(i * repeats + j, data[i]);
                         return nd2;
                     }
             }

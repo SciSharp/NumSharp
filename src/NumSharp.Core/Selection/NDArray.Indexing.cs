@@ -93,7 +93,7 @@ namespace NumSharp
             var idx = indexes.Data<int>();
             var values = new T[indexes.size];
 
-            Parallel.ForEach(Enumerable.Range(0, indexes.size), (row) =>
+            Parallel.For(0, indexes.size, (row) =>
             {
                 values[row] = buf[idx[row]];
             });
@@ -107,7 +107,7 @@ namespace NumSharp
             var idx = indexes.Data<int>();
             var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1]));
 
-            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
+            Parallel.For(0, selectedValues.shape[0], (row) =>
             {
                 for (int col = 0; col < selectedValues.shape[1]; col++)
                     selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
@@ -122,7 +122,7 @@ namespace NumSharp
             var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2]));
             var idx = indexes.Data<int>();
 
-            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+            Parallel.For(0, selectedValues.shape[0], (item) =>
             {
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
@@ -138,19 +138,20 @@ namespace NumSharp
             var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
             var idx = indexes.Data<int>();
 
+            /*
             for (int item = 0; item < selectedValues.shape[0]; item++)
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
                         for (int channel = 0; channel < selectedValues.shape[3]; channel++)
                             selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
-
-            /*Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+            */
+            Parallel.For(0, selectedValues.shape[0], (item) =>
             {
                 for (int row = 0; row < selectedValues.shape[1]; row++)
                     for (int col = 0; col < selectedValues.shape[2]; col++)
                         for (int channel = 0; channel < selectedValues.shape[3]; channel++)
                             selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
-            });*/
+            });
 
             return selectedValues;
         }

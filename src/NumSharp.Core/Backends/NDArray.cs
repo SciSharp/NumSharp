@@ -75,6 +75,8 @@ namespace NumSharp
 
         public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
 
+        public int GetIndexInShape(params int[] select) => Storage.Shape.GetIndexInShape(select);
+
         public Array Array
         {
             get

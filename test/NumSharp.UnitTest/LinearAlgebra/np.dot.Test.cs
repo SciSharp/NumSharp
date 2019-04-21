@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Diagnostics;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
@@ -75,6 +76,18 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(z.Data<float>(1), 11);
             Assert.AreEqual(z.Data<float>(2), 4);
             Assert.AreEqual(z.Data<float>(3), 7);
+        }
+
+        [TestMethod]
+        public void DotRandn()
+        {
+            var sw = new Stopwatch();
+            sw.Start();
+            var a = np.random.randn(300, 300);
+            var b = np.random.randn(300, 300);
+            var c = np.dot(a, b);
+            sw.Stop();
+            Console.WriteLine(sw.ElapsedMilliseconds);
         }
     }
 }
