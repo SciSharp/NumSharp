@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -24,21 +24,21 @@ namespace NumSharp.UnitTest
             var v = np.zeros(n,n); // velocity in y direction
 
             var eta = np.ones(n,n); // pressure deviation (like height)
-            (var x,var y) = np.mgrid(np.arange(0,n,1),np.arange(0,n,1));
+            (var x, var y) = np.mgrid(np.arange(0, n, 1), np.arange(0, n, 1));
 
-            double droplet_x = 50; 
-            double droplet_y = 50;
+            int droplet_x = 50;
+            int droplet_y = 50;
 
-            var rr = (x-droplet_x)*(x-droplet_x) + (y-droplet_y)*(y-droplet_y);
+            var rr = (x - droplet_x) * (x - droplet_x) + (y - droplet_y) * (y - droplet_y);
 
             eta[rr < 100] = 1.1; //# add a perturbation in pressure surface
 
-            grid_spacing =  1.0*box_size  * (1 / n);
+            grid_spacing = 1.0 * box_size * (1 / n);
             g = 1.0;
 
             dt = grid_spacing / 100.0;
 
-            //this.Demo(eta,u,v,g,dt);
+            //Demo(eta, u, v, g, dt);
         }
         public NDArray spatial_derivative(NDArray A,int axis=0)
         {

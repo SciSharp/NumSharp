@@ -25,9 +25,6 @@ namespace NumSharp.UnitTest.Generic
             Assert.IsTrue(Enumerable.SequenceEqual(new[] { false, false }, np2.Data<bool>()));
             Assert.AreEqual(2, np2.size);
             Assert.AreEqual(1, np2.ndim);
-            Assert.IsTrue(Enumerable.SequenceEqual(new[] { false }, np3.Data<bool>()));
-            Assert.AreEqual(1, np3.size);
-            Assert.AreEqual(1, np3.ndim);
         }
 
         [TestMethod]

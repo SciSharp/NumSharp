@@ -114,7 +114,7 @@ namespace NumSharp.Backends
         public NDTypedStorage(Type dtype)
         {
             _DType = dtype;
-            _Shape = new Shape(1);
+            _Shape = new Shape(0);
         }
 
         public NDTypedStorage(double[] values)
@@ -151,8 +151,14 @@ namespace NumSharp.Backends
                 case "Boolean":
                     _arrayBoolean = new bool[shape.Size];
                     break;
+                case "Int16":
+                    _arrayInt16 = new short[shape.Size];
+                    break;
                 case "Int32":
                     _arrayInt32 = new int[shape.Size];
+                    break;
+                case "Int64":
+                    _arrayInt64 = new long[shape.Size];
                     break;
                 case "UInt32":
                     _arrayUInt32 = new uint[shape.Size];
@@ -229,8 +235,14 @@ namespace NumSharp.Backends
             {
                 case "Byte":
                     return _arrayByte;
+                case "Boolean":
+                    return _arrayBoolean;
+                case "Int16":
+                    return _arrayInt16;
                 case "Int32":
                     return _arrayInt32;
+                case "Int64":
+                    return _arrayInt64;
                 case "UInt32":
                     return _arrayUInt32;
                 case "Single":

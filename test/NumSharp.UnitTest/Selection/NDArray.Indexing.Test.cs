@@ -57,10 +57,11 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.Data<int>(0, 0) == 10);
             Assert.IsTrue(nd.Data<int>(1, 3) == 7);
         }
+
         [TestMethod]
         public void BoolArray()
         {
-            NDArray A = new double[] {1,2,3};
+            NDArray A = new double[] { 1, 2, 3 };
 
             NDArray booleanArr = new bool[] { false, false, true };
 
@@ -77,6 +78,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Data<double>(),new double[] {-2,2,-2,4, -2,6} ));
 
         }
+
         [TestMethod]
         public void Compare()
         {

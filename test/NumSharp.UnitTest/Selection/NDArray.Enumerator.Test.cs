@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Selection
             {
                 Assert.IsTrue(nd[i].ToString() == x.ToString());
 
-                int j = 0;
+                /*int j = 0;
                 foreach(NDArray y in x)
                 {
                     Assert.IsTrue(nd[i, j].ToString() == x[j].ToString());
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Selection
                     }
 
                     j++;
-                }
+                }*/
 
                 i++;
             }
