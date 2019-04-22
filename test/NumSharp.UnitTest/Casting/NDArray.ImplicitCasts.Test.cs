@@ -78,9 +78,9 @@ namespace NumSharp.UnitTest
         {
             NDArray nd = "hello";
 
-            var a = (string) nd.Array.GetValue(0);
+            string str = nd;
 
-            Assert.IsTrue(a == "hello");
+            Assert.IsTrue(str == "hello");
         }
 
         [TestMethod]

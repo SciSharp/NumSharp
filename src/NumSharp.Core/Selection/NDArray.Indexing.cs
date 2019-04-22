@@ -105,37 +105,37 @@ namespace NumSharp
         {
             var buf = Data<T>();
             var idx = indexes.Data<int>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1]));
+            var nd = new NDArray(dtype, new Shape(indexes.size, shape[1]));
 
-            Parallel.For(0, selectedValues.shape[0], (row) =>
+            Parallel.For(0, nd.shape[0], (row) =>
             {
-                for (int col = 0; col < selectedValues.shape[1]; col++)
-                    selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
+                for (int col = 0; col < nd.shape[1]; col++)
+                    nd.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
             });
 
-            return selectedValues;
+            return nd;
         }
 
         private NDArray setValue3D<T>(NDArray indexes)
         {
             var buf = Data<T>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2]));
+            var nd = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2]));
             var idx = indexes.Data<int>();
 
-            Parallel.For(0, selectedValues.shape[0], (item) =>
+            Parallel.For(0, nd.shape[0], (item) =>
             {
-                for (int row = 0; row < selectedValues.shape[1]; row++)
-                    for (int col = 0; col < selectedValues.shape[2]; col++)
-                        selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], item, row, col);
+                for (int row = 0; row < nd.shape[1]; row++)
+                    for (int col = 0; col < nd.shape[2]; col++)
+                        nd.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], item, row, col);
             });
 
-            return selectedValues;
+            return nd;
         }
 
         private NDArray setValue4D<T>(NDArray indexes)
         {
             var buf = Data<T>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
+            var nd = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
             var idx = indexes.Data<int>();
 
             /*
@@ -145,15 +145,15 @@ namespace NumSharp
                         for (int channel = 0; channel < selectedValues.shape[3]; channel++)
                             selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
             */
-            Parallel.For(0, selectedValues.shape[0], (item) =>
+            Parallel.For(0, nd.shape[0], (item) =>
             {
-                for (int row = 0; row < selectedValues.shape[1]; row++)
-                    for (int col = 0; col < selectedValues.shape[2]; col++)
-                        for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                            selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
+                for (int row = 0; row < nd.shape[1]; row++)
+                    for (int col = 0; col < nd.shape[2]; col++)
+                        for (int channel = 0; channel < nd.shape[3]; channel++)
+                            nd.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
             });
 
-            return selectedValues;
+            return nd;
         }
 
         public NDArray this[NDArray<bool> booleanArray]

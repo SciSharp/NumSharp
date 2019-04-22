@@ -20,9 +20,7 @@ namespace NumSharp.Backends
             {
                 nd = new NDArray(x.Array, x.shape.Reverse().ToArray());
 
-                for (int idx = 0; idx < nd.shape[0]; idx++)
-                    for (int jdx = 0; jdx < nd.shape[1]; jdx++)
-                        nd[idx, jdx] = x[jdx, idx];
+                nd = nd.reshape((2, 3), order: x.order == "C" ? "F" : "C");
             }
             else
             {

@@ -446,7 +446,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        public void SetData<T>(T value, Shape indexes)
+        public void SetData<T>(T value, params int[] indexes)
         {
             int idx = _Shape.GetIndexInShape(indexes);
             switch (value)
@@ -455,7 +455,7 @@ namespace NumSharp.Backends
                     _arrayBoolean[idx] = val;
                     break;
                 case bool[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arrayBoolean = values;
                     else
                         _arrayBoolean.SetValue(values, idx);
@@ -464,7 +464,7 @@ namespace NumSharp.Backends
                     _arrayByte[idx] = val;
                     break;
                 case byte[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arrayByte = values;
                     else
                         _arrayByte.SetValue(values, idx);
@@ -473,7 +473,7 @@ namespace NumSharp.Backends
                     _arrayInt32[idx] = val;
                     break;
                 case int[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arrayInt32 = values;
                     else
                         _arrayInt32.SetValue(values, idx);
@@ -482,7 +482,7 @@ namespace NumSharp.Backends
                     _arrayInt64[idx] = val;
                     break;
                 case long[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arrayInt64 = values;
                     else
                         _arrayInt64.SetValue(values, idx);
@@ -491,7 +491,7 @@ namespace NumSharp.Backends
                     _arraySingle[idx] = val;
                     break;
                 case float[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arraySingle = values;
                     else
                         _arraySingle.SetValue(values, idx);
@@ -500,10 +500,16 @@ namespace NumSharp.Backends
                     _arrayDouble[idx] = val;
                     break;
                 case double[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _arrayDouble = values;
                     else
                         _arrayDouble.SetValue(values, idx);
+                    break;
+                case string[] values:
+                    if (indexes.Length == 0)
+                        _arrayString = values;
+                    else
+                        _arrayString.SetValue(values, idx);
                     break;
                 case NDArray nd:
                     switch(nd.dtype.Name)

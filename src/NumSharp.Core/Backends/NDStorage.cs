@@ -372,7 +372,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        public void SetData<T>(T value, Shape indexes)
+        public void SetData<T>(T value, params int[] indexes)
         {
             int idx = _Shape.GetIndexInShape(indexes);
             switch (value)
@@ -381,7 +381,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case bool[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -390,7 +390,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case byte[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -399,7 +399,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case int[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -408,7 +408,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case long[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -417,7 +417,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case float[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -426,7 +426,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case double[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);

@@ -110,7 +110,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        void SetData<T>(T value, Shape indexes);
+        void SetData<T>(T value, params int[] indexes);
 
         /// <summary>
         /// Set an Array to internal storage, cast it to new dtype and change dtype  

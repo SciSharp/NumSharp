@@ -21,7 +21,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()));
         }
 
-        [Ignore("need to implement column-wise mode")]
         [TestMethod]
         public void Transpose3x2()
         {
