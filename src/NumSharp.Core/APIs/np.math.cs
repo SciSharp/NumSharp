@@ -11,13 +11,22 @@ namespace NumSharp
             => BackendFactory.GetEngine().Add(x, y);
 
         public static NDArray divide(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Add(x, y);
+            => BackendFactory.GetEngine().Divide(x, y);
 
         public static NDArray multiply(NDArray x, NDArray y)
             => BackendFactory.GetEngine().Multiply(x, y);
 
         public static NDArray subtract(NDArray x, NDArray y)
             => BackendFactory.GetEngine().Sub(x, y);
+
+        /// <summary>
+        /// Sum of array elements over a given axis.
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="axis"></param>
+        /// <returns></returns>
+        public static NDArray sum(NDArray x, int axis = -1)
+            => BackendFactory.GetEngine().Sum(x, axis: axis);
 
         /// <summary>
         /// Calculate the absolute value element-wise.
