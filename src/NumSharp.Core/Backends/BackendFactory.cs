@@ -29,5 +29,18 @@ namespace NumSharp.Backends
 
             return cache[backendType];
         }
+
+        public static IStorage GetStorage(Type dtype, StorageType storage = StorageType.TypedArray)
+        {
+            switch (storage)
+            {
+                case StorageType.Array:
+                    return new ArrayStorage(dtype);
+                case StorageType.TypedArray:
+                    return new TypedArrayStorage(dtype);
+                default:
+                    return new TypedArrayStorage(dtype);
+            }
+        }
     }
 }

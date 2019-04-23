@@ -12,20 +12,20 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class StorageTester
     {
-        public NDStorage strg1D;
-        public NDStorage strg2D;
-        public NDStorage strg2DNonFull;
+        public ArrayStorage strg1D;
+        public ArrayStorage strg2D;
+        public ArrayStorage strg2DNonFull;
         public StorageTester()
         {
-            strg1D = new NDStorage(np.float64);
+            strg1D = new ArrayStorage(np.float64);
             strg1D.Allocate(new Shape(10));
             strg1D.SetData(new double[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
 
-            strg2D = new NDStorage(np.int64);
+            strg2D = new ArrayStorage(np.int64);
             strg2D.Allocate(new Shape(3,3));
             strg2D.SetData(new long[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
 
-            strg2DNonFull = new NDStorage(np.float32);
+            strg2DNonFull = new ArrayStorage(np.float32);
             strg2DNonFull.Allocate(new Shape(5,2));
             strg2DNonFull.SetData(new float[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         }
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CloneCheck()
         {
-            var strg1DCpy = (NDStorage)strg1D.Clone();
+            var strg1DCpy = (ArrayStorage)strg1D.Clone();
 
             Assert.IsTrue(strg1DCpy.DType == strg1DCpy.GetData().GetType().GetElementType());
             Assert.IsFalse(strg1D.GetData() == strg1DCpy.GetData());
@@ -114,7 +114,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void CheckChangeTensorLayout2D()
         {
-            var strg2DCpy = (NDStorage)strg2D.Clone();
+            var strg2DCpy = (ArrayStorage)strg2D.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new int[] { 3, 3 }));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), new long[] { 0, 3, 6, 1, 4, 7, 2, 5, 8 }));
@@ -122,7 +122,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{3,3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), strg2D.GetData<long>() ));
 
-            strg2DCpy = (NDStorage) strg2DNonFull.Clone();
+            strg2DCpy = (ArrayStorage) strg2DNonFull.Clone();
 
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), new long[] { 0, 5, 1, 6, 2, 7, 3, 8, 4, 9 }));
@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions,new int[]{5,2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), strg2DNonFull.GetData<long>()));
 
-            strg2DCpy = new NDStorage(typeof(long));
+            strg2DCpy = new ArrayStorage(typeof(long));
             strg2DCpy.Allocate(new Shape(5,2));
 
             strg2DCpy.SetData(strg2DNonFull.GetData());

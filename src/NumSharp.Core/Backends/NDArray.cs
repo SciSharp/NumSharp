@@ -112,8 +112,7 @@ namespace NumSharp
         public NDArray(Type dtype)
         {
             TensorEngine = BackendFactory.GetEngine();
-            //Storage = new NDStorage(dtype);
-            Storage = new NDTypedStorage(dtype);
+            Storage = BackendFactory.GetStorage(dtype);
         }
 
         /// <summary>
