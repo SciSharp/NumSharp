@@ -74,6 +74,7 @@ namespace NumSharp
         public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
 
         public int GetInt32(params int[] indexes) => Storage.GetInt32(indexes);
+        public float GetSingle(params int[] indexes) => Storage.GetSingle(indexes);
 
         public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
 

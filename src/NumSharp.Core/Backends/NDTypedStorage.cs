@@ -393,6 +393,11 @@ namespace NumSharp.Backends
             return _arrayInt32[Shape.GetIndexInShape(indexes)];
         }
 
+        public float GetSingle(params int[] indexes)
+        {
+            return _arraySingle[Shape.GetIndexInShape(indexes)];
+        }
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>

@@ -28,15 +28,20 @@ namespace NumSharp.UnitTest.APIs
         {
             var data = new int[,] { { 0, 1 }, { 0, 5 } };
 
-            int s1 = np.sum(data);
-            Assert.AreEqual(s1, 6);
+            int s = np.sum(data);
+            Assert.AreEqual(s, 6);
 
-            var s2 = np.sum(data, axis: 0);
-            Assert.AreEqual(s2, 6);
+            var s0 = np.sum(data, axis: 0);
+            Assert.IsTrue(Enumerable.SequenceEqual(s0.shape, new int[] { 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s0.Data<int>(), new int[] { 0, 6 }));
+
+            var s1 = np.sum(data, axis: 1);
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.shape, new int[] { 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.Data<int>(), new int[] { 1, 5 }));
         }
 
         [TestMethod]
-        public void sum2x3x2()
+         public void sum2x3x2()
         {
             var data = np.arange(12).reshape(2, 3, 2);
 
@@ -54,16 +59,6 @@ namespace NumSharp.UnitTest.APIs
             var s2 = np.sum(data, axis: 2);
             Assert.IsTrue(Enumerable.SequenceEqual(s2.shape, new int[] { 2, 3 }));
             Assert.IsTrue(Enumerable.SequenceEqual(s2.Data<int>(), new int[] { 1, 5, 9, 13, 17, 21 }));
-        }
-
-        [TestMethod]
-        public void test()
-        {
-            var a = np.zeros((2, 2, 3), np.int32);
-            NDArray b = new int[,] { { 1 }, { 2 } };
-            NDArray c = new int[,] { { 1, 2, 3 } };
-            a[0] = b;
-            a[1] = c;
         }
     }
 }

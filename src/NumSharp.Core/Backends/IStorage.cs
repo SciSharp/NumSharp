@@ -97,6 +97,7 @@ namespace NumSharp
         T GetData<T>(params int[] indexes);
 
         int GetInt32(params int[] indexes);
+        float GetSingle(params int[] indexes);
 
         /// <summary>
         /// Set an array to internal storage and keep dtype

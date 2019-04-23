@@ -210,9 +210,14 @@ namespace NumSharp.Backends
 
         public int GetInt32(params int[] indexes)
         {
-            return (int)_values.GetValue(indexes);
-            //var _arrayInt32 = _values as int[];
-            //return _arrayInt32[Shape.GetIndexInShape(indexes)];
+            var data = _values as int[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
+        public float GetSingle(params int[] indexes)
+        {
+            var data = _values as float[];
+            return data[Shape.GetIndexInShape(indexes)];
         }
 
         /// <summary>

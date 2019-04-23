@@ -159,6 +159,10 @@ namespace NumSharp
                     return dims;
                 case 0:
                     return dims.Skip(1).Take(dims.Length - 1).ToArray();
+                case 1:
+                    return new int[] { dims[0] }.Concat(dims.Skip(2).Take(dims.Length - 2)).ToArray();
+                case 2:
+                    return dims.Take(2).ToArray();
                 default:
                     throw new NotImplementedException($"GetCoordinates shape: {string.Join(", ", dims)} axis: {axis}");
             }
