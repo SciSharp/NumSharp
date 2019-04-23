@@ -134,24 +134,43 @@ namespace NumSharp
 
         private NDArray setValue4D<T>(NDArray indexes)
         {
-            var buf = Data<T>();
             var nd = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
-            var idx = indexes.Data<int>();
 
-            /*
-            for (int item = 0; item < selectedValues.shape[0]; item++)
-                for (int row = 0; row < selectedValues.shape[1]; row++)
-                    for (int col = 0; col < selectedValues.shape[2]; col++)
-                        for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                            selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
-            */
-            Parallel.For(0, nd.shape[0], (item) =>
+            /*switch (Type.GetTypeCode(dtype))
             {
-                for (int row = 0; row < nd.shape[1]; row++)
-                    for (int col = 0; col < nd.shape[2]; col++)
-                        for (int channel = 0; channel < nd.shape[3]; channel++)
-                            nd.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
-            });
+                case TypeCode.Byte:
+                    {
+                        var buf = Data<byte>().AsSpan();
+                        
+                        var idx = indexes.Data<int>().AsSpan();
+
+                        var shapes = nd.shape.AsSpan();
+                        var data = nd.Data<byte>().AsSpan();
+
+                        Parallel.For(0, nd.shape[0], (item) =>
+                        {
+                            for (int row = 0; row < shapes[1]; row++)
+                                for (int col = 0; col < shapes[2]; col++)
+                                    for (int channel = 0; channel < shapes[3]; channel++)
+                                        data[Storage.Shape.GetIndexInShape(item, row, col, channel)] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)];
+                        });
+                    }
+                    break;
+            }*/
+
+            {
+                var buf = Data<T>();
+                var idx = indexes.Data<int>();
+                var data = nd.Data<T>();
+
+                Parallel.For(0, nd.shape[0], (item) =>
+                {
+                    for (int row = 0; row < nd.shape[1]; row++)
+                        for (int col = 0; col < nd.shape[2]; col++)
+                            for (int channel = 0; channel < nd.shape[3]; channel++)
+                                data[Storage.Shape.GetIndexInShape(item, row, col, channel)] = buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)];
+                });
+            }
 
             return nd;
         }

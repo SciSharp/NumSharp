@@ -469,6 +469,15 @@ namespace NumSharp.Backends
                     else
                         _arrayByte.SetValue(values, idx);
                     break;
+                case short val:
+                    _arrayInt16[idx] = val;
+                    break;
+                case short[] values:
+                    if (indexes.Length == 0)
+                        _arrayInt16 = values;
+                    else
+                        _arrayInt16.SetValue(values, idx);
+                    break;
                 case int val:
                     _arrayInt32[idx] = val;
                     break;
