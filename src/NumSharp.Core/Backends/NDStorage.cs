@@ -27,8 +27,6 @@ namespace NumSharp.Backends
         /// </summary>
         protected Array _values;
 
-        protected int[] _arrayInt32;
-
         protected Type _DType;
         protected Shape _Shape;
         
@@ -208,6 +206,13 @@ namespace NumSharp.Backends
         public Array GetData()
         {
             return _values;
+        }
+
+        public int GetInt32(params int[] indexes)
+        {
+            return (int)_values.GetValue(indexes);
+            //var _arrayInt32 = _values as int[];
+            //return _arrayInt32[Shape.GetIndexInShape(indexes)];
         }
 
         /// <summary>

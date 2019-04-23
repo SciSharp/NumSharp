@@ -388,6 +388,11 @@ namespace NumSharp.Backends
             return values[Shape.GetIndexInShape(indexes)];
         }
 
+        public int GetInt32(params int[] indexes)
+        {
+            return _arrayInt32[Shape.GetIndexInShape(indexes)];
+        }
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>

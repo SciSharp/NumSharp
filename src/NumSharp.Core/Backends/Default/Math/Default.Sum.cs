@@ -30,10 +30,36 @@ namespace NumSharp.Backends
             }
             else if (axis == 0)
             {
+                var shape = Shape.GetShape(x.shape, axis);
+                var size = Shape.GetSize(shape);
+
                 switch (Type.GetTypeCode(x.dtype))
                 {
                     case TypeCode.Int32:
-                        return x.Data<int>().Sum();
+                        {
+                            // allocate continuous memory
+                            var data = new int[size];
+                            switch (shape.Length)
+                            {
+                                case 2:
+                                    {
+                                        int i = 0;
+                                        for (int d0 = 0; d0 < shape[0]; d0++)
+                                        {
+                                            for (int d1 = 0; d1 < shape[1]; d1++)
+                                            {
+                                                for (int d2 = 0; d2 < x.shape[axis]; d2++)
+                                                {
+                                                    data[i] += x.GetInt32(d2, d0, d1);
+                                                }
+                                                i++;
+                                            }
+                                        }
+                                    }
+                                    break;
+                            }
+                        }
+                        break;
                 }
             }
 

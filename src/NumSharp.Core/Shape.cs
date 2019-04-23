@@ -142,6 +142,28 @@ namespace NumSharp
             _SetDimOffset();
         }
 
+        public static int GetSize(int[] dims)
+        {
+            int size = 1;
+
+            for (int idx = 0; idx < dims.Length; idx++)
+                size *= dims[idx];
+
+            return size;
+        }
+        public static int[] GetShape(int[] dims, int axis = -1)
+        {
+            switch (axis)
+            {
+                case -1:
+                    return dims;
+                case 0:
+                    return dims.Skip(1).Take(dims.Length - 1).ToArray();
+                default:
+                    throw new NotImplementedException($"GetCoordinates shape: {string.Join(", ", dims)} axis: {axis}");
+            }
+        }
+
         public static implicit operator int[] (Shape shape) => shape.dimensions;
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 

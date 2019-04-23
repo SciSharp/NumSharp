@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.APIs
         }
 
         [TestMethod]
-        public void sum()
+        public void sum2x2()
         {
             var data = new int[,] { { 0, 1 }, { 0, 5 } };
 
@@ -33,6 +33,27 @@ namespace NumSharp.UnitTest.APIs
 
             var s2 = np.sum(data, axis: 0);
             Assert.AreEqual(s2, 6);
+        }
+
+        [TestMethod]
+        public void sum2x3x2()
+        {
+            var data = np.arange(12).reshape(2, 3, 2);
+
+            int s = np.sum(data);
+            Assert.AreEqual(s, 66);
+
+            var s0 = np.sum(data, axis: 0);
+            Assert.IsTrue(Enumerable.SequenceEqual(s0.shape, new int[] { 3, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s0.Data<int>(), new int[] { 6, 8, 10, 12, 14, 16 }));
+
+            var s1 = np.sum(data, axis: 1);
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.shape, new int[] { 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.Data<int>(), new int[] { 6, 9, 24, 27 }));
+
+            var s2 = np.sum(data, axis: 2);
+            Assert.IsTrue(Enumerable.SequenceEqual(s2.shape, new int[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s2.Data<int>(), new int[] { 1, 5, 9, 13, 17, 21 }));
         }
 
         [TestMethod]

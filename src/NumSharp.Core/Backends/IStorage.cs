@@ -95,6 +95,9 @@ namespace NumSharp
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>element from internal storage</returns>
         T GetData<T>(params int[] indexes);
+
+        int GetInt32(params int[] indexes);
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>
