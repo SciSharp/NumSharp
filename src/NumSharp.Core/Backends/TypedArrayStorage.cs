@@ -563,7 +563,7 @@ namespace NumSharp.Backends
                             _arrayInt16.SetValue(nd.Data<short>(0), idx);
                             break;
                         case "Int32":
-                            _arrayInt32.SetValue(nd.Data<int>(0), idx);
+                            _arrayInt32.SetValue(nd.GetInt32(0), idx);
                             break;
                         case "Int64":
                             _arrayInt64.SetValue(nd.Data<long>(0), idx);

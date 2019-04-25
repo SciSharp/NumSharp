@@ -102,10 +102,7 @@ namespace NumSharp
 
         public void astype(Type dtype) => Storage.SetData(Storage.GetData(), dtype);
 
-        /*public NDArray()
-        {
-            throw new Exception("Don't use 0 parameter constructor.");
-        }*/
+        public Slice slice { get; set; }
 
         /// <summary>
         /// Constructor for init data type

@@ -144,6 +144,18 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void Slice3x2x2()
+        {
+            var x = np.arange(12).reshape(3, 2, 2);
+            var y = x["1:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y.shape, new int[] { 2, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
+
+            // change view
+            y[0, 1] = new int[] { 100, 101 };
+        }
+
+        [TestMethod]
         public void SliceNotation()
         {
             // items start through stop-1

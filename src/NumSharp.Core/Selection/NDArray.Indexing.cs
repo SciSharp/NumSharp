@@ -72,20 +72,17 @@ namespace NumSharp
             get
             {
                 var s = new Slice(slice);
-                var nd = new NDArray(dtype, shape.Skip(1).ToArray());
-                switch (Type.GetTypeCode(dtype))
-                {
-                    case TypeCode.Int32:
-                        var seg = new ArraySegment<int>(Data<int>(), s.Start.Value, s.Length.Value);
-                        break;
-                }
-
+                s.Start = s.Start.HasValue ? s.Start.Value : 0;
+                s.Stop = s.Stop.HasValue ? s.Stop.Value : shape[0];
+                var indices = np.arange(s.Start.Value, s.Stop.Value);
+                var nd = this[indices];
+                nd.slice = s;
                 return nd;
             }
 
             set
             {
-
+                
             }
         }
 
@@ -105,7 +102,8 @@ namespace NumSharp
                 d.CopyTo(array.AsSpan(row * length));
             }
 
-            return new NDArray(array, newShape);
+            var nd = new NDArray(array, newShape);
+            return nd;
         }
 
         public NDArray this[NDArray<bool> booleanArray]
