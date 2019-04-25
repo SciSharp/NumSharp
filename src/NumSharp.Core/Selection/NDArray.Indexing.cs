@@ -67,6 +67,28 @@ namespace NumSharp
             }
         }
 
+        public NDArray this[string slice]
+        {
+            get
+            {
+                var s = new Slice(slice);
+                var nd = new NDArray(dtype, shape.Skip(1).ToArray());
+                switch (Type.GetTypeCode(dtype))
+                {
+                    case TypeCode.Int32:
+                        var seg = new ArraySegment<int>(Data<int>(), s.Start.Value, s.Length.Value);
+                        break;
+                }
+
+                return nd;
+            }
+
+            set
+            {
+
+            }
+        }
+
         private NDArray setValue<T>(NDArray indexes)
         {
             Shape newShape = new int[] { indexes.size }.Concat(shape.Skip(1)).ToArray();
