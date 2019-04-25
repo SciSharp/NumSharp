@@ -34,6 +34,7 @@ namespace NumSharp.Backends
         protected decimal[] _arrayDecimal;
         protected Complex[] _arrayComplex;
         protected string[] _arrayString;
+        protected NDArray[] _arrayNDArray;
         protected object[] _arrayObject;
 
         protected Type _DType;
@@ -53,6 +54,9 @@ namespace NumSharp.Backends
                         case TypeCode.Byte:
                             newValues = Array.ConvertAll(_arrayByte, x => Convert.ToInt32(x));
                             break;
+                        case TypeCode.Int64:
+                            newValues = Array.ConvertAll(_arrayInt64, x => Convert.ToInt32(x));
+                            break;
                     }
                     break;
                 case TypeCode.Int64 :
@@ -70,7 +74,18 @@ namespace NumSharp.Backends
                     }
                     break;
                 case TypeCode.Double:
-                    newValues = Array.ConvertAll(_arrayByte, x => Convert.ToDouble(x));
+                    switch (Type.GetTypeCode(_DType))
+                    {
+                        case TypeCode.Byte:
+                            newValues = Array.ConvertAll(_arrayByte, x => Convert.ToDouble(x));
+                            break;
+                        case TypeCode.Single:
+                            newValues = Array.ConvertAll(_arraySingle, x => Convert.ToDouble(x));
+                            break;
+                        case TypeCode.Double:
+                            newValues = Array.ConvertAll(_arrayDouble, x => Convert.ToDouble(x));
+                            break;
+                    }
                     break;
                 case TypeCode.Decimal:
                     newValues = Array.ConvertAll(_arrayDecimal, x => Convert.ToDecimal(x));
@@ -175,6 +190,9 @@ namespace NumSharp.Backends
                 case "String":
                     _arrayString = new string[shape.Size];
                     break;
+                case "NDArray":
+                    _arrayNDArray = new NDArray[shape.Size];
+                    break;
                 default:
                     throw new NotImplementedException($"Allocate {_DType.Name}");
             }
@@ -251,6 +269,8 @@ namespace NumSharp.Backends
                     return _arrayDouble;
                 case "String":
                     return _arrayString;
+                case "NDArray":
+                    return _arrayNDArray;
             }
 
             throw new NotImplementedException($"GetData {DType.Name}");
@@ -287,7 +307,8 @@ namespace NumSharp.Backends
         {
             if (typeof(T).Name != _DType.Name)
             {
-                throw new Exception($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
+                Console.WriteLine($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
+                SetData(_ChangeTypeOfArray(GetData(), typeof(T)));
             }
 
             return GetData() as T[];
@@ -334,6 +355,8 @@ namespace NumSharp.Backends
                         return _arrayDecimal[Shape.GetIndexInShape(indexes)];
                     case "String":
                         return _arrayString[Shape.GetIndexInShape(indexes)];
+                    case "NDArray":
+                        return _arrayNDArray[Shape.GetIndexInShape(indexes)];
                 }
             }
             else if (indexes.Length == Shape.NDim - 1)
@@ -557,6 +580,9 @@ namespace NumSharp.Backends
                         default:
                             throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
                     }
+                    break;
+                case NDArray[] nd:
+                    _arrayNDArray = nd;
                     break;
                 default:
                     throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");

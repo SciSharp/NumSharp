@@ -65,8 +65,8 @@ namespace NumSharp.Backends
                             case 1:
                                 for (int d0 = 0; d0 < shape[0]; d0++)
                                 {
-                                    for (int d1 = 0; d1 < x.shape[axis]; d1++)
-                                        data[i] += x.GetInt32(d1, d0);
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetInt32(a, d0);
                                     i++;
                                 }
                                 break;
@@ -76,8 +76,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetInt32(d2, d0, d1);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetInt32(a, d0, d1);
                                         i++;
                                     }
                                 }
@@ -97,8 +97,8 @@ namespace NumSharp.Backends
                             case 1:
                                 for (int d0 = 0; d0 < shape[0]; d0++)
                                 {
-                                    for (int d1 = 0; d1 < x.shape[axis]; d1++)
-                                        data[i] += x.GetSingle(d1, d0);
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetSingle(a, d0);
                                     i++;
                                 }
 
@@ -109,8 +109,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetInt32(d2, d0, d1);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetInt32(a, d0, d1);
                                         i++;
                                     }
                                 }
@@ -141,8 +141,8 @@ namespace NumSharp.Backends
                             case 1:
                                 for (int d0 = 0; d0 < shape[0]; d0++)
                                 {
-                                    for (int d1 = 0; d1 < x.shape[axis]; d1++)
-                                        data[i] += x.GetInt32(d0, d1);
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetInt32(d0, a);
                                     i++;
                                 }
                                 break;
@@ -152,8 +152,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetInt32(d0, d2, d1);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetInt32(d0, a, d1);
                                         i++;
                                     }
                                 }
@@ -172,8 +172,8 @@ namespace NumSharp.Backends
                             case 1:
                                 for (int d0 = 0; d0 < shape[0]; d0++)
                                 {
-                                    for (int d1 = 0; d1 < x.shape[axis]; d1++)
-                                        data[i] += x.GetSingle(d0, d1);
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetSingle(d0, a);
                                     i++;
                                 }
                                 break;
@@ -183,8 +183,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetSingle(d0, d2, d1);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetSingle(d0, a, d1);
                                         i++;
                                     }
                                 }
@@ -217,8 +217,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetInt32(d0, d1, d2);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetInt32(d0, d1, a);
                                         i++;
                                     }
                                 }
@@ -239,8 +239,8 @@ namespace NumSharp.Backends
                                 {
                                     for (int d1 = 0; d1 < shape[1]; d1++)
                                     {
-                                        for (int d2 = 0; d2 < x.shape[axis]; d2++)
-                                            data[i] += x.GetSingle(d0, d1, d2);
+                                        for (int a = 0; a < x.shape[axis]; a++)
+                                            data[i] += x.GetSingle(d0, d1, a);
                                         i++;
                                     }
                                 }

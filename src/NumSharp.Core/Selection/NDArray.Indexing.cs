@@ -30,60 +30,73 @@ namespace NumSharp
             }
         }
         
-        public NDArray this[NDArray indexes]
+        public NDArray this[NDArray indices]
         {
             get
             {
-                NDArray selectedValues = null;
+                NDArray nd = null;
 
                 switch (ndim)
                 {
                     case 1:
                         if (dtype.Name == "Byte")
-                            selectedValues = setValue1D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue1D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue1D<float>(indexes);
+                            nd = setValue1D<byte>(indices);
+                        else if (dtype.Name == "Int32")
+                            nd = setValue1D<int>(indices);
+                        else if (dtype.Name == "Int64")
+                            nd = setValue1D<long>(indices);
+                        else if (dtype.Name == "Single")
+                            nd = setValue1D<float>(indices);
                         else if (dtype.Name == "Double")
-                            selectedValues = setValue1D<double>(indexes);
+                            nd = setValue1D<double>(indices);
                         break;
 
                     case 2:
                         if (dtype.Name == "Byte")
-                            selectedValues = setValue2D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue2D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue2D<float>(indexes);
+                            nd = setValue2D<byte>(indices);
+                        else if (dtype.Name == "Int32")
+                            nd = setValue2D<int>(indices);
+                        else if (dtype.Name == "Int64")
+                            nd = setValue2D<long>(indices);
+                        else if (dtype.Name == "Single")
+                            nd = setValue2D<float>(indices);
                         else if (dtype.Name == "Double")
-                            selectedValues = setValue2D<double>(indexes);
+                            nd = setValue2D<double>(indices);
                         break;
 
                     case 3:
                         if (dtype.Name == "Byte")
-                            selectedValues = setValue3D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue3D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue3D<float>(indexes);
+                            nd = setValue3D<byte>(indices);
+                        else if (dtype.Name == "Int32")
+                            nd = setValue3D<int>(indices);
+                        else if (dtype.Name == "Int64")
+                            nd = setValue3D<long>(indices);
+                        else if (dtype.Name == "Single")
+                            nd = setValue3D<float>(indices);
                         else if (dtype.Name == "Double")
-                            selectedValues = setValue3D<double>(indexes);
+                            nd = setValue3D<double>(indices);
                         break;
 
                     case 4:
                         if (dtype.Name == "Byte")
-                            selectedValues = setValue4D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue4D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue4D<float>(indexes);
+                            nd = setValue4D<byte>(indices);
+                        else if (dtype.Name == "Int32")
+                            nd = setValue4D<int>(indices);
+                        else if (dtype.Name == "Int64")
+                            nd = setValue4D<long>(indices);
+                        else if (dtype.Name == "Single")
+                            nd = setValue4D<float>(indices);
                         else if (dtype.Name == "Double")
-                            selectedValues = setValue4D<double>(indexes);
+                            nd = setValue4D<double>(indices);
                         break;
                 }
 
-                return selectedValues;
+                return nd;
+            }
+
+            set
+            {
+
             }
         }
 
@@ -113,7 +126,7 @@ namespace NumSharp
                     nd.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
             });
 
-            return nd;
+            return indexes.ndim == 0 ? np.squeeze(nd) : nd;
         }
 
         private NDArray setValue3D<T>(NDArray indexes)
