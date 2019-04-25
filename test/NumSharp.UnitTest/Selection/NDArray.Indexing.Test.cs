@@ -136,6 +136,12 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 1, 1, 3 }, (result[1] as NDArray).Data<int>()));
         }
 
+        [TestMethod]
+        public void Slice1()
+        {
+            var x = np.arange(10);
+            var y = x["1:3"];
+        }
 
         [TestMethod]
         public void SliceNotation()
