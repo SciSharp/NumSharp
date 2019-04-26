@@ -124,7 +124,9 @@ namespace NumSharp.Backends
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        public Shape Shape {get {return _Shape;}}
+        public Shape Shape => _Shape;
+
+        public Slice Slice { get; set; }
 
         public TypedArrayStorage(Type dtype)
         {
@@ -411,14 +413,39 @@ namespace NumSharp.Backends
             return values[Shape.GetIndexInShape(indexes)];
         }
 
+        public bool GetBoolean(params int[] indexes)
+        {
+            return _arrayBoolean[Shape.GetIndexInShape(indexes)];
+        }
+
+        public short GetInt16(params int[] indexes)
+        {
+            return _arrayInt16[Shape.GetIndexInShape(indexes)];
+        }
+
         public int GetInt32(params int[] indexes)
         {
             return _arrayInt32[Shape.GetIndexInShape(indexes)];
         }
 
+        public long GetInt64(params int[] indexes)
+        {
+            return _arrayInt64[Shape.GetIndexInShape(indexes)];
+        }
+
         public float GetSingle(params int[] indexes)
         {
             return _arraySingle[Shape.GetIndexInShape(indexes)];
+        }
+
+        public double GetDouble(params int[] indexes)
+        {
+            return _arrayDouble[Shape.GetIndexInShape(indexes)];
+        }
+
+        public decimal GetDecimal(params int[] indexes)
+        {
+            return _arrayDecimal[Shape.GetIndexInShape(indexes)];
         }
 
         /// <summary>
@@ -554,28 +581,28 @@ namespace NumSharp.Backends
                         _arrayString.SetValue(values, idx);
                     break;
                 case NDArray nd:
-                    switch(nd.dtype.Name)
+                    switch (Type.GetTypeCode(nd.dtype))
                     {
-                        case "Boolean":
-                            _arrayBoolean.SetValue(nd.Data<bool>(0), idx);
+                        case TypeCode.Boolean:
+                            _arrayBoolean[idx] = nd.GetBoolean(0);
                             break;
-                        case "Int16":
-                            _arrayInt16.SetValue(nd.Data<short>(0), idx);
+                        case TypeCode.Int16:
+                            _arrayInt16[idx] = nd.GetInt16(0);
                             break;
-                        case "Int32":
-                            _arrayInt32.SetValue(nd.GetInt32(0), idx);
+                        case TypeCode.Int32:
+                            _arrayInt32[idx] = nd.GetInt32(0);
                             break;
-                        case "Int64":
-                            _arrayInt64.SetValue(nd.Data<long>(0), idx);
+                        case TypeCode.Int64:
+                            _arrayInt64[idx] = nd.GetInt64(0);
                             break;
-                        case "Single":
-                            _arraySingle.SetValue(nd.Data<float>(0), idx);
+                        case TypeCode.Single:
+                            _arraySingle[idx] = nd.GetSingle(0);
                             break;
-                        case "Double":
-                            _arrayDouble.SetValue(nd.Data<double>(0), idx);
+                        case TypeCode.Double:
+                            _arrayDouble[idx] = nd.GetDouble(0);
                             break;
-                        case "Decimal":
-                            _arrayDecimal.SetValue(nd.Data<decimal>(0), idx);
+                        case TypeCode.Decimal:
+                            _arrayDecimal[idx] = nd.GetDecimal(0);
                             break;
                         default:
                             throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
@@ -627,6 +654,14 @@ namespace NumSharp.Backends
             puffer.SetData((Array)GetData(_DType).Clone());
 
             return puffer;
+        }
+
+        public Span<T> View<T>(Slice slice = null)
+        {
+            if (slice is null)
+                slice = Slice;
+
+            return GetData<T>().AsSpan(slice.Start.Value * Shape.DimOffset[0]);
         }
     }
 }

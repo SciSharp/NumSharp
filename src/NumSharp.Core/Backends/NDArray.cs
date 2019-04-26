@@ -57,6 +57,8 @@ namespace NumSharp
 
         public string order => Storage.Shape.Order;
 
+        public Slice slice => Storage.Slice;
+
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
@@ -76,9 +78,13 @@ namespace NumSharp
 
         public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
 
+        public bool GetBoolean(params int[] indexes) => Storage.GetBoolean(indexes);
+        public short GetInt16(params int[] indexes) => Storage.GetInt16(indexes);
         public int GetInt32(params int[] indexes) => Storage.GetInt32(indexes);
+        public long GetInt64(params int[] indexes) => Storage.GetInt64(indexes);
         public float GetSingle(params int[] indexes) => Storage.GetSingle(indexes);
-
+        public double GetDouble(params int[] indexes) => Storage.GetDouble(indexes);
+        public decimal GetDecimal(params int[] indexes) => Storage.GetDecimal(indexes);
         public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
 
         public int GetIndexInShape(params int[] select) => Storage.Shape.GetIndexInShape(select);
@@ -101,8 +107,6 @@ namespace NumSharp
         public T Max<T>() => Data<T>().Max();
 
         public void astype(Type dtype) => Storage.SetData(Storage.GetData(), dtype);
-
-        public Slice slice { get; set; }
 
         /// <summary>
         /// Constructor for init data type
@@ -211,7 +215,9 @@ namespace NumSharp
             if (dtype != null && dtype != this.dtype)
                 Storage.SetData(Array, dtype);
 
-            return new NDArray(Array, shape);
+            var nd = new NDArray(Storage.View<int>().ToArray(), shape);
+
+            return nd;
         }
     }
 }

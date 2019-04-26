@@ -74,9 +74,8 @@ namespace NumSharp
                 var s = new Slice(slice);
                 s.Start = s.Start.HasValue ? s.Start.Value : 0;
                 s.Stop = s.Stop.HasValue ? s.Stop.Value : shape[0];
-                var indices = np.arange(s.Start.Value, s.Stop.Value);
-                var nd = this[indices];
-                nd.slice = s;
+                var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
+                nd.Storage.Slice = s;
                 return nd;
             }
 

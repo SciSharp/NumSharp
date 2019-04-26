@@ -52,7 +52,7 @@ namespace NumSharp
             int digitBefore = 0;
             int digitAfter = 0;
 
-            string[] dataParsed = new string[Storage.GetData().Length];
+            string[] dataParsed = new string[size];
 
             Array strg = Storage.GetData();
 

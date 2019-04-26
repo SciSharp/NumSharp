@@ -131,7 +131,9 @@ namespace NumSharp.Backends
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        public Shape Shape {get {return _Shape;}}
+        public Shape Shape => _Shape;
+
+        public Slice Slice { get; set; }
 
         public ArrayStorage(Type dtype)
         {
@@ -208,15 +210,45 @@ namespace NumSharp.Backends
             return _values;
         }
 
+        public bool GetBoolean(params int[] indexes)
+        {
+            var data = _values as bool[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
+        public short GetInt16(params int[] indexes)
+        {
+            var data = _values as short[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
         public int GetInt32(params int[] indexes)
         {
             var data = _values as int[];
             return data[Shape.GetIndexInShape(indexes)];
         }
 
+        public long GetInt64(params int[] indexes)
+        {
+            var data = _values as long[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
         public float GetSingle(params int[] indexes)
         {
             var data = _values as float[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
+        public double GetDouble(params int[] indexes)
+        {
+            var data = _values as double[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
+        public decimal GetDecimal(params int[] indexes)
+        {
+            var data = _values as decimal[];
             return data[Shape.GetIndexInShape(indexes)];
         }
 
@@ -512,6 +544,11 @@ namespace NumSharp.Backends
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
+        }
+
+        public Span<T> View<T>(Slice slice = null)
+        {
+            throw new NotImplementedException("View Slice");
         }
     }
 }

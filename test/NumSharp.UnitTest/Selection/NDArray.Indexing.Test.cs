@@ -148,6 +148,8 @@ namespace NumSharp.UnitTest.Selection
         {
             var x = np.arange(12).reshape(3, 2, 2);
             var y = x["1:"];
+            var str = y.ToString();
+            var v = y.view();
             Assert.IsTrue(Enumerable.SequenceEqual(y.shape, new int[] { 2, 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
 

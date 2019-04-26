@@ -29,6 +29,8 @@ namespace NumSharp
 
         int DTypeSize { get; }
 
+        Slice Slice { get; set; }
+
         /// <summary>
         /// storage shape for outside representation
         /// </summary>
@@ -96,8 +98,13 @@ namespace NumSharp
         /// <returns>element from internal storage</returns>
         T GetData<T>(params int[] indexes);
 
+        bool GetBoolean(params int[] indexes);
+        short GetInt16(params int[] indexes);
         int GetInt32(params int[] indexes);
+        long GetInt64(params int[] indexes);
         float GetSingle(params int[] indexes);
+        double GetDouble(params int[] indexes);
+        decimal GetDecimal(params int[] indexes);
 
         /// <summary>
         /// Set an array to internal storage and keep dtype
@@ -124,5 +131,7 @@ namespace NumSharp
         void SetData(Array values, Type dtype);
 
         void Reshape(params int[] dimensions);
+
+        Span<T> View<T>(Slice slice = null);
     }
 }
