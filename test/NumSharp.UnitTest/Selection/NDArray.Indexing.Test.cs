@@ -139,22 +139,37 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Slice1()
         {
-            var x = np.arange(10);
-            var y = x["1:3"];
+            var x = np.arange(5);
+            var y1 = x["1:3"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 1, 2 }));
+
+            var y2 = x["3:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 3, 4 }));
+            y2[0] = 8;
+            y2[1] = 9;
+            Assert.AreEqual((int)y2[0], 8);
         }
 
         [TestMethod]
         public void Slice3x2x2()
         {
             var x = np.arange(12).reshape(3, 2, 2);
-            var y = x["1:"];
-            var str = y.ToString();
-            var v = y.view();
-            Assert.IsTrue(Enumerable.SequenceEqual(y.shape, new int[] { 2, 2, 2 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
+            var y1 = x["1:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
+
+            var y1_0 = y1[0];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.shape, new int[] { 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0[0].Data<int>(), new int[] { 4, 5, 6, 7 }));
 
             // change view
-            y[0, 1] = new int[] { 100, 101 };
+            y1[0, 1] = new int[] { 100, 101 };
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), new int[] { 0, 1, 2, 3, 100, 101, 6, 7, 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 100, 101, 6, 7, 8, 9, 10, 11 }));
+
+            var y2 = x["2:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.shape, new int[] { 1, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 8, 9, 10, 11 }));
         }
 
         [TestMethod]

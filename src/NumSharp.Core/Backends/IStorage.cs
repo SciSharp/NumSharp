@@ -85,26 +85,22 @@ namespace NumSharp
         T[] GetData<T>();
 
         /// <summary>
-        /// Get single value from internal storage and do not cast dtype
-        /// </summary>
-        /// <param name="indexes">indexes</param>
-        /// <returns>element from internal storage</returns>
-        NDArray GetData(params int[] indexes);
-        /// <summary>
         /// Get single value from internal storage as type T and cast dtype to T
         /// </summary>
-        /// <param name="indexes">indexes</param>
+        /// <param name="indice">indexes</param>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>element from internal storage</returns>
-        T GetData<T>(params int[] indexes);
+        T GetData<T>(params int[] indice);
 
-        bool GetBoolean(params int[] indexes);
-        short GetInt16(params int[] indexes);
-        int GetInt32(params int[] indexes);
-        long GetInt64(params int[] indexes);
-        float GetSingle(params int[] indexes);
-        double GetDouble(params int[] indexes);
-        decimal GetDecimal(params int[] indexes);
+        bool GetBoolean(params int[] indice);
+        short GetInt16(params int[] indice);
+        int GetInt32(params int[] indice);
+        long GetInt64(params int[] indice);
+        float GetSingle(params int[] indice);
+        double GetDouble(params int[] indice);
+        decimal GetDecimal(params int[] indice);
+        string GetString(params int[] indice);
+        NDArray GetNDArray(params int[] indice);
 
         /// <summary>
         /// Set an array to internal storage and keep dtype

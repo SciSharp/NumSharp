@@ -21,7 +21,7 @@ namespace NumSharp
         {
             get
             {
-                return Storage.GetData(select);
+                return GetData(select);
             }
 
             set
@@ -81,7 +81,7 @@ namespace NumSharp
 
             set
             {
-                
+                throw new NotImplementedException("slice data set is not implemented.");
             }
         }
 
@@ -174,6 +174,111 @@ namespace NumSharp
                 }
 
             }
+        }
+
+        /// <summary>
+        /// Get single value from internal storage and do not cast dtype
+        /// </summary>
+        /// <param name="indice">indexes</param>
+        /// <returns>element from internal storage</returns>
+        private NDArray GetData(params int[] indice)
+        {
+            int offset = 0;
+
+            Shape s1 = shape.Skip(indice.Length).ToArray();
+            int idx = s1.GetIndexInShape(indice);
+
+            int stride = Shape.GetSize(s1.Dimensions);
+
+            if (ndim == 1)
+                offset = idx + (slice is null ? 0 : slice.Start.Value);
+            else
+                offset = idx + (slice is null ? 0 : slice.Start.Value) * stride;
+
+            switch (Type.GetTypeCode(dtype))
+            {
+                case TypeCode.Boolean:
+                    return GetBoolean(indice);
+                case TypeCode.Int16:
+                    return GetInt16(indice);
+                case TypeCode.Int32:
+                    return GetInt32(indice);
+                case TypeCode.Int64:
+                    return GetInt64(indice);
+                case TypeCode.Single:
+                    return GetSingle(indice);
+                case TypeCode.Double:
+                    return GetDouble(indice);
+                case TypeCode.Decimal:
+                    return GetDecimal(indice);
+                case TypeCode.String:
+                    return GetString(indice);
+                default:
+                    return GetNDArray(indice);
+            }
+
+            /*if (indexes.Length == ndim ||
+                shape.Last() == 1)
+            {
+                switch (Type.GetTypeCode(dtype))
+                {
+                    case TypeCode.Boolean:
+                        return GetBoolean(indexes);
+                    case TypeCode.Int16:
+                        return GetInt16(indexes);
+                    case TypeCode.Int32:
+                        return GetInt32(indexes);
+                    case TypeCode.Int64:
+                        return GetInt64(indexes);
+                    case TypeCode.Single:
+                        return GetSingle(indexes);
+                    case TypeCode.Double:
+                        return GetDouble(indexes);
+                    case TypeCode.Decimal:
+                        return GetDecimal(indexes);
+                    case TypeCode.String:
+                        return GetString(indexes);
+                    default:
+                        return GetNDArray(indexes);
+                }
+            }
+            else if (indexes.Length == ndim - 1)
+            {
+                var offset = new int[ndim];
+                for (int i = 0; i < ndim - 1; i++)
+                    offset[i] = indexes[i];
+
+                var nd = new NDArray(dtype, shape[ndim - 1]);
+                var data = GetData();
+                for (int i = 0; i < shape[ndim - 1]; i++)
+                {
+                    offset[offset.Length - 1] = i;
+                    //nd.SetData(data.GetValue(Shape.GetIndexInShape(offset)), i);
+                }
+
+                return nd;
+            }
+            // 3 Dim
+            else if (indexes.Length == ndim - 2)
+            {
+                var offset = new int[ndim];
+                var nd = new NDArray(dtype, new int[] { shape[ndim - 2], shape[ndim - 1] });
+                var data = GetData();
+                for (int i = 0; i < shape[ndim - 2]; i++)
+                {
+                    for (int j = 0; j < shape[ndim - 1]; j++)
+                    {
+                        offset[0] = 0;
+                        offset[1] = i;
+                        offset[2] = j;
+                        //nd.SetData(data.GetValue(Shape.GetIndexInShape(offset)), i, j);
+                    }
+                }
+
+                return nd;
+            }*/
+
+            throw new Exception("NDStorage.GetData");
         }
     }
 }

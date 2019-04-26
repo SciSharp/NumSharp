@@ -72,20 +72,27 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public T[] Data<T>() => Storage.GetData<T>();
+        public T[] Data<T>()
+        {
+            if (slice is null)
+                return Storage.GetData<T>();
+            else
+                return Storage.View<T>().ToArray();
+        }
 
-        public T Data<T>(int index) => Storage.GetData<T>()[index];
+        public T Data<T>(params int[] indice) => Storage.GetData<T>(indice);
 
-        public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
+        public bool GetBoolean(params int[] indice) => Storage.GetBoolean(indice);
+        public short GetInt16(params int[] indice) => Storage.GetInt16(indice);
+        public int GetInt32(params int[] indice) => Storage.GetInt32(indice);
+        public long GetInt64(params int[] indice) => Storage.GetInt64(indice);
+        public float GetSingle(params int[] indice) => Storage.GetSingle(indice);
+        public double GetDouble(params int[] indice) => Storage.GetDouble(indice);
+        public decimal GetDecimal(params int[] indice) => Storage.GetDecimal(indice);
+        public string GetString(params int[] indice) => Storage.GetString(indice);
+        public NDArray GetNDArray(params int[] indice) => Storage.GetNDArray(indice);
 
-        public bool GetBoolean(params int[] indexes) => Storage.GetBoolean(indexes);
-        public short GetInt16(params int[] indexes) => Storage.GetInt16(indexes);
-        public int GetInt32(params int[] indexes) => Storage.GetInt32(indexes);
-        public long GetInt64(params int[] indexes) => Storage.GetInt64(indexes);
-        public float GetSingle(params int[] indexes) => Storage.GetSingle(indexes);
-        public double GetDouble(params int[] indexes) => Storage.GetDouble(indexes);
-        public decimal GetDecimal(params int[] indexes) => Storage.GetDecimal(indexes);
-        public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
+        public void SetData<T>(T value, params int[] indice) => Storage.SetData(value, indice);
 
         public int GetIndexInShape(params int[] select) => Storage.Shape.GetIndexInShape(select);
 

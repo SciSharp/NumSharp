@@ -11,37 +11,13 @@ namespace NumSharp
         public override string ToString()
         {
             string output = "";
-            if (this.ndim == 0)
-            {
-                switch (dtype.Name)
-                {
-                    case "Int16":
-                        output = Data<short>()[0].ToString();
-                        break;
-                    case "Int32":
-                        output = Data<int>()[0].ToString();
-                        break;
-                    case "Single":
-                        output = Data<float>()[0].ToString();
-                        break;
-                    case "Double":
-                        output = Data<double>()[0].ToString();
-                        break;
-                    case "String":
-                        output = Data<string>()[0].ToString();
-                        break;
-                    default:
-                        throw new NotImplementedException("NDArray ToString()");
-                }
-            }
-            else if (this.ndim == 2)
-            {
+
+            if (ndim == 0)
+                output = Storage.GetData().GetValue(0).ToString();
+            else if (ndim == 2)
                 output = _ToMatrixString();
-            }
             else
-            {
                 output = _ToVectorString();
-            }
 
             return output;
         }
@@ -54,7 +30,7 @@ namespace NumSharp
 
             string[] dataParsed = new string[size];
 
-            Array strg = Storage.GetData();
+            Array strg = Storage.View<int>().ToArray();
 
             for (int idx = 0; idx < dataParsed.Length;idx++)
                 dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);

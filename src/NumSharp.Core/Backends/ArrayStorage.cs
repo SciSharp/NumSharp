@@ -252,6 +252,18 @@ namespace NumSharp.Backends
             return data[Shape.GetIndexInShape(indexes)];
         }
 
+        public string GetString(params int[] indexes)
+        {
+            var data = _values as string[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
+        public NDArray GetNDArray(params int[] indexes)
+        {
+            var data = _values as NDArray[];
+            return data[Shape.GetIndexInShape(indexes)];
+        }
+
         /// <summary>
         /// Clone internal storage and get reference to it
         /// </summary>
@@ -310,74 +322,6 @@ namespace NumSharp.Backends
             puffer = _ChangeTypeOfArray(puffer, typeof(T));
 
             return puffer as T[];
-        }
-
-        /// <summary>
-        /// Get single value from internal storage and do not cast dtype
-        /// </summary>
-        /// <param name="indexes">indexes</param>
-        /// <returns>element from internal storage</returns>
-        public NDArray GetData(params int[] indexes)
-        {
-            if (indexes.Length == Shape.NDim ||
-                Shape.Dimensions.Last() == 1)
-            {
-                switch (DType.Name)
-                {
-                    case "Boolean":
-                        return GetData<bool>(indexes);
-                    case "Int16":
-                        return GetData<short>(indexes);
-                    case "Int32":
-                        return GetData<int>(indexes);
-                    case "Int64":
-                        return GetData<long>(indexes);
-                    case "Single":
-                        return GetData<float>(indexes);
-                    case "Double":
-                        return GetData<double>(indexes);
-                    case "Decimal":
-                        return GetData<decimal>(indexes);
-                    case "String":
-                        return GetData<string>(indexes);
-                }
-            }
-            else if (indexes.Length == Shape.NDim - 1)
-            {
-                var offset = new int[Shape.NDim];
-                for (int i = 0; i < Shape.NDim - 1; i++)
-                    offset[i] = indexes[i];
-
-                var nd = new NDArray(DType, Shape.Dimensions[Shape.NDim - 1]);
-                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 1]; i++)
-                {
-                    offset[offset.Length - 1] = i;
-                    nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i);
-                }
-
-                return nd;
-            }
-            // 3 Dim
-            else if (indexes.Length == Shape.NDim - 2)
-            {
-                var offset = new int[Shape.NDim];
-                var nd = new NDArray(DType, new int[]{ Shape.Dimensions[Shape.NDim - 2] , Shape.Dimensions[Shape.NDim - 1] });
-                
-                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 2]; i++)
-                {
-                    for (int j = 0; j < Shape.Dimensions[Shape.NDim - 1]; j++)
-                    {
-                        offset[0] = 0;
-                        offset[1] = i;
-                        offset[2] = j;
-                        nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i, j);
-                    }
-                }
-
-                return nd;
-            }
-
-            throw new Exception("NDStorage.GetData");
         }
 
         /// <summary>
