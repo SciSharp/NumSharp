@@ -30,7 +30,24 @@ namespace NumSharp
 
             string[] dataParsed = new string[size];
 
-            Array strg = Storage.View<int>().ToArray();
+            Array strg = null;
+            switch (Type.GetTypeCode(dtype))
+            {
+                case TypeCode.Int32:
+                    strg = Storage.View<int>().ToArray();
+                    break;
+                case TypeCode.Int64:
+                    strg = Storage.View<long>().ToArray();
+                    break;
+                case TypeCode.Single:
+                    strg = Storage.View<float>().ToArray();
+                    break;
+                case TypeCode.Double:
+                    strg = Storage.View<double>().ToArray();
+                    break;
+                default:
+                    break;
+            }
 
             for (int idx = 0; idx < dataParsed.Length;idx++)
                 dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);

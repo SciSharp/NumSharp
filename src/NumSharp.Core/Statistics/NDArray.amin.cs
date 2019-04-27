@@ -72,7 +72,7 @@ namespace NumSharp
 
                 //Fill in data
                 index = 0; //index for result data set
-                int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
+                int sameSetOffset = this.Storage.Shape.Strides[axis.Value];
                 int increments = cur * post;
                 
                 switch (typeof(T).Name)

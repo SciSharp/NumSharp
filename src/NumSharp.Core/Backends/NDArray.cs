@@ -59,6 +59,8 @@ namespace NumSharp
 
         public Slice slice => Storage.Slice;
 
+        public int[] strides => Storage.Shape.Strides;
+
         /// <summary>
         /// The internal storage for elements of NDArray
         /// </summary>
@@ -222,7 +224,7 @@ namespace NumSharp
             if (dtype != null && dtype != this.dtype)
                 Storage.SetData(Array, dtype);
 
-            var nd = new NDArray(Storage.View<int>().ToArray(), shape);
+            var nd = new NDArray(Array, shape);
 
             return nd;
         }

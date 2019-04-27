@@ -158,9 +158,9 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
 
-            var y1_0 = y1[0];
+            /*var y1_0 = y1[0];
             Assert.IsTrue(Enumerable.SequenceEqual(y1_0.shape, new int[] { 2, 2 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y1_0[0].Data<int>(), new int[] { 4, 5, 6, 7 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.Data<int>(), new int[] { 4, 5, 6, 7 }));*/
 
             // change view
             y1[0, 1] = new int[] { 100, 101 };

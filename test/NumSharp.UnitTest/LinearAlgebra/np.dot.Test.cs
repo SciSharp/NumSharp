@@ -72,10 +72,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var z = np.dot(x, y);
 
-            Assert.AreEqual(z.Data<float>(0), 7);
-            Assert.AreEqual(z.Data<float>(1), 11);
-            Assert.AreEqual(z.Data<float>(2), 4);
-            Assert.AreEqual(z.Data<float>(3), 7);
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] { 7, 11, 4, 7 }));
         }
 
         [TestMethod]

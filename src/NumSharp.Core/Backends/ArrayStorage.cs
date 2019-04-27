@@ -276,29 +276,6 @@ namespace NumSharp.Backends
         /// <summary>
         /// Get reference to internal data storage and cast elements to new dtype
         /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>reference to internal (casted) storage as System.Array </returns>
-        public Array GetData(Type dtype)
-        {
-            var methods = this.GetType().GetMethods().Where(x => x.Name.Equals("GetData") && x.IsGenericMethod && x.ReturnType.Name.Equals("T[]"));
-            var genMethods = methods.First().MakeGenericMethod(dtype);
-
-            return (Array) genMethods.Invoke(this,null);
-        }
-
-        /// <summary>
-        /// Clone internal storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">cloned storage data type</param>
-        /// <returns>reference to cloned storage as System.Array</returns>
-        public Array CloneData(Type dtype)
-        {
-            return (Array) this.GetData().Clone();
-        }
-
-        /// <summary>
-        /// Get reference to internal data storage and cast elements to new dtype
-        /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
         public T[] GetData<T>()
@@ -493,6 +470,11 @@ namespace NumSharp.Backends
         public Span<T> View<T>(Slice slice = null)
         {
             throw new NotImplementedException("View Slice");
+        }
+
+        public Span<T> GetSpanData<T>(params int[] indice)
+        {
+            throw new NotImplementedException();
         }
     }
 }

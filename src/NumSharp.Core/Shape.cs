@@ -21,8 +21,8 @@ namespace NumSharp
         private int[] dimensions;
         public int[] Dimensions => dimensions;
 
-        private int[] dimOffset;
-        public int[] DimOffset => dimOffset;
+        private int[] strides;
+        public int[] Strides => strides;
 
         private int size;
         public int Size => size;
@@ -52,15 +52,15 @@ namespace NumSharp
 
             if (layout == 0)
             {
-                dimOffset[dimOffset.Length - 1] = 1;
-                for (int idx = dimOffset.Length - 1; idx >= 1; idx--)
-                    dimOffset[idx - 1] = dimOffset[idx] * dimensions[idx];
+                strides[strides.Length - 1] = 1;
+                for (int idx = strides.Length - 1; idx >= 1; idx--)
+                    strides[idx - 1] = strides[idx] * dimensions[idx];
             }
             else
             {
-                dimOffset[0] = 1;
-                for (int idx = 1; idx < dimOffset.Length; idx++)
-                    dimOffset[idx] = dimOffset[idx - 1] * dimensions[idx - 1];
+                strides[0] = 1;
+                for (int idx = 1; idx < strides.Length; idx++)
+                    strides[idx] = strides[idx - 1] * dimensions[idx - 1];
             }
         }
 
@@ -75,10 +75,13 @@ namespace NumSharp
         /// <returns></returns>
         public int GetIndexInShape(params int[] select)
         {
+            if (NDim == 0 && select.Length == 1)
+                return select[0];
+
             int idx = 0;
 
             for (int i = 0; i < select.Length; i++)
-                idx += dimOffset[i] * select[i];
+                idx += strides[i] * select[i];
 
             return idx;
         }
@@ -94,29 +97,29 @@ namespace NumSharp
         public int[] GetDimIndexOutShape(int select)
         {
             int[] dimIndexes = null;
-            if (dimOffset.Length == 1)
+            if (strides.Length == 1)
                 dimIndexes = new int[] {select};
 
             else if(layout == 0)
             {
                 int counter = select;
-                dimIndexes = new int[dimOffset.Length];
+                dimIndexes = new int[strides.Length];
 
-                for (int idx = 0; idx < dimOffset.Length; idx++)
+                for (int idx = 0; idx < strides.Length; idx++)
                 {
-                    dimIndexes[idx] = counter / dimOffset[idx];
-                    counter -= dimIndexes[idx] * dimOffset[idx];
+                    dimIndexes[idx] = counter / strides[idx];
+                    counter -= dimIndexes[idx] * strides[idx];
                 }
             }
             else
             {
                 int counter = select;
-                dimIndexes = new int[dimOffset.Length];
+                dimIndexes = new int[strides.Length];
 
-                for (int idx = dimOffset.Length - 1; idx > -1; idx--)
+                for (int idx = strides.Length - 1; idx > -1; idx--)
                 {
-                    dimIndexes[idx] = counter / dimOffset[idx];
-                    counter -= dimIndexes[idx] * dimOffset[idx];
+                    dimIndexes[idx] = counter / strides[idx];
+                    counter -= dimIndexes[idx] * strides[idx];
                 }
             }
 
@@ -126,14 +129,14 @@ namespace NumSharp
         public void  ChangeTensorLayout(string order = "C")
         {
             layout = order == "C" ? 0 : 1;
-            dimOffset = new int[dimensions.Length];
+            strides = new int[dimensions.Length];
             _SetDimOffset();
         }
 
         public void ReShape(params int[] dims)
         {
             dimensions = dims;
-            dimOffset = new int[dimensions.Length];
+            strides = new int[dimensions.Length];
 
             size = 1;
 

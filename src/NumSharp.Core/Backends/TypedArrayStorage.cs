@@ -233,19 +233,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Get Back Storage with Columnwise tensor Layout
-        /// By this method the layout is changed if layout is not columnwise
-        /// </summary>
-        /// <returns>reference to storage (transformed or not)</returns>
-        public IStorage GetColumWiseStorage()
-        {
-            //if ( _TensorLayout != 2 )
-                //this._ChangeRowToColumnLayout();
-            
-            return this;
-        }
-
-        /// <summary>
         /// Get reference to internal data storage
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
@@ -285,19 +272,6 @@ namespace NumSharp.Backends
         public Array CloneData()
         {
             return GetData().Clone() as Array;
-        }
-
-        /// <summary>
-        /// Get reference to internal data storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>reference to internal (casted) storage as System.Array </returns>
-        public Array GetData(Type dtype)
-        {
-            var methods = this.GetType().GetMethods().Where(x => x.Name.Equals("GetData") && x.IsGenericMethod && x.ReturnType.Name.Equals("T[]"));
-            var genMethods = methods.First().MakeGenericMethod(dtype);
-
-            return (Array) genMethods.Invoke(this,null);
         }
 
         /// <summary>
@@ -412,6 +386,9 @@ namespace NumSharp.Backends
                         break;
                     case "String":
                         _arrayString = values as string[];
+                        break;
+                    case "NDArray":
+                        _arrayNDArray = values as NDArray[];
                         break;
                     case "Object":
                         _arrayObject = values as object[];
@@ -577,7 +554,7 @@ namespace NumSharp.Backends
         {
             var puffer = new ArrayStorage(_DType);
             puffer.Allocate(new Shape(_Shape.Dimensions));
-            puffer.SetData((Array)GetData(_DType).Clone());
+            puffer.SetData((Array)GetData().Clone());
 
             return puffer;
         }
@@ -597,6 +574,15 @@ namespace NumSharp.Backends
                 var offset = Shape.GetSize(shape);
                 return GetData<T>().AsSpan(slice.Start.Value * offset, slice.Length.Value * offset);
             }
+        }
+
+        public Span<T> GetSpanData<T>(params int[] indice)
+        {
+            int stride = Shape.Strides[indice.Length - 1];
+            int idx = Shape.GetIndexInShape(indice);
+            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * stride;
+
+            return GetData<T>().AsSpan(offset, stride);
         }
     }
 }

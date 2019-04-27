@@ -91,9 +91,7 @@ namespace NumSharp
 
                 var shape = new Shape(new int[] { dim0, dim1 });
 
-                nd = new NDArray(typeof(double));
-
-                nd.Storage.Allocate(shape);
+                nd = new NDArray(typeof(double), shape);
 
                 for (int idx = 0; idx < splitted.Length; idx++)
                 {
