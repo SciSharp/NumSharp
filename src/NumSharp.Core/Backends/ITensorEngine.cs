@@ -31,7 +31,11 @@ namespace NumSharp
 
         #region Array Manipulation
         NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
-        NDArray Transpose(NDArray nd, int[] axes = null); 
+        NDArray Transpose(NDArray nd, int[] axes = null);
+        #endregion
+
+        #region Sorting, searching, counting
+        NDArray ArgMax(NDArray nd, int axis = -1); 
         #endregion
     }
 }

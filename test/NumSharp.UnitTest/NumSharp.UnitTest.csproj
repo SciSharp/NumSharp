@@ -73,4 +73,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+
+  <ItemGroup>
+    <None Include="DataSample.cs" />
+  </ItemGroup>
 </Project>

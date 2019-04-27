@@ -134,6 +134,9 @@ namespace NumSharp.UnitTest.Selection
 
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 1, 1, 2 }, (result[0] as NDArray).Data<int>()));
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 1, 1, 3 }, (result[1] as NDArray).Data<int>()));
+
+            var x = nd[1];
+            x.ravel();
         }
 
         [TestMethod]

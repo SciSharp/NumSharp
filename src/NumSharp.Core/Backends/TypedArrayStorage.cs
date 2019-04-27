@@ -311,7 +311,7 @@ namespace NumSharp.Backends
         /// <returns>element from internal storage</returns>
         public T GetData<T>(params int[] indexes)
         {
-            T[] values = GetData() as T[];
+            T[] values = GetData<T>();
 
             return values[Shape.GetIndexInShape(indexes)];
         }
@@ -578,7 +578,7 @@ namespace NumSharp.Backends
 
         public Span<T> GetSpanData<T>(params int[] indice)
         {
-            int stride = Shape.Strides[indice.Length - 1];
+            int stride = Shape.NDim == 0 ? 1 : Shape.Strides[indice.Length - 1];
             int idx = Shape.GetIndexInShape(indice);
             int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * stride;
 

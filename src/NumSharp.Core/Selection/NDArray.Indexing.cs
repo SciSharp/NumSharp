@@ -177,10 +177,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Get single value from internal storage and do not cast dtype
+        /// Get n-th dimension data
         /// </summary>
         /// <param name="indice">indexes</param>
-        /// <returns>element from internal storage</returns>
+        /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indice)
         {
             Shape s1 = shape.Skip(indice.Length).ToArray();
@@ -213,8 +213,7 @@ namespace NumSharp
                     nd.Array = Storage.GetSpanData<string>(indice).ToArray();
                     break;
                 default:
-                    nd.Array = Storage.GetSpanData<NDArray>(indice).ToArray();
-                    break;
+                    return Storage.GetSpanData<NDArray>(indice).ToArray()[0];
             }
 
             return nd;
