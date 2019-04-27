@@ -11,13 +11,17 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>Apache 2.0</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Support multiple backends.
-Change NumSharp.Core namespace to NumSharp.</PackageReleaseNotes>
-    <AssemblyVersion>0.9.0.0</AssemblyVersion>
-    <FileVersion>0.9.0.0</FileVersion>
+    <PackageReleaseNotes>Main changes since v0.9
+1: Added TypedArrayStorage.
+2: Return NDArray for [this] indexing.
+3: Support axis for np.argmax.
+4: Slice NDArray is avaliable.
+5: Speed up by adding Span&lt;T&gt; for indexing.</PackageReleaseNotes>
+    <AssemblyVersion>0.10.0.0</AssemblyVersion>
+    <FileVersion>0.10.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <Version>0.9.0</Version>
+    <Version>0.10.0-alpha</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
@@ -72,10 +76,10 @@ Change NumSharp.Core namespace to NumSharp.</PackageReleaseNotes>
   </Target>
 
   <ItemGroup>
-		<Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/lapack.dll" Link="lapack.dll" Pack="true" PackagePath="runtimes/win-x64/native/lapack.dll" />
+		<!--<Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/lapack.dll" Link="lapack.dll" Pack="true" PackagePath="runtimes/win-x64/native/lapack.dll" />
     <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/blas_win64_MT.dll" Link="blas_win64_MT.dll" Pack="true" PackagePath="runtimes/win-x64/native/blas_win64_MT.dll" />
     <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/blas.so" Link="blas.so" Pack="true" PackagePath="runtimes/linux-x64/native/blas.so" />
-    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/lapack.so" Link="lapack.so" Pack="true" PackagePath="runtimes/linux-x64/native/lapack.so" />
+    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/lapack.so" Link="lapack.so" Pack="true" PackagePath="runtimes/linux-x64/native/lapack.so" />-->
   </ItemGroup>
 
   <ItemGroup>
