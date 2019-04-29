@@ -192,6 +192,9 @@ namespace NumSharp.Backends
                 case "String":
                     _arrayString = new string[shape.Size];
                     break;
+                case "Object":
+                    _arrayObject = new object[shape.Size];
+                    break;
                 case "NDArray":
                     _arrayNDArray = new NDArray[shape.Size];
                     break;
@@ -506,6 +509,9 @@ namespace NumSharp.Backends
                             break;
                         case TypeCode.Decimal:
                             nd.Data<decimal>().AsSpan().CopyTo(_arrayDecimal.AsSpan(offset));
+                            break;
+                        case TypeCode.String:
+                            nd.Data<string>().AsSpan().CopyTo(_arrayString.AsSpan(offset));
                             break;
                         default:
                             throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");

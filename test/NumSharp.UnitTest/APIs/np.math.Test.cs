@@ -38,6 +38,10 @@ namespace NumSharp.UnitTest.APIs
             var s1 = np.sum(data, axis: 1);
             Assert.IsTrue(Enumerable.SequenceEqual(s1.shape, new int[] { 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(s1.Data<int>(), new int[] { 1, 5 }));
+
+            var s2 = np.sum(data, axis: -1);
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.shape, new int[] { 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s1.Data<int>(), new int[] { 1, 5 }));
         }
 
         [TestMethod]
@@ -57,6 +61,10 @@ namespace NumSharp.UnitTest.APIs
             Assert.IsTrue(Enumerable.SequenceEqual(s1.Data<int>(), new int[] { 6, 9, 24, 27 }));
 
             var s2 = np.sum(data, axis: 2);
+            Assert.IsTrue(Enumerable.SequenceEqual(s2.shape, new int[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(s2.Data<int>(), new int[] { 1, 5, 9, 13, 17, 21 }));
+
+            var s3 = np.sum(data, axis: -1);
             Assert.IsTrue(Enumerable.SequenceEqual(s2.shape, new int[] { 2, 3 }));
             Assert.IsTrue(Enumerable.SequenceEqual(s2.Data<int>(), new int[] { 1, 5, 9, 13, 17, 21 }));
         }

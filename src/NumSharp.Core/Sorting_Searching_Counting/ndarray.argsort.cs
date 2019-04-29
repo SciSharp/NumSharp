@@ -24,22 +24,22 @@ namespace NumSharp
                 axis = ndim-1;
             }
 
-            // Sorted arguments array
-            var resultArray = new NDArray(typeof(T), shape);
-
             // Example: If shape is 3x2x3 and we are soritng w.r.t axis = 2 required size is 3x2
             var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).ToArray();
 
             if (requiredSize.Length == 0)
             {
-
+                var data = Data<T>();
                 var sorted = Enumerable.Range(0, size)
-                    .Select(_ => new {Data = Data<T>(_), Index = _})
+                    .Select(_ => new {Data = data[_], Index = _})
                     .OrderBy(_ => _.Data)
-                    .Select(_ => _.Index);
-                return np.array(sorted.ToArray(), typeof(T), ndim);
+                    .Select(_ => _.Index)
+                    .ToArray();
+                return np.array(sorted);
             }
 
+            // Sorted arguments array
+            var resultArray = new NDArray(typeof(T), shape);
 
             var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 

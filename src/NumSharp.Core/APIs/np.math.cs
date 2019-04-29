@@ -25,7 +25,7 @@ namespace NumSharp
         /// <param name="x"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        public static NDArray sum(NDArray x, int axis = -1)
+        public static NDArray sum(NDArray x, int? axis = null)
             => BackendFactory.GetEngine().Sum(x, axis: axis);
 
         /// <summary>

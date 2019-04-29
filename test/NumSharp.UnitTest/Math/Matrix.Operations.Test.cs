@@ -24,6 +24,16 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        public void FloatSubtraction()
+        {
+            var np1 = np.array(new float[] { 3, 5, 7 });
+
+            var np2 = 0f - np1;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new float[] { -3, -5, -7 }, np2.Data<float>()));
+        }
+
+        [TestMethod]
         public void DoubleTwo2D_MatrixAddition()
         {
             var np1 = new matrix("1 2 3;4 5 6;7 8 9", np.float64);

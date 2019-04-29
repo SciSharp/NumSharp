@@ -17,7 +17,7 @@ namespace NumSharp
         NDArray Multiply(NDArray x, NDArray y);
         NDArray Power(NDArray x, ValueType y);
         NDArray Sub(NDArray x, NDArray y);
-        NDArray Sum(NDArray x, int axis = -1);
+        NDArray Sum(NDArray x, int? axis = null);
         #endregion
 
         #region Logic

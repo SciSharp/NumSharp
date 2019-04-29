@@ -56,6 +56,9 @@ namespace NumSharp
                     case TypeCode.Decimal:
                         nd = setValue<decimal>(indices);
                         break;
+                    case TypeCode.String:
+                        nd = setValue<string>(indices);
+                        break;
                 }
 
                 return nd;

@@ -18,18 +18,20 @@ namespace NumSharp.Backends
 {
     public abstract partial class DefaultEngine
     {
-        public virtual NDArray Sum(NDArray x, int axis = -1)
+        public virtual NDArray Sum(NDArray x, int? axis = null)
         {
+            if (axis == -1) axis = x.ndim - 1;
+
             switch (axis)
             {
-                case -1:
+                case null:
                     return Sum(x);
                 case 0:
-                    return Sum0(x, axis);
+                    return Sum0(x, axis.Value);
                 case 1:
-                    return Sum1(x, axis);
+                    return Sum1(x, axis.Value);
                 case 2:
-                    return Sum2(x, axis);
+                    return Sum2(x, axis.Value);
                 default:
                     throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name} axis: {axis}");
             }
@@ -41,8 +43,12 @@ namespace NumSharp.Backends
             {
                 case TypeCode.Int32:
                     return x.Data<int>().Sum();
+                case TypeCode.Int64:
+                    return x.Data<long>().Sum();
                 case TypeCode.Single:
                     return x.Data<float>().Sum();
+                case TypeCode.Double:
+                    return x.Data<double>().Sum();
             }
 
             throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name}");
