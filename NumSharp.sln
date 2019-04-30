@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28010.2003
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.28803.156
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\NumSharp.UnitTest\NumSharp.UnitTest.csproj", "{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}"
 EndProject
@@ -12,6 +12,10 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{381613F6-A794-4255-B50E-D2315F8A8CEC}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSharp.Core\NumSharp.Core.csproj", "{190A2514-31CD-4738-AF20-3492DD47DE8C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NeuralNetwork.NumSharp", "Examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,9 +43,16 @@ Global
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B9253A77-0652-4091-A7F5-14E9FE2630FF} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}
