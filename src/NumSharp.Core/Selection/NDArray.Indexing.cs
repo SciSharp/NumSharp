@@ -72,16 +72,31 @@ namespace NumSharp
 
         public NDArray this[string slice]
         {
+            get { return this[Slice.ParseSlices(slice)]; }
+
+            set
+            {
+                throw new NotImplementedException("slice data set is not implemented.");
+            }
+        }
+
+        public NDArray this[params Slice[] slices]
+        {
             get
             {
-                var s = new Slice(slice);
-                s.Start = s.Start.HasValue ? s.Start.Value : 0;
-                s.Stop = s.Stop.HasValue ? s.Stop.Value : shape[0];
-                var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
-                nd.Storage.Slice = s;
-                return nd;
+                if (slices.Length == 0)
+                    throw new ArgumentException("At least one slice definition expected");
+                if (slices.Length == 1)
+                {
+                    var s = slices[0];
+                    s.Start = s.Start.HasValue ? s.Start.Value : 0;
+                    s.Stop = s.Stop.HasValue ? s.Stop.Value : shape[0];
+                    var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
+                    nd.Storage.Slice = s;
+                    return nd;
+                }
+                throw new NotImplementedException("Multidimensional slicing not implemented yet");
             }
-
             set
             {
                 throw new NotImplementedException("slice data set is not implemented.");

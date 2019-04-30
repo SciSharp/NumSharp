@@ -153,6 +153,61 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual((int)y2[0], 8);
         }
 
+
+        [TestMethod]
+        public void Slice2()
+        {
+            //>>> x = np.arange(5)
+            //        >>> x
+            //array([0, 1, 2, 3, 4])
+            //    >>> y = x[0:5]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            var y1 = x["0:5"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 0, 1, 2,3,4 }));
+
+            //    >>> z = x[:]
+            //    >>> z
+            //array([0, 1, 2, 3, 4])
+            var y2 = x[":"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 0,1,2,3, 4 }));
+
+            // out of bounds access is handled gracefully by numpy
+            //    >>> y = x[0:77]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var y3 = x["0:77"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y3.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+
+            //    >>> y = x[-77:]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var y4 = x["-77:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y4.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+        }
+
+        [Ignore("Step not implemented yet")]
+        [TestMethod]
+        public void Slice_Step()
+        {
+            //>>> x = np.arange(5)
+            //        >>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //    >>> y = x[::-1]
+            //    >>> y
+            //array([4, 3, 2, 1, 0])
+            var y = x["::-1"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 4, 3, 2, 1, 0 }));
+
+            //    >>> y = x[::2]
+            //    >>> y
+            //array([0, 2, 4])
+            y = x["::2"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 2, 4 }));
+        }
+
         [TestMethod]
         public void Slice3x2x2()
         {
