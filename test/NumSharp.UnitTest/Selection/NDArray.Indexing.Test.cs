@@ -190,6 +190,34 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
         }
 
+        [TestMethod]
+        public void Slice3()
+        {
+            //>>> x = np.arange(6)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5])
+            //>>> y = x[1:5]
+            //>>> y
+            //array([1, 2, 3, 4])
+            //>>> z = y[:3]
+            //>>> z
+            //array([1, 2, 3])
+            //>>> z[0] = 99
+            //>>> y
+            //array([99, 2, 3, 4])
+            //>>> x
+            //array([0, 99, 2, 3, 4, 5])
+            //>>>
+            var x = np.arange(6);
+            var y = x["1:5"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 1, 2, 3, 4 }));
+            var z = y[":3"];
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<int>(), new int[] { 1, 2, 3 }));
+            z[0] = 99;
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 99, 2, 3, 4 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), new int[] { 0, 99, 2, 3, 4, 5 }));
+        }
+
         //[Ignore("Step not implemented yet")]
         [TestMethod]
         public void Slice_Step()
