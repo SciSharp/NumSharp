@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -89,7 +90,7 @@ namespace NumSharp
                 if (slices.Length == 1)
                 {
                     var s = slices[0];
-                    s.Start = Math.Max(0,s.Start.HasValue ? s.Start.Value : 0);
+                    s.Start = Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
                     s.Stop = Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
                     var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
                     nd.Storage.Slice = s;
@@ -197,44 +198,46 @@ namespace NumSharp
         /// <summary>
         /// Get n-th dimension data
         /// </summary>
-        /// <param name="indice">indexes</param>
+        /// <param name="indices">indexes</param>
         /// <returns>NDArray</returns>
-        private NDArray GetData(params int[] indice)
+        private NDArray GetData(params int[] indices)
         {
-            Shape s1 = shape.Skip(indice.Length).ToArray();
+            Shape s1 = shape.Skip(indices.Length).ToArray();
             var nd = new NDArray(dtype, s1);
             //nd.Storage.Slice = new Slice($"{}");
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Boolean:
-                    nd.Array = Storage.GetSpanData<bool>(indice).ToArray();
+                    nd.Array =Storage.GetSpanData<bool>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Int16:
-                    nd.Array = Storage.GetSpanData<short>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<short>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Int32:
-                    nd.Array = Storage.GetSpanData<int>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<int>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Int64:
-                    nd.Array = Storage.GetSpanData<long>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<long>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Single:
-                    nd.Array = Storage.GetSpanData<float>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<float>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Double:
-                    nd.Array = Storage.GetSpanData<double>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<double>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.Decimal:
-                    nd.Array = Storage.GetSpanData<decimal>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<decimal>(indices).ToArray().Step(slice.Step);
                     break;
                 case TypeCode.String:
-                    nd.Array = Storage.GetSpanData<string>(indice).ToArray();
+                    nd.Array = Storage.GetSpanData<string>(indices).ToArray().Step(slice.Step);
                     break;
                 default:
-                    return Storage.GetSpanData<NDArray>(indice).ToArray()[0];
+                    return Storage.GetSpanData<NDArray>(indices).ToArray()[0]; // todo: how to step this??
             }
 
             return nd;
         }
+
+
     }
 }
