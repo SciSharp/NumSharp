@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void FromDotNetVector()
         {
-            NDArray nd = new double[]{1,2,3,4};
+            NDArray nd = new double[] { 1, 2, 3, 4 };
 
             Assert.IsTrue(((double)nd[0]) == 1);
             Assert.IsTrue(((double)nd[1]) == 2);

@@ -24,6 +24,7 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -79,7 +80,7 @@ namespace NumSharp
             if (slice is null)
                 return Storage.GetData<T>();
             else
-                return Storage.View<T>().ToArray();
+                return Storage.View<T>().ToArray().Step(slice is null ? 1 : slice.Step);
         }
 
         public T Data<T>(params int[] indice) => Storage.GetData<T>(indice);
