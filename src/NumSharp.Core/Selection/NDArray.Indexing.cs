@@ -209,28 +209,28 @@ namespace NumSharp
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Boolean:
-                    nd.Array =Storage.GetSpanData<bool>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<bool>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int16:
-                    nd.Array = Storage.GetSpanData<short>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<short>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int32:
-                    nd.Array = Storage.GetSpanData<int>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<int>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int64:
-                    nd.Array = Storage.GetSpanData<long>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<long>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Single:
-                    nd.Array = Storage.GetSpanData<float>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<float>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Double:
-                    nd.Array = Storage.GetSpanData<double>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<double>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Decimal:
-                    nd.Array = Storage.GetSpanData<decimal>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<decimal>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.String:
-                    nd.Array = Storage.GetSpanData<string>(indices).ToArray().Step(sl.Step);
+                    nd.Array = Storage.GetSpanData<string>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 default:
                     return Storage.GetSpanData<NDArray>(indices).ToArray()[0]; // todo: how to step this??

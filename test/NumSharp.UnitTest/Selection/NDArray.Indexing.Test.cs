@@ -218,7 +218,6 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), new int[] { 0, 99, 2, 3, 4, 5 }));
         }
 
-        //[Ignore("Step not implemented yet")]
         [TestMethod]
         public void Slice_Step()
         {

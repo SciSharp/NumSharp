@@ -18,8 +18,8 @@ namespace NumSharp.Utilities
             if (step == 1)
                 return array;
             if (step == -1)
-                return array.Reverse().ToArray(); 
-            var stepped_enumerable = Step(step < 0 ? array.Reverse().GetEnumerator() : array.OfType<T>().GetEnumerator(), Math.Abs( step));
+                return array.Reverse().ToArray();
+            var stepped_enumerable = Step(step < 0 ? array.Reverse().GetEnumerator() : array.OfType<T>().GetEnumerator(), Math.Abs(step));
             return stepped_enumerable.ToArray();
         }
 
