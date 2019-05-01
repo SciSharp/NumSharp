@@ -27,12 +27,12 @@ namespace NumSharp.Utilities
         {
             while (enumerator.MoveNext())
             {
+                yield return enumerator.Current;
                 for (int i = 0; i < step - 1; i++)
                 {
                     if (!enumerator.MoveNext())
                         yield break;
                 }
-                yield return enumerator.Current;
             }
         }
     }
