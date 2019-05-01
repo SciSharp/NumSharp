@@ -89,8 +89,8 @@ namespace NumSharp
                 if (slices.Length == 1)
                 {
                     var s = slices[0];
-                    s.Start = s.Start.HasValue ? s.Start.Value : 0;
-                    s.Stop = s.Stop.HasValue ? s.Stop.Value : shape[0];
+                    s.Start = Math.Max(0,s.Start.HasValue ? s.Start.Value : 0);
+                    s.Stop = Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
                     var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
                     nd.Storage.Slice = s;
                     return nd;

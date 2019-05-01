@@ -166,7 +166,8 @@ namespace NumSharp.UnitTest.Selection
             var x = np.arange(5);
             var y1 = x["0:5"];
             Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 0, 1, 2,3,4 }));
-
+            y1 = x["1:4"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 1, 2, 3}));
             //    >>> z = x[:]
             //    >>> z
             //array([0, 1, 2, 3, 4])
@@ -185,6 +186,8 @@ namespace NumSharp.UnitTest.Selection
             //array([0, 1, 2, 3, 4])
             var y4 = x["-77:"];
             Assert.IsTrue(Enumerable.SequenceEqual(y4.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+            var y = x["-77:77"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
         }
 
         [Ignore("Step not implemented yet")]
