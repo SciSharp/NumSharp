@@ -188,5 +188,12 @@ namespace NumSharp
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
         }
 
+        // return the size of the slice, given the data dimension on this axiy
+        public int GetSize(int dim)
+        {
+            var start = Math.Max(0, Start ?? 0);
+            var stop = Math.Min(dim,  Stop ?? dim);
+            return (int)Math.Ceiling((stop - start) / (double)Math.Abs(Step));
+        }
     }
 }
