@@ -145,6 +145,11 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, }, view1.GetData());
             AssertAreEqual(new int[] { 88, -6, -4, -2, }, view2.GetData());
             AssertAreEqual(new int[] { -2, 88 }, view3.GetData());
+            view3.SetData(22, 0);
+            AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9 }, data.GetData());
+            AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, }, view1.GetData());
+            AssertAreEqual(new int[] { 88, -6, -4, 22, }, view2.GetData());
+            AssertAreEqual(new int[] { 22, 88 }, view3.GetData());
         }
     }
 }
