@@ -63,32 +63,58 @@ namespace NumSharp.UnitTest.View
             var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
             // return identical view
             var view = new ViewStorage(data, ":");
-            AssertAreEqual(new[]{0,5,9}, view.GetData<int>(0,5,9));
+            Assert.AreEqual(0,view.GetData<int>(0));
+            Assert.AreEqual(5, view.GetData<int>(5));
+            Assert.AreEqual(9, view.GetData<int>(9));
             view = new ViewStorage(data, "-77:77");
-            AssertAreEqual(new[] { 0, 5, 9 }, view.GetData<int>(0, 5, 9));
+            Assert.AreEqual(0, view.GetData<int>(0));
+            Assert.AreEqual(5, view.GetData<int>(5));
+            Assert.AreEqual(9, view.GetData<int>(9));
             // return reduced view
             view = new ViewStorage(data, "7:");
-            AssertAreEqual(new int[] { 7, 8, 9 }, view.GetData<int>(0,1,2));
+            Assert.AreEqual(7, view.GetData<int>(0));
+            Assert.AreEqual(8, view.GetData<int>(1));
+            Assert.AreEqual(9, view.GetData<int>(2));
             view = new ViewStorage(data, ":5");
-            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, view.GetData<int>(0, 1, 2, 3, 4));
+            Assert.AreEqual(0, view.GetData<int>(0));
+            Assert.AreEqual(1, view.GetData<int>(1));
+            Assert.AreEqual(2, view.GetData<int>(2));
+            Assert.AreEqual(3, view.GetData<int>(3));
+            Assert.AreEqual(4, view.GetData<int>(4));
             view = new ViewStorage(data, "2:3");
-            AssertAreEqual(new int[] { 2 }, view.GetData<int>(0));
+            Assert.AreEqual(2, view.GetData<int>(0));
             // return stepped view
             view = new ViewStorage(data, "::2");
-            AssertAreEqual(new int[] { 0, 2, 4, 6, 8 }, view.GetData<int>(0,1,2,3,4));
+            Assert.AreEqual(0, view.GetData<int>(0));
+            Assert.AreEqual(2, view.GetData<int>(1));
+            Assert.AreEqual(4, view.GetData<int>(2));
+            Assert.AreEqual(6, view.GetData<int>(3));
+            Assert.AreEqual(8, view.GetData<int>(4));
             view = new ViewStorage(data, "::3");
-            AssertAreEqual(new int[] { 0, 3, 6, 9 }, view.GetData<int>(0,1,2,3));
+            Assert.AreEqual(0, view.GetData<int>(0));
+            Assert.AreEqual(3, view.GetData<int>(1));
+            Assert.AreEqual(6, view.GetData<int>(2));
+            Assert.AreEqual(9, view.GetData<int>(3));
             view = new ViewStorage(data, "-77:77:77");
-            AssertAreEqual(new[] { 0 }, view.GetData<int>(0));
+            Assert.AreEqual(0, view.GetData<int>(0));
             // negative step!
             view = new ViewStorage(data, "::-1");
-            AssertAreEqual(new[] { 9, 5, 0 }, view.GetData<int>(0, 5, 9));
+            Assert.AreEqual(9, view.GetData<int>(0));
+            Assert.AreEqual(4, view.GetData<int>(5));
+            Assert.AreEqual(0, view.GetData<int>(9));
             view = new ViewStorage(data, "::-2");
-            AssertAreEqual(new int[] { 9, 7, 5, 3, 1 }, view.GetData<int>(0, 1, 2, 3, 4));
+            Assert.AreEqual(9, view.GetData<int>(0));
+            Assert.AreEqual(7, view.GetData<int>(1));
+            Assert.AreEqual(5, view.GetData<int>(2));
+            Assert.AreEqual(3, view.GetData<int>(3));
+            Assert.AreEqual(1, view.GetData<int>(4));
             view = new ViewStorage(data, "::-3");
-            AssertAreEqual(new int[] { 9, 6, 3, 0 }, view.GetData<int>(0, 1, 2, 3));
+            Assert.AreEqual(9, view.GetData<int>(0));
+            Assert.AreEqual(6, view.GetData<int>(1));
+            Assert.AreEqual(3, view.GetData<int>(2));
+            Assert.AreEqual(0, view.GetData<int>(3));
             view = new ViewStorage(data, "-77:77:-77");
-            AssertAreEqual(new[] { 9 }, view.GetData<int>(0));
+            Assert.AreEqual(9, view.GetData<int>(0));
         }
 
         [TestMethod]
