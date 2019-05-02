@@ -77,13 +77,6 @@
   </Target>
 
   <ItemGroup>
-		<!--<Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/lapack.dll" Link="lapack.dll" Pack="true" PackagePath="runtimes/win-x64/native/lapack.dll" />
-    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/win-x64/native/blas_win64_MT.dll" Link="blas_win64_MT.dll" Pack="true" PackagePath="runtimes/win-x64/native/blas_win64_MT.dll" />
-    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/blas.so" Link="blas.so" Pack="true" PackagePath="runtimes/linux-x64/native/blas.so" />
-    <Content CopyToOutputDirectory="PreserveNewest" Include="./runtimes/linux-x64/native/lapack.so" Link="lapack.so" Pack="true" PackagePath="runtimes/linux-x64/native/lapack.so" />-->
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="ArrayFire" Version="0.0.2" />
     <PackageReference Include="System.Memory" Version="4.5.2" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />

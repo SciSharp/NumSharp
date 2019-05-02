@@ -171,6 +171,15 @@ namespace NumSharp
             }
         }
 
+        #region Slicing support
+
+        public Shape Slice(Slice[] slices)
+        {
+            return new Shape(Dimensions.Select((dim, i) => slices[i].GetSize(dim)).ToArray());
+        }
+
+        #endregion
+
         public static implicit operator int[] (Shape shape) => shape.dimensions;
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 

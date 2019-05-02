@@ -141,6 +141,13 @@ namespace NumSharp.Backends
             _arrayDouble = values;
         }
 
+        public TypedArrayStorage(int[] values)
+        {
+            _DType = typeof(int);
+            _Shape = new Shape(values.Length);
+            _arrayInt32 = values;
+        }
+
         public TypedArrayStorage(object[] values)
         {
             _DType = values.GetType().GetElementType();
