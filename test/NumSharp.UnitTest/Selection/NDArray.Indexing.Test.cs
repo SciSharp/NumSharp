@@ -8,7 +8,7 @@ using System.Linq;
 namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
-    public class IndexingTest
+    public class IndexingTest : TestClass
     {
         [TestMethod]
         public void IndexAccessorGetter()
@@ -144,10 +144,10 @@ namespace NumSharp.UnitTest.Selection
         {
             var x = np.arange(5);
             var y1 = x["1:3"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 1, 2 }));
+            AssertAreEqual(y1.Data<int>(), new int[] { 1, 2 });
 
             var y2 = x["3:"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 3, 4 }));
+            AssertAreEqual(y2.Data<int>(), new int[] { 3, 4 });
             y2[0] = 8;
             y2[1] = 9;
             Assert.AreEqual((int)y2[0], 8);
@@ -165,54 +165,172 @@ namespace NumSharp.UnitTest.Selection
             //array([0, 1, 2, 3, 4])
             var x = np.arange(5);
             var y1 = x["0:5"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 0, 1, 2,3,4 }));
+            AssertAreEqual(y1.Data<int>(), new int[] { 0, 1, 2,3,4 });
             y1 = x["1:4"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 1, 2, 3}));
+            AssertAreEqual(y1.Data<int>(), new int[] { 1, 2, 3});
             //    >>> z = x[:]
             //    >>> z
             //array([0, 1, 2, 3, 4])
             var y2 = x[":"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 0,1,2,3, 4 }));
+            AssertAreEqual(y2.Data<int>(), new int[] { 0,1,2,3, 4 });
 
             // out of bounds access is handled gracefully by numpy
             //    >>> y = x[0:77]
             //    >>> y
             //array([0, 1, 2, 3, 4])
             var y3 = x["0:77"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y3.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+            AssertAreEqual(y3.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
 
             //    >>> y = x[-77:]
             //    >>> y
             //array([0, 1, 2, 3, 4])
             var y4 = x["-77:"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y4.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+            AssertAreEqual(y4.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
             var y = x["-77:77"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 1, 2, 3, 4 }));
+            AssertAreEqual(y.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
+        }
+
+        [TestMethod]
+        public void Slice3()
+        {
+            //>>> x = np.arange(6)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5])
+            //>>> y = x[1:5]
+            //>>> y
+            //array([1, 2, 3, 4])
+            //>>> z = y[:3]
+            //>>> z
+            //array([1, 2, 3])
+            //>>> z[0] = 99
+            //>>> y
+            //array([99, 2, 3, 4])
+            //>>> x
+            //array([0, 99, 2, 3, 4, 5])
+            //>>>
+            var x = np.arange(6);
+            var y = x["1:5"];
+            AssertAreEqual(new int[] { 1, 2, 3, 4, }, y.Data<int>());
+            var z = y[":3"];
+            AssertAreEqual(new int[] { 1, 2, 3 }, z.Data<int>());
+            z[0] = 99;
+            AssertAreEqual(new int[] { 99, 2, 3, 4 }, y.Data<int>());
+            AssertAreEqual(new int[] { 0, 99, 2, 3, 4, 5 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void Slice4()
+        {
+            //>>> x = np.arange(5)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //>>> y = x[2:4]
+            //>>> y
+            //array([2,3])
+            var y = x["2:4"];
+            Assert.AreEqual(2, (int)y[0]);
+            Assert.AreEqual(3, (int)y[1]);
+            y[0] = 77;
+            y[1] = 99;
+            Assert.AreEqual(77, (int)x[2]);
+            Assert.AreEqual(99, (int)x[3]);
         }
 
         [TestMethod]
         public void Slice_Step()
         {
             //>>> x = np.arange(5)
-            //        >>> x
+            //>>> x
             //array([0, 1, 2, 3, 4])
             var x = np.arange(5);
-            //    >>> y = x[::-1]
-            //    >>> y
+            //>>> y = x[::-1]
+            //>>> y
             //array([4, 3, 2, 1, 0])
             var y = x["::-1"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 4, 3, 2, 1, 0 }));
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 3, 2, 1, 0 });
 
-            //    >>> y = x[::2]
-            //    >>> y
+            //>>> y = x[::2]
+            //>>> y
             //array([0, 2, 4])
             y = x["::2"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 2, 4 }));
+            AssertAreEqual(y.Data<int>(), new int[] { 0, 2, 4 });
+        }
+
+        [Ignore("Stepped slices are not yet able to manipulate the base class")]
+        [TestMethod]
+        public void Slice_Step1()
+        {
+            //>>> x = np.arange(6)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5])
+            //>>> y = x[::- 1]
+            //>>> y
+            //array([5, 4, 3, 2, 1, 0])
+            //>>> y[0] = 99
+            //>>> x
+            //array([0, 1, 2, 3, 4, 99])
+            //>>> y
+            //array([99, 4, 3, 2, 1, 0])
+            //>>> y = x[::-1]
+            //>>> y
+            //array([5, 4, 3, 2, 1, 0])
+            var x = np.arange(6);
+            var y = x["::-1"];
+            y[0] = 99;
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 99 }, x.Data<int>());
+            AssertAreEqual(new int[] { 99, 4, 3, 2, 1, 0 }, y.Data<int>());
+            //>>> z = y[::2]
+            //>>> z
+            //array([99, 3, 1])
+            //>>> z[1] = 111
+            //>>> x
+            //array([0, 1, 2, 111, 4, 99])
+            //>>> y
+            //array([99, 4, 111, 2, 1, 0])
+            var z = y["::2"];
+            AssertAreEqual(new int[] { 99, 3, 1 }, z.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 2, 111, 4, 99 }, x.Data<int>());
+            AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.Data<int>());
+        }
+
+        [Ignore("Stepped slices are not yet able to manipulate the base class")]
+        [TestMethod]
+        public void Slice_Step2()
+        {
+            //>>> x = np.arange(5)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //>>> y = x[::2]
+            //>>> y
+            //array([0, 2, 4])
+            var y = x["::2"];
+            Assert.AreEqual(0, (int)y[0]);
+            Assert.AreEqual(2, (int)y[1]);
+            Assert.AreEqual(4, (int)y[2]);
         }
 
         [TestMethod]
         public void Slice3x2x2()
         {
+            //>>> x = np.arange(12).reshape(3, 2, 2)
+            //>>> x
+            //array([[[0, 1],
+            //        [ 2,  3]],
+            //
+            //       [[ 4,  5],
+            //        [ 6,  7]],
+            //
+            //       [[ 8,  9],
+            //        [10, 11]]])
+            //>>> y1 = x[1:]
+            //>>> y1
+            //array([[[ 4,  5],
+            //        [ 6,  7]],
+            //
+            //       [[ 8,  9],
+            //        [10, 11]]])
             var x = np.arange(12).reshape(3, 2, 2);
             var y1 = x["1:"];
             Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));

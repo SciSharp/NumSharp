@@ -202,6 +202,7 @@ namespace NumSharp
         /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indices)
         {
+            var sl = slice ?? new Slice();
             Shape s1 = shape.Skip(indices.Length).ToArray();
             var nd = new NDArray(dtype, s1);
             //nd.Storage.Slice = new Slice($"{}");
