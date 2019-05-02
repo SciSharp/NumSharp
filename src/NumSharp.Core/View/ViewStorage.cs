@@ -14,32 +14,54 @@ namespace NumSharp
 
         public ViewStorage(IStorage dataStorage, params Slice[] slices)
         {
-            if (dataStorage==null)
-                throw  new ArgumentException("dataStorage must not be null");
+            if (dataStorage == null)
+                throw new ArgumentException("dataStorage must not be null");
             if (slices == null)
                 throw new ArgumentException("slices must not be null");
             if (slices.Length == 0)
                 throw new ArgumentException("slices must contain at least one slice");
             _data = dataStorage;
             _slices = slices;
-            EnsureSliceStartStop();
+            EnsureValidSlicingDefinitions();
         }
 
         private IStorage _data = null;
-        private Slice[] _slices =  null;
+        private Slice[] _slices = null;
+        private Shape internal_shape;
 
-        private void EnsureSliceStartStop()
+        private void EnsureValidSlicingDefinitions()
         {
-            if (_slices.Length == 1)
+            // we need to be working with the original shape here because Slicing changes the own shape!
+            var shape = _data.Shape;
+            // we need at least one slice per dimension in order to correctly handle multi-dimensional arrays, if not given, extend by Slice.All() which returns the whole dimension
+            if (_slices == null || _slices.Length != shape.NDim)
             {
-                _slices[0].Start = Math.Max(0, _slices[0].Start ?? 0);
-                var size = _data.Shape.Size;
-                _slices[0].Stop = Math.Min(size, _slices[0].Stop ?? size);                    
+                var temp_slices = _slices;
+                _slices = new Slice[shape.NDim];
+                for (int dim = 0; dim < shape.NDim; dim++)
+                {
+                    if (temp_slices.Length > dim)
+                        _slices[dim] = temp_slices[dim];
+                    else
+                        _slices[dim] = Slice.All();
+                }
             }
-            else
+            for (int dim = 0; dim < shape.NDim; dim++)
             {
-                throw new NotImplementedException("Multi-Dim slicing");
+                var slice = _slices[dim];
+                var size = shape.Dimensions[dim];
+                if (slice.IsIndex)
+                {
+                    // special case: reduce this dimension
+                    if (slice.Start < 0 || slice.Start >= size)
+                        throw new IndexOutOfRangeException($"Index {slice.Start} is out of bounds for axis {dim} with size {size}");
+                }
+                slice.Start = Math.Max(0, slice.Start ?? 0);
+                slice.Stop = Math.Min(size, slice.Stop ?? size);
             }
+            // internal shape contains axis with only 1 element that will be reduced in public shape.
+            internal_shape = _data.Shape.Slice(_slices, reduce:false);
+            Shape = _data.Shape.Slice(_slices, reduce:true);
         }
 
         public object Clone()
@@ -50,7 +72,8 @@ namespace NumSharp
         public Type DType => _data.DType;
         public int DTypeSize => _data.DTypeSize;
         public Slice Slice { get; set; } // <--- this is not doing anything in View! 
-        public Shape Shape { get { return _data.Shape.Slice(_slices); } }
+        public Shape Shape { get; private set; }
+
 
         public void Allocate(Shape shape, Type dtype = null)
         {
@@ -67,22 +90,23 @@ namespace NumSharp
         public Array GetData()
         {
             // since the view is a subset of the data we have to copy here
+            int size = internal_shape.Size;
+            var data = AllocateArray(size, _data.DType);
+            // the algorithm is split into 1-D and N-D because for 1-D we need not go through shape.GetDimIndexOutShape
             if (_slices.Length == 1)
             {
-                var slice = _slices[0];
-                int size = Shape.Size; 
-                var data = AllocateArray(size, _data.DType);
                 for (var i = 0; i < size; i++)
                     data.SetValue(GetValue(i), i);
-                return data;
             }
             else
             {
-                throw new NotImplementedException("Multi-Dim slicing");
+                for (var i = 0; i < size; i++)
+                    data.SetValue(GetValue(internal_shape.GetDimIndexOutShape(i)), i);
             }
+            return data;
         }
 
-        private object GetValue(int idx)
+        private object GetValue(params int[] idx)
         {
             switch (DType.Name)
             {
@@ -151,7 +175,7 @@ namespace NumSharp
 
         public Array CloneData()
         {
-            throw  new NotImplementedException("Cloning the data is not supported in view");            
+            throw new NotImplementedException("Cloning the data is not supported in view");
         }
 
         public T[] GetData<T>()
@@ -164,30 +188,43 @@ namespace NumSharp
             return _data.GetData<T>(TransformIndices(indices, _slices));
         }
 
-        // todo move to Shape when implementing of multi-dim slicing
         private int[] TransformIndices(int[] indices, Slice[] slices)
         {
-            // transform in-place, for performance reasons
+            var sliced_indices = new int[slices.Length];
+            if (indices.Length < slices.Length)
+            {
+                // special case indexing into dimenionality reduced slice
+                // the user of this view doesn't know the dims have been reduced so we have to augment the indices accordingly
+                int indices_index = 0;
+                for (int i = 0; i < slices.Length; i++)
+                {
+                    var slice = slices[i];
+                    if (slice.IsIndex)
+                    {
+                        sliced_indices[i] = slice.Start.Value;
+                        continue;
+                    }
+                    var idx = indices[indices_index];
+                    indices_index++;
+                    sliced_indices[i] = TransformIndex(idx, slice);
+                }
+                return sliced_indices;
+            }
+            // normal case
             for (int i = 0; i < indices.Length; i++)
             {
                 var idx = indices[i];
-                indices[i] = TransformIndex(idx, slices);
+                var slice = slices[i];
+                sliced_indices[i] = TransformIndex(idx, slice);
             }
-            return indices;
+            return sliced_indices;
         }
 
-        // todo move to Shape when implementing of multi-dim slicing
-        private int TransformIndex(int idx, Slice[] slices)
+        private int TransformIndex(int idx, Slice slice)
         {
-            if (slices.Length == 1)
-            {
-                var slice = slices[0];
-                var start = slice.Step > 0 ? slice.Start.Value : Math.Max(0,  slice.Stop.Value-1);
-                //var stop = slice.Step > 0 ? slice.Stop.Value : Math.Max(0, slice.Start.Value - 1);
-                return start + idx * slice.Step;
-            }
-            else 
-                throw new NotImplementedException("Multi-Dim slicing");
+            var start = slice.Step > 0 ? slice.Start.Value : Math.Max(0, slice.Stop.Value - 1);
+            //var stop = slice.Step > 0 ? slice.Stop.Value : Math.Max(0, slice.Start.Value - 1);
+            return start + idx * slice.Step;
         }
 
         public Span<T> GetSpanData<T>(params int[] indices)

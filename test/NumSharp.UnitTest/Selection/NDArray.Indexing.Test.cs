@@ -386,8 +386,9 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual("::2", new Slice(step:2).ToString());
             Assert.AreEqual("::2", new Slice(null, null, 2).ToString());
 
-            // pick exactly one item
-            Assert.AreEqual("17:18", new Slice("17").ToString());
+            // pick exactly one item and reduce the dimension
+            Assert.AreEqual("17", new Slice("17").ToString());
+            // pick exactly one item but keep the dimension
             Assert.AreEqual("17:18", new Slice("17:18").ToString());
 
 
@@ -398,7 +399,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(new Slice(":2"), new Slice(":2"));
             Assert.AreEqual(new Slice("7::9"), new Slice("7::9"));
             Assert.AreEqual(new Slice("7:8:9"), new Slice("7:8:9"));
-            Assert.AreEqual(new Slice("17:18"), new Slice("17"));
+            Assert.AreEqual(new Slice("17"), new Slice("17"));
             Assert.AreEqual(new Slice("-5:-8"), new Slice("-5:-8"));
             Assert.AreEqual(new Slice("-  5:- 8"), new Slice("-5:-8"));
             Assert.AreEqual(new Slice("+  5:+ 8"), new Slice("+5:8"));
@@ -439,7 +440,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void N_DimensionalSliceNotation()
         {
-            var s = "1:3,-5:-8,7:8:9,1:,:,:1,7::9,:7:9,::-1,-5:-8,5:8";
+            var s = "1:3,-5:-8,7:8:9,1:,999,:,:1,7::9,:7:9,::-1,-5:-8,5:8";
             Assert.AreEqual(s, Slice.FormatSlices( Slice.ParseSlices(s)));
         }
 
