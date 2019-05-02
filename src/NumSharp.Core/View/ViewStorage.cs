@@ -27,6 +27,7 @@ namespace NumSharp
 
         private IStorage _data = null;
         private Slice[] _slices = null;
+        private Shape internal_shape;
 
         private void EnsureValidSlicingDefinitions()
         {
@@ -49,9 +50,18 @@ namespace NumSharp
             {
                 var slice = _slices[dim];
                 var size = shape.Dimensions[dim];
+                if (slice.IsIndex)
+                {
+                    // special case: reduce this dimension
+                    if (slice.Start < 0 || slice.Start >= size)
+                        throw new IndexOutOfRangeException($"Index {slice.Start} is out of bounds for axis {dim} with size {size}");
+                }
                 slice.Start = Math.Max(0, slice.Start ?? 0);
                 slice.Stop = Math.Min(size, slice.Stop ?? size);
             }
+            // internal shape contains axis with only 1 element that will be reduced in public shape.
+            internal_shape = _data.Shape.Slice(_slices, reduce:false);
+            Shape = _data.Shape.Slice(_slices, reduce:true);
         }
 
         public object Clone()
@@ -62,7 +72,8 @@ namespace NumSharp
         public Type DType => _data.DType;
         public int DTypeSize => _data.DTypeSize;
         public Slice Slice { get; set; } // <--- this is not doing anything in View! 
-        public Shape Shape { get { return _data.Shape.Slice(_slices); } }
+        public Shape Shape { get; private set; }
+
 
         public void Allocate(Shape shape, Type dtype = null)
         {
@@ -79,10 +90,10 @@ namespace NumSharp
         public Array GetData()
         {
             // since the view is a subset of the data we have to copy here
-            int size = Shape.Size;
+            int size = internal_shape.Size;
             var data = AllocateArray(size, _data.DType);
             // the algorithm is split into 1-D and N-D because for 1-D we need not go through shape.GetDimIndexOutShape
-            if (Shape.NDim == 1)
+            if (_slices.Length == 1)
             {
                 for (var i = 0; i < size; i++)
                     data.SetValue(GetValue(i), i);
@@ -90,7 +101,7 @@ namespace NumSharp
             else
             {
                 for (var i = 0; i < size; i++)
-                    data.SetValue(GetValue(Shape.GetDimIndexOutShape(i)), i);
+                    data.SetValue(GetValue(internal_shape.GetDimIndexOutShape(i)), i);
             }
             return data;
         }
@@ -176,14 +187,34 @@ namespace NumSharp
         {
             return _data.GetData<T>(TransformIndices(indices, _slices));
         }
-        
+
         private int[] TransformIndices(int[] indices, Slice[] slices)
         {
-            var sliced_indices=new int[indices.Length];
+            var sliced_indices = new int[slices.Length];
+            if (indices.Length < slices.Length)
+            {
+                // special case indexing into dimenionality reduced slice
+                // the user of this view doesn't know the dims have been reduced so we have to augment the indices accordingly
+                int indices_index = 0;
+                for (int i = 0; i < slices.Length; i++)
+                {
+                    var slice = slices[i];
+                    if (slice.IsIndex)
+                    {
+                        sliced_indices[i] = slice.Start.Value;
+                        continue;
+                    }
+                    var idx = indices[indices_index];
+                    indices_index++;
+                    sliced_indices[i] = TransformIndex(idx, slice);
+                }
+                return sliced_indices;
+            }
+            // normal case
             for (int i = 0; i < indices.Length; i++)
             {
                 var idx = indices[i];
-                var slice = _slices[i];
+                var slice = slices[i];
                 sliced_indices[i] = TransformIndex(idx, slice);
             }
             return sliced_indices;

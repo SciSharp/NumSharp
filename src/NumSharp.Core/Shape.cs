@@ -173,9 +173,12 @@ namespace NumSharp
 
         #region Slicing support
 
-        public Shape Slice(Slice[] slices)
+        public Shape Slice(Slice[] slices, bool reduce=false)
         {
-            return new Shape(Dimensions.Select((dim, i) => slices[i].GetSize(dim)).ToArray());
+            var sliced_axes = Dimensions.Select((dim, i) => slices[i].GetSize(dim));
+            if (reduce)
+                sliced_axes = sliced_axes.Where((dim, i) => !slices[i].IsIndex);
+            return new Shape(sliced_axes.ToArray());
         }
 
         #endregion

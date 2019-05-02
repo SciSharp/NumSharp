@@ -42,12 +42,22 @@ namespace NumSharp
     /// that this may happen.
     /// 
     /// Adapted from Greg Hewgill's answer on Stackoverflow: https://stackoverflow.com/questions/509211/understanding-slice-notation
+    /// 
+    /// Note: special IsIndex == true
+    /// It will pick only a single value at Start in this dimension effectively reducing the Shape of the sliced matrix by 1 dimension. 
+    /// It can be used to reduce an N-dimensional array/matrix to a (N-1)-dimensional array/matrix
+    /// 
+    /// Example:
+    /// a=[[1, 2], [3, 4]]
+    /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector
+
     /// </summary>
     public class Slice
     {
         public int? Start { get; set; }
         public int? Stop { get; set; }
         public int Step { get; set; } = 1;
+        public bool IsIndex { get; set; }
 
         /// <summary>
         /// Length of the slice. 
@@ -109,7 +119,8 @@ namespace NumSharp
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
                 Stop = start+1;
-                Step = 1;
+                Step = 1; // special case for dimensionality reduction by picking a single element
+                IsIndex = true;
                 return;
             }
             if (string.IsNullOrWhiteSpace(start_string))
@@ -184,6 +195,8 @@ namespace NumSharp
 
         public override string ToString()
         {
+            if (IsIndex)
+                return $"{Start ?? 0}";
             var optional_step = Step == 1 ? "" : $":{Step}";
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
         }
