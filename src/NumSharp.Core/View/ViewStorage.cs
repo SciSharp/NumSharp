@@ -19,7 +19,12 @@ namespace NumSharp
             if (slices == null)
                 throw new ArgumentException("slices must not be null");
             if (slices.Length == 0)
-                throw new ArgumentException("slices must contain at least one slice");
+            {
+                // if now slices are given the view returns all of all dimensions
+                slices = new Slice[dataStorage.Shape.NDim];
+                for (int dim = 0; dim < dataStorage.Shape.NDim; dim++)
+                    slices[dim] = Slice.All();
+            }
             _data = dataStorage;
             _slices = slices;
             EnsureValidSlicingDefinitions();
@@ -34,17 +39,16 @@ namespace NumSharp
             // we need to be working with the original shape here because Slicing changes the own shape!
             var shape = _data.Shape;
             // we need at least one slice per dimension in order to correctly handle multi-dimensional arrays, if not given, extend by Slice.All() which returns the whole dimension
-            if (_slices == null || _slices.Length != shape.NDim)
+            var temp_slices = _slices;
+            if (_slices == null)
+                temp_slices=new Slice[0];
+            _slices = new Slice[shape.NDim];
+            for (int dim = 0; dim < shape.NDim; dim++)
             {
-                var temp_slices = _slices;
-                _slices = new Slice[shape.NDim];
-                for (int dim = 0; dim < shape.NDim; dim++)
-                {
-                    if (temp_slices.Length > dim)
-                        _slices[dim] = temp_slices[dim];
-                    else
-                        _slices[dim] = Slice.All();
-                }
+                if (temp_slices.Length > dim)
+                    _slices[dim] = temp_slices[dim] ?? Slice.All(); // <-- allow to pass null for Slice.All()
+                else
+                    _slices[dim] = Slice.All();
             }
             for (int dim = 0; dim < shape.NDim; dim++)
             {
@@ -306,6 +310,53 @@ namespace NumSharp
         public Span<T> View<T>(Slice slice = null)
         {
             throw new NotImplementedException();
+        }
+
+
+        public override string ToString()
+        {
+            var s = new StringBuilder();
+            PrettyPrint(s);
+            return s.ToString();
+        }
+
+        public string ToString(bool flat = false)
+        {
+            var s = new StringBuilder();
+            PrettyPrint(s, flat);
+            return s.ToString();
+        }
+
+        private void PrettyPrint(StringBuilder s, bool flat = false)
+        {
+            if (Shape.Dimensions.Length == 0)
+            {
+                s.Append($"{GetValue(0)}");
+                return;
+            }
+            if (Shape.Dimensions.Length == 1)
+            {
+                s.Append("[");
+                s.Append(string.Join(", ", this.GetData().OfType<object>().Select(x => x == null ? "null" : x.ToString())));
+                s.Append("]");
+                return;
+            }
+            var last_dim = Shape.Dimensions.Last();
+            var slices = new Slice[Shape.Dimensions.Length];
+            s.Append("[");
+            for (int i = 0; i < last_dim; i++)
+            {
+                slices[0] = Slice.Index(i);
+                var n_minus_one_dim_slice = new ViewStorage( this, slices);
+                n_minus_one_dim_slice.PrettyPrint(s, flat);
+                if (i < last_dim - 1)
+                {
+                    s.Append(", ");
+                    if (!flat)
+                        s.AppendLine();
+                }
+            }
+            s.Append("]");
         }
     }
 }
