@@ -188,9 +188,9 @@ namespace NumSharp
             return new Slice(null, null);
         }
 
-        public static Slice SingleValue(int index)
+        public static Slice Index(int index)
         {
-            return new Slice(index, index + 1);
+            return new Slice(index, index + 1) { IsIndex = true };
         }
 
         public override string ToString()
@@ -208,5 +208,6 @@ namespace NumSharp
             var stop = Math.Min(dim,  Stop ?? dim);
             return (int)Math.Ceiling((stop - start) / (double)Math.Abs(Step));
         }
+
     }
 }

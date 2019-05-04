@@ -290,6 +290,8 @@ namespace NumSharp.UnitTest.Selection
             //array([99, 4, 111, 2, 1, 0])
             var z = y["::2"];
             AssertAreEqual(new int[] { 99, 3, 1 }, z.Data<int>());
+            z[1] = 111;
+            Assert.AreEqual(new int[] { 99, 111, 1 }, z);	    
             AssertAreEqual(new int[] { 0, 1, 2, 111, 4, 99 }, x.Data<int>());
             AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.Data<int>());
         }
@@ -422,7 +424,7 @@ namespace NumSharp.UnitTest.Selection
 
             // Create functions
             Assert.AreEqual(Slice.All(), new Slice(":"));
-            Assert.AreEqual(Slice.SingleValue(17), new Slice("17:18"));
+            Assert.AreEqual(Slice.Index(17), new Slice("17:18"));
 
             // invalid values
             Assert.ThrowsException<ArgumentException>(()=>new Slice(""));
