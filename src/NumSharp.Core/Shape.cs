@@ -86,6 +86,19 @@ namespace NumSharp
             return idx;
         }
 
+        public int GetIndexInShape(Slice slice, params int[] select)
+        {
+            if (NDim == 0 && select.Length == 1)
+                return select[0];
+
+            int idx = 0;
+
+            for (int i = 0; i < select.Length; i++)
+                idx += strides[i] * select[i];
+
+            return idx;
+        }
+
         /// <summary>
         /// get position in shape by store position
         /// [[1, 2, 3], [4, 5, 6]]

@@ -22,7 +22,7 @@
     <FileVersion>0.10.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <Version>0.10.0-rc</Version>
+    <Version>0.10.0</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>latest</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>

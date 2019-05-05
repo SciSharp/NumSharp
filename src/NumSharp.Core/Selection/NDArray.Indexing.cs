@@ -73,7 +73,10 @@ namespace NumSharp
 
         public NDArray this[string slice]
         {
-            get { return this[Slice.ParseSlices(slice)]; }
+            get
+            {
+                return this[Slice.ParseSlices(slice)];
+            }
 
             set
             {
@@ -90,8 +93,8 @@ namespace NumSharp
                 if (slices.Length == 1)
                 {
                     var s = slices[0];
-                    s.Start = Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
-                    s.Stop = Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
+                    s.Start = (slice is null ? 0 : slice.Start) + Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
+                    s.Stop = (slice is null ? 0 : slice.Start) + Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
                     var nd = new NDArray(Array, new int[] { s.Length.Value }.Concat(Shape.GetShape(shape, 0)).ToArray());
                     nd.Storage.Slice = s;
                     return nd;
@@ -188,7 +191,7 @@ namespace NumSharp
                     if (boolDotNetArray[idx])
                     {
                         int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(indexes));
+                        Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(slice, indexes));
                     }
                 }
 
@@ -209,31 +212,31 @@ namespace NumSharp
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Boolean:
-                    nd.Array = Storage.GetSpanData<bool>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<bool>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int16:
-                    nd.Array = Storage.GetSpanData<short>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<short>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int32:
-                    nd.Array = Storage.GetSpanData<int>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<int>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Int64:
-                    nd.Array = Storage.GetSpanData<long>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<long>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Single:
-                    nd.Array = Storage.GetSpanData<float>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<float>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Double:
-                    nd.Array = Storage.GetSpanData<double>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<double>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.Decimal:
-                    nd.Array = Storage.GetSpanData<decimal>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<decimal>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 case TypeCode.String:
-                    nd.Array = Storage.GetSpanData<string>(indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                    nd.Array = Storage.GetSpanData<string>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
                     break;
                 default:
-                    return Storage.GetSpanData<NDArray>(indices).ToArray()[0]; // todo: how to step this??
+                    return Storage.GetSpanData<NDArray>(slice, indices).ToArray()[0]; // todo: how to step this??
             }
 
             return nd;

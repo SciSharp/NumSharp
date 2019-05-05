@@ -27,7 +27,7 @@ namespace NumSharp
                     for (int i = 0; i < size; i++)
                     {
                         // Data<int>(s.GetDimIndexOutShape(i))
-                        values2[i] = values1[Storage.Shape.GetIndexInShape(s.GetDimIndexOutShape(i))];
+                        values2[i] = values1[Storage.Shape.GetIndexInShape(slice, s.GetDimIndexOutShape(i))];
                     }
                     nd.Array = values2;
                     break;

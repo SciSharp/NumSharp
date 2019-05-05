@@ -213,55 +213,55 @@ namespace NumSharp.Backends
         public bool GetBoolean(params int[] indexes)
         {
             var data = _values as bool[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public short GetInt16(params int[] indexes)
         {
             var data = _values as short[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public int GetInt32(params int[] indexes)
         {
             var data = _values as int[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public long GetInt64(params int[] indexes)
         {
             var data = _values as long[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public float GetSingle(params int[] indexes)
         {
             var data = _values as float[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public double GetDouble(params int[] indexes)
         {
             var data = _values as double[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public decimal GetDecimal(params int[] indexes)
         {
             var data = _values as decimal[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public string GetString(params int[] indexes)
         {
             var data = _values as string[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public NDArray GetNDArray(params int[] indexes)
         {
             var data = _values as NDArray[];
-            return data[Shape.GetIndexInShape(indexes)];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         /// <summary>
@@ -311,7 +311,7 @@ namespace NumSharp.Backends
         {
             T[] values = GetData() as T[];
 
-            return values[Shape.GetIndexInShape(indexes)];
+            return values[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         /// <summary>
@@ -337,7 +337,7 @@ namespace NumSharp.Backends
         /// <param name="indexes"></param>
         public void SetData<T>(T value, params int[] indexes)
         {
-            int idx = _Shape.GetIndexInShape(indexes);
+            int idx = _Shape.GetIndexInShape(Slice, indexes);
             switch (value)
             {
                 case bool val:
@@ -472,7 +472,7 @@ namespace NumSharp.Backends
             throw new NotImplementedException("View Slice");
         }
 
-        public Span<T> GetSpanData<T>(params int[] indice)
+        public Span<T> GetSpanData<T>(Slice slice, params int[] indice)
         {
             throw new NotImplementedException();
         }

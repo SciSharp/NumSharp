@@ -231,7 +231,7 @@ namespace NumSharp
             return start + idx * slice.Step;
         }
 
-        public Span<T> GetSpanData<T>(params int[] indices)
+        public Span<T> GetSpanData<T>(Slice slice, params int[] indices)
         {
             throw new NotImplementedException("span of a view is not supported as it typically is not contiguous memory");
         }

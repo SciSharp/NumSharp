@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
         {
             var shape0 = new Shape(4,3);
 
-            int idx0 = shape0.GetIndexInShape(2,1);
+            int idx0 = shape0.GetIndexInShape(2, 1);
         
             Assert.IsTrue(idx0 == 6);
         }
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest
 
             int[] strgDimSize = shape0.Strides;
 
-            int index = shape0.GetIndexInShape(1,2,1);
+            int index = shape0.GetIndexInShape(1, 2, 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetDimIndexOutShape(index),new int[]{1,2,1}));
 

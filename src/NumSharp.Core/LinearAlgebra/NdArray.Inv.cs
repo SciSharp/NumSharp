@@ -26,7 +26,7 @@ namespace NumSharp
                     {
                         matrix[idx] = new double[this.Storage.Shape.Dimensions[1]];
                         for (int jdx = 0; jdx < matrix[idx].Length;jdx++)
-                            matrix[idx][jdx] = np[this.Storage.Shape.GetIndexInShape(idx,jdx)];
+                            matrix[idx][jdx] = np[this.Storage.Shape.GetIndexInShape(slice, idx, jdx)];
                     }
 
                     double[][] matrixInv = MatrixInv.InverseMatrix(matrix);
@@ -36,7 +36,7 @@ namespace NumSharp
                     {
                         for (int jdx = 0; jdx < npInv.shape[1]; jdx++)
                         {
-                            invArray[this.Storage.Shape.GetIndexInShape(idx,jdx)] = matrixInv[idx][jdx];
+                            invArray[this.Storage.Shape.GetIndexInShape(slice, idx, jdx)] = matrixInv[idx][jdx];
                         }
                     }
                         

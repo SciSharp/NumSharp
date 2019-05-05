@@ -39,7 +39,8 @@ namespace NumSharp.Backends
 
         protected Type _DType;
         protected Shape _Shape;
-        
+        protected Slice _slice;
+
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
             if (dtype == arrayVar.GetType().GetElementType()) return arrayVar;
@@ -323,35 +324,35 @@ namespace NumSharp.Backends
         {
             T[] values = GetData<T>();
 
-            return values[Shape.GetIndexInShape(indexes)];
+            return values[Shape.GetIndexInShape(Slice, indexes)];
         }
 
         public bool GetBoolean(params int[] indexes) 
-            => _arrayBoolean[Shape.GetIndexInShape(indexes)];
+            => _arrayBoolean[Shape.GetIndexInShape(Slice, indexes)];
 
         public short GetInt16(params int[] indexes) 
-            => _arrayInt16[Shape.GetIndexInShape(indexes)];
+            => _arrayInt16[Shape.GetIndexInShape(Slice, indexes)];
 
         public int GetInt32(params int[] indexes) 
-            => _arrayInt32[Shape.GetIndexInShape(indexes)];
+            => _arrayInt32[Shape.GetIndexInShape(Slice, indexes)];
 
         public long GetInt64(params int[] indexes) 
-            => _arrayInt64[Shape.GetIndexInShape(indexes)];
+            => _arrayInt64[Shape.GetIndexInShape(Slice, indexes)];
 
         public float GetSingle(params int[] indexes) 
-            => _arraySingle[Shape.GetIndexInShape(indexes)];
+            => _arraySingle[Shape.GetIndexInShape(Slice, indexes)];
 
         public double GetDouble(params int[] indexes) 
-            => _arrayDouble[Shape.GetIndexInShape(indexes)];
+            => _arrayDouble[Shape.GetIndexInShape(Slice, indexes)];
 
         public decimal GetDecimal(params int[] indexes) 
-            => _arrayDecimal[Shape.GetIndexInShape(indexes)];
+            => _arrayDecimal[Shape.GetIndexInShape(Slice, indexes)];
 
         public string GetString(params int[] indexes)
-            => _arrayString[Shape.GetIndexInShape(indexes)];
+            => _arrayString[Shape.GetIndexInShape(Slice, indexes)];
 
         public NDArray GetNDArray(params int[] indexes) 
-            => _arrayNDArray[Shape.GetIndexInShape(indexes)];
+            => _arrayNDArray[Shape.GetIndexInShape(Slice, indexes)];
 
         /// <summary>
         /// Set an array to internal storage and keep dtype
@@ -416,7 +417,7 @@ namespace NumSharp.Backends
         /// <param name="indice"></param>
         public void SetData<T>(T value, params int[] indice)
         {
-            int idx = _Shape.GetIndexInShape(indice);
+            int idx = _Shape.GetIndexInShape(Slice, indice);
             switch (value)
             {
                 case bool val:
@@ -493,7 +494,7 @@ namespace NumSharp.Backends
                     if (Shape.NDim == 1)
                         offset = idx + (Slice is null ? 0 : Slice.Start.Value);
                     else
-                        offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape[0];
+                        offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape.Strides[0];
                     switch (Type.GetTypeCode(nd.dtype))
                     {
                         case TypeCode.Boolean:
@@ -589,11 +590,11 @@ namespace NumSharp.Backends
             }
         }
 
-        public Span<T> GetSpanData<T>(params int[] indice)
+        public Span<T> GetSpanData<T>(Slice slice, params int[] indice)
         {
             int stride = Shape.NDim == 0 ? 1 : Shape.Strides[indice.Length - 1];
-            int idx = Shape.GetIndexInShape(indice);
-            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * stride;
+            int idx = Shape.GetIndexInShape(Slice, indice);
+            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape.Strides[0];
 
             return GetData<T>().AsSpan(offset, stride);
         }
