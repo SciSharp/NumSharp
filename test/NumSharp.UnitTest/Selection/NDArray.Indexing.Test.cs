@@ -237,7 +237,6 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(99, (int)x[3]);
         }
 
-        [Ignore("N-dim slicing not implemented yet")]
         [TestMethod]
         public void Slice5()
         {
@@ -272,7 +271,6 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(y.Data<int>(), new int[] { 0, 2, 4 });
         }
 
-        [Ignore("Stepped slices are not yet able to manipulate the base class")]
         [TestMethod]
         public void Slice_Step1()
         {
@@ -311,7 +309,6 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.Data<int>());
         }
 
-        [Ignore("Stepped slices are not yet able to manipulate the base class")]
         [TestMethod]
         public void Slice_Step2()
         {

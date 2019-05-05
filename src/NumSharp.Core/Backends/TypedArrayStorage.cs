@@ -327,6 +327,8 @@ namespace NumSharp.Backends
             return values[Shape.GetIndexInShape(Slice, indexes)];
         }
 
+        public bool SupportsSpan => true;
+
         public bool GetBoolean(params int[] indexes) 
             => _arrayBoolean[Shape.GetIndexInShape(Slice, indexes)];
 

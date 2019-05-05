@@ -79,8 +79,10 @@ namespace NumSharp
         {
             if (slice is null)
                 return Storage.GetData<T>();
-            else
-                return Storage.View<T>().ToArray().Step(slice is null ? 1 : slice.Step);
+            else if (Storage.SupportsSpan)
+                return Storage.View<T>().ToArray();
+            else 
+               return Storage.GetData<T>();
         }
 
         public T Data<T>(params int[] indice) => Storage.GetData<T>(indice);
@@ -154,6 +156,11 @@ namespace NumSharp
         public NDArray(Type dtype, Shape shape) : this(dtype)
         {
             Storage.Allocate(shape);
+        }
+
+        public NDArray(IStorage storage)
+        {
+            Storage=storage;
         }
 
         public override int GetHashCode()

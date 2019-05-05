@@ -192,6 +192,8 @@ namespace NumSharp
             return _data.GetData<T>(TransformIndices(indices, _slices));
         }
 
+        public bool SupportsSpan => false;
+
         private int[] TransformIndices(int[] indices, Slice[] slices)
         {
             var sliced_indices = new int[slices.Length];
