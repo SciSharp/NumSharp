@@ -30,27 +30,27 @@ namespace NumSharp
 
             string[] dataParsed = new string[size];
 
-            Array strg = null;
+            Array a = null;
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Int32:
-                    strg = Storage.View<int>().ToArray();
+                    a = Data<int>();
                     break;
                 case TypeCode.Int64:
-                    strg = Storage.View<long>().ToArray();
+                    a = Data<long>();
                     break;
                 case TypeCode.Single:
-                    strg = Storage.View<float>().ToArray();
+                    a = Data<float>();
                     break;
                 case TypeCode.Double:
-                    strg = Storage.View<double>().ToArray();
+                    a = Data<double>();
                     break;
                 default:
                     break;
             }
 
             for (int idx = 0; idx < dataParsed.Length;idx++)
-                dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);
+                dataParsed[idx] = _ParseNumber(a.GetValue(idx),ref digitBefore, ref digitAfter);
             
             string elementFormatStart = "{0:";
             
@@ -69,13 +69,13 @@ namespace NumSharp
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(idx)) + ", ");
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, a.GetValue(idx)) + ", ");
             }
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, a.GetValue(a.Length-1)) + "])");
 
             return returnValue;
         }
