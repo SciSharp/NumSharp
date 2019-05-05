@@ -237,6 +237,21 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(99, (int)x[3]);
         }
 
+        [Ignore("N-dim slicing not implemented yet")]
+        [TestMethod]
+        public void Slice5()
+        {
+            var x = np.arange(6).reshape(3, 2);
+            var y = x[":,0"];
+            AssertAreEqual(new int[] { 0, 2, 4, }, y.Data<int>());
+            var z = x["1,:"];
+            AssertAreEqual(new int[] { 2, 3 }, z.Data<int>());
+            z[0] = 99;
+            AssertAreEqual(new int[] { 99, 3 }, z.Data<int>());
+            AssertAreEqual(new int[] { 0, 99, 4 }, y.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 99, 3, 4, 5 }, x.Data<int>());
+        }
+
         [TestMethod]
         public void Slice_Step()
         {
