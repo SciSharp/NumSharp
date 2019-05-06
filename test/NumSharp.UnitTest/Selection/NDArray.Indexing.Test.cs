@@ -237,7 +237,17 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(99, (int)x[3]);
         }
 
-        [Ignore("N-dim slicing not implemented yet")]
+        [TestMethod]
+        public void Slice2x2Mul()
+        {
+            NDArray x = DataSample.Int32D2x2;
+            var y = x["1:"];
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            AssertAreEqual(x.Data<int>(), new int[] { 1, 2, 4, 6 });
+        }
+
         [TestMethod]
         public void Slice5()
         {
@@ -272,7 +282,6 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(y.Data<int>(), new int[] { 0, 2, 4 });
         }
 
-        [Ignore("Stepped slices are not yet able to manipulate the base class")]
         [TestMethod]
         public void Slice_Step1()
         {
@@ -306,12 +315,11 @@ namespace NumSharp.UnitTest.Selection
             var z = y["::2"];
             AssertAreEqual(new int[] { 99, 3, 1 }, z.Data<int>());
             z[1] = 111;
-            Assert.AreEqual(new int[] { 99, 111, 1 }, z);	    
+            AssertAreEqual(new int[] { 99, 111, 1 }, (int[])z);	    
             AssertAreEqual(new int[] { 0, 1, 2, 111, 4, 99 }, x.Data<int>());
             AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.Data<int>());
         }
 
-        [Ignore("Stepped slices are not yet able to manipulate the base class")]
         [TestMethod]
         public void Slice_Step2()
         {
@@ -326,6 +334,15 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(0, (int)y[0]);
             Assert.AreEqual(2, (int)y[1]);
             Assert.AreEqual(4, (int)y[2]);
+        }
+
+        [TestMethod]
+        public void Slice_Step3()
+        {
+            var x = np.arange(5);
+            Assert.AreEqual("array([ 0,  1,  2,  3,  4])", x.ToString());
+            var y = x["::2"];
+            Assert.AreEqual("array([ 0,  2,  4])", y.ToString());
         }
 
         [TestMethod]

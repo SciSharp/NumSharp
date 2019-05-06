@@ -314,6 +314,8 @@ namespace NumSharp.Backends
             return values[Shape.GetIndexInShape(Slice, indexes)];
         }
 
+        public bool SupportsSpan => true;
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>

@@ -86,6 +86,7 @@ namespace NumSharp
         /// <returns>element from internal storage</returns>
         T GetData<T>(params int[] indice);
 
+        bool SupportsSpan { get; }
         Span<T> GetSpanData<T>(Slice slice, params int[] indice);
 
         bool GetBoolean(params int[] indice);

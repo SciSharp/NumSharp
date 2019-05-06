@@ -84,5 +84,16 @@ namespace NumSharp.UnitTest
         /// <returns></returns>
         public static int[] Int32D12
             => new int[] { 1, 2, 1, 3, 2, 1, 1, 2, 3, 2, 3, 2 };
+
+        /// <summary>
+        /// shape(2, 2)
+        /// </summary>
+        /// <returns></returns>
+        public static int[,] Int32D2x2
+            => new int[,] 
+            { 
+                { 1, 2 }, 
+                { 2, 3 }
+            };
     }
 }
