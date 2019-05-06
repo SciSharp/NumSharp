@@ -238,6 +238,17 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void Slice2x2Mul()
+        {
+            NDArray x = DataSample.Int32D2x2;
+            var y = x["1:"];
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            AssertAreEqual(x.Data<int>(), new int[] { 1, 2, 4, 6 });
+        }
+
+        [TestMethod]
         public void Slice5()
         {
             var x = np.arange(6).reshape(3, 2);

@@ -92,7 +92,7 @@ namespace NumSharp
                         {
                             string c2n = "[";
                             for (int c2 = 0; c2 < shape[1]; c2++)
-                                c2n += (c2 == 0 ? "" : " ") + Data<int>(c1, c2).ToString();
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
                             c2n += "]";
 
                             c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
@@ -108,7 +108,7 @@ namespace NumSharp
                         {
                             string c2n = "[";
                             for (int c2 = 0; c2 < shape[1]; c2++)
-                                c2n += (c2 == 0 ? "" : " ") + Data<float>(c1, c2).ToString();
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
                             c2n += "]";
 
                             c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
@@ -124,7 +124,7 @@ namespace NumSharp
                         {
                             string c2n = "[";
                             for (int c2 = 0; c2 < shape[1]; c2++)
-                                c2n += (c2 == 0 ? "" : " ") + Data<double>(c1, c2).ToString();
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
                             c2n += "]";
 
                             c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
