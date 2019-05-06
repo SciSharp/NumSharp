@@ -317,7 +317,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
             y *= 2;
             AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
-            AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 });
+            AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 }); // <------- this fails because in C# we can not intercept assignment to a variable
         }
 
         [TestMethod]
