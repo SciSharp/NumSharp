@@ -96,7 +96,7 @@ namespace NumSharp
             // since the view is a subset of the data we have to copy here
             int size = internal_shape.Size;
             var data = AllocateArray(size, _data.DType);
-            // the algorithm is split into 1-D and N-D because for 1-D we need not go through shape.GetDimIndexOutShape
+            // the algorithm is split into 1-D and N-D because for 1-D we need not go through coordinate transformation
             if (_slices.Length == 1)
             {
                 for (var i = 0; i < size; i++)
@@ -194,36 +194,36 @@ namespace NumSharp
 
         public bool SupportsSpan => false;
 
-        private int[] TransformIndices(int[] indices, Slice[] slices)
+        private int[] TransformIndices(int[] coords, Slice[] slices)
         {
-            var sliced_indices = new int[slices.Length];
-            if (indices.Length < slices.Length)
+            var sliced_coords = new int[slices.Length];
+            if (coords.Length < slices.Length)
             {
                 // special case indexing into dimenionality reduced slice
                 // the user of this view doesn't know the dims have been reduced so we have to augment the indices accordingly
-                int indices_index = 0;
+                int coord_index = 0;
                 for (int i = 0; i < slices.Length; i++)
                 {
                     var slice = slices[i];
                     if (slice.IsIndex)
                     {
-                        sliced_indices[i] = slice.Start.Value;
+                        sliced_coords[i] = slice.Start.Value;
                         continue;
                     }
-                    var idx = indices[indices_index];
-                    indices_index++;
-                    sliced_indices[i] = TransformIndex(idx, slice);
+                    var idx = coord_index < coords.Length ? coords[coord_index] : 0;
+                    coord_index++;
+                    sliced_coords[i] = TransformIndex(idx, slice);
                 }
-                return sliced_indices;
+                return sliced_coords;
             }
             // normal case
-            for (int i = 0; i < indices.Length; i++)
+            for (int i = 0; i < coords.Length; i++)
             {
-                var idx = indices[i];
+                var idx = coords[i];
                 var slice = slices[i];
-                sliced_indices[i] = TransformIndex(idx, slice);
+                sliced_coords[i] = TransformIndex(idx, slice);
             }
-            return sliced_indices;
+            return sliced_coords;
         }
 
         private int TransformIndex(int idx, Slice slice)

@@ -90,22 +90,22 @@ namespace NumSharp
             {
                 if (slices.Length == 0)
                     throw new ArgumentException("At least one slice definition expected");
-                if (slices.Length == 1)
-                {
-                    var s = slices[0];
-                    if (s.Step == 1)
-                    {
-                        if (s.IsIndex)
-                            return GetData(s.Start ?? 0);
-                        s.Start = (slice is null ? 0 : slice.Start) + Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
-                        s.Stop = (slice is null ? 0 : slice.Start) +
-                                 Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
-                        var new_shape= new int[] {s.Length.Value}.Concat(Shape.GetShape(shape, 0)).ToArray();
-                        var nd = new NDArray(Array, new_shape);
-                        nd.Storage.Slice = s;
-                        return nd;
-                    }
-                }
+                //if (slices.Length == 1)
+                //{
+                //    var s = slices[0];
+                //    if (s.Step == 1)
+                //    {
+                //        if (s.IsIndex)
+                //            return GetData(s.Start ?? 0);
+                //        s.Start = (slice is null ? 0 : slice.Start) + Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
+                //        s.Stop = (slice is null ? 0 : slice.Start) +
+                //                 Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
+                //        var new_shape= new int[] {s.Length.Value}.Concat(Shape.GetShape(shape, 0)).ToArray();
+                //        var nd = new NDArray(Array, new_shape);
+                //        nd.Storage.Slice = s;
+                //        return nd;
+                //    }
+                //}
                 return new NDArray(new ViewStorage(Storage, slices));
             }
             set
@@ -212,49 +212,44 @@ namespace NumSharp
         /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indices)
         {
+            if (indices.Length == 0)
+                return this;
             if (Storage.SupportsSpan)
             {
-                var sl = slice ?? new Slice();
                 Shape s1 = shape.Skip(indices.Length).ToArray();
                 var nd = new NDArray(dtype, s1);
                 //nd.Storage.Slice = new Slice($"{}");
                 switch (Type.GetTypeCode(dtype))
                 {
                     case TypeCode.Boolean:
-                        nd.Array = Storage.GetSpanData<bool>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<bool>(slice, indices).ToArray();
                         break;
                     case TypeCode.Byte:
-                        nd.Array = Storage.GetSpanData<byte>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<byte>(slice, indices).ToArray();
                         break;
                     case TypeCode.Int16:
-                        nd.Array = Storage.GetSpanData<short>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<short>(slice, indices).ToArray();
                         break;
                     case TypeCode.Int32:
-                        nd.Array = Storage.GetSpanData<int>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<int>(slice, indices).ToArray();
                         break;
                     case TypeCode.Int64:
-                        nd.Array = Storage.GetSpanData<long>(slice, indices).ToArray().Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<long>(slice, indices).ToArray();
                         break;
                     case TypeCode.Single:
-                        nd.Array = Storage.GetSpanData<float>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<float>(slice, indices).ToArray();
                         break;
                     case TypeCode.Double:
-                        nd.Array = Storage.GetSpanData<double>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<double>(slice, indices).ToArray();
                         break;
                     case TypeCode.Decimal:
-                        nd.Array = Storage.GetSpanData<decimal>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<decimal>(slice, indices).ToArray();
                         break;
                     case TypeCode.String:
-                        nd.Array = Storage.GetSpanData<string>(slice, indices).ToArray()
-                            .Step(slice is null ? 1 : slice.Step);
+                        nd.Array = Storage.GetSpanData<string>(slice, indices).ToArray();
                         break;
                     default:
-                        return Storage.GetSpanData<NDArray>(slice, indices).ToArray()[0]; // todo: how to step this??
+                        return Storage.GetSpanData<NDArray>(slice, indices).ToArray()[0];
                 }
                 return nd;
             }

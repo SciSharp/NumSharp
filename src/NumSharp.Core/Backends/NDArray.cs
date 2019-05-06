@@ -183,7 +183,6 @@ namespace NumSharp
         {
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
-
             puffer.Storage.Allocate(shapePuffer);
 
             puffer.Storage.SetData(this.Storage.CloneData());
