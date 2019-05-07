@@ -119,7 +119,7 @@ namespace NumSharp
         }
 
         // numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
-        public static NDArray<bool> equal(NDArray np1, NDArray np2)
+        private static NDArray<bool> equal(NDArray np1, NDArray np2)
         {
             var boolTensor = new NDArray(typeof(bool), np1.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
@@ -139,13 +139,13 @@ namespace NumSharp
 
         // numpy.array_equal(a1, a2)[source]
         // True if two arrays have the same shape and elements, False otherwise.
-        public static bool array_equal(NDArray np1, NDArray np2)
+        public bool array_equal(NDArray np2)
         {
-            if (!Enumerable.SequenceEqual(np1.shape, np2.shape))
+            if (!Enumerable.SequenceEqual(this.shape, np2.shape))
             {
                 return false;
             }
-            var values1 = np1.Storage.GetData();
+            var values1 = this.Storage.GetData();
             var values2 = np2.Storage.GetData();
             for (int idx = 0; idx < values1.Length; idx++)
             {
