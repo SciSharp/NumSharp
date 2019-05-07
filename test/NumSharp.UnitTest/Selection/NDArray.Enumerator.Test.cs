@@ -13,35 +13,31 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Enumerate()
         {
-            // var npStorage = np.arange(12).reshape(2, 3, 2).Storage;
-            
-            /// not longer for ndarray
-            /*
-            foreach (var nd1 in npStorage)
-            {
-                Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i)].Data, ((NDArrayGeneric<int>)nd1).Data));
-                Console.WriteLine(nd1.ToString());
+            var nd = np.arange(12).reshape(2, 3, 2);
 
-                int j = 0;
-                foreach (var nd2 in (NDArrayGeneric<int>)nd1)
+            int i = 0;
+            foreach (NDArray x in nd)
+            {
+                Assert.IsTrue(nd[i].ToString() == x.ToString());
+
+                /*int j = 0;
+                foreach(NDArray y in x)
                 {
-                    Assert.IsTrue(Enumerable.SequenceEqual(np[new Shape(i, j)].Data, ((NDArrayGeneric<int>)nd2).Data));
-                    Console.WriteLine(nd2.ToString());
+                    Assert.IsTrue(nd[i, j].ToString() == x[j].ToString());
 
                     int k = 0;
-                    foreach(var nd3 in (NDArrayGeneric<int>)nd2)
+                    foreach (int z in y)
                     {
-                        Assert.IsTrue(np[i, j, k] == (int)nd3);
-                        Console.WriteLine(nd3.ToString());
+                        Assert.IsTrue(nd[i, j, k].Equals(z));
                         k++;
                     }
 
                     j++;
-                }
-                
+                }*/
+
                 i++;
             }
-            */
+            
         }
     }
 }

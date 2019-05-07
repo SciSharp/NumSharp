@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -20,8 +20,8 @@ namespace NumSharp
         /// <returns>NArray X</returns>
         public NDArray lstqr(NDArray nDArrayB, double rcon = 0.0001)
         {
-            var A = (double[]) this.Storage.CloneData<double>();
-            var b = (double[])nDArrayB.Storage.CloneData<double>();
+            var A = (double[]) Data<double>();
+            var b = (double[])nDArrayB.Data<double>();
 
             int m = this.shape[0];
             int n = this.shape[1];

@@ -13,19 +13,27 @@ namespace NumSharp.UnitTest.LinearAlgebra
     public class TransposeTest 
     {
         [TestMethod]
-        public void TwoxThree()
+        public void TransposeVector()
         {
-            var np1 = np.arange(6).reshape(3,2).MakeGeneric<int>();
+            var x = np.arange(4);
+            var y = np.transpose(x);
+            x[0] = 3;
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()));
+        }
+
+        [TestMethod]
+        public void Transpose3x2()
+        {
+            var x = np.arange(6).reshape(3,2).MakeGeneric<int>();
             
-            var np1Transposed = np1.transpose().MakeGeneric<int>();
+            var y = np.transpose(x).MakeGeneric<int>();
 
-            Assert.AreEqual(np1Transposed[0,0], 0);
-            Assert.AreEqual(np1Transposed[0,1], 2);
-            Assert.AreEqual(np1Transposed[0,2], 4);
-            Assert.AreEqual(np1Transposed[1,0], 1);
-            Assert.AreEqual(np1Transposed[1,1], 3);
-            Assert.AreEqual(np1Transposed[1,2], 5);
-
+            Assert.AreEqual(y[0,0], 0);
+            Assert.AreEqual(y[0,1], 2);
+            Assert.AreEqual(y[0,2], 4);
+            Assert.AreEqual(y[1,0], 1);
+            Assert.AreEqual(y[1,1], 3);
+            Assert.AreEqual(y[1,2], 5);
         }
     }
 }

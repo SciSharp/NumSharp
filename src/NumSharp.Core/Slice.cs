@@ -42,12 +42,22 @@ namespace NumSharp
     /// that this may happen.
     /// 
     /// Adapted from Greg Hewgill's answer on Stackoverflow: https://stackoverflow.com/questions/509211/understanding-slice-notation
+    /// 
+    /// Note: special IsIndex == true
+    /// It will pick only a single value at Start in this dimension effectively reducing the Shape of the sliced matrix by 1 dimension. 
+    /// It can be used to reduce an N-dimensional array/matrix to a (N-1)-dimensional array/matrix
+    /// 
+    /// Example:
+    /// a=[[1, 2], [3, 4]]
+    /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector
+
     /// </summary>
     public class Slice
     {
-        public long? Start { get; set; }
-        public long? Stop { get; set; }
-        public long Step { get; set; } = 1;
+        public int? Start { get; set; }
+        public int? Stop { get; set; }
+        public int Step { get; set; } = 1;
+        public bool IsIndex { get; set; }
 
         /// <summary>
         /// Length of the slice. 
@@ -55,7 +65,7 @@ namespace NumSharp
         /// The length is not guaranteed to be known for i.e. a slice like ":". Make sure to check Start and Stop 
         /// for null before using it</remarks>
         /// </summary>
-        public long? Length => Stop - Start;
+        public int? Length => Stop - Start;
 
         /// <summary>
         /// ndarray can be indexed using slicing
@@ -64,7 +74,7 @@ namespace NumSharp
         /// <param name="start">Start index of the slice, null means from the start of the array</param>
         /// <param name="stop">Stop index (first index after end of slice), null means to the end of the array</param>
         /// <param name="step">Optional step to select every n-th element, defaults to 1</param>
-        public Slice(long? start=null, long? stop=null, long step = 1)
+        public Slice(int? start=null, int? stop=null, int step = 1)
         {
             Start = start;
             Stop = stop;
@@ -105,18 +115,19 @@ namespace NumSharp
             var single_pick_string = match.Groups[5].Value;
             if (!string.IsNullOrWhiteSpace(single_pick_string))
             {
-                if (!long.TryParse(Regex.Replace(single_pick_string ?? "", @"\s+", ""), out var start))
+                if (!int.TryParse(Regex.Replace(single_pick_string ?? "", @"\s+", ""), out var start))
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
                 Stop = start+1;
-                Step = 1;
+                Step = 1; // special case for dimensionality reduction by picking a single element
+                IsIndex = true;
                 return;
             }
             if (string.IsNullOrWhiteSpace(start_string))
                 Start = null;
             else
             {
-                if (!long.TryParse(start_string, out var start))
+                if (!int.TryParse(start_string, out var start))
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
             }
@@ -124,7 +135,7 @@ namespace NumSharp
                 Stop = null;
             else
             {
-                if (!long.TryParse(stop_string, out var stop))
+                if (!int.TryParse(stop_string, out var stop))
                     throw new ArgumentException($"Invalid value for start: {stop_string}");
                 Stop = stop;
             }
@@ -132,7 +143,7 @@ namespace NumSharp
                 Step = 1;
             else
             {
-                if (!long.TryParse(step_string, out var step))
+                if (!int.TryParse(step_string, out var step))
                     throw new ArgumentException($"Invalid value for start: {step_string}");
                 Step = step;
             }
@@ -177,15 +188,25 @@ namespace NumSharp
             return new Slice(null, null);
         }
 
-        public static Slice SingleValue(long index)
+        public static Slice Index(int index)
         {
-            return new Slice(index, index + 1);
+            return new Slice(index, index + 1) { IsIndex = true };
         }
 
         public override string ToString()
         {
+            if (IsIndex)
+                return $"{Start ?? 0}";
             var optional_step = Step == 1 ? "" : $":{Step}";
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
+        }
+
+        // return the size of the slice, given the data dimension on this axiy
+        public int GetSize(int dim)
+        {
+            var start = Math.Max(0, Start ?? 0);
+            var stop = Math.Min(dim,  Stop ?? dim);
+            return (int)Math.Ceiling((stop - start) / (double)Math.Abs(Step));
         }
 
     }

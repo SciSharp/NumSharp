@@ -1,14 +1,34 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp;
 using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 
 namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
     public class NDArrayAMaxTest
     {
+        [TestMethod]
+        public void argmax12()
+        {
+            NDArray x = DataSample.Int32D12;
+
+            int y0 = np.argmax(x);
+            Assert.AreEqual(y0, 3);
+        }
+
+        [TestMethod]
+        public void argmax4x3()
+        {
+            NDArray x = DataSample.Int32D4x3;
+
+            var y0 = np.argmax(x, 0);
+            Assert.IsTrue(Enumerable.SequenceEqual(y0.Data<int>(), new int[] { 0, 3, 2 }));
+
+            var y1 = np.argmax(x, 1);
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 0, 1, 2, 1 }));
+        }
+
         [TestMethod]
         public void amax()
         {
@@ -32,7 +52,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(n1[1] == 3);
 
             //3D
-            n = np.arange(24).reshape(4, 3, 2);
+            /*n = np.arange(24).reshape(4, 3, 2);
             n1 = np.amax(n, 0).MakeGeneric<int>();
             Assert.IsTrue(n1[0, 1] == 19);
             Assert.IsTrue(n1[2, 1] == 23);
@@ -51,7 +71,7 @@ namespace NumSharp.UnitTest.Selection
             n1 = np.amax(n, 3).MakeGeneric<int>();
             Assert.IsTrue(n1[0, 1, 1] == 7);
             Assert.IsTrue(n1[1, 1, 1] == 19);
-            Assert.IsTrue(n1[1, 2, 1] == 23);
+            Assert.IsTrue(n1[1, 2, 1] == 23);*/
         }
         
     }

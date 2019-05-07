@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -21,139 +22,123 @@ namespace NumSharp
         {
             get
             {
-                return Storage.GetData(select);
+                return GetData(select);
             }
-            
+
             set
             {
                 Storage.SetData(value, select);
             }
         }
-        
-        public NDArray this[NDArray indexes]
+
+        public NDArray this[NDArray indices]
         {
             get
             {
-                NDArray selectedValues = null;
+                NDArray nd = null;
 
-                switch (ndim)
+                switch (Type.GetTypeCode(dtype))
                 {
-                    case 1:
-                        if (dtype.Name == "Byte")
-                            selectedValues = setValue1D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue1D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue1D<float>(indexes);
-                        else if (dtype.Name == "Double")
-                            selectedValues = setValue1D<double>(indexes);
+                    case TypeCode.Byte:
+                        nd = setValue<byte>(indices);
                         break;
-
-                    case 2:
-                        if (dtype.Name == "Byte")
-                            selectedValues = setValue2D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue2D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue2D<float>(indexes);
-                        else if (dtype.Name == "Double")
-                            selectedValues = setValue2D<double>(indexes);
+                    case TypeCode.Int32:
+                        nd = setValue<int>(indices);
                         break;
-
-                    case 3:
-                        if (dtype.Name == "Byte")
-                            selectedValues = setValue3D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue3D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue3D<float>(indexes);
-                        else if (dtype.Name == "Double")
-                            selectedValues = setValue3D<double>(indexes);
+                    case TypeCode.Int64:
+                        nd = setValue<long>(indices);
                         break;
-
-                    case 4:
-                        if (dtype.Name == "Byte")
-                            selectedValues = setValue4D<byte>(indexes);
-                        if (dtype.Name == "Int32")
-                            selectedValues = setValue4D<int>(indexes);
-                        if (dtype.Name == "Single")
-                            selectedValues = setValue4D<float>(indexes);
-                        else if (dtype.Name == "Double")
-                            selectedValues = setValue4D<double>(indexes);
+                    case TypeCode.Single:
+                        nd = setValue<float>(indices);
+                        break;
+                    case TypeCode.Double:
+                        nd = setValue<double>(indices);
+                        break;
+                    case TypeCode.Decimal:
+                        nd = setValue<decimal>(indices);
+                        break;
+                    case TypeCode.String:
+                        nd = setValue<string>(indices);
                         break;
                 }
 
-                return selectedValues;
+                return nd;
+            }
+
+            set
+            {
+
             }
         }
 
-        private NDArray setValue1D<T>(NDArray indexes)
+        public NDArray this[string slice]
         {
-            var buf = Data<T>();
-            var idx = indexes.Data<int>();
-            var values = new T[indexes.size];
-
-            Parallel.ForEach(Enumerable.Range(0, indexes.size), (row) =>
+            get
             {
-                values[row] = buf[idx[row]];
-            });
+                return this[Slice.ParseSlices(slice)];
+            }
 
-            return new NDArray(values, indexes.size);
+            set
+            {
+                throw new NotImplementedException("slice data set is not implemented.");
+            }
         }
 
-        private NDArray setValue2D<T>(NDArray indexes)
+        public NDArray this[params Slice[] slices]
         {
-            var buf = Data<T>();
-            var idx = indexes.Data<int>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1]));
-
-            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (row) =>
+            get
             {
-                for (int col = 0; col < selectedValues.shape[1]; col++)
-                    selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[row], col)], row, col);
-            });
-
-            return selectedValues;
+                if (slices.Length == 0)
+                    throw new ArgumentException("At least one slice definition expected");
+                //if (slices.Length == 1)
+                //{
+                //    var s = slices[0];
+                //    if (s.Step == 1)
+                //    {
+                //        if (s.IsIndex)
+                //            return GetData(s.Start ?? 0);
+                //        s.Start = (slice is null ? 0 : slice.Start) + Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
+                //        s.Stop = (slice is null ? 0 : slice.Start) +
+                //                 Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
+                //        var new_shape= new int[] {s.Length.Value}.Concat(Shape.GetShape(shape, 0)).ToArray();
+                //        var nd = new NDArray(Array, new_shape);
+                //        nd.Storage.Slice = s;
+                //        return nd;
+                //    }
+                //}
+                return new NDArray(new ViewStorage(Storage, slices));
+            }
+            set
+            {
+                throw new NotImplementedException("slice data set is not implemented.");
+            }
         }
 
-        private NDArray setValue3D<T>(NDArray indexes)
+        private NDArray setValue<T>(NDArray indexes)
         {
+            Shape newShape = new int[] { indexes.size }.Concat(shape.Skip(1)).ToArray();
             var buf = Data<T>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2]));
             var idx = indexes.Data<int>();
+            var array = new T[newShape.Size];
 
-            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
+            var indice = Shape.GetShape(newShape.Dimensions, axis: 0);
+            var length = Shape.GetSize(indice);
+
+            for (var row = 0; row < newShape[0]; row++)
             {
-                for (int row = 0; row < selectedValues.shape[1]; row++)
-                    for (int col = 0; col < selectedValues.shape[2]; col++)
-                        selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col)], item, row, col);
-            });
+                var d = buf.AsSpan(idx[row] * length, length);
+                d.CopyTo(array.AsSpan(row * length));
+            }
 
-            return selectedValues;
-        }
-
-        private NDArray setValue4D<T>(NDArray indexes)
-        {
-            var buf = Data<T>();
-            var selectedValues = new NDArray(dtype, new Shape(indexes.size, shape[1], shape[2], shape[3]));
-            var idx = indexes.Data<int>();
-
-            Parallel.ForEach(Enumerable.Range(0, selectedValues.shape[0]), (item) =>
-            {
-                for (int row = 0; row < selectedValues.shape[1]; row++)
-                    for (int col = 0; col < selectedValues.shape[2]; col++)
-                        for (int channel = 0; channel < selectedValues.shape[3]; channel++)
-                            selectedValues.SetData(buf[Storage.Shape.GetIndexInShape(idx[item], row, col, channel)], item, row, col, channel);
-            });
-
-            return selectedValues;
+            var nd = new NDArray(array, newShape);
+            return nd;
         }
 
         public NDArray this[NDArray<bool> booleanArray]
         {
             get
             {
-                if (!Enumerable.SequenceEqual(shape,booleanArray.shape))
+                if (!Enumerable.SequenceEqual(shape, booleanArray.shape))
                 {
                     throw new IncorrectShapeException();
                 }
@@ -197,7 +182,7 @@ namespace NumSharp
             }
             set
             {
-                if (!Enumerable.SequenceEqual(shape,booleanArray.shape))
+                if (!Enumerable.SequenceEqual(shape, booleanArray.shape))
                 {
                     throw new IncorrectShapeException();
                 }
@@ -208,19 +193,116 @@ namespace NumSharp
 
                 int elementsAmount = booleanArray.size;
 
-                for(int idx = 0; idx < elementsAmount;idx++)
+                for (int idx = 0; idx < elementsAmount; idx++)
                 {
                     if (boolDotNetArray[idx])
                     {
                         int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-                        Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(indexes));
+                        Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(slice, indexes));
                     }
                 }
 
-            } 
+            }
         }
-      
-    }
 
-    
+        /// <summary>
+        /// Get n-th dimension data
+        /// </summary>
+        /// <param name="indices">indexes</param>
+        /// <returns>NDArray</returns>
+        private NDArray GetData(params int[] indices)
+        {
+            if (indices.Length == 0)
+                return this;
+            if (Storage.SupportsSpan)
+            {
+                Shape s1 = shape.Skip(indices.Length).ToArray();
+                var nd = new NDArray(dtype, s1);
+                //nd.Storage.Slice = new Slice($"{}");
+                switch (Type.GetTypeCode(dtype))
+                {
+                    case TypeCode.Boolean:
+                        nd.Array = Storage.GetSpanData<bool>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Byte:
+                        nd.Array = Storage.GetSpanData<byte>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Int16:
+                        nd.Array = Storage.GetSpanData<short>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Int32:
+                        nd.Array = Storage.GetSpanData<int>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Int64:
+                        nd.Array = Storage.GetSpanData<long>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Single:
+                        nd.Array = Storage.GetSpanData<float>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Double:
+                        nd.Array = Storage.GetSpanData<double>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.Decimal:
+                        nd.Array = Storage.GetSpanData<decimal>(slice, indices).ToArray();
+                        break;
+                    case TypeCode.String:
+                        nd.Array = Storage.GetSpanData<string>(slice, indices).ToArray();
+                        break;
+                    default:
+                        return Storage.GetSpanData<NDArray>(slice, indices).ToArray()[0];
+                }
+                return nd;
+            }
+
+            if (indices.Length < Storage.Shape.NDim)
+            {
+                // a slice was requested
+                return this[indices.Select(i => Slice.Index(i)).ToArray()];
+            }
+            else if (indices.Length == Storage.Shape.NDim)
+            {
+                // a scalar was indexed
+                var nd = new NDArray(this.dtype, new Shape());
+                switch (Type.GetTypeCode(dtype))
+                {
+                    case TypeCode.Boolean:
+                        nd.Array = new []{ Storage.GetData<bool>( indices)};
+                        break;
+                    case TypeCode.Byte:
+                        nd.Array = new[] { Storage.GetData<byte>(indices) };
+                        break;
+                    case TypeCode.Int16:
+                        nd.Array = new[] { Storage.GetData<short>(indices) };
+                        break;
+                    case TypeCode.Int32:
+                        nd.Array = new[] { Storage.GetData<int>(indices) };
+                        break;
+                    case TypeCode.Int64:
+                        nd.Array = new[] { Storage.GetData<long>(indices) };
+                        break;
+                    case TypeCode.Single:
+                        nd.Array = new[] { Storage.GetData<float>(indices) };
+                        break;
+                    case TypeCode.Double:
+                        nd.Array = new[] { Storage.GetData<double>(indices) };
+                        break;
+                    case TypeCode.Decimal:
+                        nd.Array = new[] { Storage.GetData<decimal>(indices) };
+                        break;
+                    case TypeCode.String:
+                        nd.Array = new[] { Storage.GetData<string>(indices) };
+                        break;
+                    default:
+                        return Storage.GetData<NDArray>(indices);
+                }
+                return nd;
+            }
+            else
+            {
+                throw new ArgumentException("Too many index dimensions for shape " + Storage.Shape);
+            }
+        }
+
+
+    }
 }

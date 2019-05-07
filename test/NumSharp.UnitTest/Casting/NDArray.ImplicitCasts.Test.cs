@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void FromDotNetVector()
         {
-            NDArray nd = new double[]{1,2,3,4};
+            NDArray nd = new double[] { 1, 2, 3, 4 };
 
             Assert.IsTrue(((double)nd[0]) == 1);
             Assert.IsTrue(((double)nd[1]) == 2);
@@ -56,21 +56,22 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void FromAndToDotNetMatrix()
         {
-            NDArray nd = new double[,]{{1,2,3},{4,5,6}};
+            NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
 
-            double[,] nd_ = new double[,]{{1,2,3},{4,5,6}};
+            double[,] nd_ = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
 
             Array arr =  nd;
 
             double[,] doubleMatr = (double[,]) arr;
 
-            for(int idx = 0; idx < doubleMatr.GetLength(0);idx++)
-                for(int jdx = 0; jdx < doubleMatr.GetLength(1);jdx++)
+            for(int idx = 0; idx < doubleMatr.GetLength(0); idx++)
+            {
+                for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
                 {
-                    Assert.IsTrue((double)nd[idx,jdx] == doubleMatr[idx,jdx]); 
-                    Assert.IsTrue(nd_[idx,jdx] == doubleMatr[idx,jdx]); 
+                    Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
+                    Assert.IsTrue(nd_[idx, jdx] == doubleMatr[idx, jdx]);
                 }
-                    
+            }
         }
 
         [TestMethod]
@@ -78,9 +79,9 @@ namespace NumSharp.UnitTest
         {
             NDArray nd = "hello";
 
-            var a = (string) nd.Array.GetValue(0);
+            string str = nd;
 
-            Assert.IsTrue(a == "hello");
+            Assert.IsTrue(str == "hello");
         }
 
         [TestMethod]

@@ -10,8 +10,8 @@ namespace NumSharp
         /// <summary>
         /// Returns the index of the maximum value of the array.
         /// </summary>
-        public static int argmax(NDArray nd)
-            => nd.argmax();
+        public static NDArray argmax(NDArray nd, int axis = -1)
+            => BackendFactory.GetEngine().ArgMax(nd, axis: axis);
 
         /// <summary>
         /// Returns the index of the maximum value of the array.

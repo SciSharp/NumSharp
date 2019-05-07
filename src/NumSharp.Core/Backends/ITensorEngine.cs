@@ -17,6 +17,7 @@ namespace NumSharp
         NDArray Multiply(NDArray x, NDArray y);
         NDArray Power(NDArray x, ValueType y);
         NDArray Sub(NDArray x, NDArray y);
+        NDArray Sum(NDArray x, int? axis = null);
         #endregion
 
         #region Logic
@@ -26,6 +27,15 @@ namespace NumSharp
         NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         NDArray<bool> IsFinite(NDArray a);
         NDArray<bool> IsNan(NDArray a);
+        #endregion
+
+        #region Array Manipulation
+        NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
+        NDArray Transpose(NDArray nd, int[] axes = null);
+        #endregion
+
+        #region Sorting, searching, counting
+        NDArray ArgMax(NDArray nd, int axis = -1); 
         #endregion
     }
 }

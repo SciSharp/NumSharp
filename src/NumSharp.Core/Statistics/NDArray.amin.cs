@@ -38,7 +38,7 @@ namespace NumSharp
                 for (int i = 0; i < npArr.Length; i++)
                     min = Math.Min(min, npArr[i]);
 
-                res.Storage = new NDStorage(dtype);
+                res.Storage = new ArrayStorage(dtype);
                 res.Storage.Allocate(new Shape(1));
                 res.Storage.SetData(new int[1] { min });
             }
@@ -72,7 +72,7 @@ namespace NumSharp
 
                 //Fill in data
                 index = 0; //index for result data set
-                int sameSetOffset = this.Storage.Shape.DimOffset[axis.Value];
+                int sameSetOffset = this.Storage.Shape.Strides[axis.Value];
                 int increments = cur * post;
                 
                 switch (typeof(T).Name)

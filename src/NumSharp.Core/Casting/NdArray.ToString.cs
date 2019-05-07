@@ -3,6 +3,7 @@ using NumSharp;
 using System.Linq;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Text;
 
 namespace NumSharp
 {
@@ -10,41 +11,71 @@ namespace NumSharp
     {
         public override string ToString()
         {
-            string output = "";
-            if (this.ndim == 0)
+            return ToString(flat:false);
+        }
+
+        public string ToString(bool flat)
+        {
+            var s = new StringBuilder();
+            if (shape.Length == 0)
             {
-                switch (dtype.Name)
-                {
-                    case "Int16":
-                        output = Data<short>()[0].ToString();
-                        break;
-                    case "Int32":
-                        output = Data<int>()[0].ToString();
-                        break;
-                    case "Single":
-                        output = Data<float>()[0].ToString();
-                        break;
-                    case "Double":
-                        output = Data<double>()[0].ToString();
-                        break;
-                    case "String":
-                        output = Data<string>()[0].ToString();
-                        break;
-                    default:
-                        throw new NotImplementedException("NDArray ToString()");
-                }
-            }
-            else if (this.ndim == 2)
-            {
-                output = this._ToMatrixString();
+                s.Append($"{Storage.GetData().GetValue(0)}");
             }
             else
             {
-                output = this._ToVectorString();
+                s.Append("array(");
+                PrettyPrint(s, flat);
+                s.Append(")");
             }
-
-            return output;
+            return s.ToString();
         }
+
+        private void PrettyPrint(StringBuilder s, bool flat = false)
+        {
+            if (shape.Length == 0)
+            {
+                s.Append($"{Storage.GetData().GetValue(0)}");
+                return;
+            }
+            if (shape.Length == 1)
+            {
+                s.Append("[");
+                s.Append(string.Join(", ", this.Array.OfType<object>().Select(x => x == null ? "null" : x.ToString())));
+                s.Append("]");
+                return;
+            }
+            var size = shape[0];
+            s.Append("[");
+            for (int i = 0; i < size; i++)
+            {
+                var n_minus_one_dim_slice = this[Slice.Index(i)];
+                n_minus_one_dim_slice.PrettyPrint(s, flat);
+                if (i < size - 1)
+                {
+                    s.Append(", ");
+                    if (!flat)
+                        s.AppendLine();
+                }
+            }
+            s.Append("]");
+        }
+        
+        //public override string ToString()
+        //{
+        //    if (Storage is ViewStorage)
+        //        return $"array({(Storage as ViewStorage).ToString()})";
+        //    string output = "";
+
+        //    if (ndim == 0)
+        //        output = Storage.GetData().GetValue(0).ToString();
+        //    else if (ndim == 2)
+        //        output = _ToMatrixString();
+        //    else
+        //        output = _ToVectorString();
+
+        //    return output;
+        //}
+                
         protected string _ToVectorString()
         {
             string returnValue = "array([";
@@ -52,12 +83,29 @@ namespace NumSharp
             int digitBefore = 0;
             int digitAfter = 0;
 
-            string[] dataParsed = new string[Storage.GetData().Length];
+            string[] dataParsed = new string[size];
 
-            Array strg = Storage.GetData();
+            Array a = null;
+            switch (Type.GetTypeCode(dtype))
+            {
+                case TypeCode.Int32:
+                    a = Data<int>();
+                    break;
+                case TypeCode.Int64:
+                    a = Data<long>();
+                    break;
+                case TypeCode.Single:
+                    a = Data<float>();
+                    break;
+                case TypeCode.Double:
+                    a = Data<double>();
+                    break;
+                default:
+                    break;
+            }
 
             for (int idx = 0; idx < dataParsed.Length;idx++)
-                dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);
+                dataParsed[idx] = _ParseNumber(a.GetValue(idx),ref digitBefore, ref digitAfter);
             
             string elementFormatStart = "{0:";
             
@@ -76,64 +124,72 @@ namespace NumSharp
                 
                 elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "0." + elementFormatEnd; 
 
-                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(idx)) + ", ");
+                returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, a.GetValue(idx)) + ", ");
             }
             missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
                 
             elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
 
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "])");
+            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, a.GetValue(a.Length-1)) + "])");
 
             return returnValue;
         }
         protected string _ToMatrixString()
         {
-            string returnValue = "array([[";
+            string returnValue = "";
 
-            int digitBefore = 0;
-            int digitAfter = 0;
-
-            string[] dataParsed = new string[Storage.GetData().Length];
-
-            Array strg = Storage.GetData();
-
-            for (int idx = 0; idx < dataParsed.Length;idx++)
-                dataParsed[idx] = _ParseNumber(strg.GetValue(idx),ref digitBefore, ref digitAfter);
-            
-            string elementFormatStart = "{0:";
-            
-            string elementFormatEnd = "";
-            for(int idx = 0; idx < digitAfter;idx++)
-                elementFormatEnd += "0";
-
-            elementFormatEnd += "}";
-            
-            int missingDigits;
-            string elementFormat;
-
-            for (int idx = 0; idx < dataParsed.Length - 1; idx++)
+            switch (dtype.Name)
             {
-                missingDigits = digitBefore - dataParsed[idx].Replace(" ", "").Split('.')[0].Length;
+                case "Int32":
+                    {
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
+                            c2n += "]";
 
-                elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ', missingDigits).ToArray()) + "0." + elementFormatEnd;
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
+                    }
+                    break;
 
-                if (((idx + 1) % shape[1]) == 0)
-                {
-                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, strg.GetValue(idx)) + "],   \n       [");
-                }
-                else
-                {
-                    returnValue += (String.Format(new CultureInfo("en-us"), elementFormat, strg.GetValue(idx)) + ", ");
-                }
+                case "Single":
+                    {
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
+                            c2n += "]";
+
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
+                    }
+                    break;
+
+                case "Double":
+                    {
+                        string c1n = "[";
+                        for (int c1 = 0; c1 < shape[0]; c1++)
+                        {
+                            string c2n = "[";
+                            for (int c2 = 0; c2 < shape[1]; c2++)
+                                c2n += (c2 == 0 ? "" : " ") + this[c1, c2].ToString();
+                            c2n += "]";
+
+                            c1n += (c1 > 0 && c1 < shape[0] ? "\r\n" : "") + c2n;
+                        }
+                        returnValue += c1n + "]";
+                    }
+                    break;
             }
 
-            missingDigits =  digitBefore - dataParsed.Last().Replace(" ","").Split('.')[0].Length;
-                
-            elementFormat = elementFormatStart + new string(Enumerable.Repeat<char>(' ',missingDigits).ToArray()) + "." + elementFormatEnd; 
-
-            returnValue += (String.Format(new CultureInfo("en-us"),elementFormat, strg.GetValue(strg.Length-1)) + "]])");
-
-            return returnValue;    
+            return returnValue + "";    
         }
         protected string _ParseNumber(object number, ref int  noBefore,ref int noAfter)
         {
@@ -149,6 +205,7 @@ namespace NumSharp
 
             return parsed;
         }
+
     }
     
 }

@@ -10,7 +10,7 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Determines if NDArray references are the same
+        /// Determines if NDArray data is same
         /// </summary>
         /// <param name="obj">NDArray to compare</param>
         /// <returns>if reference is same</returns>
@@ -29,6 +29,8 @@ namespace NumSharp
                         var thisData = this.Storage?.GetData();
                         return thisData == thatData && safeCastObj.shape == this.shape;
                     }
+                case int val:
+                    return Data<int>(0) == val;
                 // Other object is not of Type NDArray, return false immediately.
                 default:
                     return false;

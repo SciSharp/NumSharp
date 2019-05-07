@@ -176,6 +176,8 @@ namespace NumSharp
       writer.Write((byte)0); // minor;
 
       string tuple = String.Join(", ", shape.Select(i => i.ToString()).ToArray());
+      if (shape.Length == 1)
+        tuple += ","; // 1-dim array's shape is (R,)
       string header = "{{'descr': '{0}', 'fortran_order': False, 'shape': ({1}), }}";
       header = String.Format(header, dtype, tuple);
       int preamble = 10; // magic string (6) + 4

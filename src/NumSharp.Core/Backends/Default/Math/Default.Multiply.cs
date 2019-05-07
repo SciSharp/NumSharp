@@ -13,6 +13,7 @@ using System.Linq;
 using System.Text;
 using System.Numerics;
 using NumSharp.Shared;
+using System.Threading.Tasks;
 
 namespace NumSharp.Backends
 {
@@ -60,31 +61,35 @@ namespace NumSharp.Backends
                     }
             }
 
-            Array np1SysArr = x.Array;
-            Array np2SysArr = y.Array;
-            Array np3SysArr = result.Array;
+            var np1SysArr = x.Array;
+            var np2SysArr = y.Array;
+            var np3SysArr = result.Array;
 
             switch (np3SysArr)
             {
-                case System.Int32[] resArr:
+                case int[] resArr:
                     {
-                        System.Int32[] np1Array = np1SysArr as System.Int32[];
-                        System.Int32[] np2Array = np2SysArr as System.Int32[];
-                        np1Array = (np1Array == null) ? x.CloneData<System.Int32>() : np1Array;
-                        np2Array = (np2Array == null) ? y.CloneData<System.Int32>() : np2Array;
+                        var np1Array = np1SysArr as int[];
+                        var np2Array = np2SysArr as int[];
+                        np1Array = (np1Array == null) ? x.CloneData<int>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<int>() : np2Array;
 
                         if (scalarNo == 0)
-                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                        {
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
                                 resArr[idx] = np1Array[idx] * np2Array[idx];
+                            });
+                        }
                         else if (scalarNo == 1)
                         {
-                            System.Int32 scalar = x.CloneData<System.Int32>()[0];
+                            var scalar = x.CloneData<int>()[0];
                             for (int idx = 0; idx < np3SysArr.Length; idx++)
                                 resArr[idx] = scalar * np2Array[idx];
                         }
                         else if (scalarNo == 2)
                         {
-                            System.Int32 scalar = y.CloneData<System.Int32>()[0];
+                            var scalar = y.CloneData<int>()[0];
                             for (int idx = 0; idx < np3SysArr.Length; idx++)
                                 resArr[idx] = np1Array[idx] * scalar;
                         }
@@ -116,27 +121,35 @@ namespace NumSharp.Backends
                         break;
                     }
 
-                case System.Single[] resArr:
+                case float[] resArr:
                     {
-                        System.Single[] np1Array = np1SysArr as System.Single[];
-                        System.Single[] np2Array = np2SysArr as System.Single[];
-                        np1Array = (np1Array == null) ? x.CloneData<System.Single>() : np1Array;
-                        np2Array = (np2Array == null) ? y.CloneData<System.Single>() : np2Array;
+                        var np1Array = np1SysArr as float[];
+                        var np2Array = np2SysArr as float[];
+                        np1Array = (np1Array == null) ? x.CloneData<float>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<float>() : np2Array;
 
                         if (scalarNo == 0)
-                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                        {
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
                                 resArr[idx] = np1Array[idx] * np2Array[idx];
+                            });
+                        }
                         else if (scalarNo == 1)
                         {
-                            System.Single scalar = x.CloneData<System.Single>()[0];
-                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                            var scalar = x.CloneData<float>()[0];
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
                                 resArr[idx] = scalar * np2Array[idx];
+                            });
                         }
                         else if (scalarNo == 2)
                         {
-                            System.Single scalar = y.CloneData<System.Single>()[0];
-                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                            var scalar = y.CloneData<float>()[0];
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
                                 resArr[idx] = np1Array[idx] * scalar;
+                            });
                         }
                         break;
                     }

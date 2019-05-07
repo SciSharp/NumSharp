@@ -24,6 +24,7 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -41,6 +42,9 @@ namespace NumSharp
         /// Data length of every dimension
         /// </summary>
         public int[] shape => Storage.Shape.Dimensions;
+
+        public int len => Storage.Shape.NDim == 0 ? 1 : Storage.Shape.Dimensions[0];
+
         /// <summary>
         /// Dimension count
         /// </summary>
@@ -51,6 +55,12 @@ namespace NumSharp
         public int size => Storage.Shape.Size;
 
         public int dtypesize => Storage.DTypeSize;
+
+        public string order => Storage.Shape.Order;
+
+        public Slice slice => Storage.Slice;
+
+        public int[] strides => Storage.Shape.Strides;
 
         /// <summary>
         /// The internal storage for elements of NDArray
@@ -65,13 +75,31 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public T[] Data<T>() => Storage.GetData<T>();
+        public T[] Data<T>()
+        {
+            if (slice is null)
+                return Storage.GetData<T>();
+            else if (Storage.SupportsSpan)
+                return Storage.View<T>().ToArray();
+            else 
+               return Storage.GetData<T>();
+        }
 
-        public T Data<T>(int index) => Storage.GetData<T>()[index];
+        public T Data<T>(params int[] indice) => Storage.GetData<T>(indice);
 
-        public T Data<T>(params int[] indexes) => Storage.GetData<T>(indexes);
+        public bool GetBoolean(params int[] indice) => Storage.GetBoolean(indice);
+        public short GetInt16(params int[] indice) => Storage.GetInt16(indice);
+        public int GetInt32(params int[] indice) => Storage.GetInt32(indice);
+        public long GetInt64(params int[] indice) => Storage.GetInt64(indice);
+        public float GetSingle(params int[] indice) => Storage.GetSingle(indice);
+        public double GetDouble(params int[] indice) => Storage.GetDouble(indice);
+        public decimal GetDecimal(params int[] indice) => Storage.GetDecimal(indice);
+        public string GetString(params int[] indice) => Storage.GetString(indice);
+        public NDArray GetNDArray(params int[] indice) => Storage.GetNDArray(indice);
 
-        public void SetData<T>(T value, params int[] indexes) => Storage.SetData(value, indexes);
+        public void SetData<T>(T value, params int[] indice) => Storage.SetData(value, indice);
+
+        public int GetIndexInShape(params int[] select) => Storage.Shape.GetIndexInShape(slice, select);
 
         public Array Array
         {
@@ -86,16 +114,11 @@ namespace NumSharp
             }
         }
 
-        public T[] CloneData<T>() => Storage.CloneData<T>();
+        public T[] CloneData<T>() => Storage.CloneData() as T[];
 
         public T Max<T>() => Data<T>().Max();
 
         public void astype(Type dtype) => Storage.SetData(Storage.GetData(), dtype);
-
-        /*public NDArray()
-        {
-            throw new Exception("Don't use 0 parameter constructor.");
-        }*/
 
         /// <summary>
         /// Constructor for init data type
@@ -105,7 +128,7 @@ namespace NumSharp
         public NDArray(Type dtype)
         {
             TensorEngine = BackendFactory.GetEngine();
-            Storage = new NDStorage(dtype);
+            Storage = BackendFactory.GetStorage(dtype);
         }
 
         /// <summary>
@@ -114,13 +137,13 @@ namespace NumSharp
         /// </summary>
         /// <param name="values"></param>
         /// <returns>Array with values</returns>
-        public NDArray(Array values, Shape shape = null) : this(values.GetType().GetElementType())
+        public NDArray(Array values, Shape shape = null, string order = "C") : this(values.GetType().GetElementType())
         {
             if (shape is null)
                 shape = new Shape(values.Length);
 
-            Storage = new NDStorage(dtype);
-            Storage.Allocate(new Shape(shape));
+            shape.ChangeTensorLayout(order);
+            Storage.Allocate(shape);
             Storage.SetData(values);
         }
 
@@ -130,11 +153,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
-        public NDArray(Type dtype, Shape shape)
+        public NDArray(Type dtype, Shape shape) : this(dtype)
         {
-            TensorEngine = BackendFactory.GetEngine();
-            Storage = new NDStorage(dtype);
             Storage.Allocate(shape);
+        }
+
+        public NDArray(IStorage storage)
+        {
+            Storage=storage;
         }
 
         public override int GetHashCode()
@@ -157,7 +183,6 @@ namespace NumSharp
         {
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
-
             puffer.Storage.Allocate(shapePuffer);
 
             puffer.Storage.SetData(this.Storage.CloneData());
@@ -170,8 +195,22 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
-                    for (int i = 0; i < size; i++)
-                        yield return Data<int>(i);
+                    if (ndim == 0)
+                    {
+                        throw new Exception("Can't iterate scalar ndarray.");
+                    }
+                    if (ndim == 1)
+                    {
+                        var data = Data<int>();
+                        for (int i = 0; i < size; i++)
+                            yield return data[i];
+                    }
+                    else
+                    {
+                        for (int i = 0; i < shape[0]; i++)
+                            yield return this[i];
+                    }
+
                     break;
                 case "Single":
                     for (int i = 0; i < size; i++)
@@ -192,7 +231,9 @@ namespace NumSharp
             if (dtype != null && dtype != this.dtype)
                 Storage.SetData(Array, dtype);
 
-            return new NDArray(Array, shape);
+            var nd = new NDArray(Array, shape);
+
+            return nd;
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -11,7 +11,7 @@ namespace NumSharp
     {
         public (NDArray,NDArray,NDArray) svd()
         {
-            double[] A = this.Storage.CloneData<double>();
+            double[] A = Data<double>();
 
             int m = this.shape[0];
             int n = this.shape[1]; 

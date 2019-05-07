@@ -8,7 +8,7 @@ using System.Linq;
 namespace NumSharp.UnitTest.Selection
 {
     [TestClass]
-    public class IndexingTest
+    public class IndexingTest : TestClass
     {
         [TestMethod]
         public void IndexAccessorGetter()
@@ -57,10 +57,11 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.Data<int>(0, 0) == 10);
             Assert.IsTrue(nd.Data<int>(1, 3) == 7);
         }
+
         [TestMethod]
         public void BoolArray()
         {
-            NDArray A = new double[] {1,2,3};
+            NDArray A = new double[] { 1, 2, 3 };
 
             NDArray booleanArr = new bool[] { false, false, true };
 
@@ -77,6 +78,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue( System.Linq.Enumerable.SequenceEqual(A.Data<double>(),new double[] {-2,2,-2,4, -2,6} ));
 
         }
+
         [TestMethod]
         public void Compare()
         {
@@ -132,8 +134,328 @@ namespace NumSharp.UnitTest.Selection
 
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 1, 1, 2 }, (result[0] as NDArray).Data<int>()));
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 1, 1, 3 }, (result[1] as NDArray).Data<int>()));
+
+            var x = nd[1];
+            x.ravel();
         }
 
+        [TestMethod]
+        public void Slice1()
+        {
+            var x = np.arange(5);
+            var y1 = x["1:3"];
+            AssertAreEqual(y1.Data<int>(), new int[] { 1, 2 });
+
+            var y2 = x["3:"];
+            AssertAreEqual(y2.Data<int>(), new int[] { 3, 4 });
+            y2[0] = 8;
+            y2[1] = 9;
+            Assert.AreEqual((int)y2[0], 8);
+        }
+
+
+        [TestMethod]
+        public void Slice2()
+        {
+            //>>> x = np.arange(5)
+            //        >>> x
+            //array([0, 1, 2, 3, 4])
+            //    >>> y = x[0:5]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            var y1 = x["0:5"];
+            AssertAreEqual(y1.Data<int>(), new int[] { 0, 1, 2,3,4 });
+            y1 = x["1:4"];
+            AssertAreEqual(y1.Data<int>(), new int[] { 1, 2, 3});
+            //    >>> z = x[:]
+            //    >>> z
+            //array([0, 1, 2, 3, 4])
+            var y2 = x[":"];
+            AssertAreEqual(y2.Data<int>(), new int[] { 0,1,2,3, 4 });
+
+            // out of bounds access is handled gracefully by numpy
+            //    >>> y = x[0:77]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var y3 = x["0:77"];
+            AssertAreEqual(y3.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
+
+            //    >>> y = x[-77:]
+            //    >>> y
+            //array([0, 1, 2, 3, 4])
+            var y4 = x["-77:"];
+            AssertAreEqual(y4.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
+            var y = x["-77:77"];
+            AssertAreEqual(y.Data<int>(), new int[] { 0, 1, 2, 3, 4 });
+        }
+
+        [TestMethod]
+        public void Slice3()
+        {
+            //>>> x = np.arange(6)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5])
+            //>>> y = x[1:5]
+            //>>> y
+            //array([1, 2, 3, 4])
+            //>>> z = y[:3]
+            //>>> z
+            //array([1, 2, 3])
+            //>>> z[0] = 99
+            //>>> y
+            //array([99, 2, 3, 4])
+            //>>> x
+            //array([0, 99, 2, 3, 4, 5])
+            //>>>
+            var x = np.arange(6);
+            var y = x["1:5"];
+            AssertAreEqual(new int[] { 1, 2, 3, 4, }, y.Data<int>());
+            var z = y[":3"];
+            AssertAreEqual(new int[] { 1, 2, 3 }, z.Data<int>());
+            z[0] = 99;
+            AssertAreEqual(new int[] { 99, 2, 3, 4 }, y.Data<int>());
+            AssertAreEqual(new int[] { 0, 99, 2, 3, 4, 5 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void Slice4()
+        {
+            //>>> x = np.arange(5)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //>>> y = x[2:4]
+            //>>> y
+            //array([2,3])
+            var y = x["2:4"];
+            Assert.AreEqual(2, (int)y[0]);
+            Assert.AreEqual(3, (int)y[1]);
+            y[0] = 77;
+            y[1] = 99;
+            Assert.AreEqual(77, (int)x[2]);
+            Assert.AreEqual(99, (int)x[3]);
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul()
+        {
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1:"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(1,2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_2()
+        {
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            //AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 });
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_3()
+        {
+            var x = np.arange(4).reshape(2,2);
+            var y = x[":,1"]; // slice a column as 1D array (shape 2)
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 1, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 6 });
+        }
+
+        [Ignore("This can never work because C# doesn't allow overloading of the assignment operator")]
+        [TestMethod]
+        public void Slice2x2Mul_AssignmentChangesOriginal()
+        {
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            //>>> x
+            //array([[0, 1],
+            //       [4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 }); // <------- this fails because in C# we can not intercept assignment to a variable
+        }
+
+        [TestMethod]
+        public void Slice5()
+        {
+            var x = np.arange(6).reshape(3, 2);
+            var y = x[":,0"];
+            AssertAreEqual(new int[] { 0, 2, 4, }, y.Data<int>());
+            var z = x["1,:"];
+            AssertAreEqual(new int[] { 2, 3 }, z.Data<int>());
+            z[0] = 99;
+            AssertAreEqual(new int[] { 99, 3 }, z.Data<int>());
+            AssertAreEqual(new int[] { 0, 99, 4 }, y.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 99, 3, 4, 5 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void Slice_Step()
+        {
+            //>>> x = np.arange(5)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //>>> y = x[::-1]
+            //>>> y
+            //array([4, 3, 2, 1, 0])
+            var y = x["::-1"];
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 3, 2, 1, 0 });
+
+            //>>> y = x[::2]
+            //>>> y
+            //array([0, 2, 4])
+            y = x["::2"];
+            AssertAreEqual(y.Data<int>(), new int[] { 0, 2, 4 });
+        }
+
+        [TestMethod]
+        public void Slice_Step1()
+        {
+            //>>> x = np.arange(6)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5])
+            //>>> y = x[::- 1]
+            //>>> y
+            //array([5, 4, 3, 2, 1, 0])
+            //>>> y[0] = 99
+            //>>> x
+            //array([0, 1, 2, 3, 4, 99])
+            //>>> y
+            //array([99, 4, 3, 2, 1, 0])
+            //>>> y = x[::-1]
+            //>>> y
+            //array([5, 4, 3, 2, 1, 0])
+            var x = np.arange(6);
+            var y = x["::-1"];
+            y[0] = 99;
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 99 }, x.Data<int>());
+            AssertAreEqual(new int[] { 99, 4, 3, 2, 1, 0 }, y.Data<int>());
+            //>>> z = y[::2]
+            //>>> z
+            //array([99, 3, 1])
+            //>>> z[1] = 111
+            //>>> x
+            //array([0, 1, 2, 111, 4, 99])
+            //>>> y
+            //array([99, 4, 111, 2, 1, 0])
+            var z = y["::2"];
+            AssertAreEqual(new int[] { 99, 3, 1 }, z.Data<int>());
+            z[1] = 111;
+            AssertAreEqual(new int[] { 99, 111, 1 }, (int[])z);	    
+            AssertAreEqual(new int[] { 0, 1, 2, 111, 4, 99 }, x.Data<int>());
+            AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.Data<int>());
+        }
+
+        [TestMethod]
+        public void Slice_Step2()
+        {
+            //>>> x = np.arange(5)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            var x = np.arange(5);
+            //>>> y = x[::2]
+            //>>> y
+            //array([0, 2, 4])
+            var y = x["::2"];
+            Assert.AreEqual(0, (int)y[0]);
+            Assert.AreEqual(2, (int)y[1]);
+            Assert.AreEqual(4, (int)y[2]);
+        }
+
+        [TestMethod]
+        public void Slice_Step3()
+        {
+            var x = np.arange(5);
+            Assert.AreEqual("array([0, 1, 2, 3, 4])", x.ToString());
+            var y = x["::2"];
+            Assert.AreEqual("array([0, 2, 4])", y.ToString());
+        }
+
+        [TestMethod]
+        public void Slice3x2x2()
+        {
+            //>>> x = np.arange(12).reshape(3, 2, 2)
+            //>>> x
+            //array([[[0, 1],
+            //        [ 2,  3]],
+            //
+            //       [[ 4,  5],
+            //        [ 6,  7]],
+            //
+            //       [[ 8,  9],
+            //        [10, 11]]])
+            //>>> y1 = x[1:]
+            //>>> y1
+            //array([[[ 4,  5],
+            //        [ 6,  7]],
+            //
+            //       [[ 8,  9],
+            //        [10, 11]]])
+            var x = np.arange(12).reshape(3, 2, 2);
+            var y1 = x["1:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1[0, 1].Data<int>(), new int[] { 6, 7 }));
+
+            var y1_0 = y1[0];
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.shape, new int[] { 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.Data<int>(), new int[] { 4, 5, 6, 7 }));
+
+            // change view
+            y1[0, 1] = new int[] { 100, 101 };
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), new int[] { 0, 1, 2, 3, 4, 5, 100, 101, 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 4, 5, 100, 101, 8, 9, 10, 11 }));
+
+            var y2 = x["2:"];
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.shape, new int[] { 1, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 8, 9, 10, 11 }));
+        }
 
         [TestMethod]
         public void SliceNotation()
@@ -171,8 +493,9 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual("::2", new Slice(step:2).ToString());
             Assert.AreEqual("::2", new Slice(null, null, 2).ToString());
 
-            // pick exactly one item
-            Assert.AreEqual("17:18", new Slice("17").ToString());
+            // pick exactly one item and reduce the dimension
+            Assert.AreEqual("17", new Slice("17").ToString());
+            // pick exactly one item but keep the dimension
             Assert.AreEqual("17:18", new Slice("17:18").ToString());
 
 
@@ -183,7 +506,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(new Slice(":2"), new Slice(":2"));
             Assert.AreEqual(new Slice("7::9"), new Slice("7::9"));
             Assert.AreEqual(new Slice("7:8:9"), new Slice("7:8:9"));
-            Assert.AreEqual(new Slice("17:18"), new Slice("17"));
+            Assert.AreEqual(new Slice("17"), new Slice("17"));
             Assert.AreEqual(new Slice("-5:-8"), new Slice("-5:-8"));
             Assert.AreEqual(new Slice("-  5:- 8"), new Slice("-5:-8"));
             Assert.AreEqual(new Slice("+  5:+ 8"), new Slice("+5:8"));
@@ -206,7 +529,7 @@ namespace NumSharp.UnitTest.Selection
 
             // Create functions
             Assert.AreEqual(Slice.All(), new Slice(":"));
-            Assert.AreEqual(Slice.SingleValue(17), new Slice("17:18"));
+            Assert.AreEqual(Slice.Index(17), new Slice("17:18"));
 
             // invalid values
             Assert.ThrowsException<ArgumentException>(()=>new Slice(""));
@@ -224,7 +547,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void N_DimensionalSliceNotation()
         {
-            var s = "1:3,-5:-8,7:8:9,1:,:,:1,7::9,:7:9,::-1,-5:-8,5:8";
+            var s = "1:3,-5:-8,7:8:9,1:,999,:,:1,7::9,:7:9,::-1,-5:-8,5:8";
             Assert.AreEqual(s, Slice.FormatSlices( Slice.ParseSlices(s)));
         }
 

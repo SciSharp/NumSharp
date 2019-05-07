@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.Extensions
     /// Test concolve with standard example from 
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
+    [Ignore]
     [TestClass]
     public class NdArrayDGELSTest 
     {
@@ -61,5 +62,4 @@ namespace NumSharp.UnitTest.Extensions
    
    
 
-   
    

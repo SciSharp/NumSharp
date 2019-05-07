@@ -24,6 +24,16 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        public void FloatSubtraction()
+        {
+            var np1 = np.array(new float[] { 3, 5, 7 });
+
+            var np2 = 0f - np1;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new float[] { -3, -5, -7 }, np2.Data<float>()));
+        }
+
+        [TestMethod]
         public void DoubleTwo2D_MatrixAddition()
         {
             var np1 = new matrix("1 2 3;4 5 6;7 8 9", np.float64);
@@ -148,7 +158,7 @@ namespace NumSharp.UnitTest.Maths
         {
             var np1 = np.array(new double[] { 3, 5, 7 });
 
-            var np2 = np1 - 3;
+            var np2 = np1 - 3d;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 2, 4 }, np2.Data<double>()));
         }
@@ -168,7 +178,7 @@ namespace NumSharp.UnitTest.Maths
         public void Double1DPlusOffset_NDArrayMultiplication()
         {
             var np1 = new NDArray(new double[] { 1, 2, 3 });
-            var np3 = np1 * 2;
+            var np3 = np1 * 2d;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Data<double>()));
         }

@@ -9,24 +9,82 @@ namespace NumSharp.Backends
     {
         public override NDArray Add(NDArray x, NDArray y)
         {
-            return base.Add(x, y);
-            int[] lhs = x.Data<int>();
-            int[] rhs = x.Data<int>();
-
-            var simdLength = Vector<int>.Count;
-            var result = new int[lhs.Length];
-            var i = 0;
-            for (i = 0; i <= lhs.Length - simdLength; i += simdLength)
+            if (x.ndim == y.ndim && x.ndim == 1)
             {
-                var va = new Vector<int>(lhs, i);
-                var vb = new Vector<int>(rhs, i);
-                (va + vb).CopyTo(result, i);
+                switch (Type.GetTypeCode(x.dtype))
+                {
+                    case TypeCode.Int32:
+                        {
+                            var lhs = x.Data<int>();
+                            var rhs = y.Data<int>();
+
+                            var simdLength = Vector<int>.Count;
+                            var result = new int[lhs.Length];
+                            var i = 0;
+                            for (i = 0; i <= lhs.Length - simdLength; i += simdLength)
+                            {
+                                var va = new Vector<int>(lhs, i);
+                                var vb = new Vector<int>(rhs, i);
+
+                                (va + vb).CopyTo(result, i);
+                            }
+
+                            for (; i < lhs.Length; ++i)
+                                result[i] = lhs[i] + rhs[i];
+
+                            return result;
+                        }
+
+                    case TypeCode.Single:
+                        {
+                            var lhs = x.Data<float>();
+                            var rhs = y.Data<float>();
+
+                            var simdLength = Vector<float>.Count;
+                            var result = new float[lhs.Length];
+                            var i = 0;
+                            for (i = 0; i <= lhs.Length - simdLength; i += simdLength)
+                            {
+                                var va = new Vector<float>(lhs, i);
+                                var vb = new Vector<float>(rhs, i);
+                                (va + vb).CopyTo(result, i);
+                            }
+
+                            for (; i < lhs.Length; ++i)
+                                result[i] = lhs[i] + rhs[i];
+
+                            return result;
+                        }
+
+                    case TypeCode.Double:
+                        {
+                            var lhs = x.Data<double>();
+                            var rhs = y.Data<double>();
+
+                            var simdLength = Vector<double>.Count;
+                            var result = new double[lhs.Length];
+                            var i = 0;
+                            for (i = 0; i <= lhs.Length - simdLength; i += simdLength)
+                            {
+                                var va = new Vector<double>(lhs, i);
+                                var vb = new Vector<double>(rhs, i);
+                                (va + vb).CopyTo(result, i);
+                            }
+
+                            for (; i < lhs.Length; ++i)
+                                result[i] = lhs[i] + rhs[i];
+
+                            return result;
+                        }
+
+                    default:
+                        throw new NotImplementedException($"SIMD Add {x.dtype.Name} {y.dtype.Name}");
+                }
             }
-
-            for (; i < lhs.Length; ++i)
-                result[i] = lhs[i] + rhs[i];
-
-            return result;
+            else
+            {
+                return base.Add(x, y);
+            }
         }
 
         public override NDArray Dot(NDArray x, NDArray y)

@@ -29,6 +29,8 @@ namespace NumSharp
 
         int DTypeSize { get; }
 
+        Slice Slice { get; set; }
+
         /// <summary>
         /// storage shape for outside representation
         /// </summary>
@@ -68,43 +70,35 @@ namespace NumSharp
         /// </summary>
         /// <returns>reference to cloned storage as System.Array</returns>
         Array CloneData();
-        /// <summary>
-        /// Get reference to internal data storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>reference to internal (casted) storage as System.Array </returns>
-        Array GetData(Type dtype);
-        /// <summary>
-        /// Clone internal storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">cloned storage data type</param>
-        /// <returns>reference to cloned storage as System.Array</returns>
-        Array CloneData(Type dtype);
+
         /// <summary>
         /// Get reference to internal data storage and cast elements to new dtype
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
         T[] GetData<T>();
-        /// <summary>
-        /// Get all elements from cloned storage as T[] and cast dtype
-        /// </summary>
-        /// <typeparam name="T">cloned storgae dtype</typeparam>
-        /// <returns>reference to cloned storage as T[]</returns>
-        T[] CloneData<T>();
-        /// <summary>
-        /// Get single value from internal storage and do not cast dtype
-        /// </summary>
-        /// <param name="indexes">indexes</param>
-        /// <returns>element from internal storage</returns>
-        NDArray GetData(params int[] indexes);
+
         /// <summary>
         /// Get single value from internal storage as type T and cast dtype to T
         /// </summary>
-        /// <param name="indexes">indexes</param>
+        /// <param name="indice">indexes</param>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>element from internal storage</returns>
-        T GetData<T>(params int[] indexes);
+        T GetData<T>(params int[] indice);
+
+        bool SupportsSpan { get; }
+        Span<T> GetSpanData<T>(Slice slice, params int[] indice);
+
+        bool GetBoolean(params int[] indice);
+        short GetInt16(params int[] indice);
+        int GetInt32(params int[] indice);
+        long GetInt64(params int[] indice);
+        float GetSingle(params int[] indice);
+        double GetDouble(params int[] indice);
+        decimal GetDecimal(params int[] indice);
+        string GetString(params int[] indice);
+        NDArray GetNDArray(params int[] indice);
+
         /// <summary>
         /// Set an array to internal storage and keep dtype
         /// </summary>
@@ -120,7 +114,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        void SetData<T>(T value, Shape indexes);
+        void SetData<T>(T value, params int[] indexes);
 
         /// <summary>
         /// Set an Array to internal storage, cast it to new dtype and change dtype  
@@ -130,5 +124,7 @@ namespace NumSharp
         void SetData(Array values, Type dtype);
 
         void Reshape(params int[] dimensions);
+
+        Span<T> View<T>(Slice slice = null);
     }
 }

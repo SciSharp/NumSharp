@@ -19,12 +19,16 @@ namespace NumSharp.Backends
     ///  - CloneData<T> clone storage and cast this clone 
     ///     
     /// </summary>
-    public class NDStorage : IStorage
+    public class ArrayStorage : IStorage
     {
+        /// <summary>
+        /// storage, low performance when element-wise access
+        /// will refactor this seperate into dedicate typed 1-d array
+        /// </summary>
         protected Array _values;
+
         protected Type _DType;
         protected Shape _Shape;
-        protected int _TensorLayout;
         
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
@@ -127,23 +131,25 @@ namespace NumSharp.Backends
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        public Shape Shape {get {return _Shape;}}
+        public Shape Shape => _Shape;
 
-        public NDStorage(Type dtype)
+        public Slice Slice { get; set; }
+
+        public ArrayStorage(Type dtype)
         {
             _DType = dtype;
             _values = Array.CreateInstance(dtype, 1);
             _Shape = new Shape(1);
         }
 
-        public NDStorage(double[] values)
+        public ArrayStorage(double[] values)
         {
             _DType = typeof(double);
             _Shape = new Shape(values.Length);
             _values = values;
         }
 
-        public NDStorage(object[] values)
+        public ArrayStorage(object[] values)
         {
             _DType = values.GetType().GetElementType();
             _Shape = new Shape(values.Length);
@@ -158,14 +164,10 @@ namespace NumSharp.Backends
         public void Allocate(Shape shape, Type dtype = null)
         {
             _Shape = shape;
-            _Shape.ChangeTensorLayout();
-            int elementNumber = 1;
-            for(int idx = 0; idx < shape.Dimensions.Length;idx++)
-                elementNumber *= shape.Dimensions[idx];
 
             if (dtype != null)
                 _DType = dtype;
-            _values = Array.CreateInstance(_DType, elementNumber);
+            _values = Array.CreateInstance(_DType, shape.Size);
         }
 
         /// <summary>
@@ -208,6 +210,60 @@ namespace NumSharp.Backends
             return _values;
         }
 
+        public bool GetBoolean(params int[] indexes)
+        {
+            var data = _values as bool[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public short GetInt16(params int[] indexes)
+        {
+            var data = _values as short[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public int GetInt32(params int[] indexes)
+        {
+            var data = _values as int[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public long GetInt64(params int[] indexes)
+        {
+            var data = _values as long[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public float GetSingle(params int[] indexes)
+        {
+            var data = _values as float[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public double GetDouble(params int[] indexes)
+        {
+            var data = _values as double[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public decimal GetDecimal(params int[] indexes)
+        {
+            var data = _values as decimal[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public string GetString(params int[] indexes)
+        {
+            var data = _values as string[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public NDArray GetNDArray(params int[] indexes)
+        {
+            var data = _values as NDArray[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
         /// <summary>
         /// Clone internal storage and get reference to it
         /// </summary>
@@ -215,29 +271,6 @@ namespace NumSharp.Backends
         public Array CloneData()
         {
             return (Array) _values.Clone();
-        }
-
-        /// <summary>
-        /// Get reference to internal data storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">new storage data type</param>
-        /// <returns>reference to internal (casted) storage as System.Array </returns>
-        public Array GetData(Type dtype)
-        {
-            var methods = this.GetType().GetMethods().Where(x => x.Name.Equals("GetData") && x.IsGenericMethod && x.ReturnType.Name.Equals("T[]"));
-            var genMethods = methods.First().MakeGenericMethod(dtype);
-
-            return (Array) genMethods.Invoke(this,null);
-        }
-
-        /// <summary>
-        /// Clone internal storage and cast elements to new dtype
-        /// </summary>
-        /// <param name="dtype">cloned storage data type</param>
-        /// <returns>reference to cloned storage as System.Array</returns>
-        public Array CloneData(Type dtype)
-        {
-            return (Array) this.GetData().Clone();
         }
 
         /// <summary>
@@ -269,74 +302,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Get single value from internal storage and do not cast dtype
-        /// </summary>
-        /// <param name="indexes">indexes</param>
-        /// <returns>element from internal storage</returns>
-        public NDArray GetData(params int[] indexes)
-        {
-            if (indexes.Length == Shape.NDim ||
-                Shape.Dimensions.Last() == 1)
-            {
-                switch (DType.Name)
-                {
-                    case "Boolean":
-                        return GetData<bool>(indexes);
-                    case "Int16":
-                        return GetData<short>(indexes);
-                    case "Int32":
-                        return GetData<int>(indexes);
-                    case "Int64":
-                        return GetData<long>(indexes);
-                    case "Single":
-                        return GetData<float>(indexes);
-                    case "Double":
-                        return GetData<double>(indexes);
-                    case "Decimal":
-                        return GetData<decimal>(indexes);
-                    case "String":
-                        return GetData<string>(indexes);
-                }
-            }
-            else if (indexes.Length == Shape.NDim - 1)
-            {
-                var offset = new int[Shape.NDim];
-                for (int i = 0; i < Shape.NDim - 1; i++)
-                    offset[i] = indexes[i];
-
-                var nd = new NDArray(DType, Shape.Dimensions[Shape.NDim - 1]);
-                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 1]; i++)
-                {
-                    offset[offset.Length - 1] = i;
-                    nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i);
-                }
-
-                return nd;
-            }
-            // 3 Dim
-            else if (indexes.Length == Shape.NDim - 2)
-            {
-                var offset = new int[Shape.NDim];
-                var nd = new NDArray(DType, new int[]{ Shape.Dimensions[Shape.NDim - 2] , Shape.Dimensions[Shape.NDim - 1] });
-                
-                for (int i = 0; i < Shape.Dimensions[Shape.NDim - 2]; i++)
-                {
-                    for (int j = 0; j < Shape.Dimensions[Shape.NDim - 1]; j++)
-                    {
-                        offset[0] = 0;
-                        offset[1] = i;
-                        offset[2] = j;
-                        nd.SetData(_values.GetValue(Shape.GetIndexInShape(offset)), i, j);
-                    }
-                }
-
-                return nd;
-            }
-
-            throw new Exception("NDStorage.GetData");
-        }
-
-        /// <summary>
         /// Get single value from internal storage as type T and cast dtype to T
         /// </summary>
         /// <param name="indexes">indexes</param>
@@ -344,10 +309,12 @@ namespace NumSharp.Backends
         /// <returns>element from internal storage</returns>
         public T GetData<T>(params int[] indexes)
         {
-            T[] values = this.GetData() as T[];
+            T[] values = GetData() as T[];
 
-            return values[Shape.GetIndexInShape(indexes)];
+            return values[Shape.GetIndexInShape(Slice, indexes)];
         }
+
+        public bool SupportsSpan => true;
 
         /// <summary>
         /// Set an array to internal storage and keep dtype
@@ -370,16 +337,16 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value"></param>
         /// <param name="indexes"></param>
-        public void SetData<T>(T value, Shape indexes)
+        public void SetData<T>(T value, params int[] indexes)
         {
-            int idx = _Shape.GetIndexInShape(indexes);
+            int idx = _Shape.GetIndexInShape(Slice, indexes);
             switch (value)
             {
                 case bool val:
                     _values.SetValue(val, idx);
                     break;
                 case bool[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -388,7 +355,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case byte[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -397,7 +364,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case int[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -406,7 +373,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case long[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -415,7 +382,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case float[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -424,7 +391,7 @@ namespace NumSharp.Backends
                     _values.SetValue(val, idx);
                     break;
                 case double[] values:
-                    if (indexes.NDim == 0)
+                    if (indexes.Length == 0)
                         _values = values;
                     else
                         _values.SetValue(values, idx);
@@ -495,11 +462,21 @@ namespace NumSharp.Backends
 
         public object Clone()
         {
-            var puffer = new NDStorage(_DType);
+            var puffer = new ArrayStorage(_DType);
             puffer.Allocate(new Shape(_Shape.Dimensions));
             puffer.SetData((Array)_values.Clone());
 
             return puffer;
+        }
+
+        public Span<T> View<T>(Slice slice = null)
+        {
+            throw new NotImplementedException("View Slice");
+        }
+
+        public Span<T> GetSpanData<T>(Slice slice, params int[] indice)
+        {
+            throw new NotImplementedException();
         }
     }
 }

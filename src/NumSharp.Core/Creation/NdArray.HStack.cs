@@ -48,7 +48,7 @@ namespace NumSharp
                     for (int k = 0; k < npAll.Length; k++)
                     {
                         var pufferShape = new Shape(npAll[k].shape);
-                        int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.DimOffset[0];
+                        int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.Strides[0];
                         for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
                         {
                             var ele = npAll[k].Data<T>()[j];

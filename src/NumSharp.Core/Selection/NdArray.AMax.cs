@@ -86,7 +86,7 @@ namespace NumSharp
 
                 //Fill in data
                 index = 0; //index for result data set
-                int sameSetOffset = Storage.Shape.DimOffset[axis.Value];
+                int sameSetOffset = Storage.Shape.Strides[axis.Value];
                 int increments = cur * post;
                 switch (dtype.Name)
                 {
@@ -110,7 +110,7 @@ namespace NumSharp
                                     resData[index++] = min;
                                 }
                             }
-                            res.Storage = new NDStorage(dtype);
+                            res.Storage = new ArrayStorage(dtype);
                             res.Storage.Allocate(new Shape(resShapes)); // (resData);
                             res.Storage.SetData(resData);
                         }
@@ -135,7 +135,7 @@ namespace NumSharp
                                     resData[index++] = min;
                                 }
                             }
-                            res.Storage = new NDStorage(dtype);
+                            res.Storage = new ArrayStorage(dtype);
                             res.Storage.Allocate(new Shape(resShapes)); // (resData);
                             res.Storage.SetData(resData);
                         }

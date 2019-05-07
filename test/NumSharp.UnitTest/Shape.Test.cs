@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
         {
             var shape0 = new Shape(4,3);
 
-            int idx0 = shape0.GetIndexInShape(2,1);
+            int idx0 = shape0.GetIndexInShape(2, 1);
         
             Assert.IsTrue(idx0 == 6);
         }
@@ -25,9 +25,9 @@ namespace NumSharp.UnitTest
         {
             var shape0 = new Shape(4,3,2);
 
-            int[] strgDimSize = shape0.DimOffset;
+            int[] strgDimSize = shape0.Strides;
 
-            int index = shape0.GetIndexInShape(1,2,1);
+            int index = shape0.GetIndexInShape(1, 2, 1);
 
             Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetDimIndexOutShape(index),new int[]{1,2,1}));
 
@@ -59,22 +59,22 @@ namespace NumSharp.UnitTest
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.DimOffset,new int[]{1}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides,new int[]{1}));
 
             shape1.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.DimOffset,new int[]{1}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides,new int[]{1}));
 
             var shape2 = new Shape(4,3);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.DimOffset,new int[]{1,4}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides,new int[]{1,4}));
 
             shape2.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.DimOffset,new int[]{3,1}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides,new int[]{3,1}));
 
             var shape3 = new Shape(2,3,4);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.DimOffset,new int[]{1,2,6}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides,new int[]{1,2,6}));
 
             shape3.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.DimOffset,new int[]{12,4,1}));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides,new int[]{12,4,1}));
 
         }
     }

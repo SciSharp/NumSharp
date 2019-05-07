@@ -358,7 +358,7 @@ IList, ICollection, IEnumerable
       mark = "'shape': (";
       s = header.IndexOf(mark) + mark.Length;
       e = header.IndexOf(")", s + 1);
-      shape = header.Substring(s, e - s).Split(',').Select(Int32.Parse).ToArray();
+      shape = header.Substring(s, e - s).Split(',').Where(v => !String.IsNullOrEmpty(v)).Select(Int32.Parse).ToArray();
 
       return true;
     }

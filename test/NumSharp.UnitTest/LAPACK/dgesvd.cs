@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
@@ -16,6 +16,7 @@ namespace NumSharp.UnitTest.Extensions
     [TestClass]
     public class NdArraySVDTest 
     {
+        [Ignore]
         [TestMethod]
         public void Standard()
         {
@@ -51,5 +52,4 @@ namespace NumSharp.UnitTest.Extensions
    
    
 
-   
    

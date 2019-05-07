@@ -60,6 +60,18 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [TestMethod]
+        public void flatten2d()
+        {
+            var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+            var b = a.flatten();
+            var c = a.flatten("F");
+
+            Assert.IsTrue(Enumerable.SequenceEqual(c.Data<int>(), new int[] { 1, 3, 2, 4 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(b.Data<int>(), new int[] { 1, 2, 3, 4 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(a.Data<int>(), new int[] { 1, 2, 3, 4 }));
+        }
+
+        [TestMethod]
         public void StringCheck()
         {
             var nd = np.arange(9.0).reshape(3, 3).MakeGeneric<double>();

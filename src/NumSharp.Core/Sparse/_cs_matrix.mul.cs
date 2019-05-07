@@ -10,7 +10,7 @@ namespace NumSharp.Sparse
         public static matrix operator *(_cs_matrix m1, matrix m2)
         {
             m1.transpose();
-            var (M, N) = m1.shape.BiShape;
+            var (M, N) = (m1.shape[0], m1.shape[1]);
 
             var result = np.zeros(M);
 

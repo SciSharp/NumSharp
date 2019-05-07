@@ -66,7 +66,10 @@ namespace NumSharp
             if (nd.ndim > 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<float>(0);
+            if (nd.dtype.Name == "NDArray")
+                return (nd.Array.GetValue(0) as NDArray).GetSingle(0);
+            else
+                return nd.GetSingle(0);
         }
 
         public static implicit operator NDArray(double d)

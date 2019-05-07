@@ -15,42 +15,55 @@ namespace NumSharp.Backends
                 switch (nd.dtype.Name)
                 {
                     case "Int32":
-                        Parallel.ForEach(Enumerable.Range(0, nd.shape[0]), (row) =>
                         {
-                            for (int col = 0; col < nd.shape[1]; col++)
+                            var datax = x.Data<int>();
+                            var datay = y.Data<int>();
+                            Parallel.For(0, nd.shape[0], (row) =>
                             {
-                                int sum = 0;
-                                for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += x.Data<int>(row, s) * y.Data<int>(s, col);
-                                nd[row, col] = sum;
-                            }
-                        });
-                        break;
+                                for (int col = 0; col < nd.shape[1]; col++)
+                                {
+                                    int sum = 0;
+                                    for (int s = 0; s < nd.shape[0]; s++)
+                                        sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+                                    nd[row, col] = sum;
+                                }
+                            });
+                        }
 
+                        break;
                     case "Single":
-                        Parallel.ForEach(Enumerable.Range(0, nd.shape[0]), (row) =>
                         {
-                            for (int col = 0; col < nd.shape[1]; col++)
+                            var datax = x.Data<float>();
+                            var datay = y.Data<float>();
+                            Parallel.For(0, nd.shape[0], (row) =>
                             {
-                                float sum = 0;
-                                for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += x.Data<float>(row, s) * y.Data<float>(s, col);
-                                nd[row, col] = sum;
-                            }
-                        });
-                        break;
+                                for (int col = 0; col < nd.shape[1]; col++)
+                                {
+                                    float sum = 0;
+                                    for (int s = 0; s < nd.shape[0]; s++)
+                                        sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+                                    nd[row, col] = sum;
+                                }
+                            });
+                        }
 
+                        break;
                     case "Double":
-                        Parallel.ForEach(Enumerable.Range(0, nd.shape[0]), (row) =>
                         {
-                            for (int col = 0; col < nd.shape[1]; col++)
+                            var datax = x.Data<double>();
+                            var datay = y.Data<double>();
+                            Parallel.For(0, nd.shape[0], (row) =>
                             {
-                                double sum = 0;
-                                for (int s = 0; s < nd.shape[0]; s++)
-                                    sum += x.Data<double>(row, s) * y.Data<double>(s, col);
-                                nd[row, col] = sum;
-                            }
-                        });
+                                for (int col = 0; col < nd.shape[1]; col++)
+                                {
+                                    double sum = 0;
+                                    for (int s = 0; s < nd.shape[0]; s++)
+                                        sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+                                    nd[row, col] = sum;
+                                }
+                            });
+                        }
+
                         break;
                 }
 
