@@ -42,7 +42,7 @@ namespace NumSharp
         {
             if (obj is NDArray np2)
             {
-                return equal(np, np2);
+                return np.equal(np2);
             }
             var boolTensor = new NDArray(typeof(bool),np.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
@@ -119,12 +119,16 @@ namespace NumSharp
         }
 
         // numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
-        private static NDArray<bool> equal(NDArray np1, NDArray np2)
+        private NDArray<bool> equal(NDArray np2)
         {
-            var boolTensor = new NDArray(typeof(bool), np1.shape);
+            if (this.size != np2.size)
+            {
+                throw new ArgumentException("Different sized NDArray's in not yet supported by the equal operation", nameof(np2));
+            }
+            var boolTensor = new NDArray(typeof(bool), this.shape);
             bool[] bools = boolTensor.Storage.GetData() as bool[];
 
-            var values1 = np1.Storage.GetData();
+            var values1 = this.Storage.GetData();
             var values2 = np2.Storage.GetData();
             for (int idx = 0; idx < bools.Length; idx++)
             {
