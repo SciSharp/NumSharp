@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Reflection;
+using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 namespace NumSharp.Benchmark
@@ -24,7 +25,12 @@ namespace NumSharp.Benchmark
             }
             else
             {
-                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run();
+#if DEBUG
+                IConfig config = new DebugInProcessConfig();
+#else
+                IConfig config = null;
+#endif
+                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
             }
 
             Console.ReadLine();
