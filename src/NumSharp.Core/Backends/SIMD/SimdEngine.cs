@@ -9,6 +9,7 @@ namespace NumSharp.Backends
     {
         public override NDArray Add(NDArray x, NDArray y)
         {
+            return base.Add(x, y);
             if (x.ndim == y.ndim && x.ndim == 1)
             {
                 switch (Type.GetTypeCode(x.dtype))
