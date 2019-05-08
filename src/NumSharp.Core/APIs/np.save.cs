@@ -12,6 +12,11 @@ namespace NumSharp
   {
     #region NpyFormat
 
+    public static void save(string filepath, Array arr)
+    {
+       Save(arr, filepath);
+    }
+
     public static byte[] Save(Array array)
     {
       using (var stream = new MemoryStream())
@@ -24,6 +29,10 @@ namespace NumSharp
 
     public static ulong Save(Array array, string path)
     {
+      if (Path.GetExtension(path) != ".npy")
+      {
+         path += ".npy";
+      }
       using (var stream = new FileStream(path, FileMode.Create))
         return Save(array, stream);
     }
