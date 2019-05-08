@@ -118,7 +118,12 @@ namespace NumSharp
             return boolTensor.MakeGeneric<bool>();
         }
 
-        // numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
+        /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
+        /// <summary>
+        /// Compare two NDArrays element wise
+        /// </summary>
+        /// <param name="np2">NDArray to compare with</param>
+        /// <returns>NDArray with result of each element compare</returns>
         private NDArray<bool> equal(NDArray np2)
         {
             if (this.size != np2.size)
@@ -141,8 +146,12 @@ namespace NumSharp
             return boolTensor.MakeGeneric<bool>();
         }
 
-        // numpy.array_equal(a1, a2)[source]
-        // True if two arrays have the same shape and elements, False otherwise.
+        /// NumPy signature: numpy.array_equal(a1, a2)[source]
+        /// <summary>
+        /// Compares two NDArrays
+        /// </summary>
+        /// <param name="np2"></param>
+        /// <returns>True if two arrays have the same shape and elements, False otherwise.</returns>
         public bool array_equal(NDArray np2)
         {
             if (!Enumerable.SequenceEqual(this.shape, np2.shape))
