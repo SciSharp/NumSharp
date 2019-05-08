@@ -11,6 +11,15 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NumpySaveLoad
     {
+        [TestMethod]
+        public void Run()
+        {
+            int[] x = { 1, 2, 3, 4, 5 };
+            np.Save(x, @"test.npy");
+            np.Save_Npz(x, @"test1.npz");
+            np.Load<int[]>(@"test.npy");
+            np.Load_Npz<int[]>(@"test1.npz");
+        }
 
         [TestMethod]
         public void Float1DimArray()
