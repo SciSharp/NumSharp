@@ -58,5 +58,40 @@ namespace NumSharp.Generic
                 Storage.SetData(value, select);
             }
         }
+
+        /// <summary>
+        /// slicing of generic - overridden on purpose
+        /// </summary>
+        /// <value></value>
+        new public NDArray<T> this[string slice]
+        {
+            get
+            {
+                return base[slice].MakeGeneric<T>();
+            }
+
+            set
+            {
+                base[slice] = value;
+            }
+        }
+
+        /// <summary>
+        /// slicing of generic - overridden on purpose
+        /// </summary>
+        /// <value></value>
+        new public NDArray<T> this[Slice[] slices]
+        {
+            get
+            {
+                return base[slices].MakeGeneric<T>();
+            }
+
+            set
+            {
+                base[slices] = value;
+            }
+        }
+
     }
 }
