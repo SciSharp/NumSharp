@@ -460,6 +460,31 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void AssignGeneric1DSlice1()
         {
+            //>>> x = np.arange(5)
+            //>>> y1 = np.arange(5, 8)
+            //>>> y2 = np.arange(10, 13)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            //>>>
+            //>>> xS1 = x[1:4]
+            //>>> xS1[0] = y1[0]
+            //>>> xS1[1] = y1[1]
+            //>>> xS1[2] = y1[2]
+            //>>>
+            //>>> xS1
+            //array([5, 6, 7])
+            //>>> x
+            //array([0, 5, 6, 7, 4])
+            //>>>
+            //>>> xS2 = x[1:-1]
+            //>>> xS2[:] = y2
+            //>>>
+            //>>> xS2
+            //array([10, 11, 12])
+            //>>> x
+            //array([0, 10, 11, 12, 4])
+            //>>>
+
             var x = np.arange(5).MakeGeneric<int>();
             var y1 = np.arange(5, 8).MakeGeneric<int>();
             var y2 = np.arange(10, 13).MakeGeneric<int>();
@@ -484,6 +509,37 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void AssignGeneric2DSlice1()
         {
+            //>>> x = np.arange(9).reshape(3, 3)
+            //>>> y1 = np.arange(6, 9)
+            //>>> y2 = np.arange(12, 15)
+            //>>>
+            //>>> x
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>>
+            //>>> xS1 = x[1]
+            //>>> xS1[0] = y1[0]
+            //>>> xS1[1] = y1[1]
+            //>>> xS1[2] = y1[2]
+            //>>>
+            //>>> xS1
+            //array([6, 7, 8])
+            //>>> x
+            //array([[0, 1, 2],
+            //       [6, 7, 8],
+            //       [6, 7, 8]])
+            //>>>
+            //>>> xS2 = x[1:-1]
+            //>>> xS2[:] = y2
+            //>>>
+            //>>> xS2
+            //array([[12, 13, 14]])
+            //>>> x
+            //array([[ 0,  1,  2],
+            //       [12, 13, 14],
+            //       [ 6,  7,  8]])
+
             var x = np.arange(9).reshape(3,3).MakeGeneric<int>();
             var y1 = np.arange(6, 9).MakeGeneric<int>();
             var y2 = np.arange(12, 15).MakeGeneric<int>();

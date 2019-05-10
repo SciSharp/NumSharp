@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest
         {
 
             // float
-            string fTestFile = @"c:\temp\test";
+            string fTestFile = @"test_"+nameof(SaveAndLoadWithNpyFileExt);
             string fTestFileWithExt = fTestFile + ".npy";
             var f1 = np.arange(9.0f).reshape(3, 3);
             np.save(fTestFile, f1);
