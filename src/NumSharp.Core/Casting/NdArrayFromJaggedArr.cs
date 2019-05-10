@@ -29,12 +29,16 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public void FromJaggedArray(Array dotNetArray)
+        /// <summary>
+        /// low performance due to loop element-wise
+        /// </summary>
+        /// <param name="dotNetArray"></param>
+        private NDArray FromJaggedArray<T>(Array dotNetArray)
         {
             if(!dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Multi dim arrays are not allowed here!");
 
-            List<int> dimList = new List<int>();
+            var dimList = new List<int>();
 
             dimList.Add(dotNetArray.Length);
 
@@ -47,35 +51,19 @@ namespace NumSharp
                 currentArr = child;
             }
 
-            Type elementType = currentArr.GetType().GetElementType();
-
-            int[] dims = dimList.ToArray();
-
-            Shape shape = new Shape(dims);
-            shape.ChangeTensorLayout();
-
-            NDArray nd = new NDArray(elementType,shape);
-
-            Array ndStrg = nd.Storage.GetData();
-
-            if(dims.Length == 1)
+            switch (dimList.Count)
             {
-                throw new NotImplementedException("FromJaggedArray dims.Length == 1");
-            }
-            else if (dims.Length == 2)
-            {
-                switch (dotNetArray)
-                {
-                    case double[][] array:
-                        for (int i = 0; i < dims[0]; i++)
-                            for (int j = 0; j < dims[1]; j++)
-                                nd[i, j] = array[i][j];
-                        break;
-                }
-                
+                case 1:
+                    return np.array((T[])dotNetArray);
+                case 2:
+                    return np.array((T[][])dotNetArray);
+                case 3:
+                    return np.array((T[][][])dotNetArray);
+                case 4:
+                    return np.array((T[][][][])dotNetArray);
             }
 
-            this.Storage = nd.Storage;
+            throw new NotImplementedException("FromJaggedArray<T>(Array dotNetArray)");
         }
         
     }

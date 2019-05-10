@@ -32,7 +32,49 @@ namespace NumSharp.UnitTest.Creation
             var n = np.array(list);
 
             Assert.IsTrue(n.Data<int>(1, 0) == 3);
+
+            var list1 = new int[,]
+            {
+                {1, 2, 3},
+                {2, 3, 1}
+            };
+
+            var n1 = np.array(list1);
+            Assert.IsTrue(Enumerable.SequenceEqual(n1.shape, new int[] { 2, 3 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(n1.Data<int>(), new int[] { 1, 2, 3, 2, 3, 1 }));
         }
+
+        [TestMethod]
+        public void Array3Dim()
+        {
+            var list = new int[,,]
+            {
+                {{1, 2}, {3, 4}},
+                {{2, 2}, {3, 3}},
+                {{3, 2}, {3, 1}},
+            };
+
+            var nd = np.array(list);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.shape, new int[] { 3, 2, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<int>(), new int[] { 1, 2, 3, 4, 2, 2, 3, 3, 3, 2, 3, 1}));
+        }
+
+        /*public static NDArray array(System.Drawing.Bitmap image)
+        {
+            var imageArray = new NDArray(typeof(Byte));
+
+            var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
+            var dataSize = bmpd.Stride * bmpd.Height;
+
+            var bytes = new byte[dataSize];
+            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, bytes, 0, dataSize);
+            image.UnlockBits(bmpd);
+
+            imageArray.Storage.Allocate(typeof(byte),new Shape(bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8),1);
+            imageArray.Storage.SetData(bytes);
+
+            return imageArray;
+        }*/
 
         [TestMethod]
         public void ArrayImage()
