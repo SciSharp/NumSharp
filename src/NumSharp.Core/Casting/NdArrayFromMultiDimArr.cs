@@ -29,34 +29,28 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public void FromMultiDimArray(Array dotNetArray)
+        /// <summary>
+        /// low performance due to loop element-wise
+        /// </summary>
+        /// <param name="dotNetArray"></param>
+        public NDArray FromMultiDimArray<T>(Array dotNetArray)
         {
             if(dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Jagged arrays are not allowed here!");
 
-            int[] dims = new int[dotNetArray.Rank];
-
-            for(int idx = 0; idx < dims.Length;idx++)
-                dims[idx] = dotNetArray.GetLength(idx);
-
-            Storage = BackendFactory.GetStorage(dotNetArray.GetType().GetElementType());
-
-            Storage.Allocate(new Shape(dims));
-
-            Array internalStrg = Storage.GetData();
-
-            var pufferShape = new Shape(dims);
-            pufferShape.ChangeTensorLayout(); 
-
-            int[] idxDims = null;
-            object valueIdx = null;
-
-            for(int idx = 0; idx < Storage.Shape.Size;idx++)
+            switch (dotNetArray.Rank)
             {
-                idxDims = pufferShape.GetDimIndexOutShape(idx);
-                valueIdx = dotNetArray.GetValue(pufferShape.GetDimIndexOutShape(idx));
-                internalStrg.SetValue(valueIdx,Storage.Shape.GetIndexInShape(slice, idxDims));
+                case 1:
+                    return np.array((T[])dotNetArray);
+                case 2:
+                    return np.array((T[,])dotNetArray);
+                case 3:
+                    return np.array((T[,,])dotNetArray);
+                case 4:
+                    return np.array((T[,,,])dotNetArray);
             }
+
+            throw new NotImplementedException("FromMultiDimArray<T>(Array dotNetArray)");
         }
         
     }
