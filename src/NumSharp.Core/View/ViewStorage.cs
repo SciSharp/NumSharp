@@ -288,8 +288,49 @@ namespace NumSharp
             throw new NotImplementedException();
         }
 
+        private void IncrementIndexes(int [] storageIndexes, int[] storageStartIdxs, int []storageStopIdxs, int[] storageSteps)
+        {
+            var dims = storageIndexes.Length;
+            for (var dimIdx = dims-1; dimIdx >= 0; dimIdx--)
+            {
+                storageIndexes[dimIdx] += storageSteps[dimIdx];
+                if (storageIndexes[dimIdx] > storageStopIdxs[dimIdx])
+                {
+                    storageIndexes[dimIdx] = storageStartIdxs[dimIdx];
+                } else
+                {
+                    break;
+                }
+            }
+        }
+
         public void SetData<T>(Array values)
         {
+            if (values is T[] tArray)
+            {
+                var sliceDims = new int[_slices.Length];
+                var sliceStartIdxs = new int[_slices.Length];
+                var sliceStopIdxs = new int[_slices.Length];
+                var sliceSteps = new int[_slices.Length];
+                for (var dimIdx = 0; dimIdx < _slices.Length; dimIdx++)
+                {
+                    sliceDims[dimIdx] = Shape.Dimensions[dimIdx];
+                    sliceStartIdxs[dimIdx] = 0;
+                    sliceStopIdxs[dimIdx] = sliceDims[dimIdx] - 1;
+                    sliceSteps[dimIdx] = _slices[dimIdx].GetAbsStep();
+                }
+                var storageStartIdxs = TransformIndices(sliceStartIdxs, _slices);
+                var storageStopIdxs = TransformIndices(sliceStopIdxs, _slices);
+                var storageSteps = sliceSteps;
+                var storageIndexes = storageStartIdxs;
+                var tLength = tArray.Length;
+                for (var tIdx = 0; tIdx < tLength; tIdx++)
+                {
+                    _data.SetData<T>(tArray[tIdx], storageIndexes);
+                    IncrementIndexes(storageIndexes, storageStartIdxs, storageStopIdxs, storageSteps);
+                }
+                return;
+            }
             throw new NotImplementedException();
         }
 
