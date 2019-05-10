@@ -33,6 +33,14 @@ namespace NumSharp.Generic
         {
         }
 
+        public NDArray(IStorage storage) : base(storage)
+        {
+            if (typeof(T) != storage.DType)
+            {
+                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
+            }
+        }
+
         public NDArray(Shape shape) : base(typeof(T))
         {
             Storage.Allocate(shape);
@@ -41,6 +49,23 @@ namespace NumSharp.Generic
         public NDArray(Array array, Shape shape) : this(shape)
         {
             Storage.SetData(array);
+        }
+
+        /// <summary>
+        /// Array access to storage data - overridden on purpose
+        /// </summary>
+        /// <value></value>
+        new public T[] Array
+        {
+            get
+            {
+                return Storage.GetData<T>();
+            }
+
+            set
+            {
+                Storage.SetData<T>(value);
+            }
         }
         /// <summary>
         /// indexing of generic - overridden on purpose
@@ -55,7 +80,7 @@ namespace NumSharp.Generic
 
             set
             {
-                Storage.SetData(value, select);
+                Storage.SetData<T>(value, select);
             }
         }
 
@@ -72,7 +97,7 @@ namespace NumSharp.Generic
 
             set
             {
-                base[slice] = value;
+                Array = value.Data<T>();
             }
         }
 
@@ -80,7 +105,7 @@ namespace NumSharp.Generic
         /// slicing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        new public NDArray<T> this[Slice[] slices]
+        new public NDArray<T> this[params Slice[] slices]
         {
             get
             {
@@ -89,9 +114,23 @@ namespace NumSharp.Generic
 
             set
             {
-                base[slices] = value;
+                Array = value.Data<T>();
             }
         }
 
+        public static implicit operator T[] (NDArray<T> nd)
+        {
+            return nd.Array;
+        }
+        /*
+        public static implicit operator NDArray<T>(T[] tArray)
+        {
+            var genericArray = new NDArray<T>();
+            genericArray.Array = tArray;
+            return genericArray;
+        }
+        */
+
     }
+
 }

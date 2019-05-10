@@ -458,6 +458,55 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void AssignGeneric1DSlice1()
+        {
+            var x = np.arange(5).MakeGeneric<int>();
+            var y1 = np.arange(5, 8).MakeGeneric<int>();
+            var y2 = np.arange(10, 13).MakeGeneric<int>();
+
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, x.Data<int>());
+
+            var xS1 = x["1:4"];
+            xS1[0] = y1[0];
+            xS1[1] = y1[1];
+            xS1[2] = y1[2];
+
+            AssertAreEqual(new int[] { 5, 6, 7 }, xS1.Data<int>());
+            AssertAreEqual(new int[] { 0, 5, 6, 7, 4 }, x.Data<int>());
+
+            var xS2 = x[new Slice(1, -1)];
+            xS2[":"] = y2;
+
+            AssertAreEqual(new int[] { 10, 11, 12 }, xS2.Data<int>());
+            AssertAreEqual(new int[] { 0, 10, 11, 12, 4 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void AssignGeneric2DSlice1()
+        {
+            var x = np.arange(9).reshape(3,3).MakeGeneric<int>();
+            var y1 = np.arange(6, 9).MakeGeneric<int>();
+            var y2 = np.arange(12, 15).MakeGeneric<int>();
+
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, x.Data<int>());
+
+            var xS1 = x["1"];
+            xS1[0] = y1[0];
+            xS1[1] = y1[1];
+            xS1[2] = y1[2];
+
+            AssertAreEqual(new int[] { 6, 7, 8 }, xS1.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8, 6, 7, 8 }, x.Data<int>());
+
+            var xS2 = x[new Slice(1, -1)];
+            xS2[":"] = y2;
+
+            AssertAreEqual(new int[] { 12, 13, 14 }, xS2.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 2, 12, 13, 14, 6, 7, 8 }, x.Data<int>());
+        }
+
+
+        [TestMethod]
         public void SliceNotation()
         {
             // items start through stop-1

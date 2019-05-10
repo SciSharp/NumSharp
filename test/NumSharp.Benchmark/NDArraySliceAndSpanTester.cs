@@ -18,14 +18,18 @@ namespace NumSharp.Benchmark
     {
 
         public double[] A1;
+        public double[] ACopy1;
+        public double[] ASlice1;
+        public double[] ASliceStep2;
         public Memory<double> M1;
         public Memory<double> M2;
-        public NDArray N1;
-        public NDArray<double> ND1;
-        public NDArray NS1;
-        public NDArray<double> NDS1;
-        public NDArray NS2;
-        public NDArray<double> NDS2;
+        public NDArray ND1;
+        public NDArray NDSlice1;
+        public NDArray NDSliceStep2;
+
+        public NDArray<double> NDDouble1;
+        public NDArray<double> NDDoubleSlice1;
+        public NDArray<double> NDDoubleSliceStep2;
 
         private Span<double> GetFullA1Span()
         {
@@ -41,14 +45,19 @@ namespace NumSharp.Benchmark
         {
             var arraySize = 100000;
             A1 = new double[arraySize].Select((x, idx) => x + idx).ToArray();
+            ACopy1 = new double[arraySize].Select((x, idx) => x + idx).ToArray();
+            ASlice1 = new double[arraySize-2].Select((x, idx) => x + idx).ToArray();
+            ASliceStep2 = new double[((arraySize-2)+1)/2].Select((x, idx) => x + idx).ToArray();
+
             M1 = new Memory<double>(A1);
             M2 = new Memory<double>(A1, 2, A1.Length - 2);
-            N1 = new NDArray(new double[arraySize].Select((x, idx) => x + idx).ToArray());
-            ND1 = new NDArray(new double[arraySize].Select((x, idx) => x + idx).ToArray()).MakeGeneric<double>();
-            NS1 = N1["1:" + (N1.size-2)];
-            NDS1 = ND1["1:" + (ND1.size - 2)];
-            NS2 = N1["1:" + (N1.size - 2) + ":2"];
-            NDS2 = ND1["1:" + (ND1.size - 2) + ":2"];
+            ND1 = new NDArray(new double[arraySize].Select((x, idx) => x + idx).ToArray());
+            NDSlice1 = ND1["1:" + (ND1.size - 2)];
+            NDSliceStep2 = ND1["1:" + (ND1.size - 2) + ":2"];
+
+            NDDouble1 = new NDArray(new double[arraySize].Select((x, idx) => x + idx).ToArray()).MakeGeneric<double>();
+            NDDoubleSlice1 = NDDouble1["1:" + (NDDouble1.size - 2)];
+            NDDoubleSliceStep2 = NDDouble1["1:" + (NDDouble1.size - 2) + ":2"];
         }
         [Benchmark(Description = "C# double[] initialized in a for loop")]
         public void Array1InitInForLoop()
@@ -159,8 +168,8 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < N1.size; idx++)
-                    N1[idx] = 1.0;
+                for (int idx = 0; idx < ND1.size; idx++)
+                    ND1[idx] = 1.0;
             }
         }
         [Benchmark(Description = "NDArray<double> initialized in a for loop")]
@@ -169,8 +178,8 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < ND1.size; idx++)
-                    ND1[idx] = 1.0;
+                for (int idx = 0; idx < NDDouble1.size; idx++)
+                    NDDouble1[idx] = 1.0;
             }
         }
         [Benchmark(Description = "NDArray[1:-1] initialized in a for loop")]
@@ -179,8 +188,8 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < NS1.size; idx++)
-                    NS1[idx] = 1.0;
+                for (int idx = 0; idx < NDSlice1.size; idx++)
+                    NDSlice1[idx] = 1.0;
             }
         }
 
@@ -191,8 +200,8 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < NDS1.size; idx++)
-                    NDS1[idx] = 1.0;
+                for (int idx = 0; idx < NDDoubleSlice1.size; idx++)
+                    NDDoubleSlice1[idx] = 1.0;
             }
         }
 
@@ -202,8 +211,8 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < NS2.size; idx++)
-                    NS2[idx] = 1.0;
+                for (int idx = 0; idx < NDSliceStep2.size; idx++)
+                    NDSliceStep2[idx] = 1.0;
             }
         }
 
@@ -214,37 +223,117 @@ namespace NumSharp.Benchmark
             //var A1 = N1.Array;
             //unchecked
             {
-                for (int idx = 0; idx < NDS2.size; idx++)
-                    NDS2[idx] = 1.0;
+                for (int idx = 0; idx < NDDoubleSliceStep2.size; idx++)
+                    NDDoubleSliceStep2[idx] = 1.0;
             }
         }
 
+        #region Array Assign
+        [Benchmark(Description = "C# double[] assigned a double[]")]
+        public void NDArray1AssignArray()
+        {
+            //unchecked
+            {
+                for (int idx = 0; idx < ND1.size; idx++)
+                    A1[idx] = ACopy1[idx];
+            }
+        }
+        /*
+         * Not implemented yet
+        [Benchmark(Description = "NDArray assigned a double[]")]
+        public void NDArray1AssignArray()
+        {
+            ND1.Array = ACopy1;
+        }
+        */
+        [Benchmark(Description = "NDArray<double> assigned a double[]")]
+        public void NDArrayDouble1AssignArrayClone()
+        {
+            //unchecked
+            NDDouble1.Array = ACopy1; // Is this implemented correctly, should it be cloned by the storage ?
+        }
+
+        [Benchmark(Description = "NDArray<double> assigned a clone of double[]")]
+        public void NDArrayDouble1AssignArray()
+        {
+            //unchecked
+            NDDouble1.Array = (double[])ACopy1.Clone(); // Is this implemented correctly, should it be cloned by the storage ?
+        }
+
+        /*
+         * Not implemented yet
+        [Benchmark(Description = "NDArray[1:-1] assigned a double[]")]
+        public void NDArraySlice1AssignArray()
+        {
+            NDSlice1.Array = ASlice1;
+        }
+        */
+
+        [Benchmark(Description = "NDArray<double>[1:-1] assigned a double[]")]
+        public void NDArrayDoubleSliceAssignArrayInitInForLoop()
+        {
+            NDDoubleSlice1.Array = ASlice1;
+        }
+        /*
+         * Not implemented yet
+        [Benchmark(Description = "NDArray[1:-1:2] assigned a double[]")]
+        public void NDArraySlice2AssignArray()
+        {
+            NDSliceStep2.Array = ASliceStep2;
+        }
+        */
+        [Benchmark(Description = "NDArray<double>[1:-1:2] assigned a double[]")]
+        public void NDArrayDoubleSlice2AssignArray()
+        {
+            NDDoubleSliceStep2.Array = ASliceStep2;
+        }
+        #endregion
+
+        #region ToArray
+        [Benchmark(Description = "C# double[].ToArray() and assign index 0")]
+        public void Array1ToArray()
+        {
+            var A = A1.ToArray();
+            A[0] = 1.1;
+        }
+        [Benchmark(Description = "NDArray.ToArray() and assign index 0")]
+        public void NDArrayToArray()
+        {
+            var A1 = ND1.Array;
+            A1.SetValue(1.1, 0);
+        }
+        [Benchmark(Description = "NDArray<double>.ToArray() and assign index 0")]
+        public void NDArrayDoubleToArray()
+        {
+            var A1 = NDDouble1.Array;
+            A1.SetValue(1.1, 0);
+        }
         [Benchmark(Description = "NDArray[1:-1].ToArray() and assign index 0")]
         public void NDArraySlice1ToArray()
         {
-            var A1 = NS1.Array;
+            var A1 = NDSlice1.Array;
             A1.SetValue(1.1, 0);
         }
         [Benchmark(Description = "NDArray<double>[1:-1].ToArray() and assign index 0")]
         public void NDArrayDoubleSlice1ToArray()
         {
-            var A1 = NDS1.Array;
+            var A1 = NDDoubleSlice1.Array;
             A1.SetValue(1.1, 0);
         }
 
         [Benchmark(Description = "NDArray[1:-1:2].ToArray() and assign index 0")]
         public void NDArraySlice2ToArray()
         {
-            var A2 = NS2.Array;
+            var A2 = NDSliceStep2.Array;
             A2.SetValue(1.1, 0);
         }
         [Benchmark(Description = "NDArray<double>[1:-1:2].ToArray() and assign index 0")]
         public void NDArrayDoubleSlice2ToArray()
         {
-            var A2 = NDS2.Array;
+            var A2 = NDDoubleSliceStep2.Array;
             A2.SetValue(1.1, 0);
         }
-
+        #endregion
 
     }
 }

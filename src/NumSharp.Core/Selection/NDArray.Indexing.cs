@@ -80,7 +80,7 @@ namespace NumSharp
 
             set
             {
-                throw new NotImplementedException("slice data set is not implemented.");
+                throw new NotImplementedException("slice data set is not implemented for types less NDArray's.");
             }
         }
 

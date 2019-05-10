@@ -204,9 +204,30 @@ namespace NumSharp
         // return the size of the slice, given the data dimension on this axiy
         public int GetSize(int dim)
         {
-            var start = Math.Max(0, Start ?? 0);
-            var stop = Math.Min(dim,  Stop ?? dim);
-            return (int)Math.Ceiling((stop - start) / (double)Math.Abs(Step));
+            var absStart = GetAbsStart(dim);
+            var absStop = GetAbsStop(dim);
+            var absStep = GetAbsStep();
+            return ((absStop - absStart)+(absStep-1)) / absStep;
+        }
+
+        public int GetAbsStep()
+        {
+            return Math.Abs(Step);
+        }
+        public int GetAbsStart(int dim)
+        {
+            // Note: No handling of out of range
+            var absStartN = Start < 0 ? dim + Start : Start;
+            var absStart = Step < 0 ? (absStartN ?? dim) : (absStartN ?? 0);
+            return absStart;
+        }
+
+        public int GetAbsStop(int dim)
+        {
+            // Note: No handling of out of range
+            var absStopN = Stop < 0 ? dim + Stop : Stop;
+            var absStop = Step < 0 ? (absStopN ?? 0) : (absStopN ?? dim);
+            return absStop;
         }
 
     }
