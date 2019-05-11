@@ -41,6 +41,12 @@ namespace NumSharp.Backends
         protected Shape _Shape;
         protected Slice _slice;
 
+        /// <summary>
+        /// Flag current storage order
+        /// This flag will be different from Shape.Order when order is changed 
+        /// </summary>
+        private string order = "C";
+
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
             if (dtype == arrayVar.GetType().GetElementType()) return arrayVar;
@@ -49,6 +55,16 @@ namespace NumSharp.Backends
 
             switch (Type.GetTypeCode(dtype)) 
             {
+                case TypeCode.Byte:
+                    {
+                        switch (Type.GetTypeCode(_DType))
+                        {
+                            case TypeCode.Boolean:
+                                newValues = Array.ConvertAll(_arrayBoolean, x => Convert.ToByte(x));
+                                break;
+                        }
+                    }
+                    break;
                 case TypeCode.Int32 :
                     switch (Type.GetTypeCode(_DType))
                     {
@@ -249,6 +265,60 @@ namespace NumSharp.Backends
         /// <returns>reference to internal storage as System.Array</returns>
         public Array GetData()
         {
+            /*if(order != Shape.Order)
+            {
+                if (Shape.Order == "F")
+                {
+                    var s = new Shape(Shape.Dimensions);
+                    s.ChangeTensorLayout("C");
+
+                    switch (Type.GetTypeCode(DType))
+                    {
+                        case TypeCode.Int32:
+                            {
+                                var array = new int[Shape.Size];
+                                switch (Shape.NDim)
+                                {
+                                    case 2:
+                                        for (int row = 0; row < Shape[0]; row++)
+                                            for (int col = 0; col < Shape[1]; col++)
+                                                array[s.GetIndexInShape(row, col)] = _arrayInt32[Shape.GetIndexInShape(row, col)];
+                                        _arrayInt32 = array;
+                                        break;
+                                    default:
+                                        throw new NotImplementedException("Array GetData() Order F Changed.");
+                                }
+                            }
+                            break;
+                        case TypeCode.Single:
+                            {
+                                var array = new float[Shape.Size];
+                                switch (Shape.NDim)
+                                {
+                                    case 2:
+                                        for (int row = 0; row < Shape[0]; row++)
+                                            for (int col = 0; col < Shape[1]; col++)
+                                                array[s.GetIndexInShape(row, col)] = _arraySingle[Shape.GetIndexInShape(row, col)];
+                                        _arraySingle = array;
+                                        break;
+                                    default:
+                                        throw new NotImplementedException("Array GetData() Order F Changed.");
+                                }
+                            }
+                            break;
+                    }
+
+                    Shape.ChangeTensorLayout("C");
+                    order = Shape.Order;
+                }
+                else if (Shape.Order == "C")
+                {
+                    throw new NotImplementedException("Array GetData() Order C Changed.");
+                }
+
+                
+            }*/
+
             switch (DType.Name)
             {
                 case "Byte":
