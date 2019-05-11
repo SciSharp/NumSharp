@@ -240,12 +240,84 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Slice2x2Mul()
         {
-            NDArray x = DataSample.Int32D2x2;
-            var y = x["1:"];
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1:"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(1,2), new Shape(y.shape));
             AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
             y *= 2;
             AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
-            AssertAreEqual(x.Data<int>(), new int[] { 1, 2, 4, 6 });
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_2()
+        {
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            //AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 });
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_3()
+        {
+            var x = np.arange(4).reshape(2,2);
+            var y = x[":,1"]; // slice a column as 1D array (shape 2)
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 1, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 6 });
+        }
+
+        [Ignore("This can never work because C# doesn't allow overloading of the assignment operator")]
+        [TestMethod]
+        public void Slice2x2Mul_AssignmentChangesOriginal()
+        {
+            //>>> import numpy as np
+            //>>> x = np.arange(4).reshape(2, 2)
+            //>>> y = x[1:]
+            //>>> x
+            //array([[0, 1],
+            //       [2, 3]])
+            //>>> y
+            //array([[2, 3]])
+            //>>> y*=2
+            //>>> y
+            //array([[4, 6]])
+            //>>> x
+            //array([[0, 1],
+            //       [4, 6]])
+            var x = np.arange(4).reshape(2, 2);
+            var y = x["1"]; // slice a row as 1D array
+            Assert.AreEqual(new Shape(2), new Shape(y.shape));
+            AssertAreEqual(y.Data<int>(), new int[] { 2, 3 });
+            y *= 2;
+            AssertAreEqual(y.Data<int>(), new int[] { 4, 6 });
+            AssertAreEqual(x.Data<int>(), new int[] { 0, 1, 4, 6 }); // <------- this fails because in C# we can not intercept assignment to a variable
         }
 
         [TestMethod]
@@ -340,9 +412,9 @@ namespace NumSharp.UnitTest.Selection
         public void Slice_Step3()
         {
             var x = np.arange(5);
-            Assert.AreEqual("array([ 0,  1,  2,  3,  4])", x.ToString());
+            Assert.AreEqual("array([0, 1, 2, 3, 4])", x.ToString());
             var y = x["::2"];
-            Assert.AreEqual("array([ 0,  2,  4])", y.ToString());
+            Assert.AreEqual("array([0, 2, 4])", y.ToString());
         }
 
         [TestMethod]
@@ -384,6 +456,111 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y2.shape, new int[] { 1, 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y2.Data<int>(), new int[] { 8, 9, 10, 11 }));
         }
+
+        [TestMethod]
+        public void AssignGeneric1DSlice1()
+        {
+            //>>> x = np.arange(5)
+            //>>> y1 = np.arange(5, 8)
+            //>>> y2 = np.arange(10, 13)
+            //>>> x
+            //array([0, 1, 2, 3, 4])
+            //>>>
+            //>>> xS1 = x[1:4]
+            //>>> xS1[0] = y1[0]
+            //>>> xS1[1] = y1[1]
+            //>>> xS1[2] = y1[2]
+            //>>>
+            //>>> xS1
+            //array([5, 6, 7])
+            //>>> x
+            //array([0, 5, 6, 7, 4])
+            //>>>
+            //>>> xS2 = x[1:-1]
+            //>>> xS2[:] = y2
+            //>>>
+            //>>> xS2
+            //array([10, 11, 12])
+            //>>> x
+            //array([0, 10, 11, 12, 4])
+            //>>>
+
+            var x = np.arange(5).MakeGeneric<int>();
+            var y1 = np.arange(5, 8).MakeGeneric<int>();
+            var y2 = np.arange(10, 13).MakeGeneric<int>();
+
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, x.Data<int>());
+
+            var xS1 = x["1:4"];
+            xS1[0] = y1[0];
+            xS1[1] = y1[1];
+            xS1[2] = y1[2];
+
+            AssertAreEqual(new int[] { 5, 6, 7 }, xS1.Data<int>());
+            AssertAreEqual(new int[] { 0, 5, 6, 7, 4 }, x.Data<int>());
+
+            var xS2 = x[new Slice(1, -1)];
+            xS2[":"] = y2;
+
+            AssertAreEqual(new int[] { 10, 11, 12 }, xS2.Data<int>());
+            AssertAreEqual(new int[] { 0, 10, 11, 12, 4 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void AssignGeneric2DSlice1()
+        {
+            //>>> x = np.arange(9).reshape(3, 3)
+            //>>> y1 = np.arange(6, 9)
+            //>>> y2 = np.arange(12, 15)
+            //>>>
+            //>>> x
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>>
+            //>>> xS1 = x[1]
+            //>>> xS1[0] = y1[0]
+            //>>> xS1[1] = y1[1]
+            //>>> xS1[2] = y1[2]
+            //>>>
+            //>>> xS1
+            //array([6, 7, 8])
+            //>>> x
+            //array([[0, 1, 2],
+            //       [6, 7, 8],
+            //       [6, 7, 8]])
+            //>>>
+            //>>> xS2 = x[1:-1]
+            //>>> xS2[:] = y2
+            //>>>
+            //>>> xS2
+            //array([[12, 13, 14]])
+            //>>> x
+            //array([[ 0,  1,  2],
+            //       [12, 13, 14],
+            //       [ 6,  7,  8]])
+
+            var x = np.arange(9).reshape(3,3).MakeGeneric<int>();
+            var y1 = np.arange(6, 9).MakeGeneric<int>();
+            var y2 = np.arange(12, 15).MakeGeneric<int>();
+
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, x.Data<int>());
+
+            var xS1 = x["1"];
+            xS1[0] = y1[0];
+            xS1[1] = y1[1];
+            xS1[2] = y1[2];
+
+            AssertAreEqual(new int[] { 6, 7, 8 }, xS1.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8, 6, 7, 8 }, x.Data<int>());
+
+            var xS2 = x[new Slice(1, -1)];
+            xS2[":"] = y2;
+
+            AssertAreEqual(new int[] { 12, 13, 14 }, xS2.Data<int>());
+            AssertAreEqual(new int[] { 0, 1, 2, 12, 13, 14, 6, 7, 8 }, x.Data<int>());
+        }
+
 
         [TestMethod]
         public void SliceNotation()

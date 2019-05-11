@@ -341,24 +341,24 @@ namespace NumSharp.UnitTest.View
             //       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
             // return identical view
             var identical = data[ ":"];
-            Assert.AreEqual(new Shape(2, 10), identical.shape);
+            Assert.AreEqual(new Shape(2, 10), new Shape(identical.shape));
             //>>> x[:, 1:9]
             //array([[1, 2, 3, 4, 5, 6, 7, 8],
             //       [1, 2, 3, 4, 5, 6, 7, 8]])
             var view1 = identical[":,1:9"];
-            Assert.AreEqual(new Shape(2, 8), view1.shape);
+            Assert.AreEqual(new Shape(2, 8), new Shape(view1.shape));
             AssertAreEqual(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8 }, view1.Data<int>());
             //>>> x[:, 1:9][:,::- 2]
             //array([[8, 6, 4, 2],
             //       [8, 6, 4, 2]])
             var view2 = view1[":,::-2"];
-            Assert.AreEqual(new Shape(2, 4), view2.shape);
+            Assert.AreEqual(new Shape(2, 4), new Shape(view2.shape));
             AssertAreEqual(new int[] { 8, 6, 4, 2, 8, 6, 4, 2 }, view2.Data<int>());
             //>>> x[:, 1:9][:,::- 2][:,::- 3]
             //array([[2, 8],
             //       [2, 8]])
             var view3 = view2[":,::-3"];
-            Assert.AreEqual(new Shape(2, 2), view3.shape);
+            Assert.AreEqual(new Shape(2, 2), new Shape(view3.shape));
             AssertAreEqual(new int[] { 2, 8, 2, 8 }, view3.Data<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original

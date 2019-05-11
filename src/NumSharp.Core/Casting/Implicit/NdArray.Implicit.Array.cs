@@ -30,19 +30,78 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-     
-        //  User-defined conversion from double to Digit
-        public static implicit operator NDArray(Array d)
+
+        /// <summary>
+        /// User-defined conversion from double to Digit
+        /// </summary>
+        /// <param name="array"></param>
+        public static implicit operator NDArray(Array array)
         {
-            var ndArray = new NDArray(d.GetType().GetElementType());
+            bool isArray = array.GetType().GetElementType().IsArray;
 
-            if (d.GetType().GetElementType().IsArray)
-                ndArray.FromJaggedArray(d);
+            if (isArray)
+            {
+                var type = array.GetType().GetElementType();
+
+                switch (array.GetType().GetArrayRank())
+                {
+                    case 1:
+                        type = type.GetElementType();
+                        break;
+                    case 2:
+                        type = type.GetElementType().GetElementType();
+                        break;
+                    case 3:
+                        type = type.GetElementType().GetElementType().GetElementType();
+                        break;
+                    default:
+                        throw new NotImplementedException("implicit operator NDArray(Array array)");
+                }
+
+                var nd = new NDArray(type);
+                switch (Type.GetTypeCode(nd.dtype))
+                {
+                    case TypeCode.Boolean:
+                        return nd.FromJaggedArray<bool>(array);
+                    case TypeCode.Int16:
+                        return nd.FromJaggedArray<short>(array);
+                    case TypeCode.Int32:
+                        return nd.FromJaggedArray<int>(array);
+                    case TypeCode.Int64:
+                        return nd.FromJaggedArray<long>(array);
+                    case TypeCode.Single:
+                        return nd.FromJaggedArray<float>(array);
+                    case TypeCode.Double:
+                        return nd.FromJaggedArray<double>(array);
+                    case TypeCode.Decimal:
+                        return nd.FromJaggedArray<decimal>(array);
+                }
+            }
             else
-                ndArray.FromMultiDimArray(d);
+            {
+                var nd = new NDArray(array.GetType().GetElementType());
+                switch (Type.GetTypeCode(nd.dtype))
+                {
+                    case TypeCode.Boolean:
+                        return nd.FromMultiDimArray<bool>(array);
+                    case TypeCode.Int16:
+                        return nd.FromMultiDimArray<short>(array);
+                    case TypeCode.Int32:
+                        return nd.FromMultiDimArray<int>(array);
+                    case TypeCode.Int64:
+                        return nd.FromMultiDimArray<long>(array);
+                    case TypeCode.Single:
+                        return nd.FromMultiDimArray<float>(array);
+                    case TypeCode.Double:
+                        return nd.FromMultiDimArray<double>(array);
+                    case TypeCode.Decimal:
+                        return nd.FromMultiDimArray<decimal>(array);
+                }
+            }
 
-            return ndArray;
+            throw new NotImplementedException("implicit operator NDArray(Array array)");
         }
+
         public static implicit operator Array(NDArray nd)
         {
             var methods = nd.GetType().GetMethods().Where(x => x.Name.Equals("ToMuliDimArray") && x.IsGenericMethod && x.ReturnType.Name.Equals("Array"));

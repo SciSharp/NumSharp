@@ -28,69 +28,51 @@ namespace NumSharp
             return nd;
         }
 
-        /*public static NDArray array(System.Drawing.Bitmap image)
-        {
-            var imageArray = new NDArray(typeof(Byte));
-
-            var bmpd = image.LockBits(new System.Drawing.Rectangle(0, 0, image.Width, image.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, image.PixelFormat);
-            var dataSize = bmpd.Stride * bmpd.Height;
-
-            var bytes = new byte[dataSize];
-            System.Runtime.InteropServices.Marshal.Copy(bmpd.Scan0, bytes, 0, dataSize);
-            image.UnlockBits(bmpd);
-
-            imageArray.Storage.Allocate(typeof(byte),new Shape(bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8),1);
-            imageArray.Storage.SetData(bytes);
-            
-            return imageArray;
-        }*/
-
         public static NDArray array<T>(T[][] data)
         {
-            var nd = new NDArray(typeof(T), new Shape(data.Length, data[0].Length));
-            
-            for (int row = 0; row < data.Length; row++)
-            {
-                for (int col = 0; col < data[row].Length; col++)
-                {
-                    nd.SetData(data[row][col], row, col);
-                }
-            }
+            var array = data.SelectMany(inner => inner).ToArray();
 
-            return nd;
+            return new NDArray(array, new Shape(data.Length, data[0].Length));
+        }
+
+        public static NDArray array<T>(T[][][] data)
+        {
+            var array = data.SelectMany(inner => inner
+                .SelectMany(innerInner => innerInner))
+                .ToArray();
+
+            return new NDArray(array, new Shape(data.Length, data[0].Length, data[0][0].Length));
+        }
+
+        public static NDArray array<T>(T[][][][] data)
+        {
+            var array = data.SelectMany(inner => inner
+                .SelectMany(innerInner => innerInner
+                .SelectMany(innerInnerInner => innerInnerInner)))
+                .ToArray();
+
+            return new NDArray(array, new Shape(data.Length, data[0].Length, data[0][0].Length));
         }
 
         public static NDArray array<T>(T[,] data)
         {
-            var nd = new NDArray(typeof(T), new Shape(data.GetLength(0), data.GetLength(1)));
+            var array = data.Cast<T>().ToArray();
 
-            for (int dim0 = 0; dim0 < data.GetLength(0); dim0++)
-            {
-                for (int dim1 = 0; dim1 < data.GetLength(1); dim1++)
-                {
-                    nd.SetData(data[dim0, dim1], dim0, dim1);
-                }
-            }
-
-            return nd;
+            return new NDArray(array, new Shape(data.GetLength(0), data.GetLength(1)));
         }
 
         public static NDArray array<T>(T[,,] data)
         {
-            var nd = new NDArray(typeof(T), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
+            var array = data.Cast<T>().ToArray();
 
-            for (int dim0 = 0; dim0 < data.GetLength(0); dim0++)
-            {
-                for (int dim1 = 0; dim1 < data.GetLength(1); dim1++)
-                {
-                    for (int dim2 = 0; dim2 < data.GetLength(2); dim2++)
-                    {
-                        nd.SetData(data[dim0, dim1, dim2], dim0, dim1, dim2);
-                    }
-                }
-            }
+            return new NDArray(array, new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
+        }
 
-            return nd;
+        public static NDArray array<T>(T[,,,] data)
+        {
+            var array = data.Cast<T>().ToArray();
+
+            return new NDArray(data.Cast<T>().ToArray(), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3)));
         }
 
         public static NDArray array<T>(params T[] data)

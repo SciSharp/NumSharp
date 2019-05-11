@@ -28,12 +28,15 @@ namespace NumSharp.UnitTest.LinearAlgebra
             
             var y = np.transpose(x).MakeGeneric<int>();
 
-            Assert.AreEqual(y[0,0], 0);
-            Assert.AreEqual(y[0,1], 2);
-            Assert.AreEqual(y[0,2], 4);
-            Assert.AreEqual(y[1,0], 1);
-            Assert.AreEqual(y[1,1], 3);
-            Assert.AreEqual(y[1,2], 5);
+            // TODO, This should work
+            // Assert.IsTrue(Enumerable.SequenceEqual(y.Data<int>(), new int[] { 0, 2, 4, 1, 3, 5 }));
+
+            Assert.AreEqual(y[0, 0], 0);
+            Assert.AreEqual(y[0, 1], 2);
+            Assert.AreEqual(y[0, 2], 4);
+            Assert.AreEqual(y[1, 0], 1);
+            Assert.AreEqual(y[1, 1], 3);
+            Assert.AreEqual(y[1, 2], 5);
         }
     }
 }

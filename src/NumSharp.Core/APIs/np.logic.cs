@@ -102,6 +102,12 @@ namespace NumSharp
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isnan(NDArray a)
             => BackendFactory.GetEngine().IsNan(a);
+
+
+        public static bool array_equal(NDArray a, NDArray b)
+        {
+            return a.array_equal(b);
+        }
     }
 }
 

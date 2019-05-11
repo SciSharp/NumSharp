@@ -76,6 +76,27 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [TestMethod]
+        public void Dot2x3And3x2()
+        {
+            var x = np.array(new float[,]
+            {
+                { 0, 1, 2 },
+                { 3, 4, 5 }
+            });
+
+            var y = np.array(new float[,]
+            {
+                { 0, 3 },
+                { 1, 4 },
+                { 2, 5 }
+            });
+
+            var z = np.dot(x, y);
+
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] { 5, 14, 14, 50 }));
+        }
+
+        [TestMethod]
         public void DotRandn()
         {
             var sw = new Stopwatch();

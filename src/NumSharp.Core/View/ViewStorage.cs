@@ -96,7 +96,7 @@ namespace NumSharp
             // since the view is a subset of the data we have to copy here
             int size = internal_shape.Size;
             var data = AllocateArray(size, _data.DType);
-            // the algorithm is split into 1-D and N-D because for 1-D we need not go through shape.GetDimIndexOutShape
+            // the algorithm is split into 1-D and N-D because for 1-D we need not go through coordinate transformation
             if (_slices.Length == 1)
             {
                 for (var i = 0; i < size; i++)
@@ -194,36 +194,36 @@ namespace NumSharp
 
         public bool SupportsSpan => false;
 
-        private int[] TransformIndices(int[] indices, Slice[] slices)
+        private int[] TransformIndices(int[] coords, Slice[] slices)
         {
-            var sliced_indices = new int[slices.Length];
-            if (indices.Length < slices.Length)
+            var sliced_coords = new int[slices.Length];
+            if (coords.Length < slices.Length)
             {
                 // special case indexing into dimenionality reduced slice
                 // the user of this view doesn't know the dims have been reduced so we have to augment the indices accordingly
-                int indices_index = 0;
+                int coord_index = 0;
                 for (int i = 0; i < slices.Length; i++)
                 {
                     var slice = slices[i];
                     if (slice.IsIndex)
                     {
-                        sliced_indices[i] = slice.Start.Value;
+                        sliced_coords[i] = slice.Start.Value;
                         continue;
                     }
-                    var idx = indices[indices_index];
-                    indices_index++;
-                    sliced_indices[i] = TransformIndex(idx, slice);
+                    var idx = coord_index < coords.Length ? coords[coord_index] : 0;
+                    coord_index++;
+                    sliced_coords[i] = TransformIndex(idx, slice);
                 }
-                return sliced_indices;
+                return sliced_coords;
             }
             // normal case
-            for (int i = 0; i < indices.Length; i++)
+            for (int i = 0; i < coords.Length; i++)
             {
-                var idx = indices[i];
+                var idx = coords[i];
                 var slice = slices[i];
-                sliced_indices[i] = TransformIndex(idx, slice);
+                sliced_coords[i] = TransformIndex(idx, slice);
             }
-            return sliced_indices;
+            return sliced_coords;
         }
 
         private int TransformIndex(int idx, Slice slice)
@@ -288,8 +288,49 @@ namespace NumSharp
             throw new NotImplementedException();
         }
 
+        private void IncrementIndexes(int [] storageIndexes, int[] storageStartIdxs, int []storageStopIdxs, int[] storageSteps)
+        {
+            var dims = storageIndexes.Length;
+            for (var dimIdx = dims-1; dimIdx >= 0; dimIdx--)
+            {
+                storageIndexes[dimIdx] += storageSteps[dimIdx];
+                if (storageIndexes[dimIdx] > storageStopIdxs[dimIdx])
+                {
+                    storageIndexes[dimIdx] = storageStartIdxs[dimIdx];
+                } else
+                {
+                    break;
+                }
+            }
+        }
+
         public void SetData<T>(Array values)
         {
+            if (values is T[] tArray)
+            {
+                var sliceDims = new int[_slices.Length];
+                var sliceStartIdxs = new int[_slices.Length];
+                var sliceStopIdxs = new int[_slices.Length];
+                var sliceSteps = new int[_slices.Length];
+                for (var dimIdx = 0; dimIdx < _slices.Length; dimIdx++)
+                {
+                    sliceDims[dimIdx] = Shape.Dimensions[dimIdx];
+                    sliceStartIdxs[dimIdx] = 0;
+                    sliceStopIdxs[dimIdx] = sliceDims[dimIdx] - 1;
+                    sliceSteps[dimIdx] = _slices[dimIdx].GetAbsStep();
+                }
+                var storageStartIdxs = TransformIndices(sliceStartIdxs, _slices);
+                var storageStopIdxs = TransformIndices(sliceStopIdxs, _slices);
+                var storageSteps = sliceSteps;
+                var storageIndexes = storageStartIdxs;
+                var tLength = tArray.Length;
+                for (var tIdx = 0; tIdx < tLength; tIdx++)
+                {
+                    _data.SetData<T>(tArray[tIdx], storageIndexes);
+                    IncrementIndexes(storageIndexes, storageStartIdxs, storageStopIdxs, storageSteps);
+                }
+                return;
+            }
             throw new NotImplementedException();
         }
 
