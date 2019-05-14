@@ -67,6 +67,64 @@ namespace NumSharp.Backends
 
             switch (np3SysArr)
             {
+                case byte[] resArr:
+                    {
+                        var np1Array = np1SysArr as byte[];
+                        var np2Array = np2SysArr as byte[];
+                        np1Array = (np1Array == null) ? x.CloneData<byte>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<byte>() : np2Array;
+
+                        if (scalarNo == 0)
+                        {
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
+                                resArr[idx] = (byte)(np1Array[idx] * np2Array[idx]);
+                            });
+                        }
+                        else if (scalarNo == 1)
+                        {
+                            var scalar = x.CloneData<int>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (byte)(scalar * np2Array[idx]);
+                        }
+                        else if (scalarNo == 2)
+                        {
+                            var scalar = y.CloneData<int>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (byte)(np1Array[idx] * scalar);
+                        }
+                        break;
+                    }
+
+                case ushort[] resArr:
+                    {
+                        var np1Array = np1SysArr as ushort[];
+                        var np2Array = np2SysArr as ushort[];
+                        np1Array = (np1Array == null) ? x.CloneData<ushort>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<ushort>() : np2Array;
+
+                        if (scalarNo == 0)
+                        {
+                            Parallel.For(0, np3SysArr.Length, idx =>
+                            {
+                                resArr[idx] = (ushort)(np1Array[idx] * np2Array[idx]);
+                            });
+                        }
+                        else if (scalarNo == 1)
+                        {
+                            var scalar = x.CloneData<int>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (ushort)(scalar * np2Array[idx]);
+                        }
+                        else if (scalarNo == 2)
+                        {
+                            var scalar = y.CloneData<int>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (ushort)(np1Array[idx] * scalar);
+                        }
+                        break;
+                    }
+
                 case int[] resArr:
                     {
                         var np1Array = np1SysArr as int[];

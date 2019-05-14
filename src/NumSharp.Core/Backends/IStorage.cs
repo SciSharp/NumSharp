@@ -90,7 +90,9 @@ namespace NumSharp
         Span<T> GetSpanData<T>(Slice slice, params int[] indice);
 
         bool GetBoolean(params int[] indice);
+        byte GetByte(params int[] indice);
         short GetInt16(params int[] indice);
+        ushort GetUInt16(params int[] indice);
         int GetInt32(params int[] indice);
         long GetInt64(params int[] indice);
         float GetSingle(params int[] indice);

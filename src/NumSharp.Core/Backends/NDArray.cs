@@ -118,7 +118,20 @@ namespace NumSharp
 
         public T Max<T>() => Data<T>().Max();
 
-        public void astype(Type dtype) => Storage.SetData(Storage.GetData(), dtype);
+        // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
+        public NDArray astype(Type dtype, bool copy=true)
+        {
+            if (copy)
+            {
+                var result = new NDArray(Storage.DType, Storage.Shape);
+                result.SetData(Storage.GetData());
+                result.Storage.SetData(Storage.GetData(), dtype);
+                return result;
+            } else {
+                Storage.SetData(Storage.GetData(), dtype);
+                return this;
+            }
+        }
 
         /// <summary>
         /// Constructor for init data type
