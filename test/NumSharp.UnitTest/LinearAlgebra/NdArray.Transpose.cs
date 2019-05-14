@@ -6,6 +6,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 using NumSharp;
+using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
@@ -37,6 +38,20 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(y[1, 0], 1);
             Assert.AreEqual(y[1, 1], 3);
             Assert.AreEqual(y[1, 2], 5);
+        }
+
+        [TestMethod]
+        public void Transpose10x10()
+        {
+            var array = new NDArray(np.int32, new Shape(10, 10));
+            array = array.transpose();
+            for (var i = 0; i < array.shape[0]; i++)
+            {
+                for (var j = 0; j < array.shape[1]; j++)
+                {
+                    Console.WriteLine(array[i, j].ToString());
+                }
+            }
         }
     }
 }

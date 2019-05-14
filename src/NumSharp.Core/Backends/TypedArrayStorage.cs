@@ -364,7 +364,7 @@ namespace NumSharp.Backends
         {
             if (typeof(T).Name != _DType.Name)
             {
-                Console.WriteLine($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
+                Console.WriteLine($"Warning: GetData {typeof(T).Name} is not {_DType.Name} of storage.");
                 SetData(_ChangeTypeOfArray(GetData(), typeof(T)));
             }
 
