@@ -418,6 +418,41 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void Slice_Step_With_Offset()
+        {
+            //>>> x = np.arange(9).astype(np.uint8)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5, 6, 7, 8])
+            var x = np.arange(9).astype(np.uint8);
+
+            //>>> y = x[::3]
+            //>>> y
+            //array([0, 3, 6], dtype=uint8)
+            var y0 = x["::3"];
+            AssertAreEqual(new byte[] { 0, 3, 6 }, y0.Data<byte>());
+
+            //>>> y = x[1::3]
+            //>>> y
+            //array([1, 4, 7], dtype=uint8)
+            var y1 = x["1::3"];
+            AssertAreEqual(new byte[] { 1, 4, 7 }, y1.Data<byte>());
+
+            //>>> y = x[2::3]
+            //>>> y
+            //array([2, 5, 8], dtype=uint8)
+            var y2 = x["2::3"];
+            AssertAreEqual(new byte[] { 2, 5, 8 }, y2.Data<byte>());
+
+            //>>> y = x[3::3]
+            //>>> y
+            //array([3, 6], dtype=uint8)
+            var y3 = x["3::3"];
+            AssertAreEqual(new byte[] { 3, 6 }, y3.Data<byte>());
+
+        }        
+
+
+        [TestMethod]
         public void Slice3x2x2()
         {
             //>>> x = np.arange(12).reshape(3, 2, 2)
@@ -504,6 +539,41 @@ namespace NumSharp.UnitTest.Selection
 
             AssertAreEqual(new int[] { 10, 11, 12 }, xS2.Data<int>());
             AssertAreEqual(new int[] { 0, 10, 11, 12, 4 }, x.Data<int>());
+        }
+
+        [TestMethod]
+        public void AssignGeneric1DSliceWithStepAndOffset1()
+        {
+            //>>> x = np.arange(9).astype(np.uint16)
+            //>>> x
+            //array([0, 1, 2, 3, 4, 5, 6, 7, 8], dtype = uint16)
+            var x = np.arange(9).astype(np.uint16).MakeGeneric<ushort>();
+
+            //>>> yS1 = np.arange(10, 13).astype(np.uint16)
+            //>>> yS1
+            //array([10, 11, 12], dtype = uint16)
+            var yS0 = np.array<ushort>(new ushort[] { 10, 11, 12 }).MakeGeneric<ushort>();
+
+            //>>> y0 = x[::3]
+            //>>> y0
+            //array([0, 3, 6], dtype = uint16)
+            var y0 = x["::3"];
+            AssertAreEqual(new ushort[] { 0, 3, 6 }, y0.Data<ushort>());
+
+            //>>> x[::3] = yS0
+            //>>> y0
+            //array([10, 11, 12], dtype = uint16)
+            x["::3"] = yS0;
+            AssertAreEqual(new ushort[] { 10, 11, 12 }, y0.Data<ushort>());
+            //>>> x
+            //array([10, 1, 2, 11, 4, 5, 12, 7, 8], dtype = uint16)
+            AssertAreEqual(new ushort[] { 10, 1, 2, 11, 4, 5, 12, 7, 8 }, x.Data<ushort>());
+
+            //>>> x[1::3] = yS
+            //>>> x
+            //array([10, 10, 2, 11, 11, 5, 12, 12, 8], dtype = uint16)
+            x["1::3"] = yS0;
+            AssertAreEqual(new ushort[] { 10, 10, 2, 11, 11, 5, 12, 12, 8 }, x.Data<ushort>());
         }
 
         [TestMethod]

@@ -22,5 +22,19 @@ namespace NumSharp
             
             return boolTensor.MakeGeneric<bool>();
         }
+
+        public static NDArray<byte> operator &(NDArray np_, byte value)
+        {
+            var byteTensor = new NDArray(typeof(byte), np_.shape);
+            byte[] bytes = byteTensor.Storage.GetData<byte>();
+
+            byte[] np = np_.Storage.GetData<byte>();
+
+            for (int i = 0; i < bytes.Length; i++)
+                bytes[i] = (byte)(np[i] & value);
+
+            return byteTensor.MakeGeneric<byte>();
+        }
+
     }
 }

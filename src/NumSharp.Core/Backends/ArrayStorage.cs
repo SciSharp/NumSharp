@@ -216,9 +216,21 @@ namespace NumSharp.Backends
             return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 
+        public byte GetByte(params int[] indexes)
+        {
+            var data = _values as byte[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
         public short GetInt16(params int[] indexes)
         {
             var data = _values as short[];
+            return data[Shape.GetIndexInShape(Slice, indexes)];
+        }
+
+        public ushort GetUInt16(params int[] indexes)
+        {
+            var data = _values as ushort[];
             return data[Shape.GetIndexInShape(Slice, indexes)];
         }
 

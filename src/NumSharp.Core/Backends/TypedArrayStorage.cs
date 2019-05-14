@@ -26,6 +26,7 @@ namespace NumSharp.Backends
         protected byte[] _arrayByte;
         protected char[] _arrayChar;
         protected short[] _arrayInt16;
+        protected ushort[] _arrayUInt16;
         protected int[] _arrayInt32;
         protected uint[] _arrayUInt32;
         protected long[] _arrayInt64;
@@ -61,6 +62,22 @@ namespace NumSharp.Backends
                         {
                             case TypeCode.Boolean:
                                 newValues = Array.ConvertAll(_arrayBoolean, x => Convert.ToByte(x));
+                                break;
+                            case TypeCode.Int32:
+                                newValues = Array.ConvertAll(_arrayInt32, x => Convert.ToByte(x));
+                                break;
+                        }
+                    }
+                    break;
+                case TypeCode.UInt16:
+                    {
+                        switch (Type.GetTypeCode(_DType))
+                        {
+                            case TypeCode.Byte:
+                                newValues = Array.ConvertAll(_arrayByte, x => Convert.ToUInt16(x));
+                                break;
+                            case TypeCode.Int32:
+                                newValues = Array.ConvertAll(_arrayInt32, x => Convert.ToUInt16(x));
                                 break;
                         }
                     }
@@ -195,6 +212,9 @@ namespace NumSharp.Backends
                 case "Int16":
                     _arrayInt16 = new short[shape.Size];
                     break;
+                case "UInt16":
+                    _arrayUInt16 = new ushort[shape.Size];
+                    break;
                 case "Int32":
                     _arrayInt32 = new int[shape.Size];
                     break;
@@ -327,6 +347,8 @@ namespace NumSharp.Backends
                     return _arrayBoolean;
                 case "Int16":
                     return _arrayInt16;
+                case "UInt16":
+                    return _arrayUInt16;
                 case "Int32":
                     return _arrayInt32;
                 case "Int64":
@@ -399,11 +421,17 @@ namespace NumSharp.Backends
 
         public bool SupportsSpan => true;
 
-        public bool GetBoolean(params int[] indexes) 
+        public bool GetBoolean(params int[] indexes)
             => _arrayBoolean[Shape.GetIndexInShape(Slice, indexes)];
 
-        public short GetInt16(params int[] indexes) 
+        public byte GetByte(params int[] indexes)
+            => _arrayByte[Shape.GetIndexInShape(Slice, indexes)];
+
+        public short GetInt16(params int[] indexes)
             => _arrayInt16[Shape.GetIndexInShape(Slice, indexes)];
+
+        public ushort GetUInt16(params int[] indexes)
+            => _arrayUInt16[Shape.GetIndexInShape(Slice, indexes)];
 
         public int GetInt32(params int[] indexes) 
             => _arrayInt32[Shape.GetIndexInShape(Slice, indexes)];
@@ -448,6 +476,9 @@ namespace NumSharp.Backends
                         break;
                     case "Int16":
                         _arrayInt16 = values as short[];
+                        break;
+                    case "UInt16":
+                        _arrayUInt16 = values as ushort[];
                         break;
                     case "Int32":
                         _arrayInt32 = values as int[];
@@ -519,6 +550,15 @@ namespace NumSharp.Backends
                     else
                         _arrayInt16.SetValue(values, idx);
                     break;
+                case ushort val:
+                    _arrayUInt16[idx] = val;
+                    break;
+                case ushort[] values:
+                    if (indice.Length == 0)
+                        _arrayUInt16 = values;
+                    else
+                        _arrayUInt16.SetValue(values, idx);
+                    break;
                 case int val:
                     _arrayInt32[idx] = val;
                     break;
@@ -574,6 +614,9 @@ namespace NumSharp.Backends
                             break;
                         case TypeCode.Int16:
                             nd.Data<short>().AsSpan().CopyTo(_arrayInt16.AsSpan(offset));
+                            break;
+                        case TypeCode.UInt16:
+                            nd.Data<ushort>().AsSpan().CopyTo(_arrayUInt16.AsSpan(offset));
                             break;
                         case TypeCode.Int32:
                             nd.Data<int>().AsSpan().CopyTo(_arrayInt32.AsSpan(offset));

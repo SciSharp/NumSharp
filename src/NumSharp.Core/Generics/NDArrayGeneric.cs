@@ -97,7 +97,7 @@ namespace NumSharp.Generic
 
             set
             {
-                Array = value.Data<T>();
+                this[slice].Array = value.Data<T>();
             }
         }
 
@@ -114,7 +114,7 @@ namespace NumSharp.Generic
 
             set
             {
-                Array = value.Data<T>();
+                this[slice].Array = value.Data<T>();
             }
         }
 
