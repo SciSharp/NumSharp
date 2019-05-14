@@ -114,12 +114,14 @@ namespace NumSharp
         {
             switch (DType.Name)
             {
-                //case "Byte":
-                //    return GetByte(idx);
+                case "Byte":
+                    return GetByte(idx);
                 case "Boolean":
                     return GetBoolean(idx);
                 case "Int16":
                     return GetInt16(idx);
+                case "UInt16":
+                    return GetUInt16(idx);
                 case "Int32":
                     return GetInt32(idx);
                 case "Int64":
@@ -154,6 +156,8 @@ namespace NumSharp
                     return new bool[size];
                 case "Int16":
                     return new short[size];
+                case "UInt16":
+                    return new ushort[size];
                 case "Int32":
                     return new int[size];
                 case "Int64":
@@ -243,9 +247,19 @@ namespace NumSharp
             return _data.GetBoolean(TransformIndices(indices, _slices));
         }
 
+        public byte GetByte(params int[] indices)
+        {
+            return _data.GetByte(TransformIndices(indices, _slices));
+        }
+
         public short GetInt16(params int[] indices)
         {
             return _data.GetInt16(TransformIndices(indices, _slices));
+        }
+
+        public ushort GetUInt16(params int[] indices)
+        {
+            return _data.GetUInt16(TransformIndices(indices, _slices));
         }
 
         public int GetInt32(params int[] indices)

@@ -16,12 +16,12 @@ namespace NumSharp.UnitTest.Operations
         [TestMethod]
         public void BoolTwo1D_NDArrayAND()
         {
-            var np1 = new NDArray(new [] { true, true, false, false }, new Shape(4));
+            var np1 = new NDArray(new[] { true, true, false, false }, new Shape(4));
             var np2 = new NDArray(new[] { true, false, true, false }, new Shape(4));
 
             var np3 = np1 & np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new [] { true, false, false, false }, np3.Data<bool>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new[] { true, false, false, false }, np3.Data<bool>()));
         }
 
         [TestMethod]
@@ -40,5 +40,17 @@ namespace NumSharp.UnitTest.Operations
 
             Assert.IsTrue(Enumerable.SequenceEqual(np3.Data<bool>(), np4));
         }
+
+        [TestMethod]
+        public void Byte1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] { 1, 2, 3, 4 }, new Shape(4));
+
+            var np3 = np1 & 2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new byte[] { 0, 2, 2, 0 }, np3.Data<byte>()));
+        }
+
+
     }
 }
