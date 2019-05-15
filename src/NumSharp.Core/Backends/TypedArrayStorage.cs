@@ -607,6 +607,41 @@ namespace NumSharp.Backends
                         offset = idx + (Slice is null ? 0 : Slice.Start.Value);
                     else
                         offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape.Strides[0];
+                    if (nd.ndim == 0)
+                    {
+                        // we are setting a scalar
+                        switch (Type.GetTypeCode(nd.dtype))
+                        {
+                            case TypeCode.Boolean:
+                                _arrayBoolean[offset]=nd;
+                                break;
+                            case TypeCode.Int16:
+                                _arrayInt16[offset]=nd;
+                                break;
+                            case TypeCode.Int32:
+                                _arrayInt32[offset] = nd;
+                                break;
+                            case TypeCode.Int64:
+                                _arrayInt64[offset]=nd;
+                                break;
+                            case TypeCode.Single:
+                                _arraySingle[offset]=nd;
+                                break;
+                            case TypeCode.Double:
+                                _arrayDouble[offset]=nd;
+                                break;
+                            case TypeCode.Decimal:
+                                _arrayDecimal[offset]=nd;
+                                break;
+                            case TypeCode.String:
+                                _arrayString[offset]=nd;
+                                break;
+                            default:
+                                throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
+                        }
+                        return;
+                    }
+                    // we are setting a range
                     switch (Type.GetTypeCode(nd.dtype))
                     {
                         case TypeCode.Boolean:
