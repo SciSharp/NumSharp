@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.28803.156
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.645
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\NumSharp.UnitTest\NumSharp.UnitTest.csproj", "{3EDDE7AA-8037-4663-9DD4-FFB85FF962E5}"
 EndProject
@@ -15,7 +15,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSha
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NeuralNetwork.NumSharp", "Examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NeuralNetwork.NumSharp", "Examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Numpy", "src\Numpy.Pythonnet\Numpy.csproj", "{18B4E90B-D449-405B-A326-1AF41A35B59C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Numpy.UnitTest", "test\Numpy.UnitTest\Numpy.UnitTest.csproj", "{E1D7BFC3-22BB-47AA-A8AC-497278840291}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -47,6 +51,14 @@ Global
 		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B9253A77-0652-4091-A7F5-14E9FE2630FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{18B4E90B-D449-405B-A326-1AF41A35B59C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{18B4E90B-D449-405B-A326-1AF41A35B59C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{18B4E90B-D449-405B-A326-1AF41A35B59C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{18B4E90B-D449-405B-A326-1AF41A35B59C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1D7BFC3-22BB-47AA-A8AC-497278840291}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1D7BFC3-22BB-47AA-A8AC-497278840291}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1D7BFC3-22BB-47AA-A8AC-497278840291}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1D7BFC3-22BB-47AA-A8AC-497278840291}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
