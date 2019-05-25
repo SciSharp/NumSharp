@@ -119,15 +119,16 @@ namespace NumSharp
         public T Max<T>() => Data<T>().Max();
 
         // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
-        public NDArray astype(Type dtype, bool copy=true)
+        public NDArray astype(Type dtype, bool copy = false)
         {
             if (copy)
             {
-                var result = new NDArray(Storage.DType, Storage.Shape);
-                result.SetData(Storage.GetData());
+                var result = new NDArray(dtype, Storage.Shape);
                 result.Storage.SetData(Storage.GetData(), dtype);
                 return result;
-            } else {
+            }
+            else
+            {
                 Storage.SetData(Storage.GetData(), dtype);
                 return this;
             }

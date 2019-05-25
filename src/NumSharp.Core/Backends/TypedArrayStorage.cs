@@ -48,13 +48,13 @@ namespace NumSharp.Backends
         /// </summary>
         private string order = "C";
 
-        protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
+        protected Array _ChangeTypeOfArray(Array arrayVar, Type to_dtype)
         {
-            if (dtype == arrayVar.GetType().GetElementType()) return arrayVar;
+            if (to_dtype == arrayVar.GetType().GetElementType()) return arrayVar;
             
             Array newValues = null;
 
-            switch (Type.GetTypeCode(dtype)) 
+            switch (Type.GetTypeCode(to_dtype)) 
             {
                 case TypeCode.Byte:
                     {
@@ -102,6 +102,9 @@ namespace NumSharp.Backends
                         case TypeCode.Byte:
                             newValues = Array.ConvertAll(_arrayByte, x => Convert.ToSingle(x));
                             break;
+                        case TypeCode.Single:
+                            newValues = Array.ConvertAll(_arraySingle, x => Convert.ToSingle(x));
+                            break;
                         case TypeCode.Double:
                             newValues = Array.ConvertAll(_arrayDouble, x => Convert.ToSingle(x));
                             break;
@@ -127,9 +130,9 @@ namespace NumSharp.Backends
             }
 
             if(newValues == null)
-                throw new NotImplementedException($"_ChangeTypeOfArray from {_DType.Name} to {dtype.Name}");
+                throw new NotImplementedException($"_ChangeTypeOfArray from {_DType.Name} to {to_dtype.Name}");
 
-            _DType = dtype;
+            _DType = to_dtype;
 
             return newValues;
         }

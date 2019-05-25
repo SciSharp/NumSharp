@@ -89,9 +89,25 @@ namespace NumSharp.Backends
                         }
                         else if (scalarNo == 2)
                         {
-                            var scalar = y.CloneData<int>()[0];
-                            for (int idx = 0; idx < np3SysArr.Length; idx++)
-                                resArr[idx] = (byte)(np1Array[idx] * scalar);
+                            switch(Type.GetTypeCode(y.dtype))
+                            {
+                                case TypeCode.Int32:
+                                    {
+                                        var scalar = y.CloneData<int>()[0];
+                                        for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                            resArr[idx] = (byte)(np1Array[idx] * scalar);
+                                    }
+                                    break;
+                                case TypeCode.Single:
+                                    {
+                                        var scalar = y.CloneData<float>()[0];
+                                        for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                            resArr[idx] = (byte)(np1Array[idx] * scalar);
+                                    }
+                                    break;
+                                default:
+                                    throw new NotImplementedException($"Default.Multiply {y.dtype}");
+                            }
                         }
                         break;
                     }
