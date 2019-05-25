@@ -4,8 +4,6 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Numpy;
 using Numpy.Models;
-//using Python.Included;
-//using Python.Runtime;
 using Assert = NUnit.Framework.Assert;
 
 namespace Numpy.UnitTests
@@ -18,7 +16,7 @@ namespace Numpy.UnitTests
         {
             // initialize an array with random integers
             var a = np.empty(new Shape(2, 3), np.int32);
-            Console.WriteLine(a);
+            Console.WriteLine(a.repr);
             Assert.IsNotNull(a.ToString());
             // this should print out the exact integers of the array
             foreach (var x in a.GetData<int>())
@@ -29,7 +27,7 @@ namespace Numpy.UnitTests
         public void efficient_array_copy()
         {
             var a = np.empty(new Shape(2, 3), np.int32);
-            Console.WriteLine(a);
+            Console.WriteLine(a.repr);
             Assert.IsNotNull(a.ToString());
             long ptr = a.PyObject.ctypes.data;
             Console.WriteLine("ptr: " + ptr);
@@ -43,7 +41,7 @@ namespace Numpy.UnitTests
         {
             var array = new int[] { 1, 2, 3, 4, 5, 6 };
             var a = np.array(array);
-            Console.WriteLine(a);
+            Console.WriteLine(a.repr);
             Assert.AreEqual(array, a.GetData());
         }
 
@@ -120,7 +118,7 @@ namespace Numpy.UnitTests
         public void ndarray_multidim_source_array()
         {
             var a = np.array(new float[,] { { 1f, 2f }, { 3f, 4f }, { 3f, 4f } });
-            Console.WriteLine(a);
+            Console.WriteLine(a.repr);
             Assert.AreEqual(new Shape(3, 2), a.shape);
             Assert.AreEqual(np.float32, a.dtype);
         }
@@ -131,7 +129,7 @@ namespace Numpy.UnitTests
             var x = np.array(new float[,] { { 1f, 2f }, { 3f, 4f } });
             Assert.AreEqual("[[1. 2.]\n [3. 4.]]", x.ToString());
             var t = x.T;
-            Console.WriteLine(t);
+            Console.WriteLine(t.repr);
             Assert.AreEqual("[[1. 3.]\n [2. 4.]]", t.ToString());
             Assert.AreEqual(new[] { 1f, 2f, 3f, 4f }, t.GetData<float>());
         }
@@ -220,29 +218,24 @@ namespace Numpy.UnitTests
         public void ndarray_slice1()
         {
             var y = np.arange(35).reshape(5, 7);
-            var b = np.array(new[,] { { true, true, false }, { false, true, true } });
+            var b = y > 20;
             Assert.AreEqual(
                 "array([[ 1,  2],\n" +
                 "       [15, 16],\n" +
                 "       [29, 30]])",
                 y[np.array(0, 2, 4), "1:3"].repr);
-            // TODO: this example is incorrect. Reported it to numpy at: https://github.com/numpy/numpy/issues/13611
-            //Assert.AreEqual("array([[22, 23],\n       [29, 30]])", y[b[":", 5], "1:3"].repr);
+            Assert.AreEqual("array([[22, 23],\n       [29, 30]])", y[b[":", 5], "1:3"].repr);
         }
 
-        [Ignore("TODO: implement")]
         [TestMethod]
         public void ndarray_masking()
         {
             var y = np.arange(35).reshape(5, 7);
-            //>>> b = y > 20
-            //>>> y[b]
-            //array([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34])
-            //>>> b[:, 5] # use a 1-D boolean whose first dim agrees with the first dim of y
-            //array([False, False, False, True, True])
-            //>>> y[b[:, 5]]
-            //array([[21, 22, 23, 24, 25, 26, 27],
-            //       [28, 29, 30, 31, 32, 33, 34]])
+            var b = y > 20;
+            Assert.AreEqual("array([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34])", y[b].repr);
+            // use a 1-D boolean whose first dim agrees with the first dim of y
+            Assert.AreEqual("array([False, False, False,  True,  True])", b[":", 5].repr);
+            Assert.AreEqual("array([[21, 22, 23, 24, 25, 26, 27],\n       [28, 29, 30, 31, 32, 33, 34]])", y[b[":", 5]].repr);
         }
 
         [TestMethod]

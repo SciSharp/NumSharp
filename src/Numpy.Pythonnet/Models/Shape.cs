@@ -7,7 +7,7 @@ namespace Numpy.Models
 {
     public class Shape
     {
-        public int[] Dimensions { get; private set; }
+        public int[] Dimensions { get; }
 
         public Shape(params int[] shape)
         {
@@ -36,7 +36,12 @@ namespace Numpy.Models
 
         public override int GetHashCode()
         {
-            return Dimensions.GetHashCode();
+            return (Dimensions??new int[0]).GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            return $"({string.Join(", ", Dimensions ?? new int[0])})";
         }
 
         #endregion

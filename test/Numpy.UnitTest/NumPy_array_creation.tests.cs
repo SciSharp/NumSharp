@@ -6,8 +6,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-//using Python.Runtime;
-//using Python.Included;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Numpy.Models;
 using Assert = NUnit.Framework.Assert;
@@ -49,24 +47,20 @@ namespace Numpy.UnitTest
             // array([[ 0.,  1.,  0.],
             //        [ 0.,  0.,  1.],
             //        [ 0.,  0.,  0.]])
-            // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.eye(2, dtype=int);
-            expected=
+            //           
+            var given=  np.eye(2, dtype:np.int_);
+            var expected=
                 "array([[1, 0],\n" +
                 "       [0, 1]])";
             Assert.AreEqual(expected, given.repr);
-            given=  np.eye(3, k=1);
+            given=  np.eye(3, k:1);
             expected=
-                "array([[ 0.,  1.,  0.],\n" +
-                "       [ 0.,  0.,  1.],\n" +
-                "       [ 0.,  0.,  0.]])";
+                "array([[0., 1., 0.],\n" +
+                "       [0., 0., 1.],\n" +
+                "       [0., 0., 0.]])";
             Assert.AreEqual(expected, given.repr);
-            #endif
         }
+
         [TestMethod]
         public void identityTest()
         {
@@ -75,76 +69,59 @@ namespace Numpy.UnitTest
             //        [ 0.,  1.,  0.],
             //        [ 0.,  0.,  1.]])
             // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.identity(3);
-            expected=
-                "array([[ 1.,  0.,  0.],\n" +
-                "       [ 0.,  1.,  0.],\n" +
-                "       [ 0.,  0.,  1.]])";
+            var given=  np.identity(3);
+            var expected=
+                "array([[1., 0., 0.],\n" +
+                "       [0., 1., 0.],\n" +
+                "       [0., 0., 1.]])";
             Assert.AreEqual(expected, given.repr);
-            #endif
         }
+
         [TestMethod]
         public void onesTest()
         {
             // >>> np.ones(5)
             // array([ 1.,  1.,  1.,  1.,  1.])
             // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.ones(5);
-            expected=
-                "array([ 1.,  1.,  1.,  1.,  1.])";
+            var given=  np.ones(5);
+            var expected=
+                "array([1., 1., 1., 1., 1.])";
             Assert.AreEqual(expected, given.repr);
-            #endif
+
             // >>> np.ones((5,), dtype=int)
             // array([1, 1, 1, 1, 1])
             // 
             
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.ones((5,), dtype=int);
+            given=  np.ones(new Shape(5), dtype:np.int_);
             expected=
                 "array([1, 1, 1, 1, 1])";
             Assert.AreEqual(expected, given.repr);
-            #endif
+
             // >>> np.ones((2, 1))
             // array([[ 1.],
             //        [ 1.]])
             // 
             
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.ones((2, 1));
+            given=  np.ones(new Shape(2, 1));
             expected=
-                "array([[ 1.],\n" +
-                "       [ 1.]])";
+                "array([[1.],\n" +
+                "       [1.]])";
             Assert.AreEqual(expected, given.repr);
-            #endif
+
             // >>> s = (2,2)
             // >>> np.ones(s)
             // array([[ 1.,  1.],
             //        [ 1.,  1.]])
             // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  s = (2,2);
+
+            var  s = new Shape(2,2);
             given=  np.ones(s);
             expected=
-                "array([[ 1.,  1.],\n" +
-                "       [ 1.,  1.]])";
+                "array([[1., 1.],\n" +
+                "       [1., 1.]])";
             Assert.AreEqual(expected, given.repr);
-            #endif
         }
+
         [TestMethod]
         public void ones_likeTest()
         {
@@ -157,14 +134,11 @@ namespace Numpy.UnitTest
             // array([[1, 1, 1],
             //        [1, 1, 1]])
             // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  x = np.arange(6);
-            given=  x = x.reshape((2, 3));
-            given=  x;
-            expected=
+
+            var x = np.arange(6);
+            x = x.reshape(2, 3);
+            var given=  x;
+            var expected=
                 "array([[0, 1, 2],\n" +
                 "       [3, 4, 5]])";
             Assert.AreEqual(expected, given.repr);
@@ -173,7 +147,7 @@ namespace Numpy.UnitTest
                 "array([[1, 1, 1],\n" +
                 "       [1, 1, 1]])";
             Assert.AreEqual(expected, given.repr);
-            #endif
+
             // >>> y = np.arange(3, dtype=float)
             // >>> y
             // array([ 0.,  1.,  2.])
@@ -181,35 +155,29 @@ namespace Numpy.UnitTest
             // array([ 1.,  1.,  1.])
             // 
             
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  y = np.arange(3, dtype=float);
+            var y = np.arange(3, dtype:np.float_);
             given=  y;
             expected=
-                "array([ 0.,  1.,  2.])";
+                "array([0., 1., 2.])";
             Assert.AreEqual(expected, given.repr);
             given=  np.ones_like(y);
             expected=
-                "array([ 1.,  1.,  1.])";
+                "array([1., 1., 1.])";
             Assert.AreEqual(expected, given.repr);
-            #endif
         }
+
         [TestMethod]
         public void zerosTest()
         {
             // >>> np.zeros(5)
             // array([ 0.,  0.,  0.,  0.,  0.])
             // 
-            
-            #if TODO
-            object given = null;
-            object expected = null;
-            given=  np.zeros(5);
-            expected=
-                "array([ 0.,  0.,  0.,  0.,  0.])";
+
+            var given=  np.zeros(5);
+            var expected=
+                "array([0., 0., 0., 0., 0.])";
             Assert.AreEqual(expected, given.repr);
-            #endif
+
             // >>> np.zeros((5,), dtype=int)
             // array([0, 0, 0, 0, 0])
             // 

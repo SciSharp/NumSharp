@@ -128,15 +128,15 @@ namespace Numpy
         /// </summary>
         public NDarray T => new NDarray(self.GetAttr("T"));
 
-        /// <summary>
-        /// The real part of the array.
-        /// </summary>
-        public NDarray real => new NDarray(self.GetAttr("real"));
+        ///// <summary>
+        ///// The real part of the array.
+        ///// </summary>
+        //public NDarray real => new NDarray(self.GetAttr("real"));
 
-        /// <summary>
-        /// The imaginary part of the array.
-        /// </summary>
-        public NDarray imag => new NDarray(self.GetAttr("imag"));
+        ///// <summary>
+        ///// The imaginary part of the array.
+        ///// </summary>
+        //public NDarray imag => new NDarray(self.GetAttr("imag"));
 
         /// <summary>
         /// A 1-D iterator over the array.
@@ -379,8 +379,6 @@ namespace Numpy
             }
         }
 
-    
-
         public new NDarray this[params int[] coords]
         {
             get
@@ -416,6 +414,18 @@ namespace Numpy
                 var tuple = new PyTuple(pyobjs);
                 return new NDarray(this.PyObject[tuple]);
             }
+        }
+
+        /// <summary>
+        /// Convert an array of size 1 to its scalar equivalent.
+        /// </summary>
+        /// <returns>
+        /// Scalar representation of a. The output data type is the same type
+        /// returned by the input’s item method.
+        /// </returns>
+        public T asscalar<T>()
+        {
+            return NumPy.Instance.asscalar<T>(this);
         }
     }
 
