@@ -545,10 +545,21 @@ namespace NumSharp.Backends
                     _arrayInt16[idx] = val;
                     break;
                 case short[] values:
-                    if (indice.Length == 0)
-                        _arrayInt16 = values;
+                    if (value.GetType() == typeof(ushort[]))
+                    {
+                        if (indice.Length == 0)
+                            _arrayUInt16 = value as ushort[];
+                        else
+                            _arrayUInt16.SetValue(values, idx);
+                        break;
+                    }
                     else
-                        _arrayInt16.SetValue(values, idx);
+                    {
+                        if (indice.Length == 0)
+                            _arrayInt16 = values;
+                        else
+                            _arrayInt16.SetValue(values, idx);
+                    }
                     break;
                 case ushort val:
                     _arrayUInt16[idx] = val;
