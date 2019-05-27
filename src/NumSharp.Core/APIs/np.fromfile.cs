@@ -17,13 +17,26 @@ namespace NumSharp
                     {
                         var fileSize = new System.IO.FileInfo(fileName).Length;
                         var arraySize = fileSize / Marshal.SizeOf(dtype);
-                        var nd = new NDArray(dtype);
+                        byte[] dataArray;
                         using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
                         {
-                            var dataArray = reader.ReadBytes((int)arraySize);
-                            nd.SetData(dataArray);
+                            dataArray = reader.ReadBytes((int)arraySize);
                         }
-                        return nd;
+                        return new NDArray(dataArray);
+                    }
+                case TypeCode.UInt16:
+                    {
+                        var fileSize = new System.IO.FileInfo(fileName).Length;
+                        var arraySize = fileSize / Marshal.SizeOf(dtype);
+                        var dataArray = new ushort[arraySize];
+                        using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
+                        {
+                            for (var i = 0; i < (int)arraySize; i++)
+                            {
+                                dataArray[i] = reader.ReadUInt16();
+                            }
+                        }
+                        return new NDArray(dataArray);
                     }
             }
             throw new NotImplementedException($"fromfile dtype={dtype} not implemented yet");
