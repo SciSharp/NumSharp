@@ -67,6 +67,56 @@ namespace NumSharp.Backends
             switch (np3SysArr)
             {
 
+                case System.Byte[] resArr:
+                    {
+                        System.Byte[] np1Array = np1SysArr as System.Byte[];
+                        System.Byte[] np2Array = np2SysArr as System.Byte[];
+                        np1Array = (np1Array == null) ? x.CloneData<System.Byte>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<System.Byte>() : np2Array;
+
+                        if (scalarNo == 0)
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (byte)(np1Array[idx] / np2Array[idx]);
+                        else if (scalarNo == 1)
+                        {
+                            System.Int32 scalar = x.CloneData<System.Int32>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (byte)(scalar / np2Array[idx]);
+                        }
+                        else if (scalarNo == 2)
+                        {
+                            System.Int32 scalar = y.CloneData<System.Int32>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (byte)(np1Array[idx] / scalar);
+                        }
+                        break;
+                    }
+
+                case System.UInt16[] resArr:
+                    {
+                        System.UInt16[] np1Array = np1SysArr as System.UInt16[];
+                        System.UInt16[] np2Array = np2SysArr as System.UInt16[];
+                        np1Array = (np1Array == null) ? x.CloneData<System.UInt16>() : np1Array;
+                        np2Array = (np2Array == null) ? y.CloneData<System.UInt16>() : np2Array;
+
+                        if (scalarNo == 0)
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (UInt16)(np1Array[idx] / np2Array[idx]);
+                        else if (scalarNo == 1)
+                        {
+                            System.Int32 scalar = x.CloneData<System.Int32>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (UInt16)(scalar / np2Array[idx]);
+                        }
+                        else if (scalarNo == 2)
+                        {
+                            System.Int32 scalar = y.CloneData<System.Int32>()[0];
+                            for (int idx = 0; idx < np3SysArr.Length; idx++)
+                                resArr[idx] = (UInt16)(np1Array[idx] / scalar);
+                        }
+                        break;
+                    }
+
                 case System.Int32[] resArr:
                     {
                         System.Int32[] np1Array = np1SysArr as System.Int32[];
