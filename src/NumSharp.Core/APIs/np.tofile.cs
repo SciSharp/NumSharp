@@ -21,6 +21,18 @@ namespace NumSharp
                         }
                     }
                     break;
+                case TypeCode.UInt16:
+                    {
+                        var arr = Array as UInt16[];
+                        using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
+                        {
+                            for (var i = 0; i < arr.Length; i++)
+                            {
+                                writer.Write(arr[i]);
+                            }
+                        }
+                    }
+                    break;
                 default:
                     throw new NotImplementedException($"tofile dtype={dtype} not implemented yet");
             }            
