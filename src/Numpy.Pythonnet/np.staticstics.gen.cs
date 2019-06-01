@@ -308,7 +308,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> percentile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear", bool? keepdims = null)
+        public static NDarray<double> percentile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear", bool? keepdims = false)
             => NumPy.Instance.percentile(a, q, axis:axis, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation, keepdims:keepdims);
         
         /// <summary>
@@ -359,7 +359,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double percentile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear")
+        public static double percentile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear")
             => NumPy.Instance.percentile(a, q, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation);
         
         /// <summary>
@@ -428,7 +428,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> nanpercentile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear", bool? keepdims = null)
+        public static NDarray<double> nanpercentile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear", bool? keepdims = null)
             => NumPy.Instance.nanpercentile(a, q, axis:axis, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation, keepdims:keepdims);
         
         /// <summary>
@@ -481,7 +481,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double nanpercentile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear")
+        public static double nanpercentile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear")
             => NumPy.Instance.nanpercentile(a, q, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation);
         
         /// <summary>
@@ -541,7 +541,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> quantile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear", bool? keepdims = null)
+        public static NDarray<double> quantile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear", bool? keepdims = false)
             => NumPy.Instance.quantile(a, q, axis:axis, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation, keepdims:keepdims);
         
         /// <summary>
@@ -591,7 +591,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double quantile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear")
+        public static double quantile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear")
             => NumPy.Instance.quantile(a, q, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation);
         
         /// <summary>
@@ -649,7 +649,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> nanquantile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear", bool? keepdims = null)
+        public static NDarray<double> nanquantile(NDarray a, NDarray<float> q, int[] axis, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear", bool? keepdims = null)
             => NumPy.Instance.nanquantile(a, q, axis:axis, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation, keepdims:keepdims);
         
         /// <summary>
@@ -691,7 +691,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double nanquantile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = null, string interpolation = "linear")
+        public static double nanquantile(NDarray a, NDarray<float> q, NDarray @out = null, bool? overwrite_input = false, string interpolation = "linear")
             => NumPy.Instance.nanquantile(a, q, @out:@out, overwrite_input:overwrite_input, interpolation:interpolation);
         
         /// <summary>
@@ -740,7 +740,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> median(NDarray a, int[] axis, NDarray @out = null, bool? overwrite_input = null, bool? keepdims = null)
+        public static NDarray<double> median(NDarray a, int[] axis, NDarray @out = null, bool? overwrite_input = false, bool? keepdims = false)
             => NumPy.Instance.median(a, axis:axis, @out:@out, overwrite_input:overwrite_input, keepdims:keepdims);
         
         /// <summary>
@@ -779,7 +779,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double median(NDarray a, NDarray @out = null, bool? overwrite_input = null)
+        public static double median(NDarray a, NDarray @out = null, bool? overwrite_input = false)
             => NumPy.Instance.median(a, @out:@out, overwrite_input:overwrite_input);
         
         /// <summary>
@@ -824,7 +824,7 @@ namespace Numpy
         /// integral, the previous rules still applies but the result dtype will
         /// at least be float64.
         /// </returns>
-        public static NDarray<double> average(NDarray a, int[] axis, NDarray weights = null, bool? returned = null)
+        public static NDarray<double> average(NDarray a, int[] axis, NDarray weights = null, bool? returned = false)
             => NumPy.Instance.average(a, axis:axis, weights:weights, returned:returned);
         
         /// <summary>
@@ -860,7 +860,7 @@ namespace Numpy
         /// integral, the previous rules still applies but the result dtype will
         /// at least be float64.
         /// </returns>
-        public static double average(NDarray a, NDarray weights = null, bool? returned = null)
+        public static double average(NDarray a, NDarray weights = null, bool? returned = false)
             => NumPy.Instance.average(a, weights:weights, returned:returned);
         
         /// <summary>
@@ -1038,7 +1038,7 @@ namespace Numpy
         /// If out is None, return a new array containing the standard deviation,
         /// otherwise return a reference to the output array.
         /// </returns>
-        public static NDarray<double> std(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = null, bool? keepdims = null)
+        public static NDarray<double> std(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = 0, bool? keepdims = null)
             => NumPy.Instance.std(a, axis:axis, dtype:dtype, @out:@out, ddof:ddof, keepdims:keepdims);
         
         /// <summary>
@@ -1094,7 +1094,7 @@ namespace Numpy
         /// If out is None, return a new array containing the standard deviation,
         /// otherwise return a reference to the output array.
         /// </returns>
-        public static double std(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = null)
+        public static double std(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = 0)
             => NumPy.Instance.std(a, dtype:dtype, @out:@out, ddof:ddof);
         
         /// <summary>
@@ -1166,7 +1166,7 @@ namespace Numpy
         /// If out=None, returns a new array containing the variance;
         /// otherwise, a reference to the output array is returned.
         /// </returns>
-        public static NDarray<double> @var(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = null, bool? keepdims = null)
+        public static NDarray<double> @var(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = 0, bool? keepdims = null)
             => NumPy.Instance.@var(a, axis:axis, dtype:dtype, @out:@out, ddof:ddof, keepdims:keepdims);
         
         /// <summary>
@@ -1220,7 +1220,7 @@ namespace Numpy
         /// If out=None, returns a new array containing the variance;
         /// otherwise, a reference to the output array is returned.
         /// </returns>
-        public static double @var(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = null)
+        public static double @var(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = 0)
             => NumPy.Instance.@var(a, dtype:dtype, @out:@out, ddof:ddof);
         
         /// <summary>
@@ -1275,7 +1275,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static NDarray<double> nanmedian(NDarray a, int[] axis, NDarray @out = null, bool? overwrite_input = null, bool? keepdims = null)
+        public static NDarray<double> nanmedian(NDarray a, int[] axis, NDarray @out = null, bool? overwrite_input = false, bool? keepdims = null)
             => NumPy.Instance.nanmedian(a, axis:axis, @out:@out, overwrite_input:overwrite_input, keepdims:keepdims);
         
         /// <summary>
@@ -1314,7 +1314,7 @@ namespace Numpy
         /// same as that of the input. If out is specified, that array is
         /// returned instead.
         /// </returns>
-        public static double nanmedian(NDarray a, NDarray @out = null, bool? overwrite_input = null)
+        public static double nanmedian(NDarray a, NDarray @out = null, bool? overwrite_input = false)
             => NumPy.Instance.nanmedian(a, @out:@out, overwrite_input:overwrite_input);
         
         /// <summary>
@@ -1491,7 +1491,7 @@ namespace Numpy
         /// ddof is &gt;= the number of non-NaN elements in a slice or the slice
         /// contains only NaNs, then the result for that slice is NaN.
         /// </returns>
-        public static NDarray<double> nanstd(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = null, bool? keepdims = null)
+        public static NDarray<double> nanstd(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = 0, bool? keepdims = null)
             => NumPy.Instance.nanstd(a, axis:axis, dtype:dtype, @out:@out, ddof:ddof, keepdims:keepdims);
         
         /// <summary>
@@ -1554,7 +1554,7 @@ namespace Numpy
         /// ddof is &gt;= the number of non-NaN elements in a slice or the slice
         /// contains only NaNs, then the result for that slice is NaN.
         /// </returns>
-        public static double nanstd(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = null)
+        public static double nanstd(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = 0)
             => NumPy.Instance.nanstd(a, dtype:dtype, @out:@out, ddof:ddof);
         
         /// <summary>
@@ -1625,7 +1625,7 @@ namespace Numpy
         /// number of non-NaN elements in a slice or the slice contains only
         /// NaNs, then the result for that slice is NaN.
         /// </returns>
-        public static NDarray<double> nanvar(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = null, bool? keepdims = null)
+        public static NDarray<double> nanvar(NDarray a, int[] axis, Dtype dtype = null, NDarray @out = null, int? ddof = 0, bool? keepdims = null)
             => NumPy.Instance.nanvar(a, axis:axis, dtype:dtype, @out:@out, ddof:ddof, keepdims:keepdims);
         
         /// <summary>
@@ -1687,7 +1687,7 @@ namespace Numpy
         /// number of non-NaN elements in a slice or the slice contains only
         /// NaNs, then the result for that slice is NaN.
         /// </returns>
-        public static double nanvar(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = null)
+        public static double nanvar(NDarray a, Dtype dtype = null, NDarray @out = null, int? ddof = 0)
             => NumPy.Instance.nanvar(a, dtype:dtype, @out:@out, ddof:ddof);
         
         /// <summary>
@@ -1730,7 +1730,7 @@ namespace Numpy
         /// <returns>
         /// The correlation coefficient matrix of the variables.
         /// </returns>
-        public static NDarray corrcoef(NDarray x, NDarray y = null, bool? rowvar = null)
+        public static NDarray corrcoef(NDarray x, NDarray y = null, bool? rowvar = true)
             => NumPy.Instance.corrcoef(x, y:y, rowvar:rowvar);
         
         /// <summary>
@@ -1762,7 +1762,7 @@ namespace Numpy
         /// <returns>
         /// Discrete cross-correlation of a and v.
         /// </returns>
-        public static NDarray correlate(NDarray v, NDarray a, string mode = null)
+        public static NDarray correlate(NDarray v, NDarray a, string mode = "valid")
             => NumPy.Instance.correlate(v, a, mode:mode);
         
         /// <summary>
@@ -1827,7 +1827,7 @@ namespace Numpy
         /// <returns>
         /// The covariance matrix of the variables.
         /// </returns>
-        public static NDarray cov(NDarray m, NDarray y = null, bool? rowvar = null, bool? bias = null, int? ddof = null, NDarray fweights = null, NDarray aweights = null)
+        public static NDarray cov(NDarray m, NDarray y = null, bool? rowvar = true, bool? bias = false, int? ddof = null, NDarray fweights = null, NDarray aweights = null)
             => NumPy.Instance.cov(m, y:y, rowvar:rowvar, bias:bias, ddof:ddof, fweights:fweights, aweights:aweights);
         
         /// <summary>
@@ -2380,7 +2380,7 @@ namespace Numpy
         /// The result of binning the input array.
         /// The length of out is equal to np.amax(x)+1.
         /// </returns>
-        public static NDarray bincount(NDarray x, NDarray weights = null, int? minlength = null)
+        public static NDarray bincount(NDarray x, NDarray weights = null, int? minlength = 0)
             => NumPy.Instance.bincount(x, weights:weights, minlength:minlength);
         
         /// <summary>
@@ -2591,7 +2591,7 @@ namespace Numpy
         /// <returns>
         /// Output array of indices, of same shape as x.
         /// </returns>
-        public static NDarray digitize(NDarray x, NDarray bins, bool? right = null)
+        public static NDarray digitize(NDarray x, NDarray bins, bool? right = false)
             => NumPy.Instance.digitize(x, bins, right:right);
         
         

@@ -38,19 +38,58 @@ namespace Numpy
         /// <summary>
         /// Returns an array of bool where the elements of the array are == value
         /// </summary>
-        public static NDarray<bool> equals(NDarray a, ValueType obj)
+        public NDarray<bool> equals(ValueType obj)
         {
-            return new NDarray<bool>(a.self.InvokeMethod("__eq__", obj.ToPython()));
+            return new NDarray<bool>(self.InvokeMethod("__eq__", obj.ToPython()));
         }
 
         /// <summary>
-        /// Returns an array of bool where the elements of the array are == value
+        /// Returns an array of bool where the elements of the array are != value
         /// </summary>
-        public static NDarray<bool> not_equals(NDarray a, ValueType obj)
+        public NDarray<bool> not_equals(ValueType obj)
         {
-            return new NDarray<bool>(a.self.InvokeMethod("__ne__", obj.ToPython()));
+            return new NDarray<bool>(self.InvokeMethod("__ne__", obj.ToPython()));
         }
 
+        // Return element-wise self<array.
+        public static NDarray<bool> operator <(NDarray a, NDarray obj)
+        {
+            return new NDarray<bool>(a.self.InvokeMethod("__lt__", obj.self));
+        }
+
+        // Return element-wise self<=array.
+        public static NDarray<bool> operator <=(NDarray a, NDarray obj)
+        {
+            return new NDarray<bool>(a.self.InvokeMethod("__le__", obj.self));
+        }
+
+        // Return element-wise self>array.
+        public static NDarray<bool> operator >(NDarray a, NDarray obj)
+        {
+            return new NDarray<bool>(a.self.InvokeMethod("__gt__", obj.self));
+        }
+
+        // Return element-wise self>=array.
+        public static NDarray<bool> operator >=(NDarray a, NDarray obj)
+        {
+            return new NDarray<bool>(a.self.InvokeMethod("__ge__", obj.self));
+        }
+
+        /// <summary>
+        /// Returns an array of bool where the elements of the array are == array element-wise
+        /// </summary>
+        public NDarray<bool> equals(NDarray obj)
+        {
+            return new NDarray<bool>(self.InvokeMethod("__eq__", obj.self));
+        }
+
+        /// <summary>
+        /// Returns an array of bool where the elements of the array are != array element-wise
+        /// </summary>
+        public NDarray<bool> not_equals(NDarray obj)
+        {
+            return new NDarray<bool>(self.InvokeMethod("__ne__", obj.self));
+        }
 
         //------------------------------
         // Truth value of an array(bool) :
@@ -117,16 +156,40 @@ namespace Numpy
         // Return self/value.
         public static NDarray operator /(NDarray a, ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__div__", obj.ToPython()));
-        }
-
-        /// <summary>
-        /// Return self/value.
-        /// </summary>
-        public static NDarray truediv(NDarray a, ValueType obj)
-        {
             return new NDarray(a.self.InvokeMethod("__truediv__", obj.ToPython()));
         }
+
+        // Return element-wise self+array.
+        public static NDarray operator +(NDarray a, NDarray obj)
+        {
+            return new NDarray(a.self.InvokeMethod("__add__", obj.self));
+        }
+
+        // Return element-wise self-array.
+        public static NDarray operator -(NDarray a, NDarray obj)
+        {
+            return new NDarray(a.self.InvokeMethod("__sub__", obj.self));
+        }
+
+        // Return element-wise self*array.
+        public static NDarray operator *(NDarray a, NDarray obj)
+        {
+            return new NDarray(a.self.InvokeMethod("__mul__", obj.self));
+        }
+
+        // Return element-wise self/array.
+        public static NDarray operator /(NDarray a, NDarray obj)
+        {
+            return new NDarray(a.self.InvokeMethod("__truediv__", obj.self));
+        }
+
+        ///// <summary>
+        ///// Return self/value.
+        ///// </summary>
+        //public static NDarray truediv(NDarray a, ValueType obj)
+        //{
+        //    return new NDarray(a.self.InvokeMethod("__truediv__", obj.ToPython()));
+        //}
 
         /// <summary>
         /// Return self//value. 
@@ -205,105 +268,209 @@ namespace Numpy
         /// <summary>
         /// Return self+=value.
         /// </summary>
-        public static NDarray iadd(NDarray a, ValueType obj)
+        public NDarray iadd(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__iadd__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__iadd__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self-=value.
         /// </summary>
-        public static NDarray isub(NDarray a, ValueType obj)
+        public NDarray isub(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__isub__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__isub__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self*=value.
         /// </summary>
-        public static NDarray imul(NDarray a, ValueType obj)
+        public NDarray imul(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__imul__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__imul__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self/=value.
         /// </summary>
-        public static NDarray idiv(NDarray a, ValueType obj)
+        public NDarray idiv(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__idiv__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__idiv__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self/=value.
         /// </summary>
-        public static NDarray itruediv(NDarray a, ValueType obj)
+        public NDarray itruediv(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__itruediv__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__itruediv__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self//=value. 
         /// </summary>
-        public static NDarray ifloordiv(NDarray a, ValueType obj)
+        public NDarray ifloordiv(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__floordiv__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__floordiv__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self%value.
         /// </summary>
-        public static NDarray imod(NDarray a, ValueType obj)
+        public NDarray imod(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__imod__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__imod__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return inplace pow(value). 
         /// </summary>
-        public static NDarray ipow(NDarray a, ValueType obj)
+        public NDarray ipow(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__ipow__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__ipow__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return inplace self&lt;&lt;value.
         /// </summary>
-        public static NDarray ilshift(NDarray a, int obj)
+        public NDarray ilshift(int obj)
         {
-            return new NDarray(a.self.InvokeMethod("__ilshift__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__ilshift__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return inplace self&gt;&gt;value.
         /// </summary>
-        public static NDarray irshift(NDarray a, int obj)
+        public NDarray irshift(int obj)
         {
-            return new NDarray(a.self.InvokeMethod("__irshift__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__irshift__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self&=value.
         /// </summary>
-        public static NDarray iand(NDarray a, ValueType obj)
+        public NDarray iand(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__iand__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__iand__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self|=value.
         /// </summary>
-        public static NDarray ior(NDarray a, ValueType obj)
+        public NDarray ior(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__ior__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__ior__", obj.ToPython()));
         }
 
         /// <summary>
         /// Return self^=value.
         /// </summary>
-        public static NDarray ixor(NDarray a, ValueType obj)
+        public NDarray ixor(ValueType obj)
         {
-            return new NDarray(a.self.InvokeMethod("__ixor__", obj.ToPython()));
+            return new NDarray(self.InvokeMethod("__ixor__", obj.ToPython()));
+        }
+
+        /// <summary>
+        /// Return self+=NDarray.
+        /// </summary>
+        public NDarray iadd(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__iadd__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self-=NDarray.
+        /// </summary>
+        public NDarray isub(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__isub__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self*=NDarray.
+        /// </summary>
+        public NDarray imul(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__imul__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self/=NDarray.
+        /// </summary>
+        public NDarray idiv(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__idiv__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self/=NDarray.
+        /// </summary>
+        public NDarray itruediv(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__itruediv__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self//=NDarray. 
+        /// </summary>
+        public NDarray ifloordiv(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__floordiv__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self%NDarray.
+        /// </summary>
+        public NDarray imod(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__imod__", obj.self));
+        }
+
+        /// <summary>
+        /// Return inplace pow(NDarray). 
+        /// </summary>
+        public NDarray ipow(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__ipow__", obj.self));
+        }
+
+        /// <summary>
+        /// Return inplace self&lt;&lt;NDarray.
+        /// </summary>
+        public NDarray ilshift(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__ilshift__", obj.self));
+        }
+
+        /// <summary>
+        /// Return inplace self&gt;&gt;NDarray.
+        /// </summary>
+        public NDarray irshift(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__irshift__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self&=NDarray.
+        /// </summary>
+        public NDarray iand(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__iand__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self|=NDarray.
+        /// </summary>
+        public NDarray ior(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__ior__", obj.self));
+        }
+
+        /// <summary>
+        /// Return self^=NDarray.
+        /// </summary>
+        public NDarray ixor(NDarray obj)
+        {
+            return new NDarray(self.InvokeMethod("__ixor__", obj.self));
         }
 
         // TODO:

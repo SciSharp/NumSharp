@@ -179,7 +179,7 @@ namespace Numpy
             /// to the eigenvalue w[i].  Will return a matrix object if a is
             /// a matrix object.
             /// </returns>
-            public static (NDarray, NDarray) eigh(NDarray a, string UPLO = null)
+            public static (NDarray, NDarray) eigh(NDarray a, string UPLO = "L")
                 => NumPy.Instance.eigh(a, UPLO:UPLO);
         }
         
@@ -239,7 +239,7 @@ namespace Numpy
             /// The eigenvalues in ascending order, each repeated according to
             /// its multiplicity.
             /// </returns>
-            public static NDarray eigvalsh(NDarray a, string UPLO = null)
+            public static NDarray eigvalsh(NDarray a, string UPLO = "L")
                 => NumPy.Instance.eigvalsh(a, UPLO:UPLO);
         }
         
@@ -354,7 +354,7 @@ namespace Numpy
             /// The pseudo-inverse of a. If a is a matrix instance, then so
             /// is B.
             /// </returns>
-            public static NDarray pinv(NDarray a, NDarray rcond)
+            public static NDarray pinv(NDarray a, float rcond = 1e-15f)
                 => NumPy.Instance.pinv(a, rcond);
         }
         
@@ -456,7 +456,7 @@ namespace Numpy
             /// depends on the value of full_matrices. Only returned when
             /// compute_uv is True.
             /// </returns>
-            public static (NDarray, NDarray, NDarray) svd(NDarray a, bool? full_matrices = null, bool? compute_uv = null)
+            public static (NDarray, NDarray, NDarray) svd(NDarray a, bool? full_matrices = true, bool? compute_uv = true)
                 => NumPy.Instance.svd(a, full_matrices:full_matrices, compute_uv:compute_uv);
         }
         
@@ -500,7 +500,7 @@ namespace Numpy
             /// The truncated or zero-padded input, transformed along the axis
             /// indicated by axis, or the last one if axis is not specified.
             /// </returns>
-            public static NDarray fft(NDarray a, int? n = null, int? axis = null, string norm = null)
+            public static NDarray fft(NDarray a, int? n = null, int? axis = -1, string norm = null)
                 => NumPy.Instance.fft(a, n:n, axis:axis, norm:norm);
         }
         
@@ -648,7 +648,7 @@ namespace Numpy
             /// The truncated or zero-padded input, transformed along the axis
             /// indicated by axis, or the last one if axis is not specified.
             /// </returns>
-            public static NDarray ifft(NDarray a, int? n = null, int? axis = null, string norm = null)
+            public static NDarray ifft(NDarray a, int? n = null, int? axis = -1, string norm = null)
                 => NumPy.Instance.ifft(a, n:n, axis:axis, norm:norm);
         }
         

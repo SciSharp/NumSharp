@@ -18,6 +18,500 @@ namespace Numpy
     {
         
         /// <summary>
+        /// Trigonometric sine, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// The sine is one of the fundamental functions of trigonometry (the
+        /// mathematical study of triangles).  Consider a circle of radius 1
+        /// centered on the origin.  A ray comes in from the  axis, makes
+        /// an angle at the origin (measured counter-clockwise from that axis), and
+        /// departs from the origin.  The  coordinate of the outgoing
+        /// ray’s intersection with the unit circle is the sine of that angle.  It
+        /// ranges from -1 for  to +1 for   The
+        /// function has zeroes where the angle is a multiple of .
+        /// Sines of angles between  and  are negative.
+        /// The numerous properties of the sine and related functions are included
+        /// in any standard trigonometry text.
+        /// </summary>
+        /// <param name="x">
+        /// Angle, in radians ( rad equals 360 degrees).
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The sine of each element of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray sin(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("sin", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Cosine element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// If out is provided, the function writes the result into it,
+        /// and returns a reference to out.  (See Examples)
+        /// 
+        /// References
+        /// 
+        /// M. Abramowitz and I. A. Stegun, Handbook of Mathematical Functions.
+        /// New York, NY: Dover, 1972.
+        /// </summary>
+        /// <param name="x">
+        /// Input array in radians.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding cosine values.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray cos(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("cos", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute tangent element-wise.
+        /// 
+        /// Equivalent to np.sin(x)/np.cos(x) element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// If out is provided, the function writes the result into it,
+        /// and returns a reference to out.  (See Examples)
+        /// 
+        /// References
+        /// 
+        /// M. Abramowitz and I. A. Stegun, Handbook of Mathematical Functions.
+        /// New York, NY: Dover, 1972.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding tangent values.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray tan(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("tan", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Inverse sine, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// arcsin is a multivalued function: for each x there are infinitely
+        /// many numbers z such that .  The convention is to
+        /// return the angle z whose real part lies in [-pi/2, pi/2].
+        /// 
+        /// For real-valued input data types, arcsin always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arcsin is a complex analytic function that
+        /// has, by convention, the branch cuts [-inf, -1] and [1, inf]  and is
+        /// continuous from above on the former and from below on the latter.
+        /// 
+        /// The inverse sine is also known as asin or sin^{-1}.
+        /// 
+        /// References
+        /// 
+        /// Abramowitz, M. and Stegun, I. A., Handbook of Mathematical Functions,
+        /// 10th printing, New York: Dover, 1964, pp. 79ff.
+        /// http://www.math.sfu.ca/~cbm/aands/
+        /// </summary>
+        /// <param name="x">
+        /// y-coordinate on the unit circle.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The inverse sine of each element in x, in radians and in the
+        /// closed interval [-pi/2, pi/2].
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arcsin(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arcsin", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Trigonometric inverse cosine, element-wise.
+        /// 
+        /// The inverse of cos so that, if y = cos(x), then x = arccos(y).
+        /// 
+        /// Notes
+        /// 
+        /// arccos is a multivalued function: for each x there are infinitely
+        /// many numbers z such that cos(z) = x. The convention is to return
+        /// the angle z whose real part lies in [0, pi].
+        /// 
+        /// For real-valued input data types, arccos always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arccos is a complex analytic function that
+        /// has branch cuts [-inf, -1] and [1, inf] and is continuous from
+        /// above on the former and from below on the latter.
+        /// 
+        /// The inverse cos is also known as acos or cos^-1.
+        /// 
+        /// References
+        /// 
+        /// M. Abramowitz and I.A. Stegun, “Handbook of Mathematical Functions”,
+        /// 10th printing, 1964, pp. 79. http://www.math.sfu.ca/~cbm/aands/
+        /// </summary>
+        /// <param name="x">
+        /// x-coordinate on the unit circle.
+        /// For real arguments, the domain is [-1, 1].
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The angle of the ray intersecting the unit circle at the given
+        /// x-coordinate in radians [0, pi].
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arccos(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arccos", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Trigonometric inverse tangent, element-wise.
+        /// 
+        /// The inverse of tan, so that if y = tan(x) then x = arctan(y).
+        /// 
+        /// Notes
+        /// 
+        /// arctan is a multi-valued function: for each x there are infinitely
+        /// many numbers z such that tan(z) = x.  The convention is to return
+        /// the angle z whose real part lies in [-pi/2, pi/2].
+        /// 
+        /// For real-valued input data types, arctan always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arctan is a complex analytic function that
+        /// has [1j, infj] and [-1j, -infj] as branch cuts, and is continuous
+        /// from the left on the former and from the right on the latter.
+        /// 
+        /// The inverse tangent is also known as atan or tan^{-1}.
+        /// 
+        /// References
+        /// 
+        /// Abramowitz, M. and Stegun, I. A., Handbook of Mathematical Functions,
+        /// 10th printing, New York: Dover, 1964, pp. 79.
+        /// http://www.math.sfu.ca/~cbm/aands/
+        /// </summary>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Out has the same shape as x.  Its real part is in
+        /// [-pi/2, pi/2] (arctan(+/-inf) returns +/-pi/2).
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arctan(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arctan", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Given the “legs” of a right triangle, return its hypotenuse.
+        /// 
+        /// Equivalent to sqrt(x1**2 + x2**2), element-wise.  If x1 or
+        /// x2 is scalar_like (i.e., unambiguously cast-able to a scalar type),
+        /// it is broadcast for use with each element of the other argument.
+        /// (See Examples)
+        /// </summary>
+        /// <param name="x2">
+        /// Leg of the triangle(s).
+        /// </param>
+        /// <param name="x1">
+        /// Leg of the triangle(s).
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The hypotenuse of the triangle(s).
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray hypot(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("hypot", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Element-wise arc tangent of x1/x2 choosing the quadrant correctly.
+        /// 
+        /// The quadrant (i.e., branch) is chosen so that arctan2(x1, x2) is
+        /// the signed angle in radians between the ray ending at the origin and
+        /// passing through the point (1,0), and the ray ending at the origin and
+        /// passing through the point (x2, x1).  (Note the role reversal: the
+        /// “y-coordinate” is the first function parameter, the “x-coordinate”
+        /// is the second.)  By IEEE convention, this function is defined for
+        /// x2 = +/-0 and for either or both of x1 and x2 = +/-inf (see
+        /// Notes for specific values).
+        /// 
+        /// This function is not defined for complex-valued arguments; for the
+        /// so-called argument of complex values, use angle.
+        /// 
+        /// Notes
+        /// 
+        /// arctan2 is identical to the atan2 function of the underlying
+        /// C library.  The following special values are defined in the C
+        /// standard: [1]
+        /// 
+        /// Note that +0 and -0 are distinct floating point numbers, as are +inf
+        /// and -inf.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x1">
+        /// y-coordinates.
+        /// </param>
+        /// <param name="x2">
+        /// x-coordinates. x2 must be broadcastable to match the shape of
+        /// x1 or vice versa.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Array of angles in radians, in the range [-pi, pi].
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray arctan2(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arctan2", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Convert angles from radians to degrees.
+        /// </summary>
+        /// <param name="x">
+        /// Input array in radians.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding degree values; if out was supplied this is a
+        /// reference to it.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray degrees(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("degrees", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Convert angles from degrees to radians.
+        /// </summary>
+        /// <param name="x">
+        /// Input array in degrees.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding radian values.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray radians(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("radians", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
         /// Unwrap by changing deltas between values to 2*pi complement.
         /// 
         /// Unwrap radian phase p by changing absolute jumps greater than
@@ -41,7 +535,7 @@ namespace Numpy
         /// <returns>
         /// Output array.
         /// </returns>
-        public NDarray unwrap(NDarray p, float? discont = null, int? axis = null)
+        public NDarray unwrap(NDarray p, float? discont = 3.141592653589793f, int? axis = -1)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -50,9 +544,373 @@ namespace Numpy
                 p,
             });
             var kwargs=new PyDict();
-            if (discont!=null) kwargs["discont"]=ToPython(discont);
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (discont!=3.141592653589793f) kwargs["discont"]=ToPython(discont);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             dynamic py = __self__.InvokeMethod("unwrap", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Convert angles from degrees to radians.
+        /// 
+        /// Notes
+        /// 
+        /// deg2rad(x) is x * pi / 180.
+        /// </summary>
+        /// <param name="x">
+        /// Angles in degrees.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding angle in radians.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray deg2rad(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("deg2rad", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Convert angles from radians to degrees.
+        /// 
+        /// Notes
+        /// 
+        /// rad2deg(x) is 180 * x / pi.
+        /// </summary>
+        /// <param name="x">
+        /// Angle in radians.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding angle in degrees.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray rad2deg(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("rad2deg", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Hyperbolic sine, element-wise.
+        /// 
+        /// Equivalent to 1/2 * (np.exp(x) - np.exp(-x)) or
+        /// -1j * np.sin(1j*x).
+        /// 
+        /// Notes
+        /// 
+        /// If out is provided, the function writes the result into it,
+        /// and returns a reference to out.  (See Examples)
+        /// 
+        /// References
+        /// 
+        /// M. Abramowitz and I. A. Stegun, Handbook of Mathematical Functions.
+        /// New York, NY: Dover, 1972, pg. 83.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding hyperbolic sine values.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray sinh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("sinh", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Hyperbolic cosine, element-wise.
+        /// 
+        /// Equivalent to 1/2 * (np.exp(x) + np.exp(-x)) and np.cos(1j*x).
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Output array of same shape as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray cosh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("cosh", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute hyperbolic tangent element-wise.
+        /// 
+        /// Equivalent to np.sinh(x)/np.cosh(x) or -1j * np.tan(1j*x).
+        /// 
+        /// Notes
+        /// 
+        /// If out is provided, the function writes the result into it,
+        /// and returns a reference to out.  (See Examples)
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The corresponding hyperbolic tangent values.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray tanh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("tanh", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Inverse hyperbolic sine element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// arcsinh is a multivalued function: for each x there are infinitely
+        /// many numbers z such that sinh(z) = x. The convention is to return the
+        /// z whose imaginary part lies in [-pi/2, pi/2].
+        /// 
+        /// For real-valued input data types, arcsinh always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity, it
+        /// returns nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arccos is a complex analytical function that
+        /// has branch cuts [1j, infj] and [-1j, -infj] and is continuous from
+        /// the right on the former and from the left on the latter.
+        /// 
+        /// The inverse hyperbolic sine is also known as asinh or sinh^-1.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Array of the same shape as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arcsinh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arcsinh", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Inverse hyperbolic cosine, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// arccosh is a multivalued function: for each x there are infinitely
+        /// many numbers z such that cosh(z) = x. The convention is to return the
+        /// z whose imaginary part lies in [-pi, pi] and the real part in
+        /// [0, inf].
+        /// 
+        /// For real-valued input data types, arccosh always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity, it
+        /// yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arccosh is a complex analytical function that
+        /// has a branch cut [-inf, 1] and is continuous from above on it.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Array of the same shape as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arccosh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arccosh", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Inverse hyperbolic tangent element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// arctanh is a multivalued function: for each x there are infinitely
+        /// many numbers z such that tanh(z) = x. The convention is to return
+        /// the z whose imaginary part lies in [-pi/2, pi/2].
+        /// 
+        /// For real-valued input data types, arctanh always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, arctanh is a complex analytical function
+        /// that has branch cuts [-1, -inf] and [1, inf] and is continuous from
+        /// above on the former and from below on the latter.
+        /// 
+        /// The inverse hyperbolic tangent is also known as atanh or tanh^-1.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Array of the same shape as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray arctanh(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("arctanh", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
         
@@ -92,7 +950,7 @@ namespace Numpy
         /// The real and imaginary parts of complex numbers are rounded
         /// separately.  The result of rounding a float is a float.
         /// </returns>
-        public NDarray around(NDarray a, int? decimals = null, NDarray @out = null)
+        public NDarray around(NDarray a, int? decimals = 0, NDarray @out = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -101,9 +959,44 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (decimals!=null) kwargs["decimals"]=ToPython(decimals);
+            if (decimals!=0) kwargs["decimals"]=ToPython(decimals);
             if (@out!=null) kwargs["out"]=ToPython(@out);
             dynamic py = __self__.InvokeMethod("around", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Round elements of the array to the nearest integer.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Output array is same shape and type as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray rint(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("rint", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
         
@@ -133,6 +1026,129 @@ namespace Numpy
             var kwargs=new PyDict();
             if (y!=null) kwargs["y"]=ToPython(y);
             dynamic py = __self__.InvokeMethod("fix", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the floor of the input, element-wise.
+        /// 
+        /// The floor of the scalar x is the largest integer i, such that
+        /// i &lt;= x.  It is often denoted as .
+        /// 
+        /// Notes
+        /// 
+        /// Some spreadsheet programs calculate the “floor-towards-zero”, in other
+        /// words floor(-2.5) == -2.  NumPy instead uses the definition of
+        /// floor where floor(-2.5) == -3.
+        /// </summary>
+        /// <param name="x">
+        /// Input data.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The floor of each element in x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray floor(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("floor", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the ceiling of the input, element-wise.
+        /// 
+        /// The ceil of the scalar x is the smallest integer i, such that
+        /// i &gt;= x.  It is often denoted as .
+        /// </summary>
+        /// <param name="x">
+        /// Input data.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The ceiling of each element in x, with float dtype.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray ceil(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("ceil", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the truncated value of the input, element-wise.
+        /// 
+        /// The truncated value of the scalar x is the nearest integer i which
+        /// is closer to zero than x is. In short, the fractional part of the
+        /// signed number x is discarded.
+        /// 
+        /// Notes
+        /// </summary>
+        /// <param name="x">
+        /// Input data.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The truncated value of each element in x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray trunc(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("trunc", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
         
@@ -649,7 +1665,7 @@ namespace Numpy
         /// a in most cases. A notable exception is datetime64, which
         /// results in a timedelta64 output array.
         /// </returns>
-        public NDarray diff(NDarray a, int? n = null, int? axis = null, NDarray append = null, NDarray prepend = null)
+        public NDarray diff(NDarray a, int? n = 1, int? axis = -1, NDarray append = null, NDarray prepend = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -658,8 +1674,8 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (n!=null) kwargs["n"]=ToPython(n);
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (n!=1) kwargs["n"]=ToPython(n);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             if (append!=null) kwargs["append"]=ToPython(append);
             if (prepend!=null) kwargs["prepend"]=ToPython(prepend);
             dynamic py = __self__.InvokeMethod("diff", pyargs, kwargs);
@@ -811,7 +1827,7 @@ namespace Numpy
         /// <returns>
         /// Vector cross product(s).
         /// </returns>
-        public NDarray cross(NDarray a, NDarray b, int? axisa = null, int? axisb = null, int? axisc = null, int? axis = null)
+        public NDarray cross(NDarray a, NDarray b, int? axisa = -1, int? axisb = -1, int? axisc = -1, int? axis = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -821,9 +1837,9 @@ namespace Numpy
                 b,
             });
             var kwargs=new PyDict();
-            if (axisa!=null) kwargs["axisa"]=ToPython(axisa);
-            if (axisb!=null) kwargs["axisb"]=ToPython(axisb);
-            if (axisc!=null) kwargs["axisc"]=ToPython(axisc);
+            if (axisa!=-1) kwargs["axisa"]=ToPython(axisa);
+            if (axisb!=-1) kwargs["axisb"]=ToPython(axisb);
+            if (axisc!=-1) kwargs["axisc"]=ToPython(axisc);
             if (axis!=null) kwargs["axis"]=ToPython(axis);
             dynamic py = __self__.InvokeMethod("cross", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -861,7 +1877,7 @@ namespace Numpy
         /// <returns>
         /// Definite integral as approximated by trapezoidal rule.
         /// </returns>
-        public float trapz(NDarray y, NDarray x = null, ValueType dx = null, int? axis = null)
+        public float trapz(NDarray y, NDarray x = null, float? dx = 1.0f, int? axis = -1)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -871,10 +1887,447 @@ namespace Numpy
             });
             var kwargs=new PyDict();
             if (x!=null) kwargs["x"]=ToPython(x);
-            if (dx!=null) kwargs["dx"]=ToPython(dx);
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (dx!=1.0f) kwargs["dx"]=ToPython(dx);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             dynamic py = __self__.InvokeMethod("trapz", pyargs, kwargs);
             return ToCsharp<float>(py);
+        }
+        
+        /// <summary>
+        /// Calculate the exponential of all elements in the input array.
+        /// 
+        /// Notes
+        /// 
+        /// The irrational number e is also known as Euler’s number.  It is
+        /// approximately 2.718281, and is the base of the natural logarithm,
+        /// ln (this means that, if ,
+        /// then . For real input, exp(x) is always positive.
+        /// 
+        /// For complex arguments, x = a + ib, we can write
+        /// .  The first term, , is already
+        /// known (it is the real argument, described above).  The second term,
+        /// , is , a function with
+        /// magnitude 1 and a periodic phase.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Output array, element-wise exponential of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray exp(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("exp", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Calculate exp(x) - 1 for all elements in the array.
+        /// 
+        /// Notes
+        /// 
+        /// This function provides greater precision than exp(x) - 1
+        /// for small values of x.
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Element-wise exponential minus one: out = exp(x) - 1.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray expm1(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("expm1", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Calculate 2**p for all p in the input array.
+        /// 
+        /// Notes
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Element-wise 2 to the power x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray exp2(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("exp2", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Natural logarithm, element-wise.
+        /// 
+        /// The natural logarithm log is the inverse of the exponential function,
+        /// so that log(exp(x)) = x. The natural logarithm is logarithm in base
+        /// e.
+        /// 
+        /// Notes
+        /// 
+        /// Logarithm is a multivalued function: for each x there is an infinite
+        /// number of z such that exp(z) = x. The convention is to return the
+        /// z whose imaginary part lies in [-pi, pi].
+        /// 
+        /// For real-valued input data types, log always returns real output. For
+        /// each value that cannot be expressed as a real number or infinity, it
+        /// yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, log is a complex analytical function that
+        /// has a branch cut [-inf, 0] and is continuous from above on it. log
+        /// handles the floating-point negative zero as an infinitesimal negative
+        /// number, conforming to the C99 standard.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input value.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The natural logarithm of x, element-wise.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray log(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("log", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the base 10 logarithm of the input array, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// Logarithm is a multivalued function: for each x there is an infinite
+        /// number of z such that 10**z = x. The convention is to return the
+        /// z whose imaginary part lies in [-pi, pi].
+        /// 
+        /// For real-valued input data types, log10 always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, log10 is a complex analytical function that
+        /// has a branch cut [-inf, 0] and is continuous from above on it.
+        /// log10 handles the floating-point negative zero as an infinitesimal
+        /// negative number, conforming to the C99 standard.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The logarithm to the base 10 of x, element-wise. NaNs are
+        /// returned where x is negative.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray log10(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("log10", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Base-2 logarithm of x.
+        /// 
+        /// Notes
+        /// 
+        /// Logarithm is a multivalued function: for each x there is an infinite
+        /// number of z such that 2**z = x. The convention is to return the z
+        /// whose imaginary part lies in [-pi, pi].
+        /// 
+        /// For real-valued input data types, log2 always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, log2 is a complex analytical function that
+        /// has a branch cut [-inf, 0] and is continuous from above on it. log2
+        /// handles the floating-point negative zero as an infinitesimal negative
+        /// number, conforming to the C99 standard.
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Base-2 logarithm of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray log2(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("log2", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the natural logarithm of one plus the input array, element-wise.
+        /// 
+        /// Calculates log(1 + x).
+        /// 
+        /// Notes
+        /// 
+        /// For real-valued input, log1p is accurate also for x so small
+        /// that 1 + x == 1 in floating-point accuracy.
+        /// 
+        /// Logarithm is a multivalued function: for each x there is an infinite
+        /// number of z such that exp(z) = 1 + x. The convention is to return
+        /// the z whose imaginary part lies in [-pi, pi].
+        /// 
+        /// For real-valued input data types, log1p always returns real output.
+        /// For each value that cannot be expressed as a real number or infinity,
+        /// it yields nan and sets the invalid floating point error flag.
+        /// 
+        /// For complex-valued input, log1p is a complex analytical function that
+        /// has a branch cut [-inf, -1] and is continuous from above on it.
+        /// log1p handles the floating-point negative zero as an infinitesimal
+        /// negative number, conforming to the C99 standard.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Natural logarithm of 1 + x, element-wise.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray log1p(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("log1p", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Logarithm of the sum of exponentiations of the inputs.
+        /// 
+        /// Calculates log(exp(x1) + exp(x2)). This function is useful in
+        /// statistics where the calculated probabilities of events may be so small
+        /// as to exceed the range of normal floating point numbers.  In such cases
+        /// the logarithm of the calculated probability is stored. This function
+        /// allows adding probabilities stored in such a fashion.
+        /// 
+        /// Notes
+        /// </summary>
+        /// <param name="x2">
+        /// Input values.
+        /// </param>
+        /// <param name="x1">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Logarithm of exp(x1) + exp(x2).
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray logaddexp(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("logaddexp", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Logarithm of the sum of exponentiations of the inputs in base-2.
+        /// 
+        /// Calculates log2(2**x1 + 2**x2). This function is useful in machine
+        /// learning when the calculated probabilities of events may be so small as
+        /// to exceed the range of normal floating point numbers.  In such cases
+        /// the base-2 logarithm of the calculated probability can be used instead.
+        /// This function allows adding probabilities stored in such a fashion.
+        /// 
+        /// Notes
+        /// </summary>
+        /// <param name="x2">
+        /// Input values.
+        /// </param>
+        /// <param name="x1">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Base-2 logarithm of 2**x1 + 2**x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray logaddexp2(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("logaddexp2", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
         }
         
         /// <summary>
@@ -918,6 +2371,1050 @@ namespace Numpy
         }
         
         /// <summary>
+        /// Returns element-wise True where signbit is set (less than zero).
+        /// </summary>
+        /// <param name="x">
+        /// The input value(s).
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Output array, or reference to out if that was supplied.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray signbit(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("signbit", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Change the sign of x1 to that of x2, element-wise.
+        /// 
+        /// If both arguments are arrays or sequences, they have to be of the same
+        /// length. If x2 is a scalar, its sign will be copied to all elements of
+        /// x1.
+        /// </summary>
+        /// <param name="x1">
+        /// Values to change the sign of.
+        /// </param>
+        /// <param name="x2">
+        /// The sign of x2 is copied to x1.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The values of x1 with the sign of x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray copysign(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("copysign", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Decompose the elements of x into mantissa and twos exponent.
+        /// 
+        /// Returns (mantissa, exponent), where x = mantissa * 2**exponent`.
+        /// The mantissa is lies in the open interval(-1, 1), while the twos
+        /// exponent is a signed integer.
+        /// 
+        /// Notes
+        /// 
+        /// Complex dtypes are not supported, they will raise a TypeError.
+        /// </summary>
+        /// <param name="x">
+        /// Array of numbers to be decomposed.
+        /// </param>
+        /// <param name="out1">
+        /// Output array for the mantissa. Must have the same shape as x.
+        /// </param>
+        /// <param name="out2">
+        /// Output array for the exponent. Must have the same shape as x.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// A tuple of:
+        /// mantissa
+        /// Floating values between -1 and 1.
+        /// This is a scalar if x is a scalar.
+        /// exponent
+        /// Integer exponents of 2.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public (NDarray, NDarray) frexp(NDarray x, NDarray out1 = null, NDarray out2 = null, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (out1!=null) kwargs["out1"]=ToPython(out1);
+            if (out2!=null) kwargs["out2"]=ToPython(out2);
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("frexp", pyargs, kwargs);
+            var t = py as PyTuple;
+            return (ToCsharp<NDarray>(t[0]), ToCsharp<NDarray>(t[1]));
+        }
+        
+        /// <summary>
+        /// Returns x1 * 2**x2, element-wise.
+        /// 
+        /// The mantissas x1 and twos exponents x2 are used to construct
+        /// floating point numbers x1 * 2**x2.
+        /// 
+        /// Notes
+        /// 
+        /// Complex dtypes are not supported, they will raise a TypeError.
+        /// 
+        /// ldexp is useful as the inverse of frexp, if used by itself it is
+        /// more clear to simply use the expression x1 * 2**x2.
+        /// </summary>
+        /// <param name="x1">
+        /// Array of multipliers.
+        /// </param>
+        /// <param name="x2">
+        /// Array of twos exponents.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The result of x1 * 2**x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray ldexp(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("ldexp", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the next floating-point value after x1 towards x2, element-wise.
+        /// </summary>
+        /// <param name="x1">
+        /// Values to find the next representable value of.
+        /// </param>
+        /// <param name="x2">
+        /// The direction where to look for the next representable value of x1.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The next representable values of x1 in the direction of x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray nextafter(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("nextafter", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the distance between x and the nearest adjacent number.
+        /// 
+        /// Notes
+        /// 
+        /// It can be considered as a generalization of EPS:
+        /// spacing(np.float64(1)) == np.finfo(np.float64).eps, and there
+        /// should not be any representable number between x + spacing(x) and
+        /// x for any finite x.
+        /// 
+        /// Spacing of +- inf and NaN is NaN.
+        /// </summary>
+        /// <param name="x">
+        /// Values to find the spacing of.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The spacing of values of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray spacing(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("spacing", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Returns the lowest common multiple of |x1| and |x2|
+        /// </summary>
+        /// <param name="x2">
+        /// Arrays of values
+        /// </param>
+        /// <param name="x1">
+        /// Arrays of values
+        /// </param>
+        /// <returns>
+        /// The lowest common multiple of the absolute value of the inputs
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray lcm(NDarray x2, NDarray x1)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            dynamic py = __self__.InvokeMethod("lcm", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Returns the greatest common divisor of |x1| and |x2|
+        /// </summary>
+        /// <param name="x2">
+        /// Arrays of values
+        /// </param>
+        /// <param name="x1">
+        /// Arrays of values
+        /// </param>
+        /// <returns>
+        /// The greatest common divisor of the absolute value of the inputs
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray gcd(NDarray x2, NDarray x1)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            dynamic py = __self__.InvokeMethod("gcd", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Add arguments element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// Equivalent to x1 + x2 in terms of array broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays to be added.  If x1.shape != x2.shape, they must be
+        /// broadcastable to a common shape (which may be the shape of one or
+        /// the other).
+        /// </param>
+        /// <param name="x1">
+        /// The arrays to be added.  If x1.shape != x2.shape, they must be
+        /// broadcastable to a common shape (which may be the shape of one or
+        /// the other).
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The sum of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray @add(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("add", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the reciprocal of the argument, element-wise.
+        /// 
+        /// Calculates 1/x.
+        /// 
+        /// Notes
+        /// 
+        /// For integer arguments with absolute value larger than 1 the result is
+        /// always zero because of the way Python handles integer division.  For
+        /// integer zero the result is an overflow.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Return array.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray reciprocal(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("reciprocal", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Numerical positive, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// Equivalent to x.copy(), but only defined for types that support
+        /// arithmetic.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <returns>
+        /// Returned array or scalar: y = +x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray positive(NDarray x)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            dynamic py = __self__.InvokeMethod("positive", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Numerical negative, element-wise.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Returned array or scalar: y = -x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray negative(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("negative", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Multiply arguments element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// Equivalent to x1 * x2 in terms of array broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// Input arrays to be multiplied.
+        /// </param>
+        /// <param name="x1">
+        /// Input arrays to be multiplied.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The product of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray multiply(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("multiply", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Returns a true division of the inputs, element-wise.
+        /// 
+        /// Instead of the Python traditional ‘floor division’, this returns a true
+        /// division.  True division adjusts the output type to present the best
+        /// answer, regardless of input types.
+        /// 
+        /// Notes
+        /// 
+        /// The floor division operator // was added in Python 2.2 making
+        /// // and / equivalent operators.  The default floor division
+        /// operation of / can be replaced by true division with from
+        /// __future__ import division.
+        /// 
+        /// In Python 3.0, // is the floor division operator and / the
+        /// true division operator.  The true_divide(x1, x2) function is
+        /// equivalent to true division in Python.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend array.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray divide(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("divide", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// First array elements raised to powers from second array, element-wise.
+        /// 
+        /// Raise each base in x1 to the positionally-corresponding power in
+        /// x2.  x1 and x2 must be broadcastable to the same shape. Note that an
+        /// integer type raised to a negative integer power will raise a ValueError.
+        /// </summary>
+        /// <param name="x1">
+        /// The bases.
+        /// </param>
+        /// <param name="x2">
+        /// The exponents.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The bases in x1 raised to the exponents in x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray power(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("power", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Subtract arguments, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// Equivalent to x1 - x2 in terms of array broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays to be subtracted from each other.
+        /// </param>
+        /// <param name="x1">
+        /// The arrays to be subtracted from each other.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The difference of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray subtract(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("subtract", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Returns a true division of the inputs, element-wise.
+        /// 
+        /// Instead of the Python traditional ‘floor division’, this returns a true
+        /// division.  True division adjusts the output type to present the best
+        /// answer, regardless of input types.
+        /// 
+        /// Notes
+        /// 
+        /// The floor division operator // was added in Python 2.2 making
+        /// // and / equivalent operators.  The default floor division
+        /// operation of / can be replaced by true division with from
+        /// __future__ import division.
+        /// 
+        /// In Python 3.0, // is the floor division operator and / the
+        /// true division operator.  The true_divide(x1, x2) function is
+        /// equivalent to true division in Python.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend array.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray true_divide(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("true_divide", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the largest integer smaller or equal to the division of the inputs.
+        /// It is equivalent to the Python // operator and pairs with the
+        /// Python % (remainder), function so that b = a % b + b * (a // b)
+        /// up to roundoff.
+        /// </summary>
+        /// <param name="x1">
+        /// Numerator.
+        /// </param>
+        /// <param name="x2">
+        /// Denominator.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// y = floor(x1/x2)
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray floor_divide(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("floor_divide", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// First array elements raised to powers from second array, element-wise.
+        /// 
+        /// Raise each base in x1 to the positionally-corresponding power in x2.
+        /// x1 and x2 must be broadcastable to the same shape. This differs from
+        /// the power function in that integers, float16, and float32  are promoted to
+        /// floats with a minimum precision of float64 so that the result is always
+        /// inexact.  The intent is that the function will return a usable result for
+        /// negative powers and seldom overflow for positive powers.
+        /// </summary>
+        /// <param name="x1">
+        /// The bases.
+        /// </param>
+        /// <param name="x2">
+        /// The exponents.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The bases in x1 raised to the exponents in x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray float_power(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("float_power", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the element-wise remainder of division.
+        /// 
+        /// This is the NumPy implementation of the C library function fmod, the
+        /// remainder has the same sign as the dividend x1. It is equivalent to
+        /// the Matlab(TM) rem function and should not be confused with the
+        /// Python modulus operator x1 % x2.
+        /// 
+        /// Notes
+        /// 
+        /// The result of the modulo operation for negative dividend and divisors
+        /// is bound by conventions. For fmod, the sign of result is the sign of
+        /// the dividend, while for remainder the sign of the result is the sign
+        /// of the divisor. The fmod function is equivalent to the Matlab(TM)
+        /// rem function.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The remainder of the division of x1 by x2.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray fmod(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("fmod", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return element-wise remainder of division.
+        /// 
+        /// Computes the remainder complementary to the floor_divide function.  It is
+        /// equivalent to the Python modulus operator``x1 % x2`` and has the same sign
+        /// as the divisor x2. The MATLAB function equivalent to np.remainder
+        /// is mod.
+        /// 
+        /// Notes
+        /// 
+        /// Returns 0 when x2 is 0 and both x1 and x2 are (arrays of)
+        /// integers.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend array.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The element-wise remainder of the quotient floor_divide(x1, x2).
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray mod(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("mod", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the fractional and integral parts of an array, element-wise.
+        /// 
+        /// The fractional and integral parts are negative if the given number is
+        /// negative.
+        /// 
+        /// Notes
+        /// 
+        /// For integer input the return values are floats.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// A tuple of:
+        /// y1
+        /// Fractional part of x.
+        /// This is a scalar if x is a scalar.
+        /// y2
+        /// Integral part of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public (NDarray, NDarray) modf(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("modf", pyargs, kwargs);
+            var t = py as PyTuple;
+            return (ToCsharp<NDarray>(t[0]), ToCsharp<NDarray>(t[1]));
+        }
+        
+        /// <summary>
+        /// Return element-wise remainder of division.
+        /// 
+        /// Computes the remainder complementary to the floor_divide function.  It is
+        /// equivalent to the Python modulus operator``x1 % x2`` and has the same sign
+        /// as the divisor x2. The MATLAB function equivalent to np.remainder
+        /// is mod.
+        /// 
+        /// Notes
+        /// 
+        /// Returns 0 when x2 is 0 and both x1 and x2 are (arrays of)
+        /// integers.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend array.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The element-wise remainder of the quotient floor_divide(x1, x2).
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray remainder(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("remainder", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return element-wise quotient and remainder simultaneously.
+        /// 
+        /// np.divmod(x, y) is equivalent to (x // y, x % y), but faster
+        /// because it avoids redundant work. It is used to implement the Python
+        /// built-in function divmod on NumPy arrays.
+        /// </summary>
+        /// <param name="x1">
+        /// Dividend array.
+        /// </param>
+        /// <param name="x2">
+        /// Divisor array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// A tuple of:
+        /// out1
+        /// Element-wise quotient resulting from floor division.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// out2
+        /// Element-wise remainder from floor division.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public (NDarray, NDarray) divmod(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("divmod", pyargs, kwargs);
+            var t = py as PyTuple;
+            return (ToCsharp<NDarray>(t[0]), ToCsharp<NDarray>(t[1]));
+        }
+        
+        /// <summary>
         /// Return the angle of the complex argument.
         /// </summary>
         /// <param name="z">
@@ -930,7 +3427,7 @@ namespace Numpy
         /// The counterclockwise angle from the positive real axis on
         /// the complex plane, with dtype as numpy.float64.
         /// </returns>
-        public NDarray angle(NDarray z, bool? deg = null)
+        public NDarray angle(NDarray z, bool? deg = false)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -939,7 +3436,7 @@ namespace Numpy
                 z,
             });
             var kwargs=new PyDict();
-            if (deg!=null) kwargs["deg"]=ToPython(deg);
+            if (deg!=false) kwargs["deg"]=ToPython(deg);
             dynamic py = __self__.InvokeMethod("angle", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
@@ -993,6 +3490,44 @@ namespace Numpy
         }
         
         /// <summary>
+        /// Return the complex conjugate, element-wise.
+        /// 
+        /// The complex conjugate of a complex number is obtained by changing the
+        /// sign of its imaginary part.
+        /// </summary>
+        /// <param name="x">
+        /// Input value.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The complex conjugate of x, with same dtype as y.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray conj(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("conj", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
         /// 
         /// The convolution operator is often seen in signal processing, where it
@@ -1025,7 +3560,7 @@ namespace Numpy
         /// <returns>
         /// Discrete, linear convolution of a and v.
         /// </returns>
-        public NDarray convolve(NDarray a, NDarray v, string mode = null)
+        public NDarray convolve(NDarray a, NDarray v, string mode = "full")
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -1035,7 +3570,7 @@ namespace Numpy
                 v,
             });
             var kwargs=new PyDict();
-            if (mode!=null) kwargs["mode"]=ToPython(mode);
+            if (mode!="full") kwargs["mode"]=ToPython(mode);
             dynamic py = __self__.InvokeMethod("convolve", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
@@ -1089,6 +3624,514 @@ namespace Numpy
         }
         
         /// <summary>
+        /// Return the non-negative square-root of an array, element-wise.
+        /// 
+        /// Notes
+        /// 
+        /// sqrt has–consistent with common convention–as its branch cut the
+        /// real “interval” [-inf, 0), and is continuous from above on it.
+        /// A branch cut is a curve in the complex plane across which a given
+        /// complex function fails to be continuous.
+        /// </summary>
+        /// <param name="x">
+        /// The values whose square-roots are required.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// An array of the same shape as x, containing the positive
+        /// square-root of each element in x.  If any element in x is
+        /// complex, a complex array is returned (and the square-roots of
+        /// negative reals are calculated).  If all of the elements in x
+        /// are real, so is y, with negative elements returning nan.
+        /// If out was provided, y is a reference to it.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray sqrt(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("sqrt", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the cube-root of an array, element-wise.
+        /// </summary>
+        /// <param name="x">
+        /// The values whose cube-roots are required.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// An array of the same shape as x, containing the cube
+        /// cube-root of each element in x.
+        /// If out was provided, y is a reference to it.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray cbrt(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("cbrt", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Return the element-wise square of the input.
+        /// </summary>
+        /// <param name="x">
+        /// Input data.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Element-wise x*x, of the same shape and dtype as x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray square(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("square", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Calculate the absolute value element-wise.
+        /// 
+        /// np.abs is a shorthand for this function.
+        /// </summary>
+        /// <param name="x">
+        /// Input array.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// An ndarray containing the absolute value of
+        /// each element in x.  For complex input, a + ib, the
+        /// absolute value is .
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray absolute(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("absolute", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute the absolute values element-wise.
+        /// 
+        /// This function returns the absolute values (positive magnitude) of the
+        /// data in x. Complex values are not handled, use absolute to find the
+        /// absolute values of complex data.
+        /// </summary>
+        /// <param name="x">
+        /// The array of numbers for which the absolute values are required. If
+        /// x is a scalar, the result y will also be a scalar.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The absolute values of x, the returned values are always floats.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray fabs(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("fabs", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Returns an element-wise indication of the sign of a number.
+        /// 
+        /// The sign function returns -1 if x &lt; 0, 0 if x==0, 1 if x &gt; 0.  nan
+        /// is returned for nan inputs.
+        /// 
+        /// For complex inputs, the sign function returns
+        /// sign(x.real) + 0j if x.real != 0 else sign(x.imag) + 0j.
+        /// 
+        /// complex(nan, 0) is returned for complex nan inputs.
+        /// 
+        /// Notes
+        /// 
+        /// There is more than one definition of sign in common use for complex
+        /// numbers.  The definition used here is equivalent to 
+        /// which is different from a common alternative, .
+        /// </summary>
+        /// <param name="x">
+        /// Input values.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The sign of x.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray sign(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("sign", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute the Heaviside step function.
+        /// 
+        /// The Heaviside step function is defined as:
+        /// 
+        /// where x2 is often taken to be 0.5, but 0 and 1 are also sometimes used.
+        /// 
+        /// Notes
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x1">
+        /// Input values.
+        /// </param>
+        /// <param name="x2">
+        /// The value of the function when x1 is 0.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The output array, element-wise Heaviside step function of x1.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray heaviside(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("heaviside", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Element-wise maximum of array elements.
+        /// 
+        /// Compare two arrays and returns a new array containing the element-wise
+        /// maxima. If one of the elements being compared is a NaN, then that
+        /// element is returned. If both elements are NaNs then the first is
+        /// returned. The latter distinction is important for complex NaNs, which
+        /// are defined as at least one of the real or imaginary parts being a NaN.
+        /// The net effect is that NaNs are propagated.
+        /// 
+        /// Notes
+        /// 
+        /// The maximum is equivalent to np.where(x1 &gt;= x2, x1, x2) when
+        /// neither x1 nor x2 are nans, but it is faster and does proper
+        /// broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape, or shapes that can be broadcast to a single shape.
+        /// </param>
+        /// <param name="x1">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape, or shapes that can be broadcast to a single shape.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The maximum of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray maximum(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("maximum", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Element-wise minimum of array elements.
+        /// 
+        /// Compare two arrays and returns a new array containing the element-wise
+        /// minima. If one of the elements being compared is a NaN, then that
+        /// element is returned. If both elements are NaNs then the first is
+        /// returned. The latter distinction is important for complex NaNs, which
+        /// are defined as at least one of the real or imaginary parts being a NaN.
+        /// The net effect is that NaNs are propagated.
+        /// 
+        /// Notes
+        /// 
+        /// The minimum is equivalent to np.where(x1 &lt;= x2, x1, x2) when
+        /// neither x1 nor x2 are NaNs, but it is faster and does proper
+        /// broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape, or shapes that can be broadcast to a single shape.
+        /// </param>
+        /// <param name="x1">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape, or shapes that can be broadcast to a single shape.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The minimum of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray minimum(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("minimum", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Element-wise maximum of array elements.
+        /// 
+        /// Compare two arrays and returns a new array containing the element-wise
+        /// maxima. If one of the elements being compared is a NaN, then the
+        /// non-nan element is returned. If both elements are NaNs then the first
+        /// is returned.  The latter distinction is important for complex NaNs,
+        /// which are defined as at least one of the real or imaginary parts being
+        /// a NaN. The net effect is that NaNs are ignored when possible.
+        /// 
+        /// Notes
+        /// 
+        /// The fmax is equivalent to np.where(x1 &gt;= x2, x1, x2) when neither
+        /// x1 nor x2 are NaNs, but it is faster and does proper broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape.
+        /// </param>
+        /// <param name="x1">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The maximum of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray fmax(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("fmax", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Element-wise minimum of array elements.
+        /// 
+        /// Compare two arrays and returns a new array containing the element-wise
+        /// minima. If one of the elements being compared is a NaN, then the
+        /// non-nan element is returned. If both elements are NaNs then the first
+        /// is returned.  The latter distinction is important for complex NaNs,
+        /// which are defined as at least one of the real or imaginary parts being
+        /// a NaN. The net effect is that NaNs are ignored when possible.
+        /// 
+        /// Notes
+        /// 
+        /// The fmin is equivalent to np.where(x1 &lt;= x2, x1, x2) when neither
+        /// x1 nor x2 are NaNs, but it is faster and does proper broadcasting.
+        /// </summary>
+        /// <param name="x2">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape.
+        /// </param>
+        /// <param name="x1">
+        /// The arrays holding the elements to be compared. They must have
+        /// the same shape.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// The minimum of x1 and x2, element-wise.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray fmin(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("fmin", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
         /// Replace NaN with zero and infinity with large finite numbers.
         /// 
         /// If x is inexact, NaN is replaced by zero, and infinity and -infinity
@@ -1118,7 +4161,7 @@ namespace Numpy
         /// x, with the non-finite values replaced. If copy is False, this may
         /// be x itself.
         /// </returns>
-        public NDarray nan_to_num(NDarray x, bool? copy = null)
+        public NDarray nan_to_num(NDarray x, bool? copy = true)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -1127,7 +4170,7 @@ namespace Numpy
                 x,
             });
             var kwargs=new PyDict();
-            if (copy!=null) kwargs["copy"]=ToPython(copy);
+            if (copy!=true) kwargs["copy"]=ToPython(copy);
             dynamic py = __self__.InvokeMethod("nan_to_num", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
@@ -1156,7 +4199,7 @@ namespace Numpy
         /// If a is real, the type of a is used for the output.  If a
         /// has complex elements, the returned type is float.
         /// </returns>
-        public NDarray real_if_close(NDarray a, float tol)
+        public NDarray real_if_close(NDarray a, float tol = 100)
         {
             //auto-generated code, do not change
             var __self__=self;

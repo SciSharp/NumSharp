@@ -77,7 +77,7 @@ namespace Numpy
         /// Array of uninitialized (arbitrary) data with the same
         /// shape and type as prototype.
         /// </returns>
-        public static NDarray empty_like(NDarray prototype, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray empty_like(NDarray prototype, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.empty_like(prototype, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -111,7 +111,7 @@ namespace Numpy
         /// Array of uninitialized (arbitrary) data with the same
         /// shape and type as prototype.
         /// </returns>
-        public static NDarray<T> empty_like<T>(T[] prototype, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> empty_like<T>(T[] prototype, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.empty_like(prototype, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -145,7 +145,7 @@ namespace Numpy
         /// Array of uninitialized (arbitrary) data with the same
         /// shape and type as prototype.
         /// </returns>
-        public static NDarray<T> empty_like<T>(T[,] prototype, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> empty_like<T>(T[,] prototype, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.empty_like(prototype, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -173,7 +173,7 @@ namespace Numpy
         /// An array where all elements are equal to zero, except for the k-th
         /// diagonal, whose values are equal to one.
         /// </returns>
-        public static NDarray eye(int N, int? M = null, int? k = null, Dtype dtype = null, string order = null)
+        public static NDarray eye(int N, int? M = null, int? k = 0, Dtype dtype = null, string order = null)
             => NumPy.Instance.eye(N, M:M, k:k, dtype:dtype, order:order);
         
         /// <summary>
@@ -240,7 +240,7 @@ namespace Numpy
         /// <returns>
         /// Array of ones with the same shape and type as a.
         /// </returns>
-        public static NDarray ones_like(NDarray a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray ones_like(NDarray a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.ones_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -267,7 +267,7 @@ namespace Numpy
         /// <returns>
         /// Array of ones with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> ones_like<T>(T[] a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> ones_like<T>(T[] a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.ones_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -294,7 +294,7 @@ namespace Numpy
         /// <returns>
         /// Array of ones with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> ones_like<T>(T[,] a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> ones_like<T>(T[,] a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.ones_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -342,7 +342,7 @@ namespace Numpy
         /// <returns>
         /// Array of zeros with the same shape and type as a.
         /// </returns>
-        public static NDarray zeros_like(NDarray a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray zeros_like(NDarray a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.zeros_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -369,7 +369,7 @@ namespace Numpy
         /// <returns>
         /// Array of zeros with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> zeros_like<T>(T[] a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> zeros_like<T>(T[] a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.zeros_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -396,7 +396,7 @@ namespace Numpy
         /// <returns>
         /// Array of zeros with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> zeros_like<T>(T[,] a, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> zeros_like<T>(T[,] a, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.zeros_like(a, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -445,7 +445,7 @@ namespace Numpy
         /// <returns>
         /// Array of fill_value with the same shape and type as a.
         /// </returns>
-        public static NDarray full_like(NDarray a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray full_like(NDarray a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.full_like(a, fill_value, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -475,7 +475,7 @@ namespace Numpy
         /// <returns>
         /// Array of fill_value with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> full_like<T>(T[] a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> full_like<T>(T[] a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.full_like(a, fill_value, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -505,7 +505,7 @@ namespace Numpy
         /// <returns>
         /// Array of fill_value with the same shape and type as a.
         /// </returns>
-        public static NDarray<T> full_like<T>(T[,] a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = null)
+        public static NDarray<T> full_like<T>(T[,] a, ValueType fill_value, Dtype dtype = null, string order = null, bool? subok = true)
             => NumPy.Instance.full_like(a, fill_value, dtype:dtype, order:order, subok:subok);
         
         /// <summary>
@@ -555,7 +555,7 @@ namespace Numpy
         /// <returns>
         /// An array object satisfying the specified requirements.
         /// </returns>
-        public static NDarray array(NDarray @object, Dtype dtype = null, bool? copy = null, string order = null, bool? subok = null, int? ndmin = null)
+        public static NDarray array(NDarray @object, Dtype dtype = null, bool? copy = true, string order = null, bool? subok = false, int? ndmin = 0)
             => NumPy.Instance.array(@object, dtype:dtype, copy:copy, order:order, subok:subok, ndmin:ndmin);
         
         /// <summary>
@@ -605,7 +605,7 @@ namespace Numpy
         /// <returns>
         /// An array object satisfying the specified requirements.
         /// </returns>
-        public static NDarray<T> array<T>(T[] @object, Dtype dtype = null, bool? copy = null, string order = null, bool? subok = null, int? ndmin = null)
+        public static NDarray<T> array<T>(T[] @object, Dtype dtype = null, bool? copy = true, string order = null, bool? subok = false, int? ndmin = 0)
             => NumPy.Instance.array(@object, dtype:dtype, copy:copy, order:order, subok:subok, ndmin:ndmin);
         
         /// <summary>
@@ -655,7 +655,7 @@ namespace Numpy
         /// <returns>
         /// An array object satisfying the specified requirements.
         /// </returns>
-        public static NDarray<T> array<T>(T[,] @object, Dtype dtype = null, bool? copy = null, string order = null, bool? subok = null, int? ndmin = null)
+        public static NDarray<T> array<T>(T[,] @object, Dtype dtype = null, bool? copy = true, string order = null, bool? subok = false, int? ndmin = 0)
             => NumPy.Instance.array(@object, dtype:dtype, copy:copy, order:order, subok:subok, ndmin:ndmin);
         
         /// <summary>
@@ -994,7 +994,7 @@ namespace Numpy
         /// <param name="offset">
         /// Start reading the buffer from this offset (in bytes); default: 0.
         /// </param>
-        public static void frombuffer(buffer_like buffer, Dtype dtype = null, int? count = null, int? offset = null)
+        public static void frombuffer(buffer_like buffer, Dtype dtype = null, int? count = -1, int? offset = 0)
             => NumPy.Instance.frombuffer(buffer, dtype:dtype, count:count, offset:offset);
         */
         
@@ -1032,7 +1032,7 @@ namespace Numpy
         /// A separator consisting only of spaces must match at least one
         /// whitespace.
         /// </param>
-        public static void fromfile(string file, Dtype dtype, int count, string sep)
+        public static void fromfile(string file, Dtype dtype = null, int count = -1, string sep = "")
             => NumPy.Instance.fromfile(file, dtype, count, sep);
         
         /// <summary>
@@ -1090,7 +1090,7 @@ namespace Numpy
         /// <returns>
         /// The output array.
         /// </returns>
-        public static NDarray<T> fromiter<T>(IEnumerable<T> iterable, Dtype dtype, int? count = null)
+        public static NDarray<T> fromiter<T>(IEnumerable<T> iterable, Dtype dtype, int? count = -1)
             => NumPy.Instance.fromiter(iterable, dtype, count:count);
         
         /// <summary>
@@ -1115,7 +1115,7 @@ namespace Numpy
         /// <returns>
         /// The constructed array.
         /// </returns>
-        public static NDarray fromstring(string @string, Dtype dtype = null, int? count = null, string sep = null)
+        public static NDarray fromstring(string @string, Dtype dtype = null, int? count = -1, string sep = "")
             => NumPy.Instance.fromstring(@string, dtype:dtype, count:count, sep:sep);
         
         /// <summary>
@@ -1194,8 +1194,53 @@ namespace Numpy
         /// <returns>
         /// Data read from the text file.
         /// </returns>
-        public static NDarray loadtxt(string fname, Dtype dtype = null, string[] comments = null, string delimiter = null, Hashtable converters = null, int? skiprows = null, int[] usecols = null, bool? unpack = null, int? ndmin = null, string encoding = null, int? max_rows = null)
+        public static NDarray loadtxt(string fname, Dtype dtype = null, string[] comments = null, string delimiter = null, Hashtable converters = null, int? skiprows = 0, int[] usecols = null, bool? unpack = false, int? ndmin = 0, string encoding = "bytes", int? max_rows = null)
             => NumPy.Instance.loadtxt(fname, dtype:dtype, comments:comments, delimiter:delimiter, converters:converters, skiprows:skiprows, usecols:usecols, unpack:unpack, ndmin:ndmin, encoding:encoding, max_rows:max_rows);
+        
+        /// <summary>
+        /// Provides a convenient view on arrays of string and unicode values.
+        /// 
+        /// Versus a regular NumPy array of type str or unicode, this
+        /// class adds the following functionality:
+        /// 
+        /// chararrays should be created using numpy.char.array or
+        /// numpy.char.asarray, rather than this constructor directly.
+        /// 
+        /// This constructor creates the array, using buffer (with offset
+        /// and strides) if it is not None. If buffer is None, then
+        /// constructs a new array with strides in “C order”, unless both
+        /// len(shape) &gt;= 2 and order='Fortran', in which case strides
+        /// is in “Fortran order”.
+        /// </summary>
+        /// <param name="shape">
+        /// Shape of the array.
+        /// </param>
+        /// <param name="itemsize">
+        /// Length of each array element, in number of characters. Default is 1.
+        /// </param>
+        /// <param name="unicode">
+        /// Are the array elements of type unicode (True) or string (False).
+        /// Default is False.
+        /// </param>
+        /// <param name="buffer">
+        /// Memory address of the start of the array data.  Default is None,
+        /// in which case a new array is created.
+        /// </param>
+        /// <param name="offset">
+        /// Fixed stride displacement from the beginning of an axis?
+        /// Default is 0. Needs to be &gt;=0.
+        /// </param>
+        /// <param name="strides">
+        /// Strides for the array (see ndarray.strides for full description).
+        /// Default is None.
+        /// </param>
+        /// <param name="order">
+        /// The order in which the array data is stored in memory: ‘C’ -&gt;
+        /// “row major” order (the default), ‘F’ -&gt; “column major”
+        /// (Fortran) order.
+        /// </param>
+        public static void chararray(Shape shape, int? itemsize = null, bool? unicode = null, int? buffer = null, int? offset = null, int[] strides = null, string order = null)
+            => NumPy.Instance.chararray(shape, itemsize:itemsize, unicode:unicode, buffer:buffer, offset:offset, strides:strides, order:order);
         
         /// <summary>
         /// Return evenly spaced values within a given interval.
@@ -1713,7 +1758,7 @@ namespace Numpy
         /// 
         /// Size of spacing between samples.
         /// </returns>
-        public static (NDarray, float) linspace(NDarray start, NDarray stop, int? num = null, bool? endpoint = null, bool? retstep = null, Dtype dtype = null, int? axis = null)
+        public static (NDarray, float) linspace(NDarray start, NDarray stop, int? num = 50, bool? endpoint = true, bool? retstep = false, Dtype dtype = null, int? axis = 0)
             => NumPy.Instance.linspace(start, stop, num:num, endpoint:endpoint, retstep:retstep, dtype:dtype, axis:axis);
         
         /// <summary>
@@ -1760,7 +1805,7 @@ namespace Numpy
         /// <returns>
         /// num samples, equally spaced on a log scale.
         /// </returns>
-        public static NDarray logspace(NDarray start, NDarray stop, int? num = null, bool? endpoint = null, float? @base = null, Dtype dtype = null, int? axis = null)
+        public static NDarray logspace(NDarray start, NDarray stop, int? num = 50, bool? endpoint = true, float? @base = 10.0f, Dtype dtype = null, int? axis = 0)
             => NumPy.Instance.logspace(start, stop, num:num, endpoint:endpoint, @base:@base, dtype:dtype, axis:axis);
         
         /// <summary>
@@ -1803,7 +1848,7 @@ namespace Numpy
         /// <returns>
         /// num samples, equally spaced on a log scale.
         /// </returns>
-        public static NDarray geomspace(NDarray start, NDarray stop, int? num = null, bool? endpoint = null, Dtype dtype = null, int? axis = null)
+        public static NDarray geomspace(NDarray start, NDarray stop, int? num = 50, bool? endpoint = true, Dtype dtype = null, int? axis = 0)
             => NumPy.Instance.geomspace(start, stop, num:num, endpoint:endpoint, dtype:dtype, axis:axis);
         
         /*
@@ -2293,6 +2338,42 @@ namespace Numpy
         */
         
         /// <summary>
+        /// nd_grid instance which returns a dense multi-dimensional “meshgrid”.
+        /// 
+        /// An instance of numpy.lib.index_tricks.nd_grid which returns an dense
+        /// (or fleshed out) mesh-grid when indexed, so that each returned argument
+        /// has the same shape.  The dimensions and number of the output arrays are
+        /// equal to the number of indexing dimensions.  If the step length is not a
+        /// complex number, then the stop is not inclusive.
+        /// 
+        /// However, if the step length is a complex number (e.g. 5j), then
+        /// the integer part of its magnitude is interpreted as specifying the
+        /// number of points to create between the start and stop values, where
+        /// the stop value is inclusive.
+        /// </summary>
+        public static void mgrid()
+            => NumPy.Instance.mgrid();
+        
+        /*
+        /// <summary>
+        /// nd_grid instance which returns an open multi-dimensional “meshgrid”.
+        /// 
+        /// An instance of numpy.lib.index_tricks.nd_grid which returns an open
+        /// (i.e. not fleshed out) mesh-grid when indexed, so that only one dimension
+        /// of each returned array is greater than 1.  The dimension and number of the
+        /// output arrays are equal to the number of indexing dimensions.  If the step
+        /// length is not a complex number, then the stop is not inclusive.
+        /// 
+        /// However, if the step length is a complex number (e.g. 5j), then
+        /// the integer part of its magnitude is interpreted as specifying the
+        /// number of points to create between the start and stop values, where
+        /// the stop value is inclusive.
+        /// </summary>
+        public static void ogrid(math mesh-grid `ndarrays` with only one dimension)
+            => NumPy.Instance.ogrid(mesh-grid `ndarrays` with only one dimension);
+        */
+        
+        /// <summary>
         /// Extract a diagonal or construct a diagonal array.
         /// 
         /// See the more detailed documentation for numpy.diagonal if you use this
@@ -2313,7 +2394,7 @@ namespace Numpy
         /// <returns>
         /// The extracted diagonal or constructed diagonal array.
         /// </returns>
-        public static NDarray diag(NDarray v, int? k = null)
+        public static NDarray diag(NDarray v, int? k = 0)
             => NumPy.Instance.diag(v, k:k);
         
         /// <summary>
@@ -2337,7 +2418,7 @@ namespace Numpy
         /// <returns>
         /// The extracted diagonal or constructed diagonal array.
         /// </returns>
-        public static NDarray<T> diag<T>(T[] v, int? k = null)
+        public static NDarray<T> diag<T>(T[] v, int? k = 0)
             => NumPy.Instance.diag(v, k:k);
         
         /// <summary>
@@ -2361,7 +2442,7 @@ namespace Numpy
         /// <returns>
         /// The extracted diagonal or constructed diagonal array.
         /// </returns>
-        public static NDarray<T> diag<T>(T[,] v, int? k = null)
+        public static NDarray<T> diag<T>(T[,] v, int? k = 0)
             => NumPy.Instance.diag(v, k:k);
         
         /// <summary>
@@ -2379,7 +2460,7 @@ namespace Numpy
         /// <returns>
         /// The 2-D output array.
         /// </returns>
-        public static NDarray diagflat(NDarray v, int? k = null)
+        public static NDarray diagflat(NDarray v, int? k = 0)
             => NumPy.Instance.diagflat(v, k:k);
         
         /// <summary>
@@ -2397,7 +2478,7 @@ namespace Numpy
         /// <returns>
         /// The 2-D output array.
         /// </returns>
-        public static NDarray<T> diagflat<T>(T[] v, int? k = null)
+        public static NDarray<T> diagflat<T>(T[] v, int? k = 0)
             => NumPy.Instance.diagflat(v, k:k);
         
         /// <summary>
@@ -2415,7 +2496,7 @@ namespace Numpy
         /// <returns>
         /// The 2-D output array.
         /// </returns>
-        public static NDarray<T> diagflat<T>(T[,] v, int? k = null)
+        public static NDarray<T> diagflat<T>(T[,] v, int? k = 0)
             => NumPy.Instance.diagflat(v, k:k);
         
         /// <summary>
@@ -2440,7 +2521,7 @@ namespace Numpy
         /// Array with its lower triangle filled with ones and zero elsewhere;
         /// in other words T[i,j] == 1 for i &lt;= j + k, 0 otherwise.
         /// </returns>
-        public static NDarray tri(int N, int? M = null, int? k = null, Dtype dtype = null)
+        public static NDarray tri(int N, int? M = null, int? k = 0, Dtype dtype = null)
             => NumPy.Instance.tri(N, M:M, k:k, dtype:dtype);
         
         /// <summary>
@@ -2458,7 +2539,7 @@ namespace Numpy
         /// <returns>
         /// Lower triangle of m, of same shape and data-type as m.
         /// </returns>
-        public static NDarray tril(NDarray m, int? k = null)
+        public static NDarray tril(NDarray m, int? k = 0)
             => NumPy.Instance.tril(m, k:k);
         
         /// <summary>
@@ -2476,7 +2557,7 @@ namespace Numpy
         /// <returns>
         /// Lower triangle of m, of same shape and data-type as m.
         /// </returns>
-        public static NDarray<T> tril<T>(T[] m, int? k = null)
+        public static NDarray<T> tril<T>(T[] m, int? k = 0)
             => NumPy.Instance.tril(m, k:k);
         
         /// <summary>
@@ -2494,7 +2575,7 @@ namespace Numpy
         /// <returns>
         /// Lower triangle of m, of same shape and data-type as m.
         /// </returns>
-        public static NDarray<T> tril<T>(T[,] m, int? k = null)
+        public static NDarray<T> tril<T>(T[,] m, int? k = 0)
             => NumPy.Instance.tril(m, k:k);
         
         /// <summary>
@@ -2523,7 +2604,7 @@ namespace Numpy
         /// x^(N-1), the second x^(N-2) and so forth. If increasing is
         /// True, the columns are x^0, x^1, ..., x^(N-1).
         /// </returns>
-        public static NDarray vander(NDarray x, int? N = null, bool? increasing = null)
+        public static NDarray vander(NDarray x, int? N = null, bool? increasing = false)
             => NumPy.Instance.vander(x, N:N, increasing:increasing);
         
         /// <summary>
@@ -2552,7 +2633,7 @@ namespace Numpy
         /// x^(N-1), the second x^(N-2) and so forth. If increasing is
         /// True, the columns are x^0, x^1, ..., x^(N-1).
         /// </returns>
-        public static NDarray<T> vander<T>(T[] x, int? N = null, bool? increasing = null)
+        public static NDarray<T> vander<T>(T[] x, int? N = null, bool? increasing = false)
             => NumPy.Instance.vander(x, N:N, increasing:increasing);
         
         /// <summary>
@@ -2581,7 +2662,7 @@ namespace Numpy
         /// x^(N-1), the second x^(N-2) and so forth. If increasing is
         /// True, the columns are x^0, x^1, ..., x^(N-1).
         /// </returns>
-        public static NDarray<T> vander<T>(T[,] x, int? N = null, bool? increasing = null)
+        public static NDarray<T> vander<T>(T[,] x, int? N = null, bool? increasing = false)
             => NumPy.Instance.vander(x, N:N, increasing:increasing);
         
         /*

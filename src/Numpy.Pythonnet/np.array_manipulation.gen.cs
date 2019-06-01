@@ -37,7 +37,7 @@ namespace Numpy
         /// of dst, and selects elements to copy from src to dst
         /// wherever it contains the value True.
         /// </param>
-        public static void copyto(NDarray dst, NDarray src, string casting = null, NDarray @where = null)
+        public static void copyto(NDarray dst, NDarray src, string casting = "same_kind", NDarray @where = null)
             => NumPy.Instance.copyto(dst, src, casting:casting, @where:@where);
         
         /// <summary>
@@ -60,7 +60,7 @@ namespace Numpy
         /// of dst, and selects elements to copy from src to dst
         /// wherever it contains the value True.
         /// </param>
-        public static void copyto(NDarray dst, NDarray src, string casting = null, bool[] @where = null)
+        public static void copyto(NDarray dst, NDarray src, string casting = "same_kind", bool[] @where = null)
             => NumPy.Instance.copyto(dst, src, casting:casting, @where:@where);
         
         /// <summary>
@@ -163,6 +163,24 @@ namespace Numpy
             => NumPy.Instance.ravel(a, order:order);
         
         /// <summary>
+        /// Return a copy of the array collapsed into one dimension.
+        /// </summary>
+        /// <param name="order">
+        /// ‘C’ means to flatten in row-major (C-style) order.
+        /// ‘F’ means to flatten in column-major (Fortran-
+        /// style) order. ‘A’ means to flatten in column-major
+        /// order if a is Fortran contiguous in memory,
+        /// row-major order otherwise. ‘K’ means to flatten
+        /// a in the order the elements occur in memory.
+        /// The default is ‘C’.
+        /// </param>
+        /// <returns>
+        /// A copy of the input array, flattened to one dimension.
+        /// </returns>
+        public static NDarray flatten(string order = null)
+            => NumPy.Instance.flatten(order:order);
+        
+        /// <summary>
         /// Move axes of an array to new positions.
         /// 
         /// Other axes remain in their original order.
@@ -206,7 +224,7 @@ namespace Numpy
         /// NumPy versions a view of a is returned only if the order of the
         /// axes is changed, otherwise the input array is returned.
         /// </returns>
-        public static NDarray rollaxis(NDarray a, int axis, int? start = null)
+        public static NDarray rollaxis(NDarray a, int axis, int? start = 0)
             => NumPy.Instance.rollaxis(a, axis, start:start);
         
         /// <summary>
@@ -305,6 +323,24 @@ namespace Numpy
             => NumPy.Instance.atleast_3d(arys);
         
         /// <summary>
+        /// Produce an object that mimics broadcasting.
+        /// </summary>
+        /// <param name="in2">
+        /// Input parameters.
+        /// </param>
+        /// <param name="in1">
+        /// Input parameters.
+        /// </param>
+        /// <returns>
+        /// Broadcast the input parameters against one another, and
+        /// return an object that encapsulates the result.
+        /// Amongst others, it has shape and nd properties, and
+        /// may be used as an iterator.
+        /// </returns>
+        public static NDarray broadcast(NDarray in2, NDarray in1)
+            => NumPy.Instance.broadcast(in2, in1);
+        
+        /// <summary>
         /// Broadcast an array to a new shape.
         /// 
         /// Notes
@@ -324,7 +360,7 @@ namespace Numpy
         /// typically not contiguous. Furthermore, more than one element of a
         /// broadcasted array may refer to a single memory location.
         /// </returns>
-        public static NDarray broadcast_to(NDarray array, Shape shape, bool? subok = null)
+        public static NDarray broadcast_to(NDarray array, Shape shape, bool? subok = false)
             => NumPy.Instance.broadcast_to(array, shape, subok:subok);
         
         /// <summary>
@@ -461,7 +497,7 @@ namespace Numpy
         /// <param name="requirements">
         /// The requirements list can be any of the following
         /// </param>
-        public static NDarray require(NDarray a, Dtype dtype, string[] requirements)
+        public static NDarray require(NDarray a, Dtype dtype, string[] requirements = null)
             => NumPy.Instance.require(a, dtype, requirements);
         
         /// <summary>
@@ -491,7 +527,7 @@ namespace Numpy
         /// <returns>
         /// The concatenated array.
         /// </returns>
-        public static NDarray concatenate(NDarray[] arys, int? axis = null, NDarray @out = null)
+        public static NDarray concatenate(NDarray[] arys, int? axis = 0, NDarray @out = null)
             => NumPy.Instance.concatenate(arys, axis:axis, @out:@out);
         
         /// <summary>
@@ -515,7 +551,7 @@ namespace Numpy
         /// <returns>
         /// The stacked array has one more dimension than the input arrays.
         /// </returns>
-        public static NDarray stack(NDarray[] arrays, int? axis = null, NDarray @out = null)
+        public static NDarray stack(NDarray[] arrays, int? axis = 0, NDarray @out = null)
             => NumPy.Instance.stack(arrays, axis:axis, @out:@out);
         
         /// <summary>
@@ -679,7 +715,7 @@ namespace Numpy
         /// <returns>
         /// A list of sub-arrays.
         /// </returns>
-        public static NDarray[] split(NDarray ary, int[] indices_or_sections, int? axis = null)
+        public static NDarray[] split(NDarray ary, int[] indices_or_sections, int? axis = 0)
             => NumPy.Instance.split(ary, indices_or_sections, axis:axis);
         
         /// <summary>
@@ -799,7 +835,7 @@ namespace Numpy
         /// does not occur in-place: a new array is returned. If
         /// axis is None, out is a flattened array.
         /// </returns>
-        public static NDarray insert(NDarray arr, int obj, NDarray values, int? axis = null)
+        public static NDarray insert(NDarray arr, int obj = 0, NDarray values = null, int? axis = null)
             => NumPy.Instance.insert(arr, obj, values, axis:axis);
         
         /// <summary>
@@ -872,7 +908,7 @@ namespace Numpy
         /// <returns>
         /// The result of trimming the input. The input data type is preserved.
         /// </returns>
-        public static NDarray trim_zeros(NDarray filt, string trim = null)
+        public static NDarray trim_zeros(NDarray filt, string trim = "fb")
             => NumPy.Instance.trim_zeros(filt, trim:trim);
         
         /// <summary>
@@ -930,7 +966,7 @@ namespace Numpy
         /// The number of times each of the unique values comes up in the
         /// original array. Only provided if return_counts is True.
         /// </returns>
-        public static (NDarray, NDarray, NDarray, NDarray) unique(NDarray ar, bool? return_index = null, bool? return_inverse = null, bool? return_counts = null, int? axis = null)
+        public static (NDarray, NDarray, NDarray, NDarray) unique(NDarray ar, bool? return_index = false, bool? return_inverse = false, bool? return_counts = false, int? axis = null)
             => NumPy.Instance.unique(ar, return_index:return_index, return_inverse:return_inverse, return_counts:return_counts, axis:axis);
         
         /// <summary>
@@ -1065,7 +1101,7 @@ namespace Numpy
         /// <returns>
         /// A rotated view of m.
         /// </returns>
-        public static NDarray rot90(NDarray m, int k, int[] axes = null)
+        public static NDarray rot90(NDarray m, int k = 1, int[] axes = null)
             => NumPy.Instance.rot90(m, k, axes);
         
         

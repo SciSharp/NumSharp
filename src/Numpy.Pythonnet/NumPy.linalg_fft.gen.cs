@@ -206,7 +206,7 @@ namespace Numpy
         /// to the eigenvalue w[i].  Will return a matrix object if a is
         /// a matrix object.
         /// </returns>
-        public (NDarray, NDarray) eigh(NDarray a, string UPLO = null)
+        public (NDarray, NDarray) eigh(NDarray a, string UPLO = "L")
         {
             //auto-generated code, do not change
             var linalg = self.GetAttr("linalg");
@@ -216,7 +216,7 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (UPLO!=null) kwargs["UPLO"]=ToPython(UPLO);
+            if (UPLO!="L") kwargs["UPLO"]=ToPython(UPLO);
             dynamic py = __self__.InvokeMethod("eigh", pyargs, kwargs);
             var t = py as PyTuple;
             return (ToCsharp<NDarray>(t[0]), ToCsharp<NDarray>(t[1]));
@@ -286,7 +286,7 @@ namespace Numpy
         /// The eigenvalues in ascending order, each repeated according to
         /// its multiplicity.
         /// </returns>
-        public NDarray eigvalsh(NDarray a, string UPLO = null)
+        public NDarray eigvalsh(NDarray a, string UPLO = "L")
         {
             //auto-generated code, do not change
             var linalg = self.GetAttr("linalg");
@@ -296,7 +296,7 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (UPLO!=null) kwargs["UPLO"]=ToPython(UPLO);
+            if (UPLO!="L") kwargs["UPLO"]=ToPython(UPLO);
             dynamic py = __self__.InvokeMethod("eigvalsh", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
@@ -432,7 +432,7 @@ namespace Numpy
         /// The pseudo-inverse of a. If a is a matrix instance, then so
         /// is B.
         /// </returns>
-        public NDarray pinv(NDarray a, NDarray rcond)
+        public NDarray pinv(NDarray a, float rcond = 1e-15f)
         {
             //auto-generated code, do not change
             var linalg = self.GetAttr("linalg");
@@ -554,7 +554,7 @@ namespace Numpy
         /// depends on the value of full_matrices. Only returned when
         /// compute_uv is True.
         /// </returns>
-        public (NDarray, NDarray, NDarray) svd(NDarray a, bool? full_matrices = null, bool? compute_uv = null)
+        public (NDarray, NDarray, NDarray) svd(NDarray a, bool? full_matrices = true, bool? compute_uv = true)
         {
             //auto-generated code, do not change
             var linalg = self.GetAttr("linalg");
@@ -564,8 +564,8 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (full_matrices!=null) kwargs["full_matrices"]=ToPython(full_matrices);
-            if (compute_uv!=null) kwargs["compute_uv"]=ToPython(compute_uv);
+            if (full_matrices!=true) kwargs["full_matrices"]=ToPython(full_matrices);
+            if (compute_uv!=true) kwargs["compute_uv"]=ToPython(compute_uv);
             dynamic py = __self__.InvokeMethod("svd", pyargs, kwargs);
             var t = py as PyTuple;
             return (ToCsharp<NDarray>(t[0]), ToCsharp<NDarray>(t[1]), ToCsharp<NDarray>(t[2]));
@@ -610,7 +610,7 @@ namespace Numpy
         /// The truncated or zero-padded input, transformed along the axis
         /// indicated by axis, or the last one if axis is not specified.
         /// </returns>
-        public NDarray fft(NDarray a, int? n = null, int? axis = null, string norm = null)
+        public NDarray fft(NDarray a, int? n = null, int? axis = -1, string norm = null)
         {
             //auto-generated code, do not change
             var fft = self.GetAttr("fft");
@@ -621,7 +621,7 @@ namespace Numpy
             });
             var kwargs=new PyDict();
             if (n!=null) kwargs["n"]=ToPython(n);
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             if (norm!=null) kwargs["norm"]=ToPython(norm);
             dynamic py = __self__.InvokeMethod("fft", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -794,7 +794,7 @@ namespace Numpy
         /// The truncated or zero-padded input, transformed along the axis
         /// indicated by axis, or the last one if axis is not specified.
         /// </returns>
-        public NDarray ifft(NDarray a, int? n = null, int? axis = null, string norm = null)
+        public NDarray ifft(NDarray a, int? n = null, int? axis = -1, string norm = null)
         {
             //auto-generated code, do not change
             var fft = self.GetAttr("fft");
@@ -805,7 +805,7 @@ namespace Numpy
             });
             var kwargs=new PyDict();
             if (n!=null) kwargs["n"]=ToPython(n);
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             if (norm!=null) kwargs["norm"]=ToPython(norm);
             dynamic py = __self__.InvokeMethod("ifft", pyargs, kwargs);
             return ToCsharp<NDarray>(py);

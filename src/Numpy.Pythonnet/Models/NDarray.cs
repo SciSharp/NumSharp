@@ -36,6 +36,7 @@ namespace Numpy
             else if (typeof(T) == typeof(long)) array = new long[size];
             else if (typeof(T) == typeof(float)) array = new float[size];
             else if (typeof(T) == typeof(double)) array = new double[size];
+            else if (typeof(T) == typeof(bool)) array = new byte[size];
             else
                 throw new InvalidOperationException(
                     "Can not copy the data with data type due to limitations of Marshal.Copy: " + typeof(T).Name);
@@ -60,7 +61,8 @@ namespace Numpy
                     Marshal.Copy(new IntPtr(ptr), a, 0, a.Length);
                     break;
             }
-
+            // special handling for types that are not supported by Marshal.Copy: must be converted i.e. 1 => true, 0 => false
+            if (typeof(T) == typeof(bool)) return (T[])(object)((byte[])array).Select(x=>x>0).ToArray();
             return (T[]) array;
         }
 
@@ -377,14 +379,30 @@ namespace Numpy
                 }).ToArray());
                 return new NDarray(this.PyObject[tuple]);
             }
+            set
+            {
+                var tuple = new PyTuple(Slice.ParseSlices(slicing_notation).Select(s =>
+                {
+                    if (s.IsIndex)
+                        return new PyInt(s.Start.Value);
+                    else
+                        return s.ToPython();
+                }).ToArray());
+                self.SetItem(tuple, ToPython(value));
+            }
         }
 
-        public new NDarray this[params int[] coords]
+        public NDarray this[params int[] coords]
         {
             get
             {
                 var tuple = ToTuple(coords);
                 return new NDarray(this.PyObject[tuple]);
+            }
+            set
+            {
+                var tuple = ToTuple(coords);
+                self.SetItem(tuple, ToPython(value));
             }
         }
 
@@ -395,9 +413,14 @@ namespace Numpy
                 var tuple = new PyTuple(indices.Select(a => (PyObject)a.PyObject).ToArray());
                 return new NDarray(this.PyObject[tuple]);
             }
+            set
+            {
+                var tuple = new PyTuple(indices.Select(a => (PyObject)a.PyObject).ToArray());
+                self.SetItem(tuple, ToPython(value));
+            }
         }
 
-        public new NDarray this[params object[] arrays_slices_or_indices]
+        public NDarray this[params object[] arrays_slices_or_indices]
         {
             get
             {
@@ -413,6 +436,21 @@ namespace Numpy
                 }).ToArray();
                 var tuple = new PyTuple(pyobjs);
                 return new NDarray(this.PyObject[tuple]);
+            }
+            set
+            {
+                var pyobjs = arrays_slices_or_indices.Select<object, PyObject>(x =>
+                {
+                    switch (x)
+                    {
+                        case int i: return new PyInt(i);
+                        case NDarray a: return a.PyObject;
+                        case string s: return new Slice(s).ToPython();
+                        default: return ToPython(x);
+                    }
+                }).ToArray();
+                var tuple = new PyTuple(pyobjs);
+                self.SetItem(tuple, ToPython(value));
             }
         }
 

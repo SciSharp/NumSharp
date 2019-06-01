@@ -74,7 +74,7 @@ namespace Numpy
         /// <returns>
         /// Array of the same type and shape as a.
         /// </returns>
-        public NDarray sort(NDarray a, int? axis = -1, string kind = null, string order = null)
+        public NDarray sort(NDarray a, int? axis = -1, string kind = "quicksort", string order = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -84,7 +84,7 @@ namespace Numpy
             });
             var kwargs=new PyDict();
             if (axis!=-1) kwargs["axis"]=ToPython(axis);
-            if (kind!=null) kwargs["kind"]=ToPython(kind);
+            if (kind!="quicksort") kwargs["kind"]=ToPython(kind);
             if (order!=null) kwargs["order"]=ToPython(order);
             dynamic py = __self__.InvokeMethod("sort", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -112,7 +112,7 @@ namespace Numpy
         /// <returns>
         /// Array of indices that sort the keys along the specified axis.
         /// </returns>
-        public NDarray lexsort(NDarray keys, int? axis = null)
+        public NDarray lexsort(NDarray keys, int? axis = -1)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -121,7 +121,7 @@ namespace Numpy
                 keys,
             });
             var kwargs=new PyDict();
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
             dynamic py = __self__.InvokeMethod("lexsort", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
         }
@@ -163,7 +163,7 @@ namespace Numpy
         /// More generally, np.take_along_axis(a, index_array, axis=a) always
         /// yields the sorted a, irrespective of dimensionality.
         /// </returns>
-        public NDarray argsort(NDarray a, int? axis = null, string kind = null, string order = null)
+        public NDarray argsort(NDarray a, int? axis = -1, string kind = "quicksort", string order = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -172,8 +172,8 @@ namespace Numpy
                 a,
             });
             var kwargs=new PyDict();
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
-            if (kind!=null) kwargs["kind"]=ToPython(kind);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
+            if (kind!="quicksort") kwargs["kind"]=ToPython(kind);
             if (order!=null) kwargs["order"]=ToPython(order);
             dynamic py = __self__.InvokeMethod("argsort", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -283,7 +283,7 @@ namespace Numpy
         /// <returns>
         /// Array of the same type and shape as a.
         /// </returns>
-        public NDarray partition(NDarray a, int[] kth, int? axis = null, string kind = null, string order = null)
+        public NDarray partition(NDarray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -293,8 +293,8 @@ namespace Numpy
                 kth,
             });
             var kwargs=new PyDict();
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
-            if (kind!=null) kwargs["kind"]=ToPython(kind);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
+            if (kind!="introselect") kwargs["kind"]=ToPython(kind);
             if (order!=null) kwargs["order"]=ToPython(order);
             dynamic py = __self__.InvokeMethod("partition", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -341,7 +341,7 @@ namespace Numpy
         /// More generally, np.take_along_axis(a, index_array, axis=a) always
         /// yields the partitioned a, irrespective of dimensionality.
         /// </returns>
-        public NDarray argpartition(NDarray a, int[] kth, int? axis = null, string kind = null, string order = null)
+        public NDarray argpartition(NDarray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -351,8 +351,8 @@ namespace Numpy
                 kth,
             });
             var kwargs=new PyDict();
-            if (axis!=null) kwargs["axis"]=ToPython(axis);
-            if (kind!=null) kwargs["kind"]=ToPython(kind);
+            if (axis!=-1) kwargs["axis"]=ToPython(axis);
+            if (kind!="introselect") kwargs["kind"]=ToPython(kind);
             if (order!=null) kwargs["order"]=ToPython(order);
             dynamic py = __self__.InvokeMethod("argpartition", pyargs, kwargs);
             return ToCsharp<NDarray>(py);
@@ -654,7 +654,7 @@ namespace Numpy
         /// <returns>
         /// Array of insertion points with the same shape as v.
         /// </returns>
-        public NDarray<int> searchsorted(NDarray a, NDarray v, string side = null, NDarray sorter = null)
+        public NDarray<int> searchsorted(NDarray a, NDarray v, string side = "left", NDarray sorter = null)
         {
             //auto-generated code, do not change
             var __self__=self;
@@ -664,7 +664,7 @@ namespace Numpy
                 v,
             });
             var kwargs=new PyDict();
-            if (side!=null) kwargs["side"]=ToPython(side);
+            if (side!="left") kwargs["side"]=ToPython(side);
             if (sorter!=null) kwargs["sorter"]=ToPython(sorter);
             dynamic py = __self__.InvokeMethod("searchsorted", pyargs, kwargs);
             return ToCsharp<NDarray<int>>(py);

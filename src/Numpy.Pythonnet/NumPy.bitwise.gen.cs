@@ -18,6 +18,273 @@ namespace Numpy
     {
         
         /// <summary>
+        /// Compute the bit-wise AND of two arrays element-wise.
+        /// 
+        /// Computes the bit-wise AND of the underlying binary representation of
+        /// the integers in the input arrays. This ufunc implements the C/Python
+        /// operator &amp;.
+        /// </summary>
+        /// <param name="x2">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="x1">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Result.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray bitwise_and(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("bitwise_and", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute the bit-wise OR of two arrays element-wise.
+        /// 
+        /// Computes the bit-wise OR of the underlying binary representation of
+        /// the integers in the input arrays. This ufunc implements the C/Python
+        /// operator |.
+        /// </summary>
+        /// <param name="x2">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="x1">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Result.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray bitwise_or(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("bitwise_or", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute the bit-wise XOR of two arrays element-wise.
+        /// 
+        /// Computes the bit-wise XOR of the underlying binary representation of
+        /// the integers in the input arrays. This ufunc implements the C/Python
+        /// operator ^.
+        /// </summary>
+        /// <param name="x2">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="x1">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Result.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray bitwise_xor(NDarray x2, NDarray x1, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x2,
+                x1,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("bitwise_xor", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Compute bit-wise inversion, or bit-wise NOT, element-wise.
+        /// 
+        /// Computes the bit-wise NOT of the underlying binary representation of
+        /// the integers in the input arrays. This ufunc implements the C/Python
+        /// operator ~.
+        /// 
+        /// For signed integer inputs, the two’s complement is returned.  In a
+        /// two’s-complement system negative numbers are represented by the two’s
+        /// complement of the absolute value. This is the most common method of
+        /// representing signed integers on computers [1]. A N-bit
+        /// two’s-complement system can represent every integer in the range
+        ///  to .
+        /// 
+        /// Notes
+        /// 
+        /// bitwise_not is an alias for invert:
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="x">
+        /// Only integer and boolean types are handled.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Result.
+        /// This is a scalar if x is a scalar.
+        /// </returns>
+        public NDarray invert(NDarray x, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("invert", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
+        /// Shift the bits of an integer to the left.
+        /// 
+        /// Bits are shifted to the left by appending x2 0s at the right of x1.
+        /// Since the internal representation of numbers is in binary format, this
+        /// operation is equivalent to multiplying x1 by 2**x2.
+        /// </summary>
+        /// <param name="x1">
+        /// Input values.
+        /// </param>
+        /// <param name="x2">
+        /// Number of zeros to append to x1. Has to be non-negative.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Return x1 with bits shifted x2 times to the left.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray<int> left_shift(NDarray<int> x1, NDarray<int> x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("left_shift", pyargs, kwargs);
+            return ToCsharp<NDarray<int>>(py);
+        }
+        
+        /// <summary>
+        /// Shift the bits of an integer to the right.
+        /// 
+        /// Bits are shifted to the right x2.  Because the internal
+        /// representation of numbers is in binary format, this operation is
+        /// equivalent to dividing x1 by 2**x2.
+        /// </summary>
+        /// <param name="x1">
+        /// Input values.
+        /// </param>
+        /// <param name="x2">
+        /// Number of bits to remove at the right of x1.
+        /// </param>
+        /// <param name="@out">
+        /// A location into which the result is stored. If provided, it must have
+        /// a shape that the inputs broadcast to. If not provided or None,
+        /// a freshly-allocated array is returned. A tuple (possible only as a
+        /// keyword argument) must have length equal to the number of outputs.
+        /// </param>
+        /// <param name="@where">
+        /// Values of True indicate to calculate the ufunc at that position, values
+        /// of False indicate to leave the value in the output alone.
+        /// </param>
+        /// <returns>
+        /// Return x1 with bits shifted x2 times to the right.
+        /// This is a scalar if both x1 and x2 are scalars.
+        /// </returns>
+        public NDarray right_shift(NDarray x1, NDarray x2, NDarray @out = null, NDarray @where = null)
+        {
+            //auto-generated code, do not change
+            var __self__=self;
+            var pyargs=ToTuple(new object[]
+            {
+                x1,
+                x2,
+            });
+            var kwargs=new PyDict();
+            if (@out!=null) kwargs["out"]=ToPython(@out);
+            if (@where!=null) kwargs["where"]=ToPython(@where);
+            dynamic py = __self__.InvokeMethod("right_shift", pyargs, kwargs);
+            return ToCsharp<NDarray>(py);
+        }
+        
+        /// <summary>
         /// Packs the elements of a binary-valued array into bits in a uint8 array.
         /// 
         /// The result is padded to full bytes by inserting zero bits at the end.

@@ -74,7 +74,7 @@ namespace Numpy
         /// <returns>
         /// Array of the same type and shape as a.
         /// </returns>
-        public static NDarray sort(NDarray a, int? axis = -1, string kind = null, string order = null)
+        public static NDarray sort(NDarray a, int? axis = -1, string kind = "quicksort", string order = null)
             => NumPy.Instance.sort(a, axis:axis, kind:kind, order:order);
         
         /// <summary>
@@ -99,7 +99,7 @@ namespace Numpy
         /// <returns>
         /// Array of indices that sort the keys along the specified axis.
         /// </returns>
-        public static NDarray lexsort(NDarray keys, int? axis = null)
+        public static NDarray lexsort(NDarray keys, int? axis = -1)
             => NumPy.Instance.lexsort(keys, axis:axis);
         
         /// <summary>
@@ -139,7 +139,7 @@ namespace Numpy
         /// More generally, np.take_along_axis(a, index_array, axis=a) always
         /// yields the sorted a, irrespective of dimensionality.
         /// </returns>
-        public static NDarray argsort(NDarray a, int? axis = null, string kind = null, string order = null)
+        public static NDarray argsort(NDarray a, int? axis = -1, string kind = "quicksort", string order = null)
             => NumPy.Instance.argsort(a, axis:axis, kind:kind, order:order);
         
         /// <summary>
@@ -226,7 +226,7 @@ namespace Numpy
         /// <returns>
         /// Array of the same type and shape as a.
         /// </returns>
-        public static NDarray partition(NDarray a, int[] kth, int? axis = null, string kind = null, string order = null)
+        public static NDarray partition(NDarray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => NumPy.Instance.partition(a, kth, axis:axis, kind:kind, order:order);
         
         /// <summary>
@@ -270,7 +270,7 @@ namespace Numpy
         /// More generally, np.take_along_axis(a, index_array, axis=a) always
         /// yields the partitioned a, irrespective of dimensionality.
         /// </returns>
-        public static NDarray argpartition(NDarray a, int[] kth, int? axis = null, string kind = null, string order = null)
+        public static NDarray argpartition(NDarray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
             => NumPy.Instance.argpartition(a, kth, axis:axis, kind:kind, order:order);
         
         /// <summary>
@@ -481,7 +481,7 @@ namespace Numpy
         /// <returns>
         /// Array of insertion points with the same shape as v.
         /// </returns>
-        public static NDarray<int> searchsorted(NDarray a, NDarray v, string side = null, NDarray sorter = null)
+        public static NDarray<int> searchsorted(NDarray a, NDarray v, string side = "left", NDarray sorter = null)
             => NumPy.Instance.searchsorted(a, v, side:side, sorter:sorter);
         
         /// <summary>
