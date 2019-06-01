@@ -14,6 +14,8 @@ namespace Numpy.Models
             this.Dimensions = shape;
         }
 
+        public int this[int n] => Dimensions[n];
+
         #region Equality
 
         public static bool operator ==(Shape a, Shape b)

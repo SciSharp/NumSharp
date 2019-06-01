@@ -460,7 +460,7 @@ namespace Numpy
                 => NumPy.Instance.svd(a, full_matrices:full_matrices, compute_uv:compute_uv);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the one-dimensional discrete Fourier Transform.
             /// 
@@ -500,11 +500,11 @@ namespace Numpy
             /// The truncated or zero-padded input, transformed along the axis
             /// indicated by axis, or the last one if axis is not specified.
             /// </returns>
-            public static NDarray fft(NDarray a, int? n = null, int? axis = -1, string norm = null)
+            public static NDarray fft_(NDarray a, int? n = null, int? axis = -1, string norm = null)
                 => NumPy.Instance.fft(a, n:n, axis:axis, norm:norm);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the 2-dimensional discrete Fourier Transform
             /// 
@@ -555,7 +555,7 @@ namespace Numpy
                 => NumPy.Instance.fft2(a, s:s, axes:axes, norm:norm);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the N-dimensional discrete Fourier Transform.
             /// 
@@ -603,7 +603,7 @@ namespace Numpy
                 => NumPy.Instance.fftn(a, s:s, axes:axes, norm:norm);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the one-dimensional inverse discrete Fourier Transform.
             /// 
@@ -652,7 +652,7 @@ namespace Numpy
                 => NumPy.Instance.ifft(a, n:n, axis:axis, norm:norm);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the 2-dimensional inverse discrete Fourier Transform.
             /// 
@@ -709,7 +709,7 @@ namespace Numpy
                 => NumPy.Instance.ifft2(a, s:s, axes:axes, norm:norm);
         }
         
-        public static partial class FFT {
+        public static partial class fft {
             /// <summary>
             /// Compute the N-dimensional inverse discrete Fourier Transform.
             /// 

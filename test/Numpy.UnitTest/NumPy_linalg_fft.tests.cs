@@ -1147,7 +1147,7 @@ namespace Numpy.UnitTest
             //   
 
             var a = np.eye(4) * 4;
-            var given = np.FFT.ifft2(a);
+            var given = np.fft.ifft2(a);
             var expected =
                 "array([[1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],\n" +
                 "       [0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j],\n" +

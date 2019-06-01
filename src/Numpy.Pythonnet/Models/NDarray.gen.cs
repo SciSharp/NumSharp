@@ -6634,6 +6634,213 @@ namespace Numpy
         }
         
         /// <summary>
+        /// Generates a random sample from a given 1-D array
+        /// </summary>
+        /// <param name="size">
+        /// Output shape.  If the given shape is, e.g., (m, n, k), then
+        /// m * n * k samples are drawn.  Default is None, in which case a
+        /// single value is returned.
+        /// </param>
+        /// <param name="replace">
+        /// Whether the sample is with or without replacement
+        /// </param>
+        /// <param name="p">
+        /// The probabilities associated with each entry in a.
+        /// If not given the sample assumes a uniform distribution over all
+        /// entries in a.
+        /// </param>
+        /// <returns>
+        /// The generated random samples
+        /// </returns>
+        public NDarray choice(int[] size = null, bool? replace = true, NDarray p = null)
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            return NumPy.Instance.choice(@this, size:size, replace:replace, p:p);
+        }
+        
+        /// <summary>
+        /// Modify a sequence in-place by shuffling its contents.
+        /// 
+        /// This function only shuffles the array along the first axis of a
+        /// multi-dimensional array. The order of sub-arrays is changed but
+        /// their contents remains the same.
+        /// </summary>
+        public void shuffle()
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            NumPy.Instance.shuffle(@this);
+        }
+        
+        /// <summary>
+        /// Randomly permute a sequence, or return a permuted range.
+        /// 
+        /// If x is a multi-dimensional array, it is only shuffled along its
+        /// first index.
+        /// </summary>
+        /// <returns>
+        /// Permuted sequence or array range.
+        /// </returns>
+        public NDarray permutation()
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            return NumPy.Instance.permutation(@this);
+        }
+        
+        /// <summary>
+        /// Draw samples from the Dirichlet distribution.
+        /// 
+        /// Draw size samples of dimension k from a Dirichlet distribution. A
+        /// Dirichlet-distributed random variable can be seen as a multivariate
+        /// generalization of a Beta distribution. Dirichlet pdf is the conjugate
+        /// prior of a multinomial in Bayesian inference.
+        /// 
+        /// Notes
+        /// 
+        /// Uses the following property for computation: for each dimension,
+        /// draw a random sample y_i from a standard gamma generator of shape
+        /// alpha_i, then
+        ///  is
+        /// Dirichlet distributed.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="size">
+        /// Output shape.  If the given shape is, e.g., (m, n, k), then
+        /// m * n * k samples are drawn.  Default is None, in which case a
+        /// single value is returned.
+        /// </param>
+        /// <returns>
+        /// The drawn samples, of shape (size, alpha.ndim).
+        /// </returns>
+        public NDarray dirichlet(int[] size = null)
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            return NumPy.Instance.dirichlet(@this, size:size);
+        }
+        
+        /// <summary>
+        /// Draw random samples from a multivariate normal distribution.
+        /// 
+        /// The multivariate normal, multinormal or Gaussian distribution is a
+        /// generalization of the one-dimensional normal distribution to higher
+        /// dimensions.  Such a distribution is specified by its mean and
+        /// covariance matrix.  These parameters are analogous to the mean
+        /// (average or “center”) and variance (standard deviation, or “width,”
+        /// squared) of the one-dimensional normal distribution.
+        /// 
+        /// Notes
+        /// 
+        /// The mean is a coordinate in N-dimensional space, which represents the
+        /// location where samples are most likely to be generated.  This is
+        /// analogous to the peak of the bell curve for the one-dimensional or
+        /// univariate normal distribution.
+        /// 
+        /// Covariance indicates the level to which two variables vary together.
+        /// From the multivariate normal distribution, we draw N-dimensional
+        /// samples, .  The covariance matrix
+        /// element  is the covariance of  and .
+        /// The element  is the variance of  (i.e. its
+        /// “spread”).
+        /// 
+        /// Instead of specifying the full covariance matrix, popular
+        /// approximations include:
+        /// 
+        /// This geometrical property can be seen in two dimensions by plotting
+        /// generated data-points:
+        /// 
+        /// Diagonal covariance means that points are oriented along x or y-axis:
+        /// 
+        /// Note that the covariance matrix must be positive semidefinite (a.k.a.
+        /// nonnegative-definite). Otherwise, the behavior of this method is
+        /// undefined and backwards compatibility is not guaranteed.
+        /// 
+        /// References
+        /// </summary>
+        /// <param name="cov">
+        /// Covariance matrix of the distribution. It must be symmetric and
+        /// positive-semidefinite for proper sampling.
+        /// </param>
+        /// <param name="size">
+        /// Given a shape of, for example, (m,n,k), m*n*k samples are
+        /// generated, and packed in an m-by-n-by-k arrangement.  Because
+        /// each sample is N-dimensional, the output shape is (m,n,k,N).
+        /// If no shape is specified, a single (N-D) sample is returned.
+        /// </param>
+        /// <param name="check_valid">
+        /// Behavior when the covariance matrix is not positive semidefinite.
+        /// </param>
+        /// <param name="tol">
+        /// Tolerance when checking the singular values in covariance matrix.
+        /// </param>
+        /// <returns>
+        /// The drawn samples, of shape size, if that was provided.  If not,
+        /// the shape is (N,).
+        /// 
+        /// In other words, each entry out[i,j,...,:] is an N-dimensional
+        /// value drawn from the distribution.
+        /// </returns>
+        public NDarray multivariate_normal(NDarray cov, int[] size = null, string check_valid = null, float? tol = null)
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            return NumPy.Instance.multivariate_normal(@this, cov, size:size, check_valid:check_valid, tol:tol);
+        }
+        
+        /// <summary>
+        /// Container for the Mersenne Twister pseudo-random number generator.
+        /// 
+        /// RandomState exposes a number of methods for generating random numbers
+        /// drawn from a variety of probability distributions. In addition to the
+        /// distribution-specific arguments, each method takes a keyword argument
+        /// size that defaults to None. If size is None, then a single
+        /// value is generated and returned. If size is an integer, then a 1-D
+        /// array filled with generated values is returned. If size is a tuple,
+        /// then an array with that shape is filled and returned.
+        /// 
+        /// Compatibility Guarantee
+        /// A fixed seed and a fixed series of calls to ‘RandomState’ methods using
+        /// the same parameters will always produce the same results up to roundoff
+        /// error except when the values were incorrect. Incorrect values will be
+        /// fixed and the NumPy version in which the fix was made will be noted in
+        /// the relevant docstring. Extension of existing parameter ranges and the
+        /// addition of new parameters is allowed as long the previous behavior
+        /// remains unchanged.
+        /// 
+        /// Notes
+        /// 
+        /// The Python stdlib module “random” also contains a Mersenne Twister
+        /// pseudo-random number generator with a number of methods that are similar
+        /// to the ones available in RandomState. RandomState, besides being
+        /// NumPy-aware, has the advantage that it provides a much larger number
+        /// of probability distributions to choose from.
+        /// 
+        /// Methods
+        /// </summary>
+        public void RandomState()
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            NumPy.Instance.RandomState(@this);
+        }
+        
+        /// <summary>
+        /// Seed the generator.
+        /// 
+        /// This method is called when RandomState is initialized. It can be
+        /// called again to re-seed the generator. For details, see RandomState.
+        /// </summary>
+        public void seed()
+        {
+            //auto-generated code, do not change
+            var @this=this;
+            NumPy.Instance.seed(@this);
+        }
+        
+        /// <summary>
         /// Return a sorted copy of an array.
         /// 
         /// Notes

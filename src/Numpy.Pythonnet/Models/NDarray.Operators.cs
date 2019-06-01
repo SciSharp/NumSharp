@@ -141,6 +141,12 @@ namespace Numpy
             return new NDarray(a.self.InvokeMethod("__add__", obj.ToPython()));
         }
 
+        // Return value+self.
+        public static NDarray operator +(ValueType obj, NDarray a)
+        {
+            return new NDarray(a.self.InvokeMethod("__add__", obj.ToPython()));
+        }
+
         // Return self-value.
         public static NDarray operator -(NDarray a, ValueType obj)
         {
@@ -149,6 +155,12 @@ namespace Numpy
 
         // Return self*value.
         public static NDarray operator *(NDarray a, ValueType obj)
+        {
+            return new NDarray(a.self.InvokeMethod("__mul__", obj.ToPython()));
+        }
+
+        // Return value*self.
+        public static NDarray operator *(ValueType obj, NDarray a)
         {
             return new NDarray(a.self.InvokeMethod("__mul__", obj.ToPython()));
         }
