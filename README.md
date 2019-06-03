@@ -77,6 +77,8 @@ NumSharp is referenced by:
 * [CherubNLP](https://github.com/Oceania2018/CherubNLP)
 * [BotSharp](https://github.com/dotnetcore/BotSharp)
 
+You might also be interested in NumSharp's sister project [Numpy.NET](https://github.com/SciSharp/Numpy.NET).
+
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 Welcome to fork and pull request to add more APIs, and make reference list longer.
 
