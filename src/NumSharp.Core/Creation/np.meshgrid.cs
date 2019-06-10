@@ -30,8 +30,10 @@ namespace NumSharp
             if (kwargs.indexing == "xy" && ndim > 1)
             {
                 // Switch first and second axis
-                output[0].reshape(1, x2.size);
-                output[1].reshape(x1.size, 1);
+                // output[0].reshape(1, x1.size);
+                // output[1].reshape(x2.size, 1);
+
+                output = new NDArray[] { x1.reshape(1, x1.size), x2.reshape(x2.size, 1) };
             }
 
             if (!kwargs.sparse)
