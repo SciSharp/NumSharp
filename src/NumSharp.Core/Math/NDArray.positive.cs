@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace NumSharp
 {
@@ -12,78 +13,107 @@ namespace NumSharp
         /// </summary>
         public NDArray positive()
         {
-            var outputArray = (NDArray)this.Clone();
+            var outputNDArray = new NDArray(this.dtype, this.shape);
 
-            Array outputSysArr = outputArray.Storage.GetData();
+            Array inputArray = this.Storage.GetData();
+            Array outputArray = outputNDArray.Storage.GetData();
 
-            switch (outputSysArr)
+            switch (outputArray)
             {
-                case int[] data:
+                case int[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as int[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
+                        var val = @in[idx];
                         if (val < 0)
-                            data[idx] = -val;
+                            output[idx] = -val;
+                        else
+                            output[idx] = val;
                     }
 
                     break;
                 }
 
-                case long[] data:
+                case long[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as long[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
+                        var val = @in[idx];
                         if (val < 0)
-                            data[idx] = -val;
+                            output[idx] = -val;
+                        else
+                            output[idx] = val;
                     }
 
                     break;
                 }
 
-                case double[] data:
+                case double[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as double[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
+                        var val = @in[idx];
                         if (val < 0)
-                            data[idx] = -val;
+                            output[idx] = -val;
+                        else
+                            output[idx] = val;
                     }
 
                     break;
                 }
 
-                case float[] data:
+                case float[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as float[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
+                        var val = @in[idx];
                         if (val < 0)
-                            data[idx] = -val;
+                            output[idx] = -val;
+                        else
+                            output[idx] = val;
                     }
 
                     break;
                 }
 
-                case Complex[] data:
+                case Complex[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as Complex[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
-                        data[idx] = new Complex(val.Real < 0 ? -val.Real : val.Real, val.Imaginary < 0 ? -val.Imaginary : val.Imaginary);
+                        var val = @in[idx];
+                        output[idx] = new Complex(val.Real < 0 ? -val.Real : val.Real, val.Imaginary < 0 ? -val.Imaginary : val.Imaginary);
                     }
 
                     break;
                 }
 
-                case decimal[] data:
+                case decimal[] output:
                 {
-                    for (int idx = 0; idx < data.Length; idx++)
+                    var @in = inputArray as decimal[];
+                    Parallel.For(0, @in.Length, compute);
+
+                    void compute(int idx)
                     {
-                        var val = data[idx];
+                        var val = @in[idx];
                         if (val < 0)
-                            data[idx] = -val;
+                            output[idx] = -val;
+                        else
+                            output[idx] = val;
                     }
 
                     break;
@@ -95,7 +125,7 @@ namespace NumSharp
                 }
             }
 
-            return outputArray;
+            return outputNDArray;
         }
     }
 }
