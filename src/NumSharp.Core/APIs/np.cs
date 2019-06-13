@@ -22,7 +22,7 @@ namespace NumSharp
         public static Type float32 => typeof(float); // Single
         public static Type float64 => typeof(double);
         public static Type chars => typeof(string);
-        public static NumPyRandom random => new NumPyRandom();
+        public static NumPyRandom random { get; } = new NumPyRandom();
 
         // np.nan
         public static double nan => double.NaN;

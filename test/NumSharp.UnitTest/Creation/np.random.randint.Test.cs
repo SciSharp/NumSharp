@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void randint()
         {
-            var a = new NumPyRandom().randint(low: 0, high: 10, shape: new Shape(5, 5));
+            var a = np.random.RandomState().randint(low: 0, high: 10, shape: new Shape(5, 5));
             Assert.IsTrue(a.Data<int>().Count(x => x < 10) == 25);
         }
     }
