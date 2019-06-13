@@ -18,6 +18,7 @@ namespace NumSharp
         NDArray Power(NDArray x, ValueType y);
         NDArray Sub(NDArray x, NDArray y);
         NDArray Sum(NDArray x, int? axis = null);
+        NDArray Negate(NDArray x);
         #endregion
 
         #region Logic
