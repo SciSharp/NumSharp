@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -43,16 +46,15 @@ namespace NumSharp
         public NDArray normal(double loc, double scale, params int[] dims)
         {
             var array = new NDArray(typeof(double), new Shape(dims));
-            Random rand = new Random(); //reuse this if you are generating many
 
             double[] arr = array.Data<double>();
 
             for (int i = 0; i < array.size; i++)
             {
-                double u1 = 1.0 - rand.NextDouble(); //uniform(0,1] random doubles
-                double u2 = 1.0 - rand.NextDouble();
+                double u1 = 1.0 - randomizer.NextDouble(); //uniform(0,1] random doubles
+                double u2 = 1.0 - randomizer.NextDouble();
                 double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
-                             Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
+                                       Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
                 double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
                 arr[i] = randNormal;
             }
