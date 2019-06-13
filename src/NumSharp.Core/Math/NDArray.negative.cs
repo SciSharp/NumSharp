@@ -11,7 +11,7 @@ namespace NumSharp
         /// <summary>
         /// Negates all positive values.
         /// </summary>
-        internal NDArray negative()
+        public NDArray negative()
         {
             var outputNDArray = new NDArray(this.dtype, this.shape);
 
