@@ -90,5 +90,19 @@ namespace NumSharp
         /// </summary>
         public static NDArray prod(NDArray nd, int axis = -1, Type dtype = null)
             => nd.prod(axis, dtype);
+
+        /// <summary>
+        /// Numerical positive, element-wise.
+        /// </summary>
+        /// <seealso cref="https://docs.scipy.org/doc/numpy/reference/generated/numpy.positive.html"/>
+        public static NDArray positive(NDArray nd)
+            => nd.positive();        
+        
+        /// <summary>
+        /// Numerical negative, element-wise.
+        /// </summary>
+        /// <seealso cref="https://docs.scipy.org/doc/numpy/reference/generated/numpy.negative.html"/>
+        public static NDArray negative(NDArray nd)
+            => nd.negative();
     }
 }
