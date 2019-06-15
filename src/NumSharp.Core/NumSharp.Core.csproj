@@ -19,7 +19,7 @@
 5: Speed up by adding Span&lt;T&gt; for indexing.
 6: Fix np.sum -1 axis.
 7: Fix np.meshgrid.
-8：Add np.expand_dims.
+8: Add np.expand_dims.
 9: Add nd.negative/ nd.positive.
 10: Add nd.negate.</PackageReleaseNotes>
     <AssemblyVersion>0.10.3.0</AssemblyVersion>
@@ -33,7 +33,7 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.10.2</Version>
+    <Version>0.10.3</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
   </PropertyGroup>
 
@@ -84,7 +84,7 @@
 
   <ItemGroup>
     <PackageReference Include="ArrayFire" Version="0.0.2" />
-    <PackageReference Include="System.Memory" Version="4.5.2" />
+    <PackageReference Include="System.Memory" Version="4.5.3" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
   </ItemGroup>
 
