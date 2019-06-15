@@ -18,14 +18,14 @@ namespace NumSharp
 
             if ((array.Rank == 1) && ( !array.GetType().GetElementType().IsArray ))
 			{
-                nd.SetData(array); 
+                nd.SetData(array);
             }
             else 
             {
                 throw new Exception("Method is not implemeneted for multidimensional arrays or jagged arrays.");
             }
             
-            return nd;
+            return dtype == null ? nd : nd.astype(dtype);
         }
 
         public static NDArray array<T>(T[][] data)

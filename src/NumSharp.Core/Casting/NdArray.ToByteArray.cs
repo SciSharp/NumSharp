@@ -30,6 +30,14 @@ namespace NumSharp
                             bytes[i * dtypesize + j] = cache[j];
                     }
                     break;
+                case "Int64":
+                    for (int i = 0; i < size; i++)
+                    {
+                        cache = BitConverter.GetBytes(nd.Data<long>(i));
+                        for (int j = 0; j < dtypesize; j++)
+                            bytes[i * dtypesize + j] = cache[j];
+                    }
+                    break;
                 case "Single":
                     for (int i = 0; i < size; i++)
                     {

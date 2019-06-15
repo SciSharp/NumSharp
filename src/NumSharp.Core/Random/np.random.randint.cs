@@ -10,11 +10,10 @@ namespace NumSharp
     {
         public NDArray randint(int low, int size = 1)
         {
-            var rng = new Random();
             var data = new int[size];
             for (int i = 0; i < data.Length; i++)
             {
-                data[i] = rng.Next(low, int.MaxValue);
+                data[i] = randomizer.Next(low, int.MaxValue);
             }
 
             var np = new NDArray(typeof(int), size);
@@ -25,7 +24,6 @@ namespace NumSharp
 
         public NDArray randint(int low, int? high = null, Shape shape = null)
         {
-            var rng = new Random();
             if(high == null)
             {
                 high = int.MaxValue;
@@ -37,7 +35,7 @@ namespace NumSharp
             var data = new int[shape.Size];
             for(int i = 0; i < data.Length; i++)
             {
-                data[i] = rng.Next(low, high.Value);
+                data[i] = randomizer.Next(low, high.Value);
             }
 
             var np = new NDArray(typeof(int), shape.Dimensions.ToArray());

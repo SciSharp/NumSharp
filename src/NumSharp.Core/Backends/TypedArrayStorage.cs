@@ -94,7 +94,12 @@ namespace NumSharp.Backends
                     }
                     break;
                 case TypeCode.Int64 :
-                    newValues = Array.ConvertAll(_arrayInt64, x => Convert.ToInt64(x));
+                    switch (Type.GetTypeCode(_DType))
+                    {
+                        case TypeCode.Int32:
+                            newValues = Array.ConvertAll(_arrayInt32, x => Convert.ToInt64(x));
+                            break;
+                    }
                     break;
                 case TypeCode.Single:
                     switch (Type.GetTypeCode(_DType))
