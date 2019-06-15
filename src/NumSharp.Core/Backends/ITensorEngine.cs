@@ -33,6 +33,8 @@ namespace NumSharp
         #region Array Manipulation
         NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
         NDArray Transpose(NDArray nd, int[] axes = null);
+        NDArray Cast(NDArray x, Type dtype, bool copy);
+
         #endregion
 
         #region Sorting, searching, counting
