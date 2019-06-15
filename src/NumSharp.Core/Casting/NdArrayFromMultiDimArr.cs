@@ -35,7 +35,7 @@ namespace NumSharp
         /// <param name="dotNetArray"></param>
         public NDArray FromMultiDimArray<T>(Array dotNetArray)
         {
-            if(dotNetArray.GetType().GetElementType().IsArray)
+            if (dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Jagged arrays are not allowed here!");
 
             switch (dotNetArray.Rank)
@@ -48,10 +48,25 @@ namespace NumSharp
                     return np.array((T[,,])dotNetArray);
                 case 4:
                     return np.array((T[,,,])dotNetArray);
+                case 5:
+                    return np.array((T[,,,,])dotNetArray);
+                case 6:
+                    return np.array((T[,,,,,])dotNetArray);
+                case 7:
+                    return np.array((T[,,,,,,])dotNetArray);
+                case 8:
+                    return np.array((T[,,,,,,,])dotNetArray);
+                case 9:
+                    return np.array((T[,,,,,,,,])dotNetArray);
+                case 10:
+                    return np.array((T[,,,,,,,,,])dotNetArray);
+                case 11:
+                    return np.array((T[,,,,,,,,,,])dotNetArray);
+                case 12:
+                    return np.array((T[,,,,,,,,,,,])dotNetArray);
             }
 
             throw new NotImplementedException("FromMultiDimArray<T>(Array dotNetArray)");
         }
-        
     }
 }
