@@ -66,7 +66,7 @@ namespace NumSharp
         /// The internal storage for elements of NDArray
         /// </summary>
         /// <value>Internal Storage</value>
-        protected IStorage Storage { get; set; }
+        internal IStorage Storage { get; set; }
 
         public ITensorEngine TensorEngine { get; set; }
 
@@ -198,7 +198,7 @@ namespace NumSharp
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
             puffer.Storage.Allocate(shapePuffer);
-
+            
             puffer.Storage.SetData(this.Storage.CloneData());
 
             return puffer;
