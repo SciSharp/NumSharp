@@ -167,6 +167,7 @@ namespace NumSharp.Backends
 
             if (dtype != null)
                 _DType = dtype;
+
             _values = Array.CreateInstance(_DType, shape.Size);
         }
 
@@ -334,6 +335,7 @@ namespace NumSharp.Backends
         /// <param name="values"></param>
         public void SetData(Array values)
         {
+            //if dtype doesn't match arrays type - change this dtype and attempt to cast.
             if (_DType != values.GetType().GetElementType())
             {
                 _values = _ChangeTypeOfArray(values, _DType);
