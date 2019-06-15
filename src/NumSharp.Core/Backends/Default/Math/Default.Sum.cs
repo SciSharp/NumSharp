@@ -6,6 +6,7 @@ In case you want to do some changes do the following
 2 ) execute powershell file "GenerateCode.ps1" on root level
 
 */
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -39,19 +40,217 @@ namespace NumSharp.Backends
 
         private NDArray Sum(NDArray x)
         {
-            switch (Type.GetTypeCode(x.dtype))
+            #region Sum Methods
+
+            Double SumDouble(Double[] arr)
             {
-                case TypeCode.Int32:
-                    return x.Data<int>().Sum();
-                case TypeCode.Int64:
-                    return x.Data<long>().Sum();
-                case TypeCode.Single:
-                    return x.Data<float>().Sum();
-                case TypeCode.Double:
-                    return x.Data<double>().Sum();
+                Double sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
             }
 
-            throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name}");
+            Single SumSingle(Single[] arr)
+            {
+                Single sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            Byte SumByte(Byte[] arr)
+            {
+                Byte sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            Int32 SumInt32(Int32[] arr)
+            {
+                Int32 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            Int64 SumInt64(Int64[] arr)
+            {
+                Int64 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            SByte SumSByte(SByte[] arr)
+            {
+                SByte sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            Int16 SumInt16(Int16[] arr)
+            {
+                Int16 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            UInt32 SumUInt32(UInt32[] arr)
+            {
+                UInt32 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            UInt64 SumUInt64(UInt64[] arr)
+            {
+                UInt64 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            UInt16 SumUInt16(UInt16[] arr)
+            {
+                UInt16 sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            Decimal SumDecimal(Decimal[] arr)
+            {
+                Decimal sum = 0;
+                checked
+                {
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        sum += arr[i];
+                    }
+                }
+
+                return sum;
+            }
+
+            #endregion
+
+            switch (Type.GetTypeCode(x.dtype))
+            {
+                case TypeCode.Double:
+                    return SumDouble(x.Data<Double>());
+                case TypeCode.Single:
+                    return SumSingle(x.Data<Single>());
+                case TypeCode.Byte:
+                case TypeCode.Char:
+                {
+                    var sum = SumByte(x.Data<Byte>());
+                    var nd = new NDArray(typeof(Byte), 1);
+                    nd.Array.SetValue(0, sum);
+                    return nd;
+                }
+
+                case TypeCode.Int32:
+                    return SumInt32(x.Data<Int32>());
+                case TypeCode.Int64:
+                    return SumInt64(x.Data<Int64>());
+                case TypeCode.SByte:
+                    return SumSByte(x.Data<SByte>());
+                case TypeCode.Int16:
+                    return SumInt16(x.Data<Int16>());
+                case TypeCode.UInt32:
+                {
+                    var sum = SumUInt32(x.Data<UInt32>());
+                    var nd = new NDArray(typeof(UInt32), 1);
+                    nd.Array.SetValue(0, sum);
+                    return nd;
+                }
+
+                case TypeCode.UInt64:
+                    return SumUInt64(x.Data<UInt64>());
+                case TypeCode.UInt16:
+                {
+                    var sum = SumUInt16(x.Data<UInt16>());
+                    var nd = new NDArray(typeof(UInt16), 1);
+                    nd.Array.SetValue(0, sum);
+                    return nd;
+                }
+
+                case TypeCode.Decimal:
+                    return SumDecimal(x.Data<Decimal>());
+
+                default:
+                    if (x.dtype == typeof(Complex))
+                    {
+                        var cplx = x.Data<Complex>();
+                        return new Complex(cplx.Select(c => c.Real).Sum(), cplx.Select(c => c.Imaginary).Sum());
+                    }
+
+                    throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name}");
+            }
         }
 
         private NDArray Sum0(NDArray x, int axis)
@@ -63,67 +262,68 @@ namespace NumSharp.Backends
             switch (Type.GetTypeCode(x.dtype))
             {
                 case TypeCode.Int32:
+                {
+                    // allocate continuous memory
+                    var data = new int[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new int[size];
-                        switch (shape.Length)
-                        {
-                            case 1:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 1:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int a = 0; a < x.shape[axis]; a++)
+                                    data[i] += x.GetInt32(a, d0);
+                                i++;
+                            }
+
+                            break;
+
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
                                     for (int a = 0; a < x.shape[axis]; a++)
-                                        data[i] += x.GetInt32(a, d0);
+                                        data[i] += x.GetInt32(a, d0, d1);
                                     i++;
                                 }
-                                break;
+                            }
 
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
-                                {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetInt32(a, d0, d1);
-                                        i++;
-                                    }
-                                }
-                                break;
-                                
-                        }
-
-                        return new NDArray(data, shape);
+                            break;
                     }
+
+                    return new NDArray(data, shape);
+                }
 
                 case TypeCode.Single:
+                {
+                    // allocate continuous memory
+                    var data = new float[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new float[size];
-                        switch (shape.Length)
-                        {
-                            case 1:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 1:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int a = 0; a < x.shape[axis]; a++)
+                                    data[i] += x.GetSingle(a, d0);
+                                i++;
+                            }
+
+                            return new NDArray(data, shape);
+
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
                                     for (int a = 0; a < x.shape[axis]; a++)
-                                        data[i] += x.GetSingle(a, d0);
+                                        data[i] += x.GetInt32(a, d0, d1);
                                     i++;
                                 }
+                            }
 
-                                return new NDArray(data, shape);
-
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
-                                {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetInt32(a, d0, d1);
-                                        i++;
-                                    }
-                                }
-
-                                return new NDArray(data, shape);
-                        }
+                            return new NDArray(data, shape);
                     }
+                }
                     break;
             }
 
@@ -139,66 +339,70 @@ namespace NumSharp.Backends
             switch (Type.GetTypeCode(x.dtype))
             {
                 case TypeCode.Int32:
+                {
+                    // allocate continuous memory
+                    var data = new int[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new int[size];
-                        switch (shape.Length)
-                        {
-                            case 1:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 1:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int a = 0; a < x.shape[axis]; a++)
+                                    data[i] += x.GetInt32(d0, a);
+                                i++;
+                            }
+
+                            break;
+
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
                                     for (int a = 0; a < x.shape[axis]; a++)
-                                        data[i] += x.GetInt32(d0, a);
+                                        data[i] += x.GetInt32(d0, a, d1);
                                     i++;
                                 }
-                                break;
+                            }
 
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
-                                {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetInt32(d0, a, d1);
-                                        i++;
-                                    }
-                                }
-                                break;
-                        }
-
-                        return new NDArray(data, shape);
+                            break;
                     }
+
+                    return new NDArray(data, shape);
+                }
 
                 case TypeCode.Single:
+                {
+                    // allocate continuous memory
+                    var data = new float[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new float[size];
-                        switch (shape.Length)
-                        {
-                            case 1:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 1:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int a = 0; a < x.shape[axis]; a++)
+                                    data[i] += x.GetSingle(d0, a);
+                                i++;
+                            }
+
+                            break;
+
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
                                     for (int a = 0; a < x.shape[axis]; a++)
-                                        data[i] += x.GetSingle(d0, a);
+                                        data[i] += x.GetSingle(d0, a, d1);
                                     i++;
                                 }
-                                break;
+                            }
 
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
-                                {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetSingle(d0, a, d1);
-                                        i++;
-                                    }
-                                }
-                                break;
-                        }
-
-                        return new NDArray(data, shape);
+                            break;
                     }
+
+                    return new NDArray(data, shape);
+                }
             }
 
             throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name} axis: {axis}");
@@ -213,53 +417,53 @@ namespace NumSharp.Backends
             switch (Type.GetTypeCode(x.dtype))
             {
                 case TypeCode.Int32:
+                {
+                    // allocate continuous memory
+                    var data = new int[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new int[size];
-                        switch (shape.Length)
-                        {
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetInt32(d0, d1, a);
-                                        i++;
-                                    }
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetInt32(d0, d1, a);
+                                    i++;
                                 }
-                                break;
-                        }
+                            }
 
-                        return new NDArray(data, shape);
+                            break;
                     }
+
+                    return new NDArray(data, shape);
+                }
 
                 case TypeCode.Single:
+                {
+                    // allocate continuous memory
+                    var data = new float[size];
+                    switch (shape.Length)
                     {
-                        // allocate continuous memory
-                        var data = new float[size];
-                        switch (shape.Length)
-                        {
-                            case 2:
-                                for (int d0 = 0; d0 < shape[0]; d0++)
+                        case 2:
+                            for (int d0 = 0; d0 < shape[0]; d0++)
+                            {
+                                for (int d1 = 0; d1 < shape[1]; d1++)
                                 {
-                                    for (int d1 = 0; d1 < shape[1]; d1++)
-                                    {
-                                        for (int a = 0; a < x.shape[axis]; a++)
-                                            data[i] += x.GetSingle(d0, d1, a);
-                                        i++;
-                                    }
+                                    for (int a = 0; a < x.shape[axis]; a++)
+                                        data[i] += x.GetSingle(d0, d1, a);
+                                    i++;
                                 }
-                                break;
-                        }
+                            }
 
-                        return new NDArray(data, shape);
+                            break;
                     }
+
+                    return new NDArray(data, shape);
+                }
             }
 
             throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name} axis: {axis}");
         }
     }
-
 }
-
