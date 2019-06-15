@@ -40,7 +40,7 @@ namespace NumSharp
         public static implicit operator NDArray(bool d)
         {
             var ndArray = new NDArray(typeof(bool), new int[0]);
-            ndArray.Storage.SetData(new bool[] { d });
+            ndArray.Storage.SetData(new bool[] {d});
 
             return ndArray;
         }
@@ -56,7 +56,7 @@ namespace NumSharp
         public static implicit operator NDArray(float d)
         {
             var ndArray = new NDArray(typeof(float), new int[0]);
-            ndArray.Storage.SetData(new float[] { d });
+            ndArray.Storage.SetData(new float[] {d});
 
             return ndArray;
         }
@@ -74,16 +74,8 @@ namespace NumSharp
 
         public static implicit operator NDArray(double d)
         {
-            var ndArray = new NDArray(typeof(double),new int[0]);
-            ndArray.Storage.SetData(new double[] { d });
-
-            return ndArray;
-        }
-
-        public static implicit operator NDArray(decimal d)
-        {
             var ndArray = new NDArray(typeof(double), new int[0]);
-            ndArray.Storage.SetData(new decimal[] { d });
+            ndArray.Storage.SetData(new double[] {d});
 
             return ndArray;
         }
@@ -99,7 +91,7 @@ namespace NumSharp
         public static implicit operator NDArray(short d)
         {
             var ndArray = new NDArray(typeof(short), new int[0]);
-            ndArray.Storage.SetData(new short[] { d });
+            ndArray.Storage.SetData(new short[] {d});
 
             return ndArray;
         }
@@ -114,8 +106,8 @@ namespace NumSharp
 
         public static implicit operator NDArray(int d)
         {
-            var ndArray = new NDArray(typeof(int),new int[0]);
-            ndArray.Storage.SetData(new int[]{d});
+            var ndArray = new NDArray(typeof(int), new int[0]);
+            ndArray.Storage.SetData(new int[] {d});
 
             return ndArray;
         }
@@ -130,8 +122,8 @@ namespace NumSharp
 
         public static implicit operator NDArray(long d)
         {
-            var ndArray = new NDArray(typeof(Int64),new int[0]);
-            ndArray.Storage.SetData(new Int64[]{d});
+            var ndArray = new NDArray(typeof(Int64), new int[0]);
+            ndArray.Storage.SetData(new Int64[] {d});
 
             return ndArray;
         }
@@ -144,10 +136,42 @@ namespace NumSharp
             return nd.Data<long>(0);
         }
 
+        public static implicit operator NDArray(ulong d)
+        {
+            var ndArray = new NDArray(typeof(UInt64), new int[0]);
+            ndArray.Storage.SetData(new UInt64[] {d});
+
+            return ndArray;
+        }
+
+        public static implicit operator ulong(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<ulong>(0);
+        }
+
+        public static implicit operator NDArray(decimal d)
+        {
+            var ndArray = new NDArray(typeof(decimal), new int[0]);
+            ndArray.Storage.SetData(new decimal[] {d});
+
+            return ndArray;
+        }
+
+        public static implicit operator decimal(NDArray nd)
+        {
+            if (nd.ndim > 0)
+                throw new IncorrectShapeException();
+
+            return nd.Data<decimal>(0);
+        }
+
         public static implicit operator NDArray(Complex d)
         {
-            var ndArray = new NDArray(typeof(Complex),new int[0]);
-            ndArray.Storage.SetData(new Complex[]{d});
+            var ndArray = new NDArray(typeof(Complex), new int[0]);
+            ndArray.Storage.SetData(new Complex[] {d});
 
             return ndArray;
         }
