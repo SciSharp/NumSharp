@@ -28,7 +28,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Type dtype = null, params int[] shapes)
         {
-            return ones(typeof(double), shapes);
+            return ones(new Shape(shapes), dtype: dtype);
         }
 
         /// <summary>
