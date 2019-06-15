@@ -9,6 +9,7 @@ namespace NumSharp
     {
         public static NDArray ones_like(NDArray nd, string order = "C")
         {
+            //todo use parameter order.
             return np.ones(new Shape(nd.shape));
         }
     }

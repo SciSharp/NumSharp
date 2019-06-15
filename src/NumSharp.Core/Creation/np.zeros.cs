@@ -7,28 +7,37 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        /// Return a new float array of given shape, filled with zeros.
+        ///     Return a new float array of given shape, filled with zeros.
         /// </summary>
-        /// <param name="np"></param>
-        /// <param name="shape"></param>
-        /// <returns></returns>
-        public static NDArray zeros(params int[] shape)
+        /// <param name="shapes">Shape of the new array,</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(params int[] shapes)
         {
-            var nd = new NDArray(float64, new Shape(shape));
-            return nd;
+            return zeros(shapes, null); //theres a fallback from null.
         }
 
-        public static NDArray zeros<T>(params int[] shape)
+        /// <summary>
+        ///     Return a new float array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shapes">Shape of the new array,</param>
+        /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros<T>(params int[] shapes)
         {
-            var nd = new NDArray(typeof(T));
-            nd.reshape(shape);
-
-            return nd;
+            return zeros(shapes, typeof(T));
         }
 
+        /// <summary>
+        ///     Return a new float array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shape">Shape of the new array,</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros(Shape shape, Type dtype = null)
         {
-            return new NDArray(dtype == null? float64 : dtype, shape);
+            return new NDArray(dtype ?? np.float64, shape);
         }
     }
 }
