@@ -9,59 +9,50 @@ namespace NumSharp
 {
     public static partial class np
     {
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shapes">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(params int[] shapes)
         {
-            Type dtype = typeof(double);
-
-            return ones(dtype,shapes);
-        }
-
-        public static NDArray ones(Type dtype = null, params int[] shapes)
-        {
-            dtype = (dtype == null ) ? typeof(double) : dtype;
-
-            return new NDArray(dtype).ones(dtype,shapes);
+            return ones(typeof(double), shapes);
         }
 
         /// <summary>
-        /// Return a new array of given shape and type, filled with ones.
+        ///     Return a new array of given shape and type, filled with ones.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="np"></param>
-        /// <param name="shape"></param>
-        /// <returns></returns>
-        public static NDArray ones(Shape shape, Type dtype = null)
+        /// <param name="shapes">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Type dtype = null, params int[] shapes)
         {
-            if(dtype == null)
-            {
-                dtype = typeof(double);
-            }
-
-            var nd = new NDArray(dtype, shape);
-
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    nd.SetData(Enumerable.Range(0, nd.size).Select(x => 1).ToArray());
-                    break;
-
-                case "Double":
-                    nd.SetData(Enumerable.Range(0, nd.size).Select(x => 1.0).ToArray());
-                    break;
-
-                case "Boolean":
-                   nd.SetData(Enumerable.Range(0, nd.size).Select(x => true).ToArray());
-                    break;
-            }
-
-            return nd;
+            return ones(typeof(double), shapes);
         }
 
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shapes">Shape of the new array.</param>
+        /// <typeparam name="T">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</typeparam>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones<T>(params int[] shapes)
         {
             return ones(new Shape(shapes), typeof(T));
         }
-    }
 
-    
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape, Type dtype = null)
+        {
+            dtype = dtype ?? typeof(double);
+            var nd = new NDArray(dtype, 0).ones(dtype, shape);
+            return nd;
+        }
+    }
 }
