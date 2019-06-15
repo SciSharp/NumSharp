@@ -142,17 +142,8 @@ namespace NumSharp
                 return false;
             }
 
-            return type.IsPrimitive && (obj is sbyte
-                                        || obj is byte
-                                        || obj is short
-                                        || obj is ushort
-                                        || obj is int
-                                        || obj is uint
-                                        || obj is long
-                                        || obj is ulong
-                                        || obj is float
-                                        || obj is double
-                                        || obj is decimal);
+            //type.IsPrimitive checks for: Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, IntPtr, UIntPtr, Char, Double, and Single.
+            return type.IsPrimitive || obj is decimal;
         }
     }
 }
