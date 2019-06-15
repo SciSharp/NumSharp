@@ -30,5 +30,4 @@ namespace NumSharp.Backends
             return nd;
         }
     }
-
 }
