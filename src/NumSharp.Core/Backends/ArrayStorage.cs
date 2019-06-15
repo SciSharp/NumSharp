@@ -29,7 +29,7 @@ namespace NumSharp.Backends
 
         protected Type _DType;
         protected Shape _Shape;
-        
+
         protected Array _ChangeTypeOfArray(Array arrayVar, Type dtype)
         {
             if (dtype == arrayVar.GetType().GetElementType()) return arrayVar;
@@ -37,52 +37,105 @@ namespace NumSharp.Backends
             _DType = dtype;
             Array newValues = null;
 
-            switch (Type.GetTypeCode(dtype)) 
+            switch (Type.GetTypeCode(dtype))
             {
-                case TypeCode.Double : 
+                case TypeCode.Double:
                 {
                     newValues = new double[arrayVar.Length];
-                    for(int idx = 0;idx < arrayVar.Length;idx++)
-                        newValues.SetValue(Convert.ToDouble(arrayVar.GetValue(idx)),idx);
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToDouble(arrayVar.GetValue(idx)), idx);
                     break;
                 }
-                case TypeCode.Single : 
+
+                case TypeCode.Single:
                 {
                     newValues = new float[arrayVar.Length];
-                    for(int idx = 0;idx < arrayVar.Length;idx++)
-                        newValues.SetValue(Convert.ToSingle(arrayVar.GetValue(idx)),idx);
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToSingle(arrayVar.GetValue(idx)), idx);
                     break;
                 }
-                case TypeCode.Decimal : 
+
+                case TypeCode.Decimal:
                 {
                     newValues = new Decimal[arrayVar.Length];
-                    for(int idx = 0;idx < arrayVar.Length;idx++)
-                        newValues.SetValue(Convert.ToDecimal(arrayVar.GetValue(idx)),idx);
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToDecimal(arrayVar.GetValue(idx)), idx);
                     break;
                 }
-                case TypeCode.Int32 : 
+
+                case TypeCode.Int32:
                 {
                     newValues = new int[arrayVar.Length];
-                    for(int idx = 0;idx < arrayVar.Length;idx++)
-                        newValues.SetValue(Convert.ToInt32(arrayVar.GetValue(idx)),idx);
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToInt32(arrayVar.GetValue(idx)), idx);
                     break;
                 }
-                case TypeCode.Int64 :
+
+                case TypeCode.UInt32:
                 {
-                    newValues = new Int64[arrayVar.Length];
-                    for(int idx = 0;idx < arrayVar.Length;idx++)
-                        newValues.SetValue(Convert.ToInt64(arrayVar.GetValue(idx)),idx);
+                    newValues = new uint[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToUInt32(arrayVar.GetValue(idx)), idx);
                     break;
                 }
-                case TypeCode.Object : 
+
+                case TypeCode.Int64:
                 {
-                    if( dtype == typeof(System.Numerics.Complex) )
+                    newValues = new long[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToInt64(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                case TypeCode.UInt64:
+                {
+                    newValues = new ulong[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToUInt64(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                case TypeCode.Int16:
+                {
+                    newValues = new short[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToInt16(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                case TypeCode.UInt16:
+                {
+                    newValues = new ushort[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToUInt16(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                case TypeCode.Byte:
+                {
+                    newValues = new byte[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToByte(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                case TypeCode.SByte:
+                {
+                    newValues = new sbyte[arrayVar.Length];
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ToSByte(arrayVar.GetValue(idx)), idx);
+                    break;
+                }
+
+                default:
+                    if (dtype == typeof(System.Numerics.Complex))
                     {
                         newValues = new System.Numerics.Complex[arrayVar.Length];
-                        for(int idx = 0;idx < arrayVar.Length;idx++)
-                            newValues.SetValue(new System.Numerics.Complex((double)arrayVar.GetValue(idx),0),idx);
+                        for (int idx = 0; idx < arrayVar.Length; idx++)
+                            newValues.SetValue(new System.Numerics.Complex((double)arrayVar.GetValue(idx), 0), idx);
                         break;
                     }
+
                     /*else if ( dtype == typeof(System.Numerics.Quaternion) )
                     {
                         newValues = new System.Numerics.Quaternion[arrayVar.Length];
@@ -90,17 +143,11 @@ namespace NumSharp.Backends
                             newValues.SetValue(new System.Numerics.Quaternion(new System.Numerics.Vector3(0,0,0) , (float)arrayVar.GetValue(idx)),idx);
                         break;
                     }*/
-                    else 
-                    {
-                        newValues = new object[arrayVar.Length];
-                        for(int idx = 0;idx < arrayVar.Length;idx++)
-                            newValues.SetValue(arrayVar.GetValue(idx),idx);
-                        break;
-                    }
-                    
-                }
-                default :
-                    newValues = arrayVar;
+
+                    //fallback
+                    newValues = Array.CreateInstance(dtype, arrayVar.Length);
+                    for (int idx = 0; idx < arrayVar.Length; idx++)
+                        newValues.SetValue(Convert.ChangeType(arrayVar.GetValue(idx), dtype), idx);
                     break;
             }
 
@@ -111,13 +158,13 @@ namespace NumSharp.Backends
         /// Data Type of stored elements
         /// </summary>
         /// <value>numpys equal dtype</value>
-        public Type DType {get {return _DType;}}
+        public Type DType => _DType;
 
         public int DTypeSize
         {
             get
             {
-                if(_DType == typeof(string))
+                if (_DType == typeof(string))
                 {
                     return 0;
                 }
@@ -127,6 +174,7 @@ namespace NumSharp.Backends
                 }
             }
         }
+
         /// <summary>
         /// storage shape for outside representation
         /// </summary>
@@ -167,6 +215,7 @@ namespace NumSharp.Backends
 
             if (dtype != null)
                 _DType = dtype;
+
             _values = Array.CreateInstance(_DType, shape.Size);
         }
 
@@ -177,14 +226,14 @@ namespace NumSharp.Backends
         public void Allocate(Array values)
         {
             int[] dim = new int[values.Rank];
-            for (int idx = 0; idx < dim.Length;idx++)
+            for (int idx = 0; idx < dim.Length; idx++)
                 dim[idx] = values.GetLength(idx);
-            
+
             _Shape = new Shape(dim);
             Type elementType = values.GetType();
             while (elementType.IsArray)
                 elementType = elementType.GetElementType();
-            
+
             _DType = elementType;
         }
 
@@ -196,8 +245,8 @@ namespace NumSharp.Backends
         public IStorage GetColumWiseStorage()
         {
             //if ( _TensorLayout != 2 )
-                //this._ChangeRowToColumnLayout();
-            
+            //this._ChangeRowToColumnLayout();
+
             return this;
         }
 
@@ -282,7 +331,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public Array CloneData()
         {
-            return (Array) _values.Clone();
+            return (Array)_values.Clone();
         }
 
         /// <summary>
@@ -296,7 +345,7 @@ namespace NumSharp.Backends
             {
                 throw new Exception($"GetData {typeof(T).Name} is not {_DType.Name} of storage.");
             }
-                
+
             return _values as T[];
         }
 
@@ -307,7 +356,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as T[]</returns>
         public T[] CloneData<T>()
         {
-            var puffer = (Array) this.GetData().Clone();
+            var puffer = (Array)this.GetData().Clone();
             puffer = _ChangeTypeOfArray(puffer, typeof(T));
 
             return puffer as T[];
@@ -334,6 +383,7 @@ namespace NumSharp.Backends
         /// <param name="values"></param>
         public void SetData(Array values)
         {
+            //if dtype doesn't match arrays type - change this dtype and attempt to cast.
             if (_DType != values.GetType().GetElementType())
             {
                 _values = _ChangeTypeOfArray(values, _DType);
@@ -409,7 +459,7 @@ namespace NumSharp.Backends
                         _values.SetValue(values, idx);
                     break;
                 case NDArray nd:
-                    switch(nd.dtype.Name)
+                    switch (nd.dtype.Name)
                     {
                         case "Boolean":
                             _values.SetValue(nd.Data<bool>(0), idx);
@@ -435,11 +485,11 @@ namespace NumSharp.Backends
                         default:
                             throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
                     }
+
                     break;
                 default:
                     throw new NotImplementedException($"SetData<T>(T value, Shape indexes)");
             }
-                
         }
 
         /// <summary>
@@ -460,7 +510,7 @@ namespace NumSharp.Backends
         public void SetData(Array values, Type dtype)
         {
             _values = _ChangeTypeOfArray(values, dtype);
-        } 
+        }
 
         public void SetNewShape(params int[] dimensions)
         {

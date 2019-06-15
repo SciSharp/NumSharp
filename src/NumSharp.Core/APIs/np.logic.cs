@@ -1,6 +1,7 @@
 ﻿using NumSharp.Backends;
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Text;
 using NumSharp.Generic;
 
@@ -103,11 +104,55 @@ namespace NumSharp
         public static NDArray<bool> isnan(NDArray a)
             => BackendFactory.GetEngine().IsNan(a);
 
-
+        /// <summary>
+        ///     True if two arrays have the same shape and elements, False otherwise.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="b">Input array.</param>
+        /// <returns>Returns True if the arrays are equal.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.array_equal.html</remarks>
         public static bool array_equal(NDArray a, NDArray b)
         {
             return a.array_equal(b);
         }
+
+        /// <summary>
+        ///     Returns true incase of a number, bool or string. If null, returns false.
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.isscalar.html</remarks>
+        public static bool isscalar(object obj)
+        {
+            switch (obj)
+            {
+                case null:
+                    return false;
+                case NDArray nd:
+                    return nd.ndim == 0 && nd.size == 1;
+                case Type _:
+                    break;
+                case Complex _:
+                case string _:
+                case bool _:
+                    return true;
+            }
+
+            var type = obj as Type ?? obj.GetType();
+            if (type.IsArray)
+            {
+                return false;
+            }
+
+            return type.IsPrimitive && (obj is sbyte
+                                        || obj is byte
+                                        || obj is short
+                                        || obj is ushort
+                                        || obj is int
+                                        || obj is uint
+                                        || obj is long
+                                        || obj is ulong
+                                        || obj is float
+                                        || obj is double
+                                        || obj is decimal);
+        }
     }
 }
-

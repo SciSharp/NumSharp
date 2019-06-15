@@ -66,7 +66,7 @@ namespace NumSharp
         /// The internal storage for elements of NDArray
         /// </summary>
         /// <value>Internal Storage</value>
-        protected IStorage Storage { get; set; }
+        internal IStorage Storage { get; set; }
 
         public ITensorEngine TensorEngine { get; set; }
 
@@ -121,17 +121,7 @@ namespace NumSharp
         // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
         public NDArray astype(Type dtype, bool copy = false)
         {
-            if (copy)
-            {
-                var result = new NDArray(dtype, Storage.Shape);
-                result.Storage.SetData(Storage.GetData(), dtype);
-                return result;
-            }
-            else
-            {
-                Storage.SetData(Storage.GetData(), dtype);
-                return this;
-            }
+            return BackendFactory.GetEngine().Cast(this, dtype, copy);
         }
 
         /// <summary>
@@ -198,7 +188,7 @@ namespace NumSharp
             var puffer = new NDArray(this.dtype);
             var shapePuffer = new Shape(this.shape);
             puffer.Storage.Allocate(shapePuffer);
-
+            
             puffer.Storage.SetData(this.Storage.CloneData());
 
             return puffer;

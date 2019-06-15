@@ -35,7 +35,7 @@ namespace NumSharp
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        Shape Shape {get;}
+        Shape Shape { get; }
 
         /// <summary>
         /// Allocate memory by dtype, shape, tensororder (default column wise)
@@ -43,11 +43,13 @@ namespace NumSharp
         /// <param name="dtype">storage data type</param>
         /// <param name="shape">storage data shape</param>
         void Allocate(Shape shape, Type dtype = null);
+
         /// <summary>
         /// Allocate memory by Array and tensororder and deduce shape and dtype (default column wise)
         /// </summary>
         /// <param name="values">elements to store</param>
         void Allocate(Array values);
+
         /// <summary>
         /// Get Back Storage with Columnwise tensor Layout
         /// By this method the layout is changed if layout is not columnwise
@@ -65,6 +67,7 @@ namespace NumSharp
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
         Array GetData();
+
         /// <summary>
         /// Clone internal storage and get reference to it
         /// </summary>

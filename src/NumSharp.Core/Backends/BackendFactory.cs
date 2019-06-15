@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace NumSharp.Backends
@@ -9,9 +10,10 @@ namespace NumSharp.Backends
         private static Dictionary<BackendType, ITensorEngine> cache
             = new Dictionary<BackendType, ITensorEngine>();
 
+        [DebuggerNonUserCode]
         public static ITensorEngine GetEngine(BackendType backendType = BackendType.SIMD)
         {
-            if(!cache.ContainsKey(backendType))
+            if (!cache.ContainsKey(backendType))
             {
                 switch (backendType)
                 {

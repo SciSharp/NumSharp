@@ -88,20 +88,21 @@ namespace NumSharp
         /// <summary>
         /// Return the product of array elements over a given axis.
         /// </summary>
-        public static NDArray prod(NDArray nd, int axis = -1, Type dtype = null)
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.1/reference/generated/numpy.prod.html</remarks>
+        public static NDArray prod(NDArray nd, int axis = -1, Type dtype = null) //todo impl a version with keepdims
             => nd.prod(axis, dtype);
 
         /// <summary>
         /// Numerical positive, element-wise.
         /// </summary>
-        /// <seealso cref="https://docs.scipy.org/doc/numpy/reference/generated/numpy.positive.html"/>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.positive.html</remarks>
         public static NDArray positive(NDArray nd)
             => nd.positive();        
         
         /// <summary>
         /// Numerical negative, element-wise.
         /// </summary>
-        /// <seealso cref="https://docs.scipy.org/doc/numpy/reference/generated/numpy.negative.html"/>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.negative.html</remarks>
         public static NDArray negative(NDArray nd)
             => nd.negative();
     }
