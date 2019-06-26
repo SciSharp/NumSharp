@@ -48,6 +48,7 @@
 
   <ItemGroup>
     <PackageReference Include="Codecov" Version="1.5.0" />
+    <PackageReference Include="FluentAssertions" Version="5.7.0" />
     <PackageReference Include="Microsoft.CSharp" Version="4.5.0" />
     <PackageReference Include="OpenCover" Version="4.7.922" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
