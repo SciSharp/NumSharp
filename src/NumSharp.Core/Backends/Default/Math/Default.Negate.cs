@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public virtual NDArray Negate(NDArray x)
         {

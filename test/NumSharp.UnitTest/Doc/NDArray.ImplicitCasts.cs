@@ -8,11 +8,11 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class DocTest
     {
-        [TestMethod]
+        [TestMethod] //todo! Remove add asserts
         public void Dump()
         {
             var nd = new NDArray(typeof(double), new Shape(3, 3));
-            nd.SetData(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+            nd.ReplaceData(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         }
     }
 }

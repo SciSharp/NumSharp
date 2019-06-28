@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using NumSharp.Shared;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -11,21 +12,20 @@ namespace NumSharp
     {
         public NDArray inv()
         {
-            var npInv = new NDArray(this.Storage.DType,this.shape);
+            var npInv = new NDArray(this.Storage.DType, this.shape);
 
             Array matrixStorage = this.Storage.GetData();
-            Array invStorage = Array.CreateInstance(npInv.Storage.DType,matrixStorage.Length);
+            Array invStorage = Arrays.Create(npInv.Storage.DType, matrixStorage.Length);
 
             switch (matrixStorage)
             {
-                case double[] np :
+                case double[] np:
                 {
-                    
                     double[][] matrix = new double[this.Storage.Shape.Dimensions[0]][];
-                    for (int idx = 0; idx < matrix.Length;idx++)
+                    for (int idx = 0; idx < matrix.Length; idx++)
                     {
                         matrix[idx] = new double[this.Storage.Shape.Dimensions[1]];
-                        for (int jdx = 0; jdx < matrix[idx].Length;jdx++)
+                        for (int jdx = 0; jdx < matrix[idx].Length; jdx++)
                             matrix[idx][jdx] = np[this.Storage.Shape.GetIndexInShape(slice, idx, jdx)];
                     }
 
@@ -39,17 +39,18 @@ namespace NumSharp
                             invArray[this.Storage.Shape.GetIndexInShape(slice, idx, jdx)] = matrixInv[idx][jdx];
                         }
                     }
-                        
+
                     break;
                 }
-                default : 
+
+                default:
                 {
                     throw new IncorrectTypeException();
                 }
             }
 
-            npInv.Storage.SetData(invStorage);
-            
+            npInv.Storage.ReplaceData(invStorage);
+
             return npInv;
         }
     }

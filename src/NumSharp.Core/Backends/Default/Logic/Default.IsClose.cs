@@ -6,7 +6,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
@@ -50,7 +50,7 @@ namespace NumSharp.Backends
             if (a.size > b.size)
                 throw new ArgumentException("Array a must not be larger in size than array b");
             var result = new NDArray<bool>(a.shape);
-            var rdata = result.Array as bool[];
+            bool[] rdata = result.Array;
             if (a.dtype == np.uint8 || a.dtype == np.int16 || a.dtype == np.int32 || a.dtype == np.int64 && b.dtype == typeof(double) || b.dtype == typeof(float))
             {
                 //  convert both to double and compare

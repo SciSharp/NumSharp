@@ -5,7 +5,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         /// <summary>
         /// Test whether all array elements evaluate to True.

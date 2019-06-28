@@ -154,7 +154,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(99, (int)view[9]);
             view[1] = 11;
             Assert.AreEqual(11, (int)data[1]);
-            data.SetData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
+            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
             Assert.AreEqual(-1, (int)data[1]);
             Assert.AreEqual(-1, (int)view[1]);
         }
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 5, 6 }, view3.Data<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.SetData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
+            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.Data<int>());
             AssertAreEqual(new int[] { -5, -6, -7, -8, }, view2.Data<int>());
             AssertAreEqual(new int[] { -5, -6 }, view3.Data<int>());
@@ -212,7 +212,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 2, 8 }, view3.Data<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.SetData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
+            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.Data<int>());
             AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.Data<int>());
             AssertAreEqual(new int[] { -2, -8 }, view3.Data<int>());
@@ -362,7 +362,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 2, 8, 2, 8 }, view3.Data<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.SetData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
+            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, -1, -2, -3, -4, -5, -6, -7, -8 }, view1.Data<int>());
             AssertAreEqual(new int[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.Data<int>());
             AssertAreEqual(new int[] { -2, -8, -2, -8 }, view3.Data<int>());

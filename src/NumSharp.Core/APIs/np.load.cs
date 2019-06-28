@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.IO.Compression;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -34,7 +35,7 @@ namespace NumSharp
                 if (!parseReader(reader, out bytes, out type, out shape))
                     throw new FormatException();
 
-                Array array = Array.CreateInstance(type, shape.Aggregate((dims, dim) => dims*dim));
+                Array array = Arrays.Create(type, shape.Aggregate((dims, dim) => dims*dim));
 
                 var result = new NDArray(readValueMatrix(reader, array, bytes, type, shape));
                 return result.reshape(shape);
@@ -167,7 +168,7 @@ IList, ICollection, IEnumerable
         if (!parseReader(reader, out bytes, out type, out shape))
           throw new FormatException();
 
-        Array matrix = Array.CreateInstance(type, shape);
+        Array matrix = Arrays.Create(type, shape);
 
         if (type == typeof(String))
           return readStringMatrix(reader, matrix, bytes, type, shape);
@@ -190,7 +191,7 @@ IList, ICollection, IEnumerable
         if (!parseReader(reader, out bytes, out type, out shape))
           throw new FormatException();
 
-        Array matrix = Array.CreateInstance(type, shape);
+        Array matrix = Arrays.Create(type, shape);
 
         if (type == typeof(String))
         {

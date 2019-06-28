@@ -28,10 +28,10 @@ namespace NumSharp.UnitTest.Operations
         public void BoolTwo2D_NDArrayAND()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));
-            np1.SetData(new bool[] { true, true, false, false, true, false });
+            np1.ReplaceData(new bool[] { true, true, false, false, true, false });
 
             var np2 = new NDArray(typeof(bool), new Shape(2, 3));
-            np2.SetData(new bool[] { true, false, true, false, true, true });
+            np2.ReplaceData(new bool[] { true, false, true, false, true, true });
             
             var np3 = np1 & np2;
 

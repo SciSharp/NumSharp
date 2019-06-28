@@ -5,7 +5,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         /// <summary>
         /// Returns True if two arrays are element-wise equal within a tolerance.

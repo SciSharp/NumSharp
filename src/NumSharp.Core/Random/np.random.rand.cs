@@ -28,7 +28,7 @@ namespace NumSharp
                 numArray[index] = randomizer.NextDouble();
             }
 
-            ndArray.SetData<double[]>(numArray);
+            ndArray.ReplaceData(numArray);
             return ndArray;
         }
 

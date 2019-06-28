@@ -45,8 +45,8 @@ namespace NumSharp
             for (int idx = 0; idx < uNDArr.size;idx++)
                 uDouble[idx] = u[idx];
 
-            vtNDArr.Storage.SetData(vt);
-            sNDArr.Storage.SetData(s);
+            vtNDArr.Storage.ReplaceData(vt);
+            sNDArr.Storage.ReplaceData(s);
 
             return (uNDArr,sNDArr,vtNDArr);
         }

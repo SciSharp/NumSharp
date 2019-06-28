@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Linq;
 using System.Text;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -71,7 +72,7 @@ namespace NumSharp
         {
             shift = (-1) * shift;
 
-            Array cpy = Array.CreateInstance(this.dtype, this.size);
+            Array cpy = Arrays.Create(this.dtype, this.size);
 
             shift = ((shift % this.size) < 0) ? shift + this.size : shift;
 
@@ -88,7 +89,7 @@ namespace NumSharp
 
             returnValue.Storage.Allocate(new Shape(this.shape));
 
-            returnValue.Storage.SetData(cpy);
+            returnValue.Storage.ReplaceData(cpy);
 
             return returnValue;
         }

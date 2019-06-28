@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.Maths
         public void PositiveAllNegatives()
         {
             var nd = new NDArray(np.float32, 3);
-            nd.SetData(new float[] {1, -2, 3.3f});
+            nd.ReplaceData(new float[] {1, -2, 3.3f});
             nd = np.positive(nd);
             Assert.IsTrue(nd.Data<float>().All(v => v >= 0));
         }

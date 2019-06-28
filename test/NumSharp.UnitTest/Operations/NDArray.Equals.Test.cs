@@ -46,10 +46,10 @@ namespace NumSharp.UnitTest.Operations
         public void IntTwo2D_NDArrayEquals()
         {
             var np1 = new NDArray(typeof(int), new Shape(2, 3));
-            np1.SetData(new[] { 1, 2, 3, 4, 5, 6 });
+            np1.ReplaceData(new[] { 1, 2, 3, 4, 5, 6 });
 
             var np2 = new NDArray(typeof(int), new Shape(2, 3));
-            np2.SetData(new[] { 1, 2, 3, 4, 5, 6 });
+            np2.ReplaceData(new[] { 1, 2, 3, 4, 5, 6 });
 
             var np3 = np1 == np2;
 
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.Operations
 
 
             var np5 = new NDArray(typeof(int), new Shape(2, 3));
-            np5.SetData(new[] { 0, 0, 0, 0, 0, 0 });
+            np5.ReplaceData(new[] { 0, 0, 0, 0, 0, 0 });
 
             var np6 = np1 == np5;
             // expected
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Operations
         public void IntAnd2D_NDArrayEquals()
         {
             var np1 = new NDArray(typeof(int), new Shape(2, 3));
-            np1.SetData(new[] { 1, 2, 3, 4, 5, 6 });
+            np1.ReplaceData(new[] { 1, 2, 3, 4, 5, 6 });
 
             var np2 = np1 == 2;
 

@@ -6,16 +6,12 @@ namespace NumSharp.Backends
     /// <summary>
     ///     Represents all available types in numpy.
     /// </summary>
-    /// <remarks>The values are a copy of <see cref="TypeCode"/> excluding types not available in numpy.</remarks>
+    /// <remarks>The int values of the enum are a copy of <see cref="TypeCode"/> excluding types not available in numpy.</remarks>
     public enum NPTypeCode
     {
         /// <summary>A null reference.</summary>
         /// <returns></returns>
         Empty = 0,
-
-        /// <summary>A general type representing any reference or value type not explicitly represented by another TypeCode.</summary>
-        /// <returns></returns>
-        Object = 1,
 
         /// <summary>A simple type representing Boolean values of true or false.</summary>
         /// <returns></returns>
@@ -76,23 +72,36 @@ namespace NumSharp.Backends
 
     public static class NPTypeCodeExtensions
     {
+        /// <summary>
+        ///     Returns true if typecode is a number (incl. <see cref="bool"/>, <see cref="char"/> and <see cref="Complex"/>).
+        /// </summary>
+        public static bool IsNumerical(this NPTypeCode typeCode)
+        {
+            var val = (int)typeCode;
+            return val >= 3 && val <= 15 || val == 129;
+        }
 
         /// <summary>
         ///     Extracts <see cref="NPTypeCode"/> from given <see cref="Type"/>.
         /// </summary>
+        /// <remarks>In case there was no successful cast to <see cref="NPTypeCode"/>, return will be <see cref="NPTypeCode.Empty"/></remarks>
         public static NPTypeCode GetTypeCode(this Type type)
         {
+            // ReSharper disable once PossibleNullReferenceException
+            while (type.IsArray)
+                type = type.GetElementType();
+
             var tc = Type.GetTypeCode(type);
             if (tc == TypeCode.Object)
             {
                 if (type == typeof(NDArray))
                 {
-                    return NPTypeCode.Complex;
+                    return NPTypeCode.NDArray;
                 }
 
                 if (type == typeof(Complex))
                 {
-                    return NPTypeCode.NDArray;
+                    return NPTypeCode.Complex;
                 }
 
                 return NPTypeCode.Empty;
@@ -100,11 +109,57 @@ namespace NumSharp.Backends
 
             try
             {
-                return (NPTypeCode) (int) tc;
+                return (NPTypeCode)(int)tc;
             }
             catch (InvalidCastException)
             {
                 return NPTypeCode.Empty;
+            }
+        }
+
+        /// <summary>
+        ///     Convert <see cref="NPTypeCode"/> into its <see cref="Type"/>
+        /// </summary>
+        /// <param name="typeCode"></param>
+        /// <returns></returns>
+        public static Type AsType(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Empty:
+                    return null;
+                case NPTypeCode.Boolean:
+                    return typeof(Boolean);
+                case NPTypeCode.Char:
+                    return typeof(Char);
+                case NPTypeCode.Byte:
+                    return typeof(Byte);
+                case NPTypeCode.Int16:
+                    return typeof(Int16);
+                case NPTypeCode.UInt16:
+                    return typeof(UInt16);
+                case NPTypeCode.Int32:
+                    return typeof(Int32);
+                case NPTypeCode.UInt32:
+                    return typeof(UInt32);
+                case NPTypeCode.Int64:
+                    return typeof(Int64);
+                case NPTypeCode.UInt64:
+                    return typeof(UInt64);
+                case NPTypeCode.Single:
+                    return typeof(Single);
+                case NPTypeCode.Double:
+                    return typeof(Double);
+                case NPTypeCode.Decimal:
+                    return typeof(Decimal);
+                case NPTypeCode.String:
+                    return typeof(String);
+                case NPTypeCode.NDArray:
+                    return typeof(NDArray);
+                case NPTypeCode.Complex:
+                    return typeof(Complex);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
             }
         }
 

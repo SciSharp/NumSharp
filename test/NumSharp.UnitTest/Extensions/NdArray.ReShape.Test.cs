@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp;
+using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Extensions
 {
@@ -51,38 +52,37 @@ namespace NumSharp.UnitTest.Extensions
         /// It simply means that it is an unknown dimension and we want numpy to figure it out. 
         /// And numpy will figure this by looking at the 'length of the array and remaining dimensions' and making sure it satisfies the above mentioned criteria
         /// </summary>
-        [Ignore]
         [TestMethod]
         public void ReshapeNegative()
         {
-            var np = new NDArray(typeof(int),12).MakeGeneric<int>();
-            np.arange(12);
-            np.reshape(-1, 2);
-            Assert.IsTrue(np.shape[0] == 6);
-            Assert.IsTrue(np.shape[1] == 2);
+            NDArray<int> nd;
+            nd = np.arange(12).MakeGeneric<int>();
+            nd.reshape(-1, 2);
+            Assert.IsTrue(nd.shape[0] == 6);
+            Assert.IsTrue(nd.shape[1] == 2);
 
-            np.arange(12);
-            np.reshape(2, -1);
-            Assert.IsTrue(np.shape[0] == 2);
-            Assert.IsTrue(np.shape[1] == 6);
+            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd.reshape(2, -1);
+            Assert.IsTrue(nd.shape[0] == 2);
+            Assert.IsTrue(nd.shape[1] == 6);
 
-            np.arange(12);
-            np.reshape(1, 3, 4);
-            np.reshape(-1, 3);
-            Assert.IsTrue(np.shape[0] == 4);
-            Assert.IsTrue(np.shape[1] == 3);
+            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd.reshape(1, 3, 4);
+            nd.reshape(-1, 3);
+            Assert.IsTrue(nd.shape[0] == 4);
+            Assert.IsTrue(nd.shape[1] == 3);
 
-            np.arange(12);
-            np.reshape(1, 3, 4);
-            np.reshape(3, -1);
-            Assert.IsTrue(np.shape[0] == 3);
-            Assert.IsTrue(np.shape[1] == 4);
+            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd.reshape(1, 3, 4);
+            nd.reshape(3, -1);
+            Assert.IsTrue(nd.shape[0] == 3);
+            Assert.IsTrue(nd.shape[1] == 4);
 
-            np.arange(100 * 100 * 3);
-            np.reshape(100, 100, 3);
-            np.reshape(-1, 3);
-            Assert.IsTrue(np.shape[0] == 10000);
-            Assert.IsTrue(np.shape[1] == 3);
+            nd = np.arange(100 * 100 * 3).MakeGeneric<int>(); ;
+            nd.reshape(100, 100, 3);
+            nd.reshape(-1, 3);
+            Assert.IsTrue(nd.shape[0] == 10000);
+            Assert.IsTrue(nd.shape[1] == 3);
 
             /*np.arange(15801033);
             np.reshape(2531, 2081, 3);

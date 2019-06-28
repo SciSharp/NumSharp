@@ -52,7 +52,7 @@ namespace NumSharp
             
             var slnArr = new NDArray(typeof(double),new Shape(n,nrhs));
 
-            slnArr.Storage.SetData(sln);
+            slnArr.Storage.ReplaceData(sln);
 
             return slnArr;
 

@@ -9,28 +9,28 @@ namespace NumSharp
         public static NDArray asanyarray(string data)
         {
             var nd = new NDArray(typeof(string), new int[0]);
-            nd.SetData(new string[] { data });
+            nd.ReplaceData(new string[] { data });
             return nd;
         }
 
         public static NDArray asanyarray<T>(T data) where T : struct
         {
             var nd = new NDArray(typeof(T), new int[0]);
-            nd.SetData(new T[] { data });
+            nd.ReplaceData(new T[] { data });
             return nd;
         }
 
         public static NDArray asanyarray(string[] data, int ndim = 1)
         {
             var nd = new NDArray(typeof(string), data.Length);
-            nd.SetData(data);
+            nd.ReplaceData(data);
             return nd;
         }
 
         public static NDArray asanyarray<T>(T[] data, int ndim = 1) where T : struct
         {
             var nd = new NDArray(typeof(T), data.Length);
-            nd.SetData(data);
+            nd.ReplaceData(data);
             return nd;
         }
     }

@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.Maths
         public void DoubleSqrtTest()
         {
             var nd = new NDArray(np.float64,3);
-            nd.SetData(new double[] { 1, 4, 9 });
+            nd.ReplaceData(new double[] { 1, 4, 9 });
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Data<double>(), new double[] { 1, 2, 3 }));
         }
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.Maths
         public void ComplexSqrtTest()
         {
             var np = new NDArray(typeof(Complex),3);
-            np.Storage.SetData(new Complex[] {
+            np.Storage.ReplaceData(new Complex[] {
                 new Complex(4, 0),
                 new Complex(-1, 0),
                 new Complex(-3, 4)

@@ -7,7 +7,7 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         // TODO: create an overload because np.power also allows to pass an array of exponents for every entry in the array
 

@@ -24,7 +24,7 @@ namespace NumSharp
                 list.AddRange(ele.Storage.GetData<T>());
             }
 
-            np.Storage.SetData(list.ToArray());
+            np.Storage.ReplaceData(list.ToArray());
             
             if (nps[0].ndim == 1)
             {

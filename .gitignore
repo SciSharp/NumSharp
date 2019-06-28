@@ -352,3 +352,4 @@ src/NumSharp.Python/Ironpython/DLLs/IronPython.SQLite.dll
 src/NumSharp.Python/NumSharpPy/NumSharp.dll
 docfx_project/src
 /coverage.xml
+test/NumSharp.Benchmark/LocalBenches.cs

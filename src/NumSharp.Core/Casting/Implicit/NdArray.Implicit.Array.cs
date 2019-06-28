@@ -37,9 +37,10 @@ namespace NumSharp
         /// <param name="array"></param>
         public static implicit operator NDArray(Array array)
         {
-            bool isArray = array.GetType().GetElementType().IsArray;
+            // ReSharper disable once PossibleNullReferenceException
+            bool isJaggedArray = array.GetType().GetElementType().IsArray;
 
-            if (isArray)
+            if (isJaggedArray)
             {
                 var type = array.GetType().GetElementType();
 
@@ -102,8 +103,9 @@ namespace NumSharp
             throw new NotImplementedException("implicit operator NDArray(Array array)");
         }
 
-        public static implicit operator Array(NDArray nd)
+        public static explicit operator Array(NDArray nd)
         {
+            //todo! cache generic invocation.
             var methods = nd.GetType().GetMethods().Where(x => x.Name.Equals("ToMuliDimArray") && x.IsGenericMethod && x.ReturnType.Name.Equals("Array"));
             var genMethods = methods.First().MakeGenericMethod(nd.dtype);
 
@@ -165,7 +167,7 @@ namespace NumSharp
             else
             {
                 var nd = new NDArray(typeof(string), new int[0]);
-                nd.Storage.SetData(new string[] { str });
+                nd.Storage.ReplaceData((Array) new string[] { str });
 
                 return nd;
             }

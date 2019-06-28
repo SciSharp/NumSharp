@@ -17,7 +17,7 @@ using NumSharp.Shared;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public virtual NDArray Sum(NDArray x, int? axis = null)
         {

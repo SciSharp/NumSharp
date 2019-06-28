@@ -12,9 +12,9 @@ namespace NumSharp
             var random = new Random();
             int[] orders = new int[max];
 
-            var np = new NDArray(typeof(int)).arange(max);
+            var nd = np.arange(max);
 
-            int[] npData = np.Data<int>();
+            int[] npData = nd.Data<int>();
 
             for(int i = 0; i < max; i++)
             {
@@ -24,7 +24,7 @@ namespace NumSharp
                 npData[pos] = zero;
             }
             
-            return np;
+            return nd;
         }
     }
 }

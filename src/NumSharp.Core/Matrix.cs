@@ -7,7 +7,7 @@ namespace NumSharp
     {
         public matrix(NDArray data) : base(data.dtype)
         {
-            Storage.SetData(data.Array);
+            Storage.ReplaceData(data.Array);
             Storage.Reshape(data.shape);
         }
 

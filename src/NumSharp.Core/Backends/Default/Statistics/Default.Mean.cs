@@ -7,7 +7,7 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public NDArray Mean(NDArray x, int axis = -1)
         {
@@ -34,7 +34,7 @@ namespace NumSharp.Backends
                         throw new NotImplementedException($"mean {x.dtype.Name}");
                 }
 
-                mean.SetData(new double[] { sum / x.size });
+                mean.ReplaceData(new double[] { sum / x.size });
             }
             // to compute mean by compressing row and row
             else if (axis == 0)
@@ -54,7 +54,7 @@ namespace NumSharp.Backends
                 {
                     puffer.Add(sumVec[d] / x.shape[0]);
                 }
-                mean.SetData(puffer.ToArray());
+                mean.ReplaceData(puffer.ToArray());
 
                 mean.reshape(mean.Array.Length);
             }
@@ -73,7 +73,7 @@ namespace NumSharp.Backends
                     puffer.Add(rowSum / x.shape[1]);
                 }
 
-                mean.SetData(puffer.ToArray());
+                mean.ReplaceData(puffer.ToArray());
 
                 mean.reshape(mean.Array.Length);
             }

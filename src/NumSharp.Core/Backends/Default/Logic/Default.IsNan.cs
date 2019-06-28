@@ -6,7 +6,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         /// <summary>
         /// Test element-wise for Not a Number.
@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         {
             var result = new NDArray<bool>(a.shape);
             var data = a.Array;
-            var res = result.Array as bool[];
+            bool[] res = result.Array;
 
             switch (data)
             {

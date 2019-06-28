@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(y[1, 2], 5);
         }
 
-        [TestMethod]
+        [TestMethod, Ignore("No actual asserts inside")] //todo!
         public void Transpose10x10()
         {
             var array = new NDArray(np.int32, new Shape(10, 10));

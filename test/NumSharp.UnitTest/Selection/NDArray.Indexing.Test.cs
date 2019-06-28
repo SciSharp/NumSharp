@@ -472,6 +472,7 @@ namespace NumSharp.UnitTest.Selection
             //
             //       [[ 8,  9],
             //        [10, 11]]])
+
             var x = np.arange(12).reshape(3, 2, 2);
             var y1 = x["1:"];
             Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));

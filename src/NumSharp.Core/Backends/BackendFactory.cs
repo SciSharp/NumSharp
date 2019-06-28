@@ -11,38 +11,25 @@ namespace NumSharp.Backends
             = new Dictionary<BackendType, ITensorEngine>();
 
         [DebuggerNonUserCode]
-        public static ITensorEngine GetEngine(BackendType backendType = BackendType.SIMD)
+        public static ITensorEngine GetEngine(BackendType backendType = BackendType.Default)
         {
             if (!cache.ContainsKey(backendType))
             {
                 switch (backendType)
                 {
+                    case BackendType.Default:
+                        return cache[backendType] = new DefaultEngine();
                     case BackendType.MKL:
                     case BackendType.SIMD:
-                        cache[backendType] = new SimdEngine();
-                        break;
+                        return cache[backendType] = new SimdEngine();
                     case BackendType.ArrayFire:
-                        cache[backendType] = new ArrayFireEngine();
-                        break;
+                        return cache[backendType] = new ArrayFireEngine();
                     default:
                         throw new NotImplementedException($"Storage {backendType} not found.");
                 }
             }
 
             return cache[backendType];
-        }
-
-        public static IStorage GetStorage(Type dtype, StorageType storage = StorageType.TypedArray)
-        {
-            switch (storage)
-            {
-                case StorageType.Array:
-                    return new ArrayStorage(dtype);
-                case StorageType.TypedArray:
-                    return new TypedArrayStorage(dtype);
-                default:
-                    return new TypedArrayStorage(dtype);
-            }
         }
     }
 }

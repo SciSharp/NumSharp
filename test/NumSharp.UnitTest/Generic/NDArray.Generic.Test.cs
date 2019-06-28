@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Generic
         public void Generic2DBool_NDArrayOR()
         {
             var np1 = new NDArray<bool>(new Shape(2, 3));
-            np1.SetData(new bool[] { true, true, false, false, true, false });
+            np1.ReplaceData(new bool[] { true, true, false, false, true, false });
             Assert.IsTrue(Enumerable.SequenceEqual(new[] { true, true, false, false, true, false }, np1.Data<bool>()));
             Assert.AreEqual(6, np1.size);
             Assert.AreEqual(2, np1.ndim);
