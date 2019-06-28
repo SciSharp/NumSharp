@@ -7,7 +7,7 @@ using NumSharp.Extensions;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public NDArray ArgMax(NDArray nd, int axis = -1)
         {

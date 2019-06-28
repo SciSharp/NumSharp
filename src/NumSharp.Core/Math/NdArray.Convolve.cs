@@ -19,7 +19,7 @@ namespace NumSharp
         /// <param name="numSharpArray2"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public NDArray convolve(NDArray numSharpArray2, string mode = "full" )
+        public NDArray convolve(NDArray numSharpArray2, string mode = "full")
         {
             int nf = this.shape[0];
             int ng = numSharpArray2.shape[0];
@@ -36,7 +36,7 @@ namespace NumSharp
             {
                 case "full":
                 {
-                    int n  = nf + ng - 1;
+                    int n = nf + ng - 1;
 
                     var outArray = new double[n];
 
@@ -45,44 +45,46 @@ namespace NumSharp
                         int jmn = (idx >= ng - 1) ? (idx - (ng - 1)) : 0;
                         int jmx = (idx < nf - 1) ? idx : nf - 1;
 
-                        for (int jdx = jmn; jdx <= jmx; ++jdx )
+                        for (int jdx = jmn; jdx <= jmx; ++jdx)
                         {
-                            outArray[idx] += ( np1[jdx] * np2[idx - jdx] );
+                            outArray[idx] += (np1[jdx] * np2[idx - jdx]);
                         }
                     }
 
-                    numSharpReturn.Storage = new ArrayStorage(numSharpReturn.dtype);
+                    numSharpReturn.Storage = numSharpReturn.TensorEngine.GetStorage(numSharpReturn.dtype);
                     numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
-                    numSharpReturn.Storage.SetData(outArray);
+                    numSharpReturn.Storage.ReplaceData(outArray);
 
                     break;
                 }
+
                 case "valid":
                 {
                     var min_v = (nf < ng) ? np1 : np2;
                     var max_v = (nf < ng) ? np2 : np1;
-            
-                    int n  = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
-                
+
+                    int n = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
+
                     double[] outArray = new double[n];
-  
-                    for(int idx = 0; idx < n; ++idx) 
+
+                    for (int idx = 0; idx < n; ++idx)
                     {
-                        int kdx = idx; 
-                    
-                        for(int jdx = (min_v.Length - 1); jdx >= 0; --jdx) 
+                        int kdx = idx;
+
+                        for (int jdx = (min_v.Length - 1); jdx >= 0; --jdx)
                         {
                             outArray[idx] += min_v[jdx] * max_v[kdx];
                             ++kdx;
                         }
                     }
 
-                    numSharpReturn.Storage = new ArrayStorage(numSharpReturn.dtype);
+                    numSharpReturn.Storage = numSharpReturn.TensorEngine.GetStorage(numSharpReturn.dtype);
                     numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
-                    numSharpReturn.Storage.SetData(outArray);
-                    
+                    numSharpReturn.Storage.ReplaceData(outArray);
+
                     break;
                 }
+
                 case "same":
                 {
                     // followed the discussion on 
@@ -94,39 +96,38 @@ namespace NumSharp
 
                     if (npad % 2 == 1)
                     {
-                        npad = (int) Math.Floor(((double)npad) / 2.0);
+                        npad = (int)Math.Floor(((double)npad) / 2.0);
 
-                        np1New = (double[]) np1.Clone();
-                    
-                        np1New.ToList().AddRange(new double[npad+1]);
+                        np1New = (double[])np1.Clone();
+
+                        np1New.ToList().AddRange(new double[npad + 1]);
                         var puffer = (new double[npad]).ToList();
                         puffer.AddRange(np1New);
-                        np1New = puffer.ToArray(); 
+                        np1New = puffer.ToArray();
                     }
-                    else 
+                    else
                     {
                         npad = npad / 2;
 
-                        np1New = (double[]) np1.Clone();
-                    
-                        var puffer = np1New.ToList(); 
+                        np1New = (double[])np1.Clone();
+
+                        var puffer = np1New.ToList();
                         puffer.AddRange(new double[npad]);
                         np1New = puffer.ToArray();
-                    
+
                         puffer = (new double[npad]).ToList();
                         puffer.AddRange(np1New);
                         np1New = puffer.ToArray();
                     }
 
-                    var numSharpNew = np.array(np1New,dtype);
+                    var numSharpNew = np.array(np1New, dtype);
 
-                    numSharpReturn = numSharpNew.convolve(numSharpArray2,"valid");
+                    numSharpReturn = numSharpNew.convolve(numSharpArray2, "valid");
                     break;
                 }
-
             }
 
             return numSharpReturn;
         }
     }
-  }
+}

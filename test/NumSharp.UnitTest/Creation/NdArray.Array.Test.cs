@@ -71,7 +71,7 @@ namespace NumSharp.UnitTest.Creation
             image.UnlockBits(bmpd);
 
             imageArray.Storage.Allocate(typeof(byte),new Shape(bmpd.Height, bmpd.Width, System.Drawing.Image.GetPixelFormatSize(image.PixelFormat) / 8),1);
-            imageArray.Storage.SetData(bytes);
+            imageArray.Storage.ReplaceData(bytes);
 
             return imageArray;
         }*/
@@ -119,7 +119,7 @@ namespace NumSharp.UnitTest.Creation
             var nd = np.arange(9.0).reshape(3, 3).MakeGeneric<double>();
 
             var random = new Random();
-            nd.SetData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
+            nd.ReplaceData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             nd[1, 0] = 1.0;
             nd[0, 0] = 9.0;
             nd[2, 2] = 7.0;
@@ -134,10 +134,10 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void CheckVectorString()
         {
-            var np = new NDArray(typeof(double)).arange(9).MakeGeneric<double>();
+            var np = NumSharp.np.arange(9).MakeGeneric<double>();
 
             var random = new Random();
-            np.SetData(np.Data<double>().Select(x => x + random.NextDouble()).ToArray());
+            np.ReplaceData(np.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             np[1] = 1;
             np[2] -= 4;
             np[3] -= 20;
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToDotNetArray1D()
         {
-            var np1 = new NDArray(typeof(double)).arange(9).MakeGeneric<double>();
+            var np1 = np.arange(9).MakeGeneric<double>();
 
             double[] np1_ = (double[])np1.ToMuliDimArray<double>();
 
@@ -158,7 +158,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToDotNetArray2D()
         {
-            var np1 = new NDArray(typeof(double)).arange(9).reshape(3, 3).MakeGeneric<double>();
+            var np1 = np.arange(9).reshape(3, 3).MakeGeneric<double>();
             double[][] np1_ = (double[][])np1.ToJaggedArray<double>();
 
             for (int idx = 0; idx < 3; idx++)
@@ -173,7 +173,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToDotNetArray3D()
         {
-            var np1 = new NDArray(typeof(double)).arange(27).reshape(3, 3, 3);
+            var np1 = np.arange(27).astype(np.float64).reshape(3, 3, 3);
 
             double[][][] np1_ = (double[][][])np1.ToJaggedArray<double>();
 

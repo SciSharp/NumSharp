@@ -59,7 +59,7 @@ namespace NumSharp
                 arr[i] = randNormal;
             }
 
-            array.SetData(arr);
+            array.ReplaceData(arr);
 
             return array;
         }

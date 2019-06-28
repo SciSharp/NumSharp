@@ -9,13 +9,13 @@ namespace NumSharp
     public partial class NDArray
     {
         
-        public static NDArray<bool> operator &(NDArray np_, NDArray obj_)
+        public static NDArray<bool> operator &(NDArray lhs, NDArray rhs)
         {
-            var boolTensor = new NDArray(typeof(bool),np_.shape);
+            var boolTensor = new NDArray(typeof(bool),lhs.shape);
             bool[] bools = boolTensor.Storage.GetData<bool>();
 
-            bool[] np = np_.Storage.GetData<bool>();
-            bool[] obj = obj_.Storage.GetData<bool>();
+            bool[] np = lhs.Storage.GetData<bool>();
+            bool[] obj = rhs.Storage.GetData<bool>();
 
              for(int i = 0;i < bools.Length;i++)
                 bools[i] = np[i] && obj[i];
@@ -23,17 +23,18 @@ namespace NumSharp
             return boolTensor.MakeGeneric<bool>();
         }
 
-        public static NDArray<byte> operator &(NDArray np_, byte value)
+        public static NDArray<byte> operator &(NDArray lhs, byte rhs)
         {
-            var byteTensor = new NDArray(typeof(byte), np_.shape);
-            byte[] bytes = byteTensor.Storage.GetData<byte>();
 
-            byte[] np = np_.Storage.GetData<byte>();
+            var result = new NDArray(typeof(byte), lhs.shape);
+            byte[] resultBytes = result.Storage.GetData<byte>();
 
-            for (int i = 0; i < bytes.Length; i++)
-                bytes[i] = (byte)(np[i] & value);
+            byte[] lhsValues = lhs.Storage.GetData<byte>();
 
-            return byteTensor.MakeGeneric<byte>();
+            for (int i = 0; i < resultBytes.Length; i++)
+                resultBytes[i] = (byte)(lhsValues[i] & rhs);
+
+            return result.MakeGeneric<byte>();
         }
 
     }

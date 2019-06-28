@@ -16,6 +16,10 @@ namespace NumSharp
     {
        Save(arr, filepath);
     }
+    public static void save(string filepath, NDArray arr)
+    {
+       Save((Array)arr, filepath);
+    }
 
     public static byte[] Save(Array array)
     {

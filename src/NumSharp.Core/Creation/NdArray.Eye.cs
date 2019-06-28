@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -23,7 +24,7 @@ namespace NumSharp
                 puffer = new NDArray(this.dtype,this.shape);
             }
 
-            puffer.Storage.SetData(Array.CreateInstance(dtype,puffer.size));
+            puffer.Storage.ReplaceData(Arrays.Create(dtype,puffer.size));
 
             if (diagonalIndex >= 0)
             {

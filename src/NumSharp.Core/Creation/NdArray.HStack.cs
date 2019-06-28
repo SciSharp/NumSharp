@@ -65,7 +65,7 @@ namespace NumSharp
                     shapes[1] = npAll.Sum(x => x.shape[1]);
 
                 nd.Storage.Allocate(new Shape(shapes));
-                nd.Storage.SetData(list.ToArray());
+                nd.Storage.ReplaceData(list.ToArray());
             }
 
             return nd;

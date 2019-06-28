@@ -14,7 +14,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros(params int[] shapes)
         {
-            return zeros(shapes, null); //theres a fallback from null.
+            return zeros(shapes, null);
         }
 
         /// <summary>
@@ -37,7 +37,14 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros(Shape shape, Type dtype = null)
         {
-            return new NDArray(dtype ?? np.float64, shape);
+            dtype = dtype ?? np.float64;
+            var nd = new NDArray(dtype, shape); //already allocates inside.
+            if (dtype == typeof(NDArray)) //todo-NDArray Is it what is expected from NDArray dtype?
+            {
+                ((NDArray[])nd.Array).AsSpan().Fill(NDArray.Scalar<int>(0)); //todo-NDArray! should it be int?
+            }
+
+            return nd;
         }
     }
 }

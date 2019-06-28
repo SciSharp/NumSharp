@@ -24,7 +24,7 @@ namespace NumSharp
             {
                 var ret = new NDArray<double>(new Shape(1));
                 var data = new double[] {low + randomizer.NextDouble() * (high - low)};
-                ret.SetData(data);
+                ret.ReplaceData(data);
                 return ret;
             }
 
@@ -36,7 +36,7 @@ namespace NumSharp
             for (int i = 0; i < result.size; ++i)
                 resultArray[i] = low + randomizer.NextDouble() * diff;
 
-            result.SetData(resultArray); //incase of a view
+            result.ReplaceData(resultArray); //incase of a view //todo! incase of a view?
             return result;
         }
 

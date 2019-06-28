@@ -1,19 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
     public enum StorageType
     {
         /// <summary>
-        /// NDStorage
+        ///     <see cref="TypedArrayStorage"/>
         /// </summary>
-        Array = 1,
-
-        /// <summary>
-        /// NDTypedStorage
-        /// </summary>
-        TypedArray = 2
+        TypedArray = 1
     }
 }

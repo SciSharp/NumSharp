@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NumSharp.Extensions;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -27,9 +28,9 @@ namespace NumSharp
                 
                 double stdValue = Math.Sqrt(sum / this.size);
                 stdArr.Storage.Allocate(new Shape(1));
-                var puffer = Array.CreateInstance(dtype,1);
+                var puffer = Arrays.Create(dtype,1);
                 puffer.SetValue(stdValue,0);
-                stdArr.Storage.SetData(puffer);
+                stdArr.Storage.ReplaceData(puffer);
             }
             else 
             {
@@ -72,7 +73,7 @@ namespace NumSharp
                     throw new NotImplementedException();
                 }
                 stdArr.Storage.Allocate(new Shape(stdValue.Length));
-                stdArr.Storage.SetData(stdValue);
+                stdArr.Storage.ReplaceData(stdValue);
             }
             return stdArr;
         }

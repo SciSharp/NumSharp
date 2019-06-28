@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Maths
         {
             //initialization
             var nd = new NDArray(np.float32, 3);
-            nd.SetData(new float[] {1, -2, 3.3f});
+            nd.ReplaceData(new float[] {1, -2, 3.3f});
 
             //perform test
             nd = -nd;
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Maths
             //initialization
             var nd = new NDArray(np.float32, 3);
             var input = new float[] {1, -2, 3.3f};
-            nd.SetData(input);
+            nd.ReplaceData(input);
 
             //perform test
             nd = +nd;

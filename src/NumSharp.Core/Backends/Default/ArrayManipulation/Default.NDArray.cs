@@ -6,7 +6,7 @@ using System.Numerics;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F")
         {
@@ -15,7 +15,7 @@ namespace NumSharp.Backends
 
             if (buffer == null)
             {
-                switch (dtype.Name)
+                switch (dtype.Name) //todo! support all types
                 {
                     case "Int32":
                         buffer = new int[shape.Size];

@@ -36,7 +36,7 @@ namespace NumSharp
 
             var R = new NDArray(typeof(double), new Shape(n, n));
 
-            R.Storage.SetData(RDouble);
+            R.Storage.ReplaceData(RDouble);
 
             int k = tau.Length;
 
@@ -45,7 +45,7 @@ namespace NumSharp
             var Q = new NDArray(typeof(double), new Shape(tau.Length, tau.Length));
 
             Q.Storage.Allocate(Q.Storage.Shape);
-            Q.Storage.SetData(a);
+            Q.Storage.ReplaceData(a);
 
             return (Q,R);
         }

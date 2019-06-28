@@ -13,10 +13,10 @@ namespace NumSharp
             switch (mx.dtype.Name)
             {
                 case "Double":
-                    nd.SetData(mx.Data<double>());
+                    nd.ReplaceData(mx.Data<double>());
                     break;
                 case "Int32":
-                    nd.SetData(mx.Data<int>());
+                    nd.ReplaceData(mx.Data<int>());
                     break;
             }
 

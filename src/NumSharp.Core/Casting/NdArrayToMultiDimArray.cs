@@ -24,6 +24,7 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -31,7 +32,7 @@ namespace NumSharp
     {
         public Array ToMuliDimArray<T>()
         {
-            Array dotNetArray = Array.CreateInstance(typeof(T), this.shape);
+            Array dotNetArray = Arrays.Create(typeof(T), this.shape);
 
             var pufferShape = new Shape(shape);
             pufferShape.ChangeTensorLayout();

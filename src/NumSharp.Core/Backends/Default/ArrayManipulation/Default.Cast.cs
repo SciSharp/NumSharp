@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public NDArray Cast(NDArray nd, Type dtype, bool copy)
         {
@@ -17,13 +18,8 @@ namespace NumSharp.Backends
 
             NDArray clone()
             {
-                var copied = new NDArray(dtype);
-                var shapePuffer = new Shape(nd.shape);
-
-                //todo is there a need to allocate first? setdata should be sufficient.
-                copied.Storage.Allocate(shapePuffer);
-
-                copied.Storage.SetData(nd.Storage.CloneData());
+                var copied = new NDArray(nd.dtype, nd.TensorEngine);
+                copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
 
                 return copied;
             }
@@ -42,7 +38,41 @@ namespace NumSharp.Backends
                 }
 
                 //just re-set the data, conversion is handled inside.
-                nd.Storage.SetData(nd.Storage.GetData(), dtype);
+                nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
+                return nd;
+            }
+        }
+        
+        public NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
+        {
+            if (dtype == NPTypeCode.Empty)
+            {
+                throw new ArgumentNullException(nameof(dtype));
+            }
+
+            NDArray clone()
+            {
+                var copied = new NDArray(nd.dtype, nd.TensorEngine);
+                copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
+
+                return copied;
+            }
+
+            if (nd.GetTypeCode == dtype)
+            {
+                //casting not needed
+                return copy ? clone() : nd;
+            }
+            else
+            {
+                //casting needed
+                if (copy)
+                {
+                    return clone();
+                }
+
+                //just re-set the data, conversion is handled inside.
+                nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
                 return nd;
             }
         }

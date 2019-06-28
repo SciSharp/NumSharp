@@ -1,13 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends;
 using NumSharp.Generic;
 
 namespace NumSharp
 {
     public interface ITensorEngine
     {
+        #region Allocation
+
+        /// <summary>
+        ///     Get storage for given <paramref name="dtype"/>.
+        /// </summary>
+        IStorage GetStorage(Type dtype);
+
+        /// <summary>
+        ///     Get storage for given <paramref name="typeCode"/>.
+        /// </summary>
+        IStorage GetStorage(NPTypeCode typeCode);
+
+        #endregion
+
         #region Math
+
         NDArray Add(NDArray x, NDArray y);
         NDArray Dot(NDArray x, NDArray y);
         NDArray Divide(NDArray x, NDArray y);
@@ -19,18 +35,22 @@ namespace NumSharp
         NDArray Sub(NDArray x, NDArray y);
         NDArray Sum(NDArray x, int? axis = null);
         NDArray Negate(NDArray x);
+
         #endregion
 
         #region Logic
+
         bool All(NDArray nd);
         NDArray<bool> All(NDArray nd, int axis);
         bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         NDArray<bool> IsFinite(NDArray a);
         NDArray<bool> IsNan(NDArray a);
+
         #endregion
 
         #region Array Manipulation
+
         NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
         NDArray Transpose(NDArray nd, int[] axes = null);
         NDArray Cast(NDArray x, Type dtype, bool copy);
@@ -38,7 +58,9 @@ namespace NumSharp
         #endregion
 
         #region Sorting, searching, counting
-        NDArray ArgMax(NDArray nd, int axis = -1); 
+
+        NDArray ArgMax(NDArray nd, int axis = -1);
+
         #endregion
     }
 }

@@ -18,7 +18,7 @@ namespace NumSharp
             for (int idx = 0; idx < doubleArray.Length;idx++)
                 doubleArray[idx] = start + idx * steps;
 
-            Storage.SetData(doubleArray);
+            Storage.ReplaceData(doubleArray);
             Storage.Reshape(doubleArray.Length);
 
             return this;
@@ -33,7 +33,7 @@ namespace NumSharp
             for (int idx = 0; idx < floatArray.Length; idx++)
                 floatArray[idx] = start + idx * steps;
 
-            Storage.SetData(floatArray);
+            Storage.ReplaceData(floatArray);
             Storage.Reshape(floatArray.Length);
 
             return this;

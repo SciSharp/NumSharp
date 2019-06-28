@@ -6,7 +6,7 @@ using System.Numerics;
 
 namespace NumSharp.Backends
 {
-    public abstract partial class DefaultEngine
+    public partial class DefaultEngine
     {
         public NDArray Transpose(NDArray x, int[] axes = null)
         {

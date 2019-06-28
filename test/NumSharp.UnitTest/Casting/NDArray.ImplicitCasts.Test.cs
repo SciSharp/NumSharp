@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest
 
             double[,] nd_ = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
 
-            Array arr =  nd;
+            Array arr =  (Array) nd;
 
             double[,] doubleMatr = (double[,]) arr;
 

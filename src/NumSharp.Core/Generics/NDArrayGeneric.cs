@@ -23,6 +23,7 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 
 namespace NumSharp.Generic
@@ -46,32 +47,44 @@ namespace NumSharp.Generic
             Storage.Allocate(shape);
         }
 
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and shape are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, Shape shape) : base(dtype, shape) { }
+
+
         public NDArray(Array array, Shape shape) : this(shape)
         {
-            Storage.SetData(array);
+            Storage.ReplaceData(array);
         }
 
         /// <summary>
         /// Array access to storage data - overridden on purpose
         /// </summary>
         /// <value></value>
-        new public T[] Array
+        internal new T[] Array
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return Storage.GetData<T>();
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                Storage.SetData<T>(value);
+                Storage.ReplaceData(value);
             }
         }
         /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        new public T this[params int[] select]
+        public new T this[params int[] select]
         {
             get
             {
@@ -80,7 +93,7 @@ namespace NumSharp.Generic
 
             set
             {
-                Storage.SetData<T>(value, select);
+                Storage.SetData(value, select);
             }
         }
 
@@ -88,13 +101,15 @@ namespace NumSharp.Generic
         /// slicing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        new public NDArray<T> this[string slice]
+        public new NDArray<T> this[string slice]
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return base[slice].MakeGeneric<T>();
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 this[slice].Array = value.Data<T>();
@@ -105,31 +120,33 @@ namespace NumSharp.Generic
         /// slicing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        new public NDArray<T> this[params Slice[] slices]
+        public new NDArray<T> this[params Slice[] slices]
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return base[slices].MakeGeneric<T>();
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 this[slice].Array = value.Data<T>();
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator T[] (NDArray<T> nd)
         {
             return nd.Array;
         }
-        /*
-        public static implicit operator NDArray<T>(T[] tArray)
+
+        public static explicit operator NDArray<T>(T[] tArray)
         {
             var genericArray = new NDArray<T>();
             genericArray.Array = tArray;
             return genericArray;
         }
-        */
 
     }
 

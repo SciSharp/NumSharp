@@ -38,22 +38,22 @@ namespace NumSharp
                 switch (dtype.Name)
                 {
                     case "Int32":
-                        {
-                            var npArr = Data<int>();
-                            var max = npArr[0];
-                            for (int i = 0; i < npArr.Length; i++)
-                                max = Math.Max(max, npArr[i]);
-                            return max;
-                        }
+                    {
+                        var npArr = Data<int>();
+                        var max = npArr[0];
+                        for (int i = 0; i < npArr.Length; i++)
+                            max = Math.Max(max, npArr[i]);
+                        return max;
+                    }
 
                     case "Double":
-                        {
-                            var npArr = Data<double>();
-                            var max = npArr[0];
-                            for (int i = 0; i < npArr.Length; i++)
-                                max = Math.Max(max, npArr[i]);
-                            return max;
-                        }
+                    {
+                        var npArr = Data<double>();
+                        var max = npArr[0];
+                        for (int i = 0; i < npArr.Length; i++)
+                            max = Math.Max(max, npArr[i]);
+                        return max;
+                    }
                 }
             }
             else
@@ -91,58 +91,62 @@ namespace NumSharp
                 switch (dtype.Name)
                 {
                     case "Int32":
+                    {
+                        var npArr = Data<int>();
+                        var resData = new int[size]; //res.Data = new double[size];
+                        int start = 0;
+                        int min = 0;
+                        for (int i = 0; i < this.size; i += increments)
                         {
-                            var npArr = Data<int>();
-                            var resData = new int[size];  //res.Data = new double[size];
-                            int start = 0;
-                            int min = 0;
-                            for (int i = 0; i < this.size; i += increments)
+                            for (int j = i; j < i + post; j++)
                             {
-                                for (int j = i; j < i + post; j++)
+                                start = j;
+                                min = npArr[start];
+                                for (int k = 0; k < cur; k++)
                                 {
-                                    start = j;
-                                    min = npArr[start];
-                                    for (int k = 0; k < cur; k++)
-                                    {
-                                        min = Math.Max(min, npArr[start]);
-                                        start += sameSetOffset;
-                                    }
-                                    resData[index++] = min;
+                                    min = Math.Max(min, npArr[start]);
+                                    start += sameSetOffset;
                                 }
+
+                                resData[index++] = min;
                             }
-                            res.Storage = new ArrayStorage(dtype);
-                            res.Storage.Allocate(new Shape(resShapes)); // (resData);
-                            res.Storage.SetData(resData);
                         }
+
+                        res.Storage = res.TensorEngine.GetStorage(dtype);
+                        res.Storage.Allocate(new Shape(resShapes)); // (resData);
+                        res.Storage.ReplaceData(resData);
+                    }
                         break;
                     case "Single":
+                    {
+                        var npArr = Data<float>();
+                        var resData = new float[size]; //res.Data = new double[size];
+                        int start = 0;
+                        float min = 0;
+                        for (int i = 0; i < this.size; i += increments)
                         {
-                            var npArr = Data<float>();
-                            var resData = new float[size];  //res.Data = new double[size];
-                            int start = 0;
-                            float min = 0;
-                            for (int i = 0; i < this.size; i += increments)
+                            for (int j = i; j < i + post; j++)
                             {
-                                for (int j = i; j < i + post; j++)
+                                start = j;
+                                min = npArr[start];
+                                for (int k = 0; k < cur; k++)
                                 {
-                                    start = j;
-                                    min = npArr[start];
-                                    for (int k = 0; k < cur; k++)
-                                    {
-                                        min = Math.Max(min, npArr[start]);
-                                        start += sameSetOffset;
-                                    }
-                                    resData[index++] = min;
+                                    min = Math.Max(min, npArr[start]);
+                                    start += sameSetOffset;
                                 }
+
+                                resData[index++] = min;
                             }
-                            res.Storage = new ArrayStorage(dtype);
-                            res.Storage.Allocate(new Shape(resShapes)); // (resData);
-                            res.Storage.SetData(resData);
                         }
+
+                        res.Storage = res.TensorEngine.GetStorage(res.dtype);
+                        res.Storage.Allocate(new Shape(resShapes)); // (resData);
+                        res.Storage.ReplaceData(resData);
+                    }
                         break;
                 }
-
             }
+
             return res;
         }
     }
