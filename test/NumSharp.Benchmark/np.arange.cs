@@ -36,7 +36,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void arange_ndarray()
         {
-            var nd3 = nd.arange(length, start, step);
+            var nd3 = np.arange(start, length, step);
         }
 
         [Benchmark]
