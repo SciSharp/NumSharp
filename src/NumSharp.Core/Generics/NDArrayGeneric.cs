@@ -143,9 +143,7 @@ namespace NumSharp.Generic
 
         public static explicit operator NDArray<T>(T[] tArray)
         {
-            var genericArray = new NDArray<T>();
-            genericArray.Array = tArray;
-            return genericArray;
+            return new NDArray(tArray).MakeGeneric<T>();
         }
 
     }
