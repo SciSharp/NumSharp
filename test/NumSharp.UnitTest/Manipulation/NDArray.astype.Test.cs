@@ -21,12 +21,12 @@ namespace NumSharp.UnitTest
             var int64 = nd.astype(np.int64, false);
 
             //test copying
-            Assert.IsTrue(int64_copied.Array!=nd.Array);
-            Assert.IsTrue(int64.Array==nd.Array);
+            Assert.IsTrue(int64_copied.Array != nd.Array);
+            Assert.IsTrue(int64.Array == nd.Array);
             Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
             Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
-        }        
-        
+        }
+
         [TestMethod]
         public void UpcastingByteToLong()
         {
@@ -35,12 +35,12 @@ namespace NumSharp.UnitTest
             var int64 = nd.astype(np.int64, false);
 
             //test copying
-            Assert.IsTrue(int64_copied.Array!=nd.Array);
-            Assert.IsTrue(int64.Array==nd.Array);
+            Assert.IsTrue(int64_copied.Array != nd.Array);
+            Assert.IsTrue(int64.Array == nd.Array);
             Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
             Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
-        }        
-        
+        }
+
         [TestMethod]
         public void UpcastingCharsToLong()
         {
@@ -49,12 +49,12 @@ namespace NumSharp.UnitTest
             var int64 = nd.astype(np.int64, false);
 
             //test copying
-            Assert.IsTrue(int64_copied.Array!=nd.Array);
-            Assert.IsTrue(int64.Array==nd.Array);
+            Assert.IsTrue(int64_copied.Array != nd.Array);
+            Assert.IsTrue(int64.Array == nd.Array);
             Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
             Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
-        }        
-        
+        }
+
         [TestMethod]
         public void DowncastingIntToShort()
         {
@@ -63,12 +63,12 @@ namespace NumSharp.UnitTest
             var int16 = nd.astype(np.int16, false);
 
             //test copying
-            Assert.IsTrue(int16_copied.Array!=nd.Array);
-            Assert.IsTrue(int16.Array==nd.Array);
+            Assert.IsTrue(int16_copied.Array != nd.Array);
+            Assert.IsTrue(int16.Array == nd.Array);
             Assert.IsTrue(int16_copied.Array.GetType().GetElementType() == typeof(Int16));
             Assert.IsTrue(int16.Array.GetType().GetElementType() == typeof(Int16));
-        }        
-        
+        }
+
         [TestMethod]
         public void DowncastingIntToUShort()
         {
@@ -83,5 +83,19 @@ namespace NumSharp.UnitTest
             int16.Array.GetType().GetElementType().Should().Be<UInt16>();
         }
 
+        [TestMethod]
+        public void CastingStringToByte()
+        {
+            var nd = np.ones(np.chars, 3, 3);
+            nd[2, 2].Data<string>()[0].Should().Be("1");
+            var int16_copied = nd.astype(np.uint8, true);
+            var int16 = nd.astype(np.uint8, false);
+
+            //test copying
+            int16_copied.Array.Should().Equal(nd.Array);
+            int16.Array.Should().Equal(nd.Array);
+            int16_copied.Array.GetType().GetElementType().Should().Be<byte>();
+            int16.Array.GetType().GetElementType().Should().Be<byte>();
+        }
     }
 }
