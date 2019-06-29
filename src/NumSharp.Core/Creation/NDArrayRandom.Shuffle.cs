@@ -10,7 +10,7 @@ namespace NumSharp
     {
         public void shuffle(NDArray list)
         {
-            var rng = new Random();
+            var rng = new Randomizer();
             var count = list.size;
 
             Array listArr = list.Array;

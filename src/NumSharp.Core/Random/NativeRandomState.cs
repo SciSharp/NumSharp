@@ -6,28 +6,19 @@ namespace NumSharp
 {
     internal static class RandomStateExtensions
     {
-        public static NativeRandomState Save(this System.Random random)
+        public static NativeRandomState Save(this Randomizer random)
         {
-            var binaryFormatter = new BinaryFormatter();
-            using (var temp = new MemoryStream())
-            {
-                binaryFormatter.Serialize(temp, random);
-                return new NativeRandomState(temp.ToArray());
-            }
+            return new NativeRandomState(random.Serialize());
         }
 
-        public static System.Random Restore(this NativeRandomState state)
+        public static Randomizer Restore(this NativeRandomState state)
         {
-            var binaryFormatter = new BinaryFormatter();
-            using (var temp = new MemoryStream(state.State))
-            {
-                return (System.Random)binaryFormatter.Deserialize(temp);
-            }
+            return Randomizer.Deserialize(state.State);
         }
     }
 
     /// <summary>
-    ///     Represents the stored state of <see cref="Random"/>.
+    ///     Represents the stored state of <see cref="Randomizer"/>.
     /// </summary>
     [Serializable]
     public struct NativeRandomState

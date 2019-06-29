@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetDimIndexOutShape(index),new int[]{1,2,1}));
 
-            var rnd = new Random();
+            var rnd = new Randomizer();
             var randomIndex = new int[]{rnd.Next(0,3),rnd.Next(0,2),rnd.Next(0,1)};
 
             int index1 = shape0.GetIndexInShape(randomIndex);
