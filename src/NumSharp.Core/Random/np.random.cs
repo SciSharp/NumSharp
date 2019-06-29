@@ -11,13 +11,13 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy-1.16.1/reference/routines.random.html</remarks>
     public partial class NumPyRandom
     {
-        internal Random randomizer;
+        internal Randomizer randomizer;
 
         public int Seed { get; set; }
 
         #region Constructors
 
-        internal NumPyRandom(Random randomizer)
+        internal NumPyRandom(Randomizer randomizer)
         {
             this.randomizer = randomizer;
         }
@@ -27,9 +27,9 @@ namespace NumSharp
             set_state(nativeRandomState);
         }
 
-        internal NumPyRandom(int seed) : this(new Random(seed)) { }
+        internal NumPyRandom(int seed) : this(new Randomizer(seed)) { }
 
-        internal NumPyRandom() : this(new Random()) { }
+        internal NumPyRandom() : this(new Randomizer()) { }
 
         #endregion
 
@@ -67,7 +67,7 @@ namespace NumSharp
         /// </summary>
         public void seed(int seed)
         {
-            randomizer = new System.Random(seed);
+            randomizer = new Randomizer(seed);
         }
 
         /// <summary>

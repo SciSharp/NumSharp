@@ -17,7 +17,7 @@ namespace NumSharp.Benchmark
         [GlobalSetup]
         public void Setup()
         {
-            var rnd = new Random(42);
+            var rnd = new Randomizer(42);
             // first array
             nonGenericArray = genericArray = new double[10_000_000];
 

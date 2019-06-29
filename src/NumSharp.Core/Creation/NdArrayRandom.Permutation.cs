@@ -9,7 +9,7 @@ namespace NumSharp
     {
         public NDArray Permutation(int max)
         {
-            var random = new Random();
+            var random = new Randomizer();
             int[] orders = new int[max];
 
             var nd = np.arange(max);
