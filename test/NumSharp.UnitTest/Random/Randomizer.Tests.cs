@@ -2,7 +2,7 @@
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.RandomSampling
 {
     [TestClass]
     public class RandomizerTests
