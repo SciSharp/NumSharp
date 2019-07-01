@@ -3,11 +3,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 
-#if _REGEN_GLOBAL
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportedTypes = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String", "Complex"]
-#endif
-
 namespace NumSharp.Utilities
 {
     //todo!  write manually Complex[] ToComplex(String[] sourceArray)
@@ -157,7 +152,7 @@ namespace NumSharp.Utilities
             switch (returnType.GetTypeCode())
             {
 #if _REGEN
-                %foreach supportedTypes %
+                %foreach supported_dtypes %
                 case NPTypeCode.#1:
                 {
                     return To#1(arr);
@@ -252,7 +247,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supportedTypes %
+                %foreach supported_dtypes %
                 case NPTypeCode.#1:
                 {
                     return To#1(arr);
@@ -352,7 +347,7 @@ namespace NumSharp.Utilities
         #region From NonGeneric
 
 #if _REGEN
-        %foreach supportedTypes%
+        %foreach supported_dtypes%
 
         public static #1[] To#1(Array sourceArray)
         {
@@ -979,7 +974,7 @@ namespace NumSharp.Utilities
         #region To Same Type
 
 #if _REGEN
-        %foreach supportedTypes%
+        %foreach supported_dtypes%
         
         /// <summary>
         ///     Converts <see cref="#1"/> array to a <see cref="#1"/> array.
@@ -1273,7 +1268,7 @@ namespace NumSharp.Utilities
         #endregion
 
 #if _REGEN
-        %foreach forevery(supportedTypes_Primitives, supportedTypes_Primitives, true)%
+        %foreach forevery(supported_primitives, supported_primitives, true)%
         
         /// <summary>
         ///     Converts <see cref="#1"/> array to a <see cref="#2"/> array.
@@ -4580,7 +4575,7 @@ namespace NumSharp.Utilities
         #region Complex
 
 #if _REGEN
-        %foreach supportedTypes_Primitives%
+        %foreach supported_primitives%
         
         /// <summary>
         ///     Converts <see cref="#1"/> array to a <see cref="Complex"/> array.

@@ -1,0 +1,53 @@
+﻿//This is a bank for commonly used regen template
+
+
+#if _REGEN_GLOBAL
+    %supported_dtypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
+    %supported_dtypes_lowercase = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
+
+    %supported_primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
+    %supported_primitives_lowercase = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
+#endif
+
+#if _REGEN
+        %foreach supported_dtypes, supported_dtypes_lowercase%
+        /// <summary>
+        ///     Retrieves value of type <see cref="#2"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
+        public #2 Get#1(params int[] indices)
+            => _array#1[Shape.GetIndexInShape(Slice, indices)];
+
+        %
+#else
+
+#endif
+
+            switch (_typecode)
+            {
+#if _REGEN
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                %foreach supported_dtypes,supported_dtypes_lowercase%
+                case NPTypeCode.#1:
+                {
+                    _array#1 = (#2[]) array;
+                    break;
+                }
+                %
+                default:
+                    throw new NotImplementedException();
+#else
+            }
+
+#if _REGEN
+    %supported_dtypes = ["Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
+    %vals = ["3","false","1","1","1","1","1","1","1","'c'","1d","2f","3","3"]
+    [DataTestMethod]
+    %foreach supported_dtypes, vals%
+    [DataRow(typeof(#1),(#1)#2)]
+    %
+#else
+
+#endif

@@ -2,10 +2,6 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-#if _REGEN_GLOBAL
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower_Primitives = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-#endif
 namespace NumSharp.Utilities
 {
     public delegate object TypelessConvertDelegate(object input);
@@ -24,7 +20,7 @@ namespace NumSharp.Utilities
             // ReSharper disable once UseObjectOrCollectionInitializer
             _delegates = new Dictionary<(Type input, Type output), TypelessConvertDelegate>();
 #if _REGEN
-            %foreach forevery(supportedTypes_Primitives, supportedTypes_Primitives, true)%
+            %foreach forevery(supported_primitives, supported_primitives, true)%
             _delegates.Add((typeof(#1), typeof(#2)), From#1To#2);
             %
 #else
@@ -193,7 +189,7 @@ namespace NumSharp.Utilities
         }
 
 #if _REGEN
-        %foreach forevery(supportedTypes_Primitives, supportedTypes_Primitives, true)%
+        %foreach forevery(supported_primitives, supported_primitives, true)%
         /// <summary>
         ///     Convert from #1 to #2 when input is a boxed non-generic <see cref="object"/>.
         /// </summary>

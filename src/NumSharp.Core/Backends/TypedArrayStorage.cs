@@ -6,14 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Utilities;
 
-#if _REGEN_GLOBAL
-    %supportedTypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower_Primitives = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-#endif
-
 namespace NumSharp.Backends
 {
     /// <summary>
@@ -33,7 +25,7 @@ namespace NumSharp.Backends
     public class TypedArrayStorage : IStorage
     {
 #if _REGEN
-        %foreach supportedTypes
+        %foreach supported_dtypes
         protected #1[] _array#1;
 #else
         protected NDArray[] _arrayNDArray;
@@ -140,7 +132,7 @@ namespace NumSharp.Backends
         //todo! create scalar constuctors?
 
 #if _REGEN
-        %foreach supportedTypes%
+        %foreach supported_dtypes%
         public TypedArrayStorage(#1[] values)
         {            
             if (values == null)
@@ -332,7 +324,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supportedTypes,supportTypesLower%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     _array#1 = (#2[]) array;
@@ -449,7 +441,7 @@ namespace NumSharp.Backends
             switch (_typecode)
             {
 #if _REGEN
-                %foreach supportedTypes,supportTypesLower%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     return _array#1[index];
@@ -553,7 +545,7 @@ namespace NumSharp.Backends
 #if _REGEN
                 //Based on benchmark `ArrayAssignmentUnspecifiedType`
 
-                %foreach supportedTypes_Primitives,supportTypesLower_Primitives%
+                %foreach supported_primitives,supported_primitives_lowercase%
                 case NPTypeCode.#1:
                 {
                     _array#1[index] = Convert.To#1(value);
@@ -671,7 +663,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supportedTypes_Primitives,supportTypesLower_Primitives%
+                %foreach supported_primitives,supported_primitives_lowercase%
                 case NPTypeCode.#1:
                 {
                     _array#1[index] = (#1) value;
@@ -805,7 +797,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supportedTypes%
+                %foreach supported_dtypes%
                 case NPTypeCode.#1:
                 {
                     return _array#1;
@@ -1339,7 +1331,7 @@ namespace NumSharp.Backends
         #region Getters
 
 #if _REGEN
-        %foreach supportedTypes,supportTypesLower%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         /// <summary>
         ///     Retrieves value of type <see cref="#2"/> from internal storage.
         /// </summary>
