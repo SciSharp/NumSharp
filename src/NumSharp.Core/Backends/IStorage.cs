@@ -4,14 +4,6 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-#if _REGEN_GLOBAL
-    %supportedTypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower_Primitives = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-#endif
-
 namespace NumSharp
 {
     /// <summary>
@@ -190,7 +182,7 @@ namespace NumSharp
         #region Get Methods
 
 #if _REGEN
-        %foreach supportedTypes, supportTypesLower%
+        %foreach supported_dtypes, supported_dtypes_lowercase%
 
         /// <summary>
         ///     Retrieves value of type <see cref="#2"/> from internal storage..

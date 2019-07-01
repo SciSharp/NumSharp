@@ -73,6 +73,7 @@ namespace NumSharp.UnitTest
         public void DowncastingIntToUShort()
         {
             var nd = np.ones(np.int32, 3, 3);
+            nd[2, 2].Data<int>()[0].Should().Be(1);
             var int16_copied = nd.astype(np.uint16, true);
             var int16 = nd.astype(np.uint16, false);
 
@@ -88,14 +89,49 @@ namespace NumSharp.UnitTest
         {
             var nd = np.ones(np.chars, 3, 3);
             nd[2, 2].Data<string>()[0].Should().Be("1");
-            var int16_copied = nd.astype(np.uint8, true);
-            var int16 = nd.astype(np.uint8, false);
+            var output_copied = nd.astype(np.uint8, true);
+            var output = nd.astype(np.uint8, false);
 
             //test copying
-            int16_copied.Array.Should().Equal(nd.Array);
-            int16.Array.Should().Equal(nd.Array);
-            int16_copied.Array.GetType().GetElementType().Should().Be<byte>();
-            int16.Array.GetType().GetElementType().Should().Be<byte>();
+            output_copied.Array.Should().Equal(nd.Array);
+            output.Array.Should().Equal(nd.Array);
+            output_copied.Array.GetType().GetElementType().Should().Be<byte>();
+            output.Array.GetType().GetElementType().Should().Be<byte>();
+        }
+
+        [TestMethod]
+        public void CastingByteToString()
+        {
+            var nd = np.ones(np.uint8, 3, 3);
+            nd[2, 2].Data<byte>()[0].Should().Be(1);
+            var output_copied = nd.astype(np.chars, true);
+            var output = nd.astype(np.chars, false);
+
+            output_copied[2, 2].Data<string>()[0].Should().Be("1");
+
+            //test copying
+            output_copied.Array.Should().Equal(nd.Array);
+            output.Array.Should().Equal(nd.Array);
+            output_copied.Array.GetType().GetElementType().Should().Be<string>();
+            output.Array.GetType().GetElementType().Should().Be<string>();
+        }
+
+
+        [TestMethod]
+        public void CastingIntToComplex()
+        {
+            var nd = np.ones(np.int32, 3, 3);
+            nd[2, 2].Data<int>()[0].Should().Be(1);
+            var output_copied = nd.astype(np.complex128, true);
+            var output = nd.astype(np.complex128, false);
+
+            //test copying
+            output_copied.Array.Should().Equal(nd.Array);
+            output.Array.Should().Equal(nd.Array);
+            output_copied.Array.GetType().GetElementType().Should().Be<Complex>();
+            output.Array.GetType().GetElementType().Should().Be<Complex>();
+
+            output_copied[2, 2].Data<Complex>(0).Should().Be(new Complex(1, 0));
         }
     }
 }

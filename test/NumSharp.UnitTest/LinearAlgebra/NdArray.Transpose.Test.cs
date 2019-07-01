@@ -5,13 +5,14 @@ using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
+using FluentAssertions;
 using NumSharp;
 using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
-    public class TransposeTest 
+    public class TransposeTest
     {
         [TestMethod]
         public void TransposeVector()
@@ -25,8 +26,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void Transpose3x2()
         {
-            var x = np.arange(6).reshape(3,2).MakeGeneric<int>();
-            
+            var x = np.arange(6).reshape(3, 2).MakeGeneric<int>();
+
             var y = np.transpose(x).MakeGeneric<int>();
 
             // TODO, This should work
@@ -43,15 +44,18 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod, Ignore("No actual asserts inside")] //todo!
         public void Transpose10x10()
         {
-            var array = new NDArray(np.int32, new Shape(10, 10));
-            array = array.transpose();
-            for (var i = 0; i < array.shape[0]; i++)
+            new Action(() =>
             {
-                for (var j = 0; j < array.shape[1]; j++)
+                var array = np.arange(100).reshape(3, 3, 3);
+                array = array.transpose();
+                for (var i = 0; i < array.shape[0]; i++)
                 {
-                    Console.WriteLine(array[i, j].ToString());
+                    for (var j = 0; j < array.shape[1]; j++)
+                    {
+                        Console.WriteLine(array[i, j].ToString());
+                    }
                 }
-            }
+            }).Should().NotThrow("It has to run completely.");
         }
     }
 }

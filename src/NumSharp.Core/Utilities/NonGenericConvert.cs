@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-#if _REGEN_GLOBAL
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower_Primitives = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-#endif
 namespace NumSharp.Utilities
 {
     /// <summary>
@@ -13,7 +9,7 @@ namespace NumSharp.Utilities
     public static class NonGenericConvert
     {
 #if _REGEN
-        %foreach forevery(supportedTypes_Primitives, supportedTypes_Primitives, true)%
+        %foreach forevery(supported_primitives, supported_primitives, true)%
         /// <summary>
         ///     Convert from #1 to #2 when input is a boxed non-generic <see cref="object"/>.
         /// </summary>

@@ -23,6 +23,21 @@ namespace NumSharp
             ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), Convert.ChangeType(value, dtype)));
 
             return ndArray;
+        }        
+        
+        /// <summary>
+        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value of the scalar</param>
+        /// <returns></returns>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
+        public static NDArray Scalar(object value)
+        {
+            var dtype = value.GetType();
+            var ndArray = new NDArray(dtype, new int[0]);
+            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
+
+            return ndArray;
         }
 
         /// <summary>
@@ -36,20 +51,7 @@ namespace NumSharp
         {
             var type = typeCode.AsType();
             var ndArray = new NDArray(type, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(typeCode, Convert.ChangeType(value, type)));
-
-            return ndArray;
-        }
-
-        /// <summary>
-        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> from a known type <typeparamref name="T"/>.
-        /// </summary>
-        /// <param name="value">The value of the scalar</param>
-        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
-        public static NDArray Scalar<T>(T value)
-        {
-            var ndArray = new NDArray(typeof(T), new int[0]);
-            ndArray.Storage.ReplaceData(new T[] {value});
+            ndArray.Storage.ReplaceData(Arrays.Wrap(typeCode, Convert.ChangeType(value, type))); //todo! create a NPConvert to support NPTypeCode
 
             return ndArray;
         }

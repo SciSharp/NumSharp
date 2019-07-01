@@ -6,13 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
 
-#if _REGEN_GLOBAL
-    %supportedTypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-    %supportedTypes_Primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-    %supportTypesLower_Primitives = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
-#endif
-
 namespace NumSharp.Utilities
 {
     public static class Arrays
@@ -71,7 +64,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supportedTypes,supportTypesLower%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     return new #2[length];
@@ -173,7 +166,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supportedTypes,supportTypesLower%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     return new #2[1] {(#1)value};
