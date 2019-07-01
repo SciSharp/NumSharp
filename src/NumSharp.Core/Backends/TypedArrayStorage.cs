@@ -83,7 +83,7 @@ namespace NumSharp.Backends
             {
                 if (_typecode == NPTypeCode.NDArray || _typecode == NPTypeCode.String)
                 {
-                    return 0;
+                    return IntPtr.Size;
                 }
 
                 return Marshal.SizeOf(_DType);
