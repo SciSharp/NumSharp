@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(y[1, 2], 5);
         }
 
-        [TestMethod]
+        [TestMethod, Ignore("No actual asserts inside")] //todo!
         public void Transpose10x10()
         {
             new Action(() =>
