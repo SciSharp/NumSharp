@@ -84,7 +84,7 @@ Welcome to fork and pull request to add more APIs, and make reference list longe
 
 <img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
 
-Star me on [Github](https://gitter.im/sci-sharp/community) if you like it.
+Join us on [Gitter](https://gitter.im/sci-sharp/community)
 
 Scan QR code to join TIM group:
 
