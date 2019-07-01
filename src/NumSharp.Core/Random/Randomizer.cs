@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics.Contracts;
 using System.IO;
+using System.Runtime.ConstrainedExecution;
 
 namespace NumSharp
 {
@@ -12,7 +13,8 @@ namespace NumSharp
     [Serializable]
     public class Randomizer : ICloneable
     {
-        private const int MBIG = Int32.MaxValue;
+        private const int MBIG = int.MaxValue;
+        private const long MBIG_LONG = long.MaxValue;
         private const int MSEED = 161803398;
         private const int MZ = 0;
         private int inext;
@@ -36,7 +38,7 @@ namespace NumSharp
 
             //Initialize our Seed array.
             //This algorithm comes from Numerical Recipes in C (2nd Ed.)
-            int subtraction = (Seed == Int32.MinValue) ? Int32.MaxValue : Math.Abs(Seed);
+            int subtraction = (Seed == int.MinValue) ? int.MaxValue : Math.Abs(Seed);
             mj = MSEED - subtraction;
             SeedArray[55] = mj;
             mk = 1;
@@ -105,6 +107,16 @@ namespace NumSharp
             return retVal;
         }
 
+        /// <summary>
+        ///     Returns a value between 0 and <see cref="long"/>.<see cref="long.MaxValue"/>.
+        /// </summary>
+        /// <returns></returns>
+        private long InternalSampleLong()
+        {
+            const double factor = long.MaxValue / int.MaxValue;
+            return (long)(InternalSample() * factor);
+        }
+
         //
         // Public Instance Methods
         // 
@@ -139,8 +151,8 @@ namespace NumSharp
             }
 
             double d = result;
-            d += (Int32.MaxValue - 1); // get a number in range [0 .. 2 * Int32MaxValue - 1)
-            d /= 2 * (uint)Int32.MaxValue - 1;
+            d += (int.MaxValue - 1); // get a number in range [0 .. 2 * Int32MaxValue - 1)
+            d /= 2 * (uint)int.MaxValue - 1;
             return d;
         }
 
@@ -170,13 +182,75 @@ namespace NumSharp
 
 
             long range = (long)maxValue - minValue;
-            if (range <= (long)Int32.MaxValue)
+            if (range <= int.MaxValue)
             {
                 return ((int)(Sample() * range) + minValue);
             }
             else
             {
                 return (int)((long)(GetSampleForLargeRange() * range) + minValue);
+            }
+        }
+
+
+        /*=====================================Next=====================================
+        **Returns: An int [0..maxValue)
+        **Arguments: maxValue -- One more than the greatest legal return value.
+        **Exceptions: None.
+        ==============================================================================*/
+
+        /// <summary>Returns a non-negative random integer that is less than the specified maximum.</summary>
+        /// <param name="maxValue">The exclusive upper bound of the random number to be generated. <paramref name="maxValue" /> must be greater than or equal to 0.</param>
+        /// <returns>A 32-bit signed integer that is greater than or equal to 0, and less than <paramref name="maxValue" />; that is, the range of return values ordinarily includes 0 but not <paramref name="maxValue" />. However, if <paramref name="maxValue" /> equals 0, <paramref name="maxValue" /> is returned.</returns>
+        /// <exception cref="T:System.ArgumentOutOfRangeException">
+        /// <paramref name="maxValue" /> is less than 0.</exception>
+        public virtual long NextLong(long maxValue)
+        {
+            return (long)(Sample() * maxValue);
+        }
+
+        /// <summary>Returns a non-negative random integer that is less than the specified maximum.</summary>
+        /// <param name="maxValue">The exclusive upper bound of the random number to be generated. <paramref name="maxValue" /> must be greater than or equal to 0.</param>
+        /// <returns>A 32-bit signed integer that is greater than or equal to 0, and less than <paramref name="maxValue" />; that is, the range of return values ordinarily includes 0 but not <paramref name="maxValue" />. However, if <paramref name="maxValue" /> equals 0, <paramref name="maxValue" /> is returned.</returns>
+        /// <exception cref="T:System.ArgumentOutOfRangeException">
+        /// <paramref name="maxValue" /> is less than 0.</exception>
+        public virtual long NextLong()
+        {
+            return InternalSampleLong();
+        }
+
+
+        /*=====================================Next=====================================
+        **Returns: An int [minvalue..maxvalue)
+        **Arguments: minValue -- the least legal value for the Random number.
+        **           maxValue -- One greater than the greatest legal return value.
+        **Exceptions: None.
+        ==============================================================================*/
+
+        /// <summary>Returns a random integer that is within a specified range.</summary>
+        /// <param name="minValue">The inclusive lower bound of the random number returned.</param>
+        /// <param name="maxValue">The exclusive upper bound of the random number returned. <paramref name="maxValue" /> must be greater than or equal to <paramref name="minValue" />.</param>
+        /// <returns>A 32-bit signed integer greater than or equal to <paramref name="minValue" /> and less than <paramref name="maxValue" />; that is, the range of return values includes <paramref name="minValue" /> but not <paramref name="maxValue" />. If <paramref name="minValue" /> equals <paramref name="maxValue" />, <paramref name="minValue" /> is returned.</returns>
+        /// <exception cref="T:System.ArgumentOutOfRangeException">
+        /// <paramref name="minValue" /> is greater than <paramref name="maxValue" />.</exception>
+        public virtual long NextLong(long minValue, long maxValue)
+        {
+            if (minValue > maxValue)
+            {
+                //swap
+                var tmp = minValue;
+                minValue = maxValue;
+                maxValue = tmp;
+            }
+
+            long range = maxValue - minValue;
+            if (range <= int.MaxValue)
+            {
+                return (long)(Sample() * range + minValue);
+            }
+            else
+            {
+                return (long)(GetSampleForLargeRange() * range) + minValue;
             }
         }
 
@@ -226,7 +300,7 @@ namespace NumSharp
         {
             for (int i = 0; i < buffer.Length; i++)
             {
-                buffer[i] = (byte)(InternalSample() % (Byte.MaxValue + 1));
+                buffer[i] = (byte)(InternalSample() % (byte.MaxValue + 1));
             }
         }
 
