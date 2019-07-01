@@ -914,6 +914,8 @@ namespace NumSharp.Backends
             {
                 _DType = dtype;
                 _typecode = _DType.GetTypeCode();
+                if (_typecode == NPTypeCode.Empty)
+                    throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             }
 
             SetInternalArray(values);
@@ -1240,6 +1242,8 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _DType = dtype;
             _typecode = _DType.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             SetInternalArray(changedArray);
         }
 
@@ -1262,6 +1266,8 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _DType = dtype;
             _typecode = _DType.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
             SetInternalArray(changedArray);
         }
 
@@ -1278,7 +1284,9 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _Shape = nd.shape;
             _DType = nd.dtype;
-            _typecode = _DType.GetTypeCode();
+            _typecode = _DType.GetTypeCode(); 
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{_DType.Name} as a dtype is not supported.");
             SetInternalArray(nd.Array);
         }
 
@@ -1318,7 +1326,7 @@ namespace NumSharp.Backends
         {
             var puffer = (TypedArrayStorage)Engine.GetStorage(_DType);
             puffer.Allocate(_Shape.Clone()); //allocate is necessary if non-C# memory storage is used.
-            puffer.ReplaceData((Array)GetData().Clone());
+            puffer.ReplaceData((Array)GetData().Clone()); //todo! check if theres a faster way to clone.
 
             return puffer;
         }
