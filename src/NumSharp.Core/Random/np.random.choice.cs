@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace NumSharp
@@ -27,7 +28,14 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
         public NDArray choice(int a, Shape shape, double[] probabilities = null)
         {
-            throw new NotImplementedException();
+            NDArray arr = np.arange(a);
+            NDArray idx = null;
+            //Debug.WriteLine($"arr: {arr}");
+            if (probabilities is null)
+            {
+                idx = np.random.randint(0, arr.len, shape);
+            }
+            return idx;
         }
     }
 }
