@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.RandomSampling
 {
     [TestClass]
     public class NpRandomUniformTests : TestClass
