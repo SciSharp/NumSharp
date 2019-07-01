@@ -908,7 +908,7 @@ namespace NumSharp.Backends
 
         protected void _Allocate(Shape shape, Type dtype, Array values)
         {
-            _Shape = shape;
+            _Shape = shape ?? throw new ArgumentNullException(nameof(shape));
 
             if (dtype != null)
             {
@@ -928,6 +928,9 @@ namespace NumSharp.Backends
         /// <param name="shape">The shape of the array.</param>
         public void Allocate(Shape shape, Type dtype = null)
         {
+            if (shape == null)
+                throw new ArgumentNullException(nameof(shape));
+
             dtype = dtype ?? DType;
             _Allocate(shape, dtype, Arrays.Create(dtype, new int[] {shape.Size}));
         }
@@ -975,9 +978,10 @@ namespace NumSharp.Backends
         public void Allocate(Array values, Shape shape)
         {
             if (values == null)
-            {
                 throw new ArgumentNullException(nameof(values));
-            }
+
+            if (shape == null)
+                throw new ArgumentNullException(nameof(shape));
 
             Type elementType = values.GetType();
             // ReSharper disable once PossibleNullReferenceException

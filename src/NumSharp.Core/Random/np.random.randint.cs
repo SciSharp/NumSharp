@@ -1,47 +1,155 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public partial class NumPyRandom
     {
-        public NDArray randint(int low, int size = 1)
+        /// <summary>
+        ///     Return random integers from the “discrete uniform” distribution of the specified dtype in the “half-open” interval [low, high). If high is None (the default), then results are from [0, low).
+        /// </summary>
+        /// <param name="low">Lowest (signed) integer to be drawn from the distribution (unless high=-1, in which case this parameter is one above the highest such integer).</param>
+        /// <param name="high">If provided, one above the largest (signed) integer to be drawn from the distribution (see above for behavior if high=-1).</param>
+        /// <param name="size">The shape of the array.</param>
+        /// <param name="dtype">Desired dtype of the result. All dtypes are determined by their name, i.e., ‘int64’, ‘int’, etc, so byteorder is not available and a specific precision may have different C types depending on the platform. The default value is ‘np.int’.</param>
+        /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.randint.html</remarks>
+        public NDArray randint(long low, long high = -1, Shape size = null, Type dtype = null)
         {
-            var data = new int[size];
-            for (int i = 0; i < data.Length; i++)
+            dtype = dtype ?? np.int32;
+            var typecode = dtype.GetTypeCode();
+            if (high == -1)
             {
-                data[i] = randomizer.Next(low, int.MaxValue);
+                high = low;
+                low = 0;
             }
 
-            var np = new NDArray(typeof(int), size);
-            np.ReplaceData(data);
+            if (size == null || (size.NDim == 1 && size.Size == 1))
+                return NDArray.Scalar(randomizer.NextLong(low, high), typecode);
 
-            return np;
-        }
-
-        public NDArray randint(int low, int? high = null, Shape shape = null)
-        {
-            if(high == null)
+            var nd = new NDArray(dtype, size); //allocation called inside.
+            switch (typecode)
             {
-                high = int.MaxValue;
-            }
-            if(shape == null)
-            {
-                shape = new Shape(high.Value - low);
-            }
-            var data = new int[shape.Size];
-            for(int i = 0; i < data.Length; i++)
-            {
-                data[i] = randomizer.Next(low, high.Value);
+#if _REGEN
+                %foreach supported_numericals,supported_numericals_lowercase%
+                case NPTypeCode.#1:
+                {
+                    var data = (#2[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.To#1(randomizer.NextLong(low, high));
+                    
+                    break;
+                }
+                %
+#else
+                case NPTypeCode.Byte:
+                {
+                    var data = (byte[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToByte(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Int16:
+                {
+                    var data = (short[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToInt16(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.UInt16:
+                {
+                    var data = (ushort[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToUInt16(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Int32:
+                {
+                    var data = (int[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToInt32(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.UInt32:
+                {
+                    var data = (uint[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToUInt32(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Int64:
+                {
+                    var data = (long[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToInt64(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.UInt64:
+                {
+                    var data = (ulong[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToUInt64(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Char:
+                {
+                    var data = (char[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToChar(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Double:
+                {
+                    var data = (double[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToDouble(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Single:
+                {
+                    var data = (float[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToSingle(randomizer.NextLong(low, high));
+
+                    break;
+                }
+
+                case NPTypeCode.Decimal:
+                {
+                    var data = (decimal[])nd.Array;
+                    for (int i = 0; i < data.Length; i++)
+                        data[i] = Convert.ToDecimal(randomizer.NextLong(low, high));
+
+                    break;
+                }
+#endif
             }
 
-            var np = new NDArray(typeof(int), shape.Dimensions.ToArray());
-            np.ReplaceData(data);
-
-            return np;
+            return nd;
         }
     }
 }

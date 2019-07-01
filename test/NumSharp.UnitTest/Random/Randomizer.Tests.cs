@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [TestMethod]
         public void CompareRandomizerToRandom()
         {
-            var rnd = new Random(42);
+            var rnd = new System.Random(42);
             var rndizer = new Randomizer(42);
 
             rnd.Next().Should().Be(rndizer.Next());
