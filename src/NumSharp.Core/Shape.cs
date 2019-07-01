@@ -220,7 +220,15 @@ namespace NumSharp
 
         public static bool operator ==(Shape a, Shape b)
         {
-            if (b is null) return false;
+            if (a is null && b is null)
+                return true;
+            
+            if (a is null || b is null) 
+                return false;
+
+            if (ReferenceEquals(a, b))
+                return true;
+
             return Equals(a, b);
         }
 
@@ -301,6 +309,17 @@ namespace NumSharp
         public Shape Clone()
         {
             return new Shape(this.dimensions) {layout = this.layout};
+        }
+
+        public Shape SubShape(int dim)
+        {
+            var arr = new int[dimensions.Length-dim];
+            for (int i = 0; i < arr.Length; i++)
+            {
+                arr[i] = dimensions[dim + i];
+            }
+
+            return arr;
         }
     }
 }
