@@ -1185,11 +1185,13 @@ namespace NumSharp.Backends
             {
                 if (np.isscalar(nd))
                 {
-                    SetInternalValueUnsafe(nd.Array.GetValue(0), _Shape.GetIndexInShape(Slice, indices));
+                    SetOrConvertInternalValue(nd.Array.GetValue(0), _Shape.GetIndexInShape(Slice, indices));
                     return;
                 }
 
                 var targetIndex = _Shape.GetIndexInShape(Slice, indices);
+
+                //todo! we need to handle more dims.
 
                 int offset = 0;
                 if (Shape.NDim == 1)

@@ -734,5 +734,19 @@ namespace NumSharp.UnitTest.Selection
                 }
             }).Should().NotThrow("It has to run completely.");
         }
+
+        /// <summary>
+        /// Based on issue https://github.com/SciSharp/NumSharp/issues/293
+        /// </summary>
+        [TestMethod]
+        public void CastingWhenSettingDifferentType()
+        {
+            NDArray output = np.zeros(5);
+            double newValDouble = 2;
+            int newValInt = 4;
+            output[3] = newValDouble; // This works fine
+            new Action(()=>output[4] = newValInt).Should().NotThrow<NullReferenceException>(); // throws System.NullReferenceException
+            output.Array.GetValue(4).Should().Be(newValInt);
+        }
     }
 }
