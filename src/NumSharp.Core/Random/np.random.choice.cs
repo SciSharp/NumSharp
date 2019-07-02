@@ -8,27 +8,29 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        /// //todo
+        /// Generates a random sample from a given 1-D array
         /// </summary>
         /// <param name="arr">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
-        /// <param name="shape"></param>
+        /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
+        /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(NDArray arr, Shape shape, double[] probabilities = null)
+        public NDArray choice(NDArray arr, Shape shape = null, bool replace = true, double[] probabilities = null)
         {
             int arrSize = arr.len;
-            NDArray idx = np.random.choice(arrSize, shape, probabilities);
+            NDArray idx = np.random.choice(arrSize, shape, probabilities: probabilities);
             return arr[idx];
         }
 
         /// <summary>
-        ///  //todo
+        ///  Generates a random sample from a given 1-D array
         /// </summary>
         /// <param name="a">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
-        /// <param name="shape"></param>
+        /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
+        /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(int a, Shape shape, double[] probabilities = null)
+        public NDArray choice(int a, Shape shape = null, bool replace = true, double[] probabilities = null)
         {
             NDArray arr = np.arange(a);
             NDArray idx = null;
