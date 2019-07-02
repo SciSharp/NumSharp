@@ -16,7 +16,9 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
         public NDArray choice(NDArray arr, Shape shape, double[] probabilities = null)
         {
-            throw new NotImplementedException();
+            int arrSize = arr.len;
+            NDArray idx = np.random.choice(arrSize, shape, probabilities);
+            return arr[idx];
         }
 
         /// <summary>
@@ -34,6 +36,13 @@ namespace NumSharp
             if (probabilities is null)
             {
                 idx = np.random.randint(0, arr.len, shape);
+            }
+            else
+            {
+                NDArray cdf = np.cumsum(probabilities);
+                cdf /= cdf[cdf.len - 1];
+                NDArray uniformSamples = np.random.uniform(0, 1, shape);
+                idx = np.searchsorted(cdf, uniformSamples);
             }
             return idx;
         }
