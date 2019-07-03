@@ -9,7 +9,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.RandomSampling
 {
     [TestClass]
-    public class NumPyRandomNormalTest
+    public class NpRandomNormalTest
     {
         [TestMethod]
         public void NormalDistributionTest()

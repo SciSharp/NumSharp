@@ -10,7 +10,6 @@ namespace NumSharp
     {
         public void shuffle(NDArray list)
         {
-            var rng = new Randomizer();
             var count = list.size;
 
             Array listArr = list.Array;
@@ -18,7 +17,7 @@ namespace NumSharp
             while (count > 1)
             {
                 count--;
-                var k = rng.Next(count + 1);
+                var k = randomizer.Next(count + 1);
                 var value = listArr.GetValue(k);
                 listArr.SetValue(listArr.GetValue(count),k); 
                 listArr.SetValue(value,count);
