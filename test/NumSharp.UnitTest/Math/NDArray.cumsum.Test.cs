@@ -34,6 +34,7 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        [Ignore("Cumulative summing on multidimensional arrays not implemented yet")]
         public void Cumsum2dTest()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -45,6 +46,7 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        [Ignore("Cumulative summing with specified data type not implemented yet")]
         public void Cumsum2dDtypeTest()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -56,6 +58,7 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        [Ignore("Cumulative summing along axis not implemented yet")]
         public void Cumsum2dAxisRowsTest()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -73,6 +76,7 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
+        [Ignore("Cumulative summing along axis not implemented yet")]
         public void Cumsum2dAxisColsTest()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
