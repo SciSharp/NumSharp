@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.RandomSampling
     public class NpRandomChoiceTests : TestClass
     {
         [TestMethod]
+        [Ignore("Choice without specifying size not implemented yet")]
         public void UniformSample1()
         {
             // Generate a uniform random sample from np.arange(5) of size 1:
@@ -71,6 +72,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [TestMethod]
+        [Ignore("Choice without replacement not implemented yet")]
         public void UniformSampleWithoutReplace1()
         {
             NDArray actual = np.random.choice(5, 3, replace: false);
@@ -78,6 +80,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [TestMethod]
+        [Ignore("Choice without replacement not implemented yet")]
         public void NonUniformSampleWithoutReplace1()
         {
             double[] probabilities = new double[] { 0.1, 0, 0.3, 0.6, 0 };
@@ -86,6 +89,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [TestMethod]
+        [Ignore("Choice with arbitrary arrays not implemented yet")]
         public void NonUniformArraySample1()
         {
             NDArray aa_milne_arr = new string[] { "pooh", "rabbit", "piglet", "Christopher" };
