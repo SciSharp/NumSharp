@@ -10,7 +10,7 @@ using FluentAssertions;
 namespace NumSharp.UnitTest.RandomSampling
 {
     [TestClass]
-    public class NdArrayRandomRandIntTests
+    public class NpRandomRandintTest
     {
         [TestMethod]
         public void randint()

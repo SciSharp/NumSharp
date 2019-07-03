@@ -9,7 +9,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.RandomSampling
 {
     [TestClass]
-    public class NdArrayRandomShuffleTest
+    public class NpRandomShuffleTest
     {
         [TestMethod]
         public void Base1DTest()
