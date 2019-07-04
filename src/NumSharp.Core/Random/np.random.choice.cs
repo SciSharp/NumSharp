@@ -32,6 +32,10 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
         public NDArray choice(int a, Shape shape = null, bool replace = true, double[] probabilities = null)
         {
+            if (shape is null)
+            {
+                shape = 1;
+            }
             NDArray arr = np.arange(a);
             NDArray idx = null;
             //Debug.WriteLine($"arr: {arr}");

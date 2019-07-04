@@ -10,7 +10,6 @@ namespace NumSharp.UnitTest.RandomSampling
     public class NpRandomChoiceTests : TestClass
     {
         [TestMethod]
-        [Ignore("Choice without specifying size not implemented yet")]
         public void UniformSample1()
         {
             // Generate a uniform random sample from np.arange(5) of size 1:
