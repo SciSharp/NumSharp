@@ -4,7 +4,6 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends.Unmanaged;
-using NumSharp.NewStuff;
 using OOMath;
 
 namespace OMath.Test
