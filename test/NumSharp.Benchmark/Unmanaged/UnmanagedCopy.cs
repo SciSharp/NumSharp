@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using NumSharp.Backends.Unmanaged;
 using OOMath;
 using OOMath.MemoryPooling;
 

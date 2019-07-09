@@ -1,15 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
-using NumSharp.NewStuff;
 
-namespace OOMath
+namespace NumSharp.Backends.Unmanaged
 {
     public partial class UnmanagedByteStorage<T>
     {
@@ -1677,7 +1672,7 @@ namespace OOMath
             return null;
         }
 
-        private static int[] ExpandStartDim(NumSharp.NewStuff.Shape shape)
+        private static int[] ExpandStartDim(Shape shape)
         {
             var ret = new int[shape.NDim + 1];
             ret[0] = 1;
@@ -1685,7 +1680,7 @@ namespace OOMath
             return ret;
         }
 
-        private static Shape ExpandEndDim(NumSharp.NewStuff.Shape shape)
+        private static Shape ExpandEndDim(Shape shape)
         {
             var ret = new int[shape.NDim + 1];
             ret[ret.Length - 1] = 1;

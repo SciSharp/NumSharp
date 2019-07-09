@@ -3,18 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Numerics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.ServiceModel.Channels;
 using System.Text;
-using NumSharp;
-using NumSharp.NewStuff;
+using OOMath;
 using OOMath.MemoryPooling;
 
-namespace OOMath
+namespace NumSharp.Backends.Unmanaged
 {
     public partial class UnmanagedByteStorage<T> : IEnumerable<T> where T : unmanaged
     {

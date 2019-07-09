@@ -1,10 +1,10 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using NumSharp.NewStuff;
+using OOMath;
 using OOMath.MemoryPooling;
 
-namespace OOMath
+namespace NumSharp.Backends.Unmanaged
 {
     /// <summary>
     ///     <see cref="ArraySlice{T}"/> is similar to <see cref="Span{T}"/> but it can be moved around without having to follow `ref struct` rules.

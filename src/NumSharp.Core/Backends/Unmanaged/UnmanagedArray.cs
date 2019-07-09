@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using OOMath.MemoryPooling;
 
-namespace OOMath
+namespace NumSharp.Backends.Unmanaged
 {
     public static class UnmanagedArray
     {
@@ -29,7 +29,7 @@ namespace OOMath
                 var tc = Type.GetTypeCode(typeof(TOut));
                 for (int i = 0; i < len; i++)
                 {
-                    *(dst + i) = (TOut)Convert.ChangeType(*(src + i), tc);
+                    *(dst + i) = (TOut)Convert.ChangeType((object) *(src + i), tc);
                 }
 
                 return ret;
@@ -342,7 +342,7 @@ namespace OOMath
         {
             for (var i = 0; i < _itemCounts; i++)
             {
-                array.SetValue(*(_itemBuffer + i), i + index);
+                array.SetValue((object) *(_itemBuffer + i), i + index);
             }
         }
 
@@ -426,7 +426,7 @@ namespace OOMath
             }
         }
 
-        /// <summary>Returns a value that indicates whether the values of two <see cref="T:OOMath.UnmanagedArray`1" /> objects are equal.</summary>
+        /// <summary>Returns a value that indicates whether the values of two <see cref="T:NumSharp.Backends.Unmanaged.UnmanagedArray`1" /> objects are equal.</summary>
         /// <param name="left">The first value to compare.</param>
         /// <param name="right">The second value to compare.</param>
         /// <returns>true if the <paramref name="left" /> and <paramref name="right" /> parameters have the same value; otherwise, false.</returns>
@@ -436,7 +436,7 @@ namespace OOMath
             return left.Equals(right);
         }
 
-        /// <summary>Returns a value that indicates whether two <see cref="T:OOMath.UnmanagedArray`1" /> objects have different values.</summary>
+        /// <summary>Returns a value that indicates whether two <see cref="T:NumSharp.Backends.Unmanaged.UnmanagedArray`1" /> objects have different values.</summary>
         /// <param name="left">The first value to compare.</param>
         /// <param name="right">The second value to compare.</param>
         /// <returns>true if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, false.</returns>

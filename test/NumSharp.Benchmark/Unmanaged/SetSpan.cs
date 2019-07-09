@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using NumSharp.Backends.Unmanaged;
 using OOMath;
 
 namespace NumSharp.Benchmark.Unmanaged

@@ -7,7 +7,7 @@ namespace NumSharp.Sparse
 {
     public class sparse
     {
-        public csr_matrix diags(NDArray[] diagonals, int[] offsets = null, Shape shape = null, string format = null, Type dtype = null)
+        public csr_matrix diags(NDArray[] diagonals, int[] offsets = null, Shape shape = default, string format = null, Type dtype = null)
         {
             int m = shape;
             var data_arr = np.zeros(m);
