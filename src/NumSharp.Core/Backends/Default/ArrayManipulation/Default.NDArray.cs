@@ -8,7 +8,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F")
+        public NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F')
         {
             if (dtype == null)
                 dtype = np.float32;
@@ -30,10 +30,9 @@ namespace NumSharp.Backends
                         break;
                 }
             }
-                
+
 
             return new NDArray(buffer, shape: shape, order: order);
         }
     }
-
 }

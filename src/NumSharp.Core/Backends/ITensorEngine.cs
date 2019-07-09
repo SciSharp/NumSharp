@@ -51,7 +51,7 @@ namespace NumSharp
 
         #region Array Manipulation
 
-        NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, string order = "F");
+        NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F');
         NDArray Transpose(NDArray nd, int[] axes = null);
         NDArray Cast(NDArray x, Type dtype, bool copy);
 

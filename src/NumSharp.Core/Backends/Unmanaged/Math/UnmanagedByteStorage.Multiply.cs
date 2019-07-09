@@ -95,7 +95,7 @@ namespace NumSharp.Backends.Unmanaged
                     if ((k < 0) ||
                         ogiter._shape.dimensions[k] != mit.dimensions[j])
                     {
-                        it.layout = 0;
+                        it.layout = 'C';
                         it.strides[j] = 0;
                     }
                     else

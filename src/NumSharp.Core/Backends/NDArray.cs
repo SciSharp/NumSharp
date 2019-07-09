@@ -100,7 +100,7 @@ namespace NumSharp
         /// <param name="order"></param>
         /// <returns>Array with values</returns>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Array values, Shape shape = default, string order = "C") : this(values.GetType().GetElementType())
+        public NDArray(Array values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
         {
             if (shape.IsEmpty)
                 shape = new Shape(values.Length);
@@ -155,7 +155,7 @@ namespace NumSharp
 
         public int dtypesize => Storage.DTypeSize;
 
-        public string order => Storage.Shape.Order;
+        public char order => Storage.Shape.Order;
 
         public Slice slice => Storage.Slice;
 

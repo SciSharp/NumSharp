@@ -14,7 +14,7 @@ namespace NumSharp
         ///     0: Row major<br></br>
         ///     1: Column major
         /// </summary>
-        internal int layout;
+        internal char layout;
         internal int _hashCode;
         internal int size;
         internal int[] dimensions;
@@ -22,7 +22,7 @@ namespace NumSharp
 
         public bool IsScalar;
         public bool IsEmpty => _hashCode == 0;
-        public string Order => layout == 1 ? "F" : "C";
+        public char Order => layout;
 
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
@@ -90,7 +90,7 @@ namespace NumSharp
                 strides = new int[dims.Length];
             }
 
-            layout = 0;
+            layout = 'C';
             size = 1;
             unchecked
             {
@@ -269,9 +269,9 @@ namespace NumSharp
             return dimIndexes;
         }
 
-        public void ChangeTensorLayout(string order = "C")
+        public void ChangeTensorLayout(char order = 'C')
         {
-            layout = order == "C" ? 0 : 1;
+            layout = order;
             strides = new int[dimensions.Length];
             _SetDimOffset();
         }

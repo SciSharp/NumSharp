@@ -12,7 +12,7 @@ namespace NumSharp
         /// 
         /// A 1-D array, containing the elements of the input, is returned.A copy is made only if needed.
         /// </summary>
-        public NDArray flatten(string order = "C")
+        public NDArray flatten(char order = 'C')
         {
             var nd = new NDArray(dtype, size);
 

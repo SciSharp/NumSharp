@@ -17,7 +17,7 @@ namespace NumSharp
         /// F: column major
         /// </param>
         /// <returns></returns>
-        public NDArray reshape(Shape shape, string order = "C")
+        public NDArray reshape(Shape shape, char order = 'C')
         {
             // have to update Array storage
             if (ndim > 1 && order != this.order && shape != this.shape)
