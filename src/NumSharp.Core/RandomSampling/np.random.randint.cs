@@ -20,7 +20,7 @@ namespace NumSharp
         /// <param name="dtype">Desired dtype of the result. All dtypes are determined by their name, i.e., ‘int64’, ‘int’, etc, so byteorder is not available and a specific precision may have different C types depending on the platform. The default value is ‘np.int’.</param>
         /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.randint.html</remarks>
-        public NDArray randint(long low, long high = -1, Shape size = null, Type dtype = null)
+        public NDArray randint(long low, long high = -1, Shape size = default, Type dtype = null)
         {
             dtype = dtype ?? np.int32;
             var typecode = dtype.GetTypeCode();
@@ -30,7 +30,7 @@ namespace NumSharp
                 low = 0;
             }
 
-            if (size == null || (size.NDim == 1 && size.Size == 1))
+            if (size.IsScalar)
                 return NDArray.Scalar(randomizer.NextLong(low, high), typecode);
 
             var nd = new NDArray(dtype, size); //allocation called inside.

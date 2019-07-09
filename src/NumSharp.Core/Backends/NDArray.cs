@@ -100,9 +100,9 @@ namespace NumSharp
         /// <param name="order"></param>
         /// <returns>Array with values</returns>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Array values, Shape shape = null, string order = "C") : this(values.GetType().GetElementType())
+        public NDArray(Array values, Shape shape = default, string order = "C") : this(values.GetType().GetElementType())
         {
-            if (shape is null)
+            if (shape.IsEmpty)
                 shape = new Shape(values.Length);
 
             shape.ChangeTensorLayout(order);

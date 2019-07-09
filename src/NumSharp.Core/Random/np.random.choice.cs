@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(NDArray arr, Shape shape = null, bool replace = true, double[] probabilities = null)
+        public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             int arrSize = arr.len;
             NDArray idx = np.random.choice(arrSize, shape, probabilities: probabilities);
@@ -30,9 +30,9 @@ namespace NumSharp
         /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(int a, Shape shape = null, bool replace = true, double[] probabilities = null)
+        public NDArray choice(int a, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
-            if (shape is null)
+            if (shape.IsEmpty)
             {
                 shape = 1;
             }

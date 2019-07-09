@@ -908,7 +908,10 @@ namespace NumSharp.Backends
 
         protected void _Allocate(Shape shape, Type dtype, Array values)
         {
-            _Shape = shape ?? throw new ArgumentNullException(nameof(shape));
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            _Shape = shape;
 
             if (dtype != null)
             {
@@ -928,7 +931,7 @@ namespace NumSharp.Backends
         /// <param name="shape">The shape of the array.</param>
         public void Allocate(Shape shape, Type dtype = null)
         {
-            if (shape == null)
+            if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
             dtype = dtype ?? DType;
@@ -980,7 +983,7 @@ namespace NumSharp.Backends
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
 
-            if (shape == null)
+            if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
             Type elementType = values.GetType();
@@ -1290,7 +1293,7 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _Shape = nd.shape;
             _DType = nd.dtype;
-            _typecode = _DType.GetTypeCode(); 
+            _typecode = _DType.GetTypeCode();
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{_DType.Name} as a dtype is not supported.");
             SetInternalArray(nd.Array);
