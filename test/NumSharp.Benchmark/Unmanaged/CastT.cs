@@ -22,7 +22,8 @@ namespace NumSharp.Benchmark.Unmanaged
     [SimpleJob(RunStrategy.Throughput, targetCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public class CastT {
+    public class CastT
+    {
         private const int iterations = 300_000;
         private double d = 15.3d;
         double a = 5;
@@ -31,69 +32,84 @@ namespace NumSharp.Benchmark.Unmanaged
 
 
         [Benchmark(Description = "(double) (object) Tval")]
-        public void BoxCast() {
+        public void BoxCast()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = FunctionB(h);
             }
         }
 
         [Benchmark(Description = "(double) (ValueType) Tval")]
-        public void ValueTypeCast() {
+        public void ValueTypeCast()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = FunctionC(h);
             }
         }
 
         [Benchmark(Description = "(double) (IComparable) Tval")]
-        public void IComparableCast() {
+        public void IComparableCast()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = FunctionD(h);
             }
         }
 
 
         [Benchmark(Baseline = true, Description = "FastCast<TOut>(Holder<T> @in;)")]
-        public void FastCastFunction() {
+        public void FastCastFunction()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = Function(h);
             }
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        private double Function<T>(Holder<T> tval) {
+        [MethodImpl((MethodImplOptions)768)]
+        private double Function<T>(Holder<T> tval)
+        {
             return FastCast<double>(tval.Value);
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        private double FunctionB<T>(Holder<T> tval) {
-            return (double) (object) tval.Value;
+        [MethodImpl((MethodImplOptions)768)]
+        private double FunctionB<T>(Holder<T> tval)
+        {
+            return (double)(object)tval.Value;
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        private double FunctionC<T>(Holder<T> tval) where T : struct {
-            return (double) (ValueType) tval.Value;
+        [MethodImpl((MethodImplOptions)768)]
+        private double FunctionC<T>(Holder<T> tval) where T : struct
+        {
+            return (double)(ValueType)tval.Value;
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        private double FunctionD<T>(Holder<T> tval) where T : IComparable {
-            return (double) (IComparable) tval.Value;
+        [MethodImpl((MethodImplOptions)768)]
+        private double FunctionD<T>(Holder<T> tval) where T : IComparable
+        {
+            return (double)(IComparable)tval.Value;
         }
 
 
-        [MethodImpl((MethodImplOptions) 768)]
-        private TOut FastCast<TOut>(object @in) {
-            return (TOut) @in;
+        [MethodImpl((MethodImplOptions)768)]
+        private TOut FastCast<TOut>(object @in)
+        {
+            return (TOut)@in;
         }
 
-        public struct Holder<T> {
+        public struct Holder<T>
+        {
             public T Value;
 
             /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
-            public Holder(T value) {
+            public Holder(T value)
+            {
                 Value = value;
             }
         }

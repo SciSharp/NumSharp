@@ -3,8 +3,8 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using OOMath;
 
-namespace NumSharp.Benchmark.Unmanaged {
-
+namespace NumSharp.Benchmark.Unmanaged
+{
     //|                   Method |          Toolchain | IterationCount | RunStrategy | UnrollFactor |      Mean |      Error |     StdDev |       Min |       Max |    Median | Ratio | RatioSD |
     //|------------------------- |------------------- |--------------- |------------ |------------- |----------:|-----------:|-----------:|----------:|----------:|----------:|------:|--------:|
     //|           UnmanagedArray |            Default |             20 |   ColdStart |            1 | 110.51 ms |  7.2478 ms |  8.3465 ms | 101.13 ms | 131.91 ms | 109.51 ms |  1.08 |    0.08 |
@@ -26,7 +26,8 @@ namespace NumSharp.Benchmark.Unmanaged {
     [ClrJob(baseline: true)]
     [MonoJob]
     [CoreJob]
-    public unsafe class UnmanagedBench {
+    public unsafe class UnmanagedBench
+    {
         private const int length = 100_000;
         private const int iterations = 2_000;
         int[] arr;
@@ -35,48 +36,61 @@ namespace NumSharp.Benchmark.Unmanaged {
         private unsafe int* arrayAddress;
 
         [GlobalSetup]
-        public void Setup() {
+        public void Setup()
+        {
             mem = new UnmanagedArray<int>(length);
             vec = new UnmanagedByteStorage<int>(mem, new Shape(length));
             arr = new int[length];
 
             var ret = new UnmanagedArray<int>();
             var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
-            arrayAddress = (int*) handle.AddrOfPinnedObject();
+            arrayAddress = (int*)handle.AddrOfPinnedObject();
         }
 
         [Benchmark]
-        public void UnmanagedArray() {
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+        public void UnmanagedArray()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     mem[i] = i;
                 }
             }
         }
 
         [Benchmark]
-        public void Vector() {
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+        public void Vector()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     vec.SetIndex(i, i);
                 }
             }
         }
 
         [Benchmark(Baseline = true)]
-        public void SimpleArray() {
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+        public void SimpleArray()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     arr[i] = i;
                 }
             }
         }
 
         [Benchmark]
-        public void SimpleArray_DirectAccess() {
+        public void SimpleArray_DirectAccess()
+        {
             int* ptr = arrayAddress;
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     *(ptr + i) = i;
                 }
             }

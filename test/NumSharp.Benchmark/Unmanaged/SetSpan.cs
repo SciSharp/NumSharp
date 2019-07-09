@@ -14,11 +14,13 @@ namespace NumSharp.Benchmark.Unmanaged
     //| UnmanagedArray | Default |    Core |            Default |             20 |  Throughput |           16 |   238.2 ms |  2.640 ms |  3.040 ms |   234.6 ms |   243.8 ms |   237.5 ms |     ? |       ? |
     //|    SimpleArray | Default |    Core |            Default |             20 |  Throughput |           16 |   220.1 ms |  1.986 ms |  2.039 ms |   215.3 ms |   223.5 ms |   220.3 ms |     ? |       ? |
     //|     ManualCopy | Default |    Core |            Default |             20 |  Throughput |           16 |   851.2 ms | 58.912 ms | 67.844 ms |   741.0 ms |   934.0 ms |   877.9 ms |     ? |       ? |
+
     [SimpleJob(RunStrategy.ColdStart, targetCount: 20)]
     [SimpleJob(RunStrategy.Throughput, targetCount: 20)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public unsafe class SetSpan {
+    public unsafe class SetSpan
+    {
         private const int length = 100_000;
         private const int iterations = 20_000;
 
@@ -31,7 +33,8 @@ namespace NumSharp.Benchmark.Unmanaged
         private UnmanagedArray<int> tosimple;
 
         [GlobalSetup]
-        public void Setup() {
+        public void Setup()
+        {
             @from = new UnmanagedArray<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
             to = new UnmanagedArray<int>(length);
@@ -43,27 +46,34 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void UnmanagedArray() {
-            for (int j = 0; j < iterations; j++) {
+        public void UnmanagedArray()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 fromvec.Set(setvec, 3);
             }
         }
 
         [Benchmark(Baseline = true)]
-        public void SimpleArray() {
+        public void SimpleArray()
+        {
             var fromspan = fromsimple.AsSpan();
             var tospan = tosimple.AsSpan();
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 fromspan.CopyTo(tospan);
             }
         }
 
         [Benchmark]
-        public void ManualCopy() {
-            int* frm = (int*) Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
-            int* to = (int*) Unsafe.AsPointer(ref tosimple.GetPinnableReference());
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+        public void ManualCopy()
+        {
+            int* frm = (int*)Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
+            int* to = (int*)Unsafe.AsPointer(ref tosimple.GetPinnableReference());
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     *(to + i) = *(frm + i);
                 }
             }

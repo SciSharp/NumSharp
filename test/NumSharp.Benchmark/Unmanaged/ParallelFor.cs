@@ -1,9 +1,11 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using OOMath;
 
-namespace NumSharp.Benchmark.Unmanaged {
+namespace NumSharp.Benchmark.Unmanaged
+{
     //RELEASE-OPTIMIZE:
     //|                      Method | RunStrategy | UnrollFactor |        Mean |       Error |      StdDev |      Median |         Min |         Max | Ratio | RatioSD |
     //|---------------------------- |------------ |------------- |------------:|------------:|------------:|------------:|------------:|------------:|------:|--------:|
@@ -19,58 +21,68 @@ namespace NumSharp.Benchmark.Unmanaged {
 
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [SimpleJob(launchCount: 1, warmupCount: 3, targetCount: 15)]
-    public class ParallelFor {
+    public class ParallelFor
+    {
         private const int iterations = 10;
         private int largeSize = 250;
         UnmanagedByteStorage<int> a;
         UnmanagedByteStorage<int> b;
 
-        private ParallelOptions settingsDistributed;
+        //private ParallelOptions settingsDistributed;
         private ParallelOptions settingsConcurrent;
 
         [GlobalSetup]
-        public void GlobalSetup() {
-            if (DistributedScheduler.Created == false) {
-                DistributedScheduler.Configure(1, 1);
-            }
-
-            var dist = DistributedScheduler.Default;
-            settingsDistributed = new ParallelOptions() {TaskScheduler = DistributedScheduler.Default, MaxDegreeOfParallelism = dist.MaximumConcurrencyLevel};
-            settingsConcurrent = new ParallelOptions() {TaskScheduler = TaskScheduler.Default, MaxDegreeOfParallelism = dist.MaximumConcurrencyLevel};
+        public void GlobalSetup()
+        {
+            //if (DistributedScheduler.Created == false) {
+            //    DistributedScheduler.Configure(1, 1);
+            //}
+            //
+            //var dist = DistributedScheduler.Default;
+            //settingsDistributed = new ParallelOptions() {TaskScheduler = DistributedScheduler.Default, MaxDegreeOfParallelism = dist.MaximumConcurrencyLevel};
+            settingsConcurrent = new ParallelOptions() {TaskScheduler = TaskScheduler.Default, MaxDegreeOfParallelism = Environment.ProcessorCount * 2};
         }
 
         [IterationSetup]
-        public void Setup() {
+        public void Setup()
+        {
             a = new UnmanagedByteStorage<int>(new Shape(5, 5), 0);
             b = new UnmanagedByteStorage<int>(Enumerable.Range(0, 25).ToArray(), new Shape(5, 5));
 
             var _ = UnmanagedByteStorage<int>.TypeCode;
         }
 
-        [Benchmark]
-        public void DistributedScheduler_() {
-            Parallel.For(0, largeSize, settingsDistributed, i => {
-                var c = a + b;
-            });
-        }
+
+        //[Benchmark]
+        //public void DistributedScheduler_() {
+        //    Parallel.For(0, largeSize, settingsDistributed, i => {
+        //        var c = a + b;
+        //    });
+        //}
 
         [Benchmark]
-        public void DefaultHigherDegree() {
-            Parallel.For(0, largeSize, settingsConcurrent, i => {
+        public void DefaultHigherDegree()
+        {
+            Parallel.For(0, largeSize, settingsConcurrent, i =>
+            {
                 var c = a + b;
             });
         }
 
         [Benchmark(Baseline = true)]
-        public void Default() {
-            Parallel.For(0, largeSize, i => {
+        public void Default()
+        {
+            Parallel.For(0, largeSize, i =>
+            {
                 var c = a + b;
             });
         }
 
         [Benchmark()]
-        public void Linear() {
-            for (var i = 0; i < largeSize; i++) {
+        public void Linear()
+        {
+            for (var i = 0; i < largeSize; i++)
+            {
                 var c = a + b;
             }
         }

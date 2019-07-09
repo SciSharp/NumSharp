@@ -7,8 +7,8 @@ using BenchmarkDotNet.Engines;
 using OOMath;
 using OOMath.MemoryPooling;
 
-namespace NumSharp.Benchmark.Unmanaged {
-
+namespace NumSharp.Benchmark.Unmanaged
+{
     //| Method | RunStrategy |     Mean |     Error |   StdDev |   Median |      Min |       Max |
     //|------- |------------ |---------:|----------:|---------:|---------:|---------:|----------:|
     //|  copy3 |   ColdStart | 82.16 ms | 1.6843 ms | 4.966 ms | 80.67 ms | 74.72 ms | 100.53 ms |
@@ -25,7 +25,8 @@ namespace NumSharp.Benchmark.Unmanaged {
     [SimpleJob(RunStrategy.Throughput, targetCount: 100)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public unsafe class UnmanagedCopy {
+    public unsafe class UnmanagedCopy
+    {
         private const int length = 100;
         private const int iterations = 800_000;
 
@@ -43,7 +44,8 @@ namespace NumSharp.Benchmark.Unmanaged {
         NDArray nd;
 
         [IterationSetup]
-        public void Setup() {
+        public void Setup()
+        {
             @from = new UnmanagedArray<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
             to = new UnmanagedArray<int>(length);
@@ -56,9 +58,11 @@ namespace NumSharp.Benchmark.Unmanaged {
         }
 
         [BenchmarkDotNet.Attributes.IterationCleanup()]
-        public void Cleanup() {
+        public void Cleanup()
+        {
             if (memoryTrash != null)
-                for (var i = 0; i < memoryTrash.Length; i++) {
+                for (var i = 0; i < memoryTrash.Length; i++)
+                {
                     var vector = memoryTrash[i];
                     if (vector == null)
                         break;
@@ -66,7 +70,8 @@ namespace NumSharp.Benchmark.Unmanaged {
                     memoryTrash[i] = null;
                 }
 
-            if (pool != null) {
+            if (pool != null)
+            {
                 pool.Clear();
                 pool = null;
             }
@@ -74,30 +79,38 @@ namespace NumSharp.Benchmark.Unmanaged {
 
 
         [Benchmark]
-        public void copy3() {
-            for (int j = 0; j < iterations; j++) {
+        public void copy3()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 Copy3<int>(@from).Free();
             }
         }
 
         [Benchmark]
-        public void copy2() {
-            for (int j = 0; j < iterations; j++) {
+        public void copy2()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 Copy2<int>(@from).Free();
             }
         }
 
         [Benchmark]
-        public void copy1() {
-            for (int j = 0; j < iterations; j++) {
+        public void copy1()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 Copy1<int>(@from).Free();
             }
         }
 
 
         [Benchmark]
-        public void copy() {
-            for (int j = 0; j < iterations; j++) {
+        public void copy()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 Copy<int>(@from).Free();
             }
         }
@@ -108,28 +121,31 @@ namespace NumSharp.Benchmark.Unmanaged {
         public static extern int MemCopy(void* dest, void* src, UIntPtr count);
 
 
-        [MethodImpl((MethodImplOptions) 768)]
-        public static UnmanagedArray<T> Copy3<T>(UnmanagedArray<T> source) where T : unmanaged {
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy3<T>(UnmanagedArray<T> source) where T : unmanaged
+        {
             var len = source._itemCounts * sizeof(T);
             var ret = new UnmanagedArray<T>(source.Count);
-            MemCopy(ret._itemBuffer, source._itemBuffer, (UIntPtr) len);
+            MemCopy(ret._itemBuffer, source._itemBuffer, (UIntPtr)len);
             //Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        public static UnmanagedArray<T> Copy2<T>(UnmanagedArray<T> source) where T : unmanaged {
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy2<T>(UnmanagedArray<T> source) where T : unmanaged
+        {
             var len = source._itemCounts * sizeof(T);
             var buffer = pool.TakeBuffer(len);
-            var ret = new UnmanagedArray<T>((T*) Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
+            var ret = new UnmanagedArray<T>((T*)Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
             Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        public static UnmanagedArray<T> Copy1<T>(UnmanagedArray<T> source) where T : unmanaged {
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy1<T>(UnmanagedArray<T> source) where T : unmanaged
+        {
             var ret = new UnmanagedArray<T>(source.Count);
             var len = ret._itemCounts * sizeof(T);
             Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
@@ -137,8 +153,9 @@ namespace NumSharp.Benchmark.Unmanaged {
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions) 768)]
-        public static UnmanagedArray<T> Copy<T>(UnmanagedArray<T> source) where T : unmanaged {
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy<T>(UnmanagedArray<T> source) where T : unmanaged
+        {
             var ret = new UnmanagedArray<T>(source.Count);
             source.AsSpan().CopyTo(ret.AsSpan());
             return ret;

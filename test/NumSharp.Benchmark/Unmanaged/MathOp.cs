@@ -52,48 +52,58 @@ namespace NumSharp.Benchmark.Unmanaged
     [SimpleJob(RunStrategy.Throughput, targetCount: 10)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public class MathOp {
+    public class MathOp
+    {
         private const int iterations = 300_000;
         private double d = 15.3d;
-        private unsafe double* dptr = (double*) Marshal.AllocHGlobal(sizeof(double));
+        private unsafe double* dptr = (double*)Marshal.AllocHGlobal(sizeof(double));
         double a = 5;
         double b = 3;
 
         [Benchmark]
-        public void Vector() {
+        public void Vector()
+        {
             Vector<double> ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = new Vector<double>(d) + new Vector<double>(d);
             }
         }
 
-        [Benchmark]
-        public unsafe void NewVector() {
-            NewVector<double> ret;
-            for (int i = 0; i < iterations; i++) {
-                ret = new NewVector<double>(dptr) + new NewVector<double>(dptr);
-            }
-        }
+        //This used to be a local copy of Vector<T> but it turned out to be so slow - probably because Vector<T> is optimized behind the scenes.
+        //[Benchmark]
+        //public unsafe void NewVector() {
+        //    NewVector<double> ret;
+        //    for (int i = 0; i < iterations; i++) {
+        //        ret = new NewVector<double>(dptr) + new NewVector<double>(dptr);
+        //    }
+        //}
 
         [Benchmark]
-        public void ScalarAdd() {
+        public void ScalarAdd()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = ScalarAdd<double>(a, b);
             }
         }
 
         [Benchmark]
-        public void MathComputer_() {
+        public void MathComputer_()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = new MathComputer<double>(a) + new MathComputer<double>(b);
             }
         }
 
         [Benchmark]
-        public void ScalarAddSwitched() {
-            for (int i = 0; i < iterations; i++) {
+        public void ScalarAddSwitched()
+        {
+            for (int i = 0; i < iterations; i++)
+            {
                 var doubletype = a.GetType();
 #if _REGEN
                 %foreach supported_numericals_lowercase%
@@ -102,40 +112,64 @@ namespace NumSharp.Benchmark.Unmanaged
                 } else 
                 %
 #else
-                if (doubletype == typeof(byte)) {
+                if (doubletype == typeof(byte))
+                {
                     var ret = ScalarAdd<byte>(0, 0);
-                } else if (doubletype == typeof(short)) {
+                }
+                else if (doubletype == typeof(short))
+                {
                     var ret = ScalarAdd<short>(0, 0);
-                } else if (doubletype == typeof(ushort)) {
+                }
+                else if (doubletype == typeof(ushort))
+                {
                     var ret = ScalarAdd<ushort>(0, 0);
-                } else if (doubletype == typeof(int)) {
+                }
+                else if (doubletype == typeof(int))
+                {
                     var ret = ScalarAdd<int>(0, 0);
-                } else if (doubletype == typeof(uint)) {
+                }
+                else if (doubletype == typeof(uint))
+                {
                     var ret = ScalarAdd<uint>(0, 0);
-                } else if (doubletype == typeof(long)) {
+                }
+                else if (doubletype == typeof(long))
+                {
                     var ret = ScalarAdd<long>(0, 0);
-                } else if (doubletype == typeof(ulong)) {
+                }
+                else if (doubletype == typeof(ulong))
+                {
                     var ret = ScalarAdd<ulong>(0, 0);
-                } else if (doubletype == typeof(char)) {
+                }
+                else if (doubletype == typeof(char))
+                {
                     var ret = ScalarAdd<char>('\0', '\0');
-                } else if (doubletype == typeof(float)) {
+                }
+                else if (doubletype == typeof(float))
+                {
                     var ret = ScalarAdd<float>(0, 0);
-                } else if (doubletype == typeof(decimal)) {
+                }
+                else if (doubletype == typeof(decimal))
+                {
                     var ret = ScalarAdd<decimal>(0, 0);
-                } else
+                }
+                else
 #endif
-                if (doubletype == typeof(double)) {
+                if (doubletype == typeof(double))
+                {
                     var ret = ScalarAdd<double>(a, b);
                 }
             }
         }
 
         [Benchmark]
-        public void ScalarAddSwitchedTypeCode() {
+        public void ScalarAddSwitchedTypeCode()
+        {
             IComparable ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 var doubletype = Type.GetTypeCode(a.GetType());
-                switch (doubletype) {
+                switch (doubletype)
+                {
 #if _REGEN
                 %foreach supported_numericals%
 	                case TypeCode.#1: {
@@ -145,57 +179,68 @@ namespace NumSharp.Benchmark.Unmanaged
                 %
 #else
 
-                    case TypeCode.Byte: {
+                    case TypeCode.Byte:
+                    {
                         ret = ScalarAdd<Byte>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int16: {
+                    case TypeCode.Int16:
+                    {
                         ret = ScalarAdd<Int16>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt16: {
+                    case TypeCode.UInt16:
+                    {
                         ret = ScalarAdd<UInt16>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int32: {
+                    case TypeCode.Int32:
+                    {
                         ret = ScalarAdd<Int32>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt32: {
+                    case TypeCode.UInt32:
+                    {
                         ret = ScalarAdd<UInt32>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int64: {
+                    case TypeCode.Int64:
+                    {
                         ret = ScalarAdd<Int64>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt64: {
+                    case TypeCode.UInt64:
+                    {
                         ret = ScalarAdd<UInt64>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Char: {
+                    case TypeCode.Char:
+                    {
                         ret = ScalarAdd<Char>('\0', '\0');
                         break;
                     }
 
-                    case TypeCode.Single: {
+                    case TypeCode.Single:
+                    {
                         ret = ScalarAdd<Single>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Decimal: {
+                    case TypeCode.Decimal:
+                    {
                         ret = ScalarAdd<Decimal>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Double: {
+                    case TypeCode.Double:
+                    {
                         ret = ScalarAdd<Double>(a, b);
                         break;
                     }
@@ -208,11 +253,14 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void ScalarAddSwitchedTypeCodeFull() {
+        public void ScalarAddSwitchedTypeCodeFull()
+        {
             IComparable ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 var doubletype = Type.GetTypeCode(a.GetType());
-                switch (doubletype) {
+                switch (doubletype)
+                {
 #if _REGEN
                 %foreach supported_numericals%
 	                case TypeCode.#1: {
@@ -221,57 +269,68 @@ namespace NumSharp.Benchmark.Unmanaged
                 %
 #else
 
-                    case TypeCode.Byte: {
+                    case TypeCode.Byte:
+                    {
                         ret = ScalarAddSwitch<Byte>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int16: {
+                    case TypeCode.Int16:
+                    {
                         ret = ScalarAddSwitch<Int16>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt16: {
+                    case TypeCode.UInt16:
+                    {
                         ret = ScalarAddSwitch<UInt16>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int32: {
+                    case TypeCode.Int32:
+                    {
                         ret = ScalarAddSwitch<Int32>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt32: {
+                    case TypeCode.UInt32:
+                    {
                         ret = ScalarAddSwitch<UInt32>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Int64: {
+                    case TypeCode.Int64:
+                    {
                         ret = ScalarAddSwitch<Int64>(0, 0);
                         break;
                     }
 
-                    case TypeCode.UInt64: {
+                    case TypeCode.UInt64:
+                    {
                         ret = ScalarAddSwitch<UInt64>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Char: {
+                    case TypeCode.Char:
+                    {
                         ret = ScalarAddSwitch<Char>('\0', '\0');
                         break;
                     }
 
-                    case TypeCode.Single: {
+                    case TypeCode.Single:
+                    {
                         ret = ScalarAddSwitch<Single>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Decimal: {
+                    case TypeCode.Decimal:
+                    {
                         ret = ScalarAddSwitch<Decimal>(0, 0);
                         break;
                     }
 
-                    case TypeCode.Double: {
+                    case TypeCode.Double:
+                    {
                         ret = ScalarAddSwitch<Double>(a, b);
                         break;
                     }
@@ -284,17 +343,21 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void ScalarAddBoxed() {
+        public void ScalarAddBoxed()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
-                ret = (double) ScalarAddBoxed(a, b);
+            for (int i = 0; i < iterations; i++)
+            {
+                ret = (double)ScalarAddBoxed(a, b);
             }
         }
 
         [Benchmark(Baseline = true)]
-        public void Direct() {
+        public void Direct()
+        {
             double ret;
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 ret = a + b;
             }
         }
@@ -303,28 +366,29 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because typeof vs typeof is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions) 768)]
-        public static T ScalarAdd<T>(T left, T right) where T : IComparable {
+        [MethodImpl((MethodImplOptions)768)]
+        public static T ScalarAdd<T>(T left, T right) where T : IComparable
+        {
             if (typeof(T) == typeof(byte))
-                return (T) (IComparable) (byte) ((uint) (byte) (IComparable) left + (uint) (byte) (IComparable) right);
+                return (T)(IComparable)(byte)((uint)(byte)(IComparable)left + (uint)(byte)(IComparable)right);
             if (typeof(T) == typeof(sbyte))
-                return (T) (IComparable) (sbyte) ((int) (sbyte) (IComparable) left + (int) (sbyte) (IComparable) right);
+                return (T)(IComparable)(sbyte)((int)(sbyte)(IComparable)left + (int)(sbyte)(IComparable)right);
             if (typeof(T) == typeof(ushort))
-                return (T) (IComparable) (ushort) ((uint) (ushort) (IComparable) left + (uint) (ushort) (IComparable) right);
+                return (T)(IComparable)(ushort)((uint)(ushort)(IComparable)left + (uint)(ushort)(IComparable)right);
             if (typeof(T) == typeof(short))
-                return (T) (IComparable) (short) ((int) (short) (IComparable) left + (int) (short) (IComparable) right);
+                return (T)(IComparable)(short)((int)(short)(IComparable)left + (int)(short)(IComparable)right);
             if (typeof(T) == typeof(uint))
-                return (T) (IComparable) (uint) ((int) (uint) (IComparable) left + (int) (uint) (IComparable) right);
+                return (T)(IComparable)(uint)((int)(uint)(IComparable)left + (int)(uint)(IComparable)right);
             if (typeof(T) == typeof(int))
-                return (T) (IComparable) ((int) (IComparable) left + (int) (IComparable) right);
+                return (T)(IComparable)((int)(IComparable)left + (int)(IComparable)right);
             if (typeof(T) == typeof(ulong))
-                return (T) (IComparable) (ulong) ((long) (ulong) (IComparable) left + (long) (ulong) (IComparable) right);
+                return (T)(IComparable)(ulong)((long)(ulong)(IComparable)left + (long)(ulong)(IComparable)right);
             if (typeof(T) == typeof(long))
-                return (T) (IComparable) ((long) (IComparable) left + (long) (IComparable) right);
+                return (T)(IComparable)((long)(IComparable)left + (long)(IComparable)right);
             if (typeof(T) == typeof(float))
-                return (T) (IComparable) ((float) (IComparable) left + (float) (IComparable) right);
+                return (T)(IComparable)((float)(IComparable)left + (float)(IComparable)right);
             if (typeof(T) == typeof(double))
-                return (T) (IComparable) ((double) (IComparable) left + (double) (IComparable) right);
+                return (T)(IComparable)((double)(IComparable)left + (double)(IComparable)right);
             return default;
         }
 
@@ -341,8 +405,9 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because typeof vs typeof is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions) 768)]
-        public static T ScalarAddSwitch<T>(T left, T right) where T : IComparable {
+        [MethodImpl((MethodImplOptions)768)]
+        public static T ScalarAddSwitch<T>(T left, T right) where T : IComparable
+        {
             //if (typeof(T) == typeof(byte))
             //    return (T) (IComparable) (byte) ((uint) (byte) (IComparable) left + (uint) (byte) (IComparable) right);
             //if (typeof(T) == typeof(sbyte))
@@ -363,48 +428,60 @@ namespace NumSharp.Benchmark.Unmanaged
             //    return (T) (IComparable) ((float) (IComparable) left + (float) (IComparable) right);
             //if (typeof(T) == typeof(double))
             //    return (T)(IComparable)((double)(IComparable)left + (double)(IComparable)right);
-            switch (Type.GetTypeCode(typeof(T))) {
-                case TypeCode.Byte: {
-                    return (T) (IComparable) (byte) ((uint) (byte) (IComparable) left + (uint) (byte) (IComparable) right);
+            switch (Type.GetTypeCode(typeof(T)))
+            {
+                case TypeCode.Byte:
+                {
+                    return (T)(IComparable)(byte)((uint)(byte)(IComparable)left + (uint)(byte)(IComparable)right);
                 }
 
-                case TypeCode.Int16: {
-                    return (T) (IComparable) (short) ((int) (short) (IComparable) left + (int) (short) (IComparable) right);
+                case TypeCode.Int16:
+                {
+                    return (T)(IComparable)(short)((int)(short)(IComparable)left + (int)(short)(IComparable)right);
                 }
 
-                case TypeCode.UInt16: {
-                    return (T) (IComparable) (ushort) ((uint) (ushort) (IComparable) left + (uint) (ushort) (IComparable) right);
+                case TypeCode.UInt16:
+                {
+                    return (T)(IComparable)(ushort)((uint)(ushort)(IComparable)left + (uint)(ushort)(IComparable)right);
                 }
 
-                case TypeCode.Int32: {
-                    return (T) (IComparable) ((int) (IComparable) left + (int) (IComparable) right);
+                case TypeCode.Int32:
+                {
+                    return (T)(IComparable)((int)(IComparable)left + (int)(IComparable)right);
                 }
 
-                case TypeCode.UInt32: {
-                    return (T) (IComparable) (uint) ((int) (uint) (IComparable) left + (int) (uint) (IComparable) right);
+                case TypeCode.UInt32:
+                {
+                    return (T)(IComparable)(uint)((int)(uint)(IComparable)left + (int)(uint)(IComparable)right);
                 }
 
-                case TypeCode.Int64: {
-                    return (T) (IComparable) ((long) (IComparable) left + (long) (IComparable) right);
+                case TypeCode.Int64:
+                {
+                    return (T)(IComparable)((long)(IComparable)left + (long)(IComparable)right);
                 }
 
-                case TypeCode.UInt64: {
-                    return (T) (IComparable) (ulong) ((long) (ulong) (IComparable) left + (long) (ulong) (IComparable) right);
+                case TypeCode.UInt64:
+                {
+                    return (T)(IComparable)(ulong)((long)(ulong)(IComparable)left + (long)(ulong)(IComparable)right);
                 }
 
-                case TypeCode.Char: {
+                case TypeCode.Char:
+                {
                     return default;
                 }
 
-                case TypeCode.Single: {
-                    return (T) (IComparable) ((float) (IComparable) left + (float) (IComparable) right);
+                case TypeCode.Single:
+                {
+                    return (T)(IComparable)((float)(IComparable)left + (float)(IComparable)right);
                 }
 
-                case TypeCode.Double: {
-                    return (T) (IComparable) ((double) (IComparable) left + (double) (IComparable) right);
+                case TypeCode.Double:
+                {
+                    return (T)(IComparable)((double)(IComparable)left + (double)(IComparable)right);
                 }
 
-                case TypeCode.Decimal: {
+                case TypeCode.Decimal:
+                {
                     return default;
                 }
             }
@@ -416,67 +493,72 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because T vs T is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions) 768)]
-        public static object ScalarAddBoxed(object left, object right) {
+        [MethodImpl((MethodImplOptions)768)]
+        public static object ScalarAddBoxed(object left, object right)
+        {
             var T = left.GetType();
             if (T == typeof(byte))
-                return (IComparable) (byte) ((uint) (byte) (IComparable) left + (uint) (byte) (IComparable) right);
+                return (IComparable)(byte)((uint)(byte)(IComparable)left + (uint)(byte)(IComparable)right);
             if (T == typeof(sbyte))
-                return (IComparable) (sbyte) ((int) (sbyte) (IComparable) left + (int) (sbyte) (IComparable) right);
+                return (IComparable)(sbyte)((int)(sbyte)(IComparable)left + (int)(sbyte)(IComparable)right);
             if (T == typeof(ushort))
-                return (IComparable) (ushort) ((uint) (ushort) (IComparable) left + (uint) (ushort) (IComparable) right);
+                return (IComparable)(ushort)((uint)(ushort)(IComparable)left + (uint)(ushort)(IComparable)right);
             if (T == typeof(short))
-                return (IComparable) (short) ((int) (short) (IComparable) left + (int) (short) (IComparable) right);
+                return (IComparable)(short)((int)(short)(IComparable)left + (int)(short)(IComparable)right);
             if (T == typeof(uint))
-                return (IComparable) (uint) ((int) (uint) (IComparable) left + (int) (uint) (IComparable) right);
+                return (IComparable)(uint)((int)(uint)(IComparable)left + (int)(uint)(IComparable)right);
             if (T == typeof(int))
-                return (IComparable) ((int) (IComparable) left + (int) (IComparable) right);
+                return (IComparable)((int)(IComparable)left + (int)(IComparable)right);
             if (T == typeof(ulong))
-                return (IComparable) (ulong) ((long) (ulong) (IComparable) left + (long) (ulong) (IComparable) right);
+                return (IComparable)(ulong)((long)(ulong)(IComparable)left + (long)(ulong)(IComparable)right);
             if (T == typeof(long))
-                return (IComparable) ((long) (IComparable) left + (long) (IComparable) right);
+                return (IComparable)((long)(IComparable)left + (long)(IComparable)right);
             if (T == typeof(float))
-                return (IComparable) ((float) (IComparable) left + (float) (IComparable) right);
+                return (IComparable)((float)(IComparable)left + (float)(IComparable)right);
             if (T == typeof(double))
-                return (IComparable) ((double) (IComparable) left + (double) (IComparable) right);
+                return (IComparable)((double)(IComparable)left + (double)(IComparable)right);
             return default;
         }
 
-        public struct MathComputer<T> where T : struct {
+        public struct MathComputer<T> where T : struct
+        {
             public T Value;
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public MathComputer(T val) {
+            [MethodImpl((MethodImplOptions)768)]
+            public MathComputer(T val)
+            {
                 Value = val;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public static T operator +(MathComputer<T> lhs, T rhs) {
+            [MethodImpl((MethodImplOptions)768)]
+            public static T operator +(MathComputer<T> lhs, T rhs)
+            {
                 return lhs + new MathComputer<T>(rhs);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public static T operator +(MathComputer<T> left, MathComputer<T> right) {
+            [MethodImpl((MethodImplOptions)768)]
+            public static T operator +(MathComputer<T> left, MathComputer<T> right)
+            {
                 if (typeof(T) == typeof(byte))
-                    return ((T) (ValueType) (byte) ((uint) (byte) (ValueType) left.Value + (uint) (byte) (ValueType) right.Value));
+                    return ((T)(ValueType)(byte)((uint)(byte)(ValueType)left.Value + (uint)(byte)(ValueType)right.Value));
                 if (typeof(T) == typeof(sbyte))
-                    return ((T) (ValueType) (sbyte) ((int) (sbyte) (ValueType) left.Value + (int) (sbyte) (ValueType) right.Value));
+                    return ((T)(ValueType)(sbyte)((int)(sbyte)(ValueType)left.Value + (int)(sbyte)(ValueType)right.Value));
                 if (typeof(T) == typeof(ushort))
-                    return ((T) (ValueType) (ushort) ((uint) (ushort) (ValueType) left.Value + (uint) (ushort) (ValueType) right.Value));
+                    return ((T)(ValueType)(ushort)((uint)(ushort)(ValueType)left.Value + (uint)(ushort)(ValueType)right.Value));
                 if (typeof(T) == typeof(short))
-                    return ((T) (ValueType) (short) ((int) (short) (ValueType) left.Value + (int) (short) (ValueType) right.Value));
+                    return ((T)(ValueType)(short)((int)(short)(ValueType)left.Value + (int)(short)(ValueType)right.Value));
                 if (typeof(T) == typeof(uint))
-                    return ((T) (ValueType) (uint) ((int) (uint) (ValueType) left.Value + (int) (uint) (ValueType) right.Value));
+                    return ((T)(ValueType)(uint)((int)(uint)(ValueType)left.Value + (int)(uint)(ValueType)right.Value));
                 if (typeof(T) == typeof(int))
-                    return ((T) (ValueType) ((int) (ValueType) left.Value + (int) (ValueType) right.Value));
+                    return ((T)(ValueType)((int)(ValueType)left.Value + (int)(ValueType)right.Value));
                 if (typeof(T) == typeof(ulong))
-                    return ((T) (ValueType) (ulong) ((long) (ulong) (ValueType) left.Value + (long) (ulong) (ValueType) right.Value));
+                    return ((T)(ValueType)(ulong)((long)(ulong)(ValueType)left.Value + (long)(ulong)(ValueType)right.Value));
                 if (typeof(T) == typeof(long))
-                    return ((T) (ValueType) ((long) (ValueType) left.Value + (long) (ValueType) right.Value));
+                    return ((T)(ValueType)((long)(ValueType)left.Value + (long)(ValueType)right.Value));
                 if (typeof(T) == typeof(float))
-                    return ((T) (ValueType) ((float) (ValueType) left.Value + (float) (ValueType) right.Value));
+                    return ((T)(ValueType)((float)(ValueType)left.Value + (float)(ValueType)right.Value));
                 if (typeof(T) == typeof(double))
-                    return ((T) (ValueType) ((double) (ValueType) left.Value + (double) (ValueType) right.Value));
+                    return ((T)(ValueType)((double)(ValueType)left.Value + (double)(ValueType)right.Value));
                 return default;
             }
         }

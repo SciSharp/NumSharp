@@ -2,7 +2,6 @@
 
 namespace NumSharp.Benchmark.Unmanaged
 {
-
     //|                                 Method |      Mean |     Error |    StdDev |    Median |       Min |       Max | Ratio | RatioSD |
     //|--------------------------------------- |----------:|----------:|----------:|----------:|----------:|----------:|------:|--------:|
     //|                             BasicClass |  2.542 us | 0.0209 us | 0.0299 us |  2.526 us |  2.516 us |  2.613 us |  1.00 |    0.00 |
@@ -23,7 +22,8 @@ namespace NumSharp.Benchmark.Unmanaged
 
     [SimpleJob(launchCount: 1, warmupCount: 10, targetCount: 30)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
-    public class VirtualMethod {
+    public class VirtualMethod
+    {
         static BasicClass basicClass;
         static InterfacedClass interfacedClass;
         static SealedInterfacedClass sealedInterfaced;
@@ -43,7 +43,8 @@ namespace NumSharp.Benchmark.Unmanaged
         static AbstractClass viaBase_sealedOfAbstractClass;
 
         [GlobalSetup]
-        public void Setup() {
+        public void Setup()
+        {
             basicClass = new BasicClass();
             isealedInterfaced = sealedInterfaced = new SealedInterfacedClass();
             iinterfacedClass = interfacedClass = new InterfacedClass();
@@ -55,147 +56,181 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark(Baseline = true)]
-        public void BasicClass() {
+        public void BasicClass()
+        {
             for (int i = 0; i < 10000; i++)
                 basicClass.func();
         }
 
         [Benchmark]
-        public void InterfacedClass() {
+        public void InterfacedClass()
+        {
             for (int i = 0; i < 10000; i++)
                 interfacedClass.func();
         }
-        
+
         [Benchmark]
-        public void SealedInterfaced() {
+        public void SealedInterfaced()
+        {
             for (int i = 0; i < 10000; i++)
                 sealedInterfaced.func();
         }
-        
+
         [Benchmark]
-        public void VirtualInterfacedClass() {
+        public void VirtualInterfacedClass()
+        {
             for (int i = 0; i < 10000; i++)
                 virtualInterfacedClass.func();
         }
-        
+
         [Benchmark]
-        public void SecondInherietClass() {
+        public void SecondInherietClass()
+        {
             for (int i = 0; i < 10000; i++)
                 secondInherietClass.func();
         }
-        
+
         [Benchmark]
-        public void SealedSecondInherietClass() {
+        public void SealedSecondInherietClass()
+        {
             for (int i = 0; i < 10000; i++)
                 sealedSecondInherietClass.func();
         }
-        
+
         [Benchmark]
-        public void ViaInterface_InterfacedClass() {
+        public void ViaInterface_InterfacedClass()
+        {
             for (int i = 0; i < 10000; i++)
                 iinterfacedClass.func();
         }
-        
+
         [Benchmark]
-        public void ViaInterface_SealedInterfaced() {
+        public void ViaInterface_SealedInterfaced()
+        {
             for (int i = 0; i < 10000; i++)
                 isealedInterfaced.func();
         }
-        
+
         [Benchmark]
-        public void ViaInterface_VirtualInterfacedClass() {
+        public void ViaInterface_VirtualInterfacedClass()
+        {
             for (int i = 0; i < 10000; i++)
                 ivirtualInterfacedClass.func();
         }
-        
+
         [Benchmark]
-        public void ViaInterface_SecondInherietClass() {
+        public void ViaInterface_SecondInherietClass()
+        {
             for (int i = 0; i < 10000; i++)
                 isecondInherietClass.func();
         }
-        
+
         [Benchmark]
-        public void ViaInterface_SealedSecondInherietClass() {
+        public void ViaInterface_SealedSecondInherietClass()
+        {
             for (int i = 0; i < 10000; i++)
                 isealedSecondInherietClass.func();
         }
 
         [Benchmark]
-        public void Abstract() {
+        public void Abstract()
+        {
             for (int i = 0; i < 10000; i++)
                 ofAbstractClass.func();
         }
 
         [Benchmark]
-        public void AbstractSealed() {
+        public void AbstractSealed()
+        {
             for (int i = 0; i < 10000; i++)
                 sealedOfAbstractClass.func();
         }
+
         [Benchmark]
-        public void ViaBase_Abstract() {
+        public void ViaBase_Abstract()
+        {
             for (int i = 0; i < 10000; i++)
                 viaBase_ofAbstractClass.func();
         }
 
         [Benchmark]
-        public void ViaBase_AbstractSealed() {
+        public void ViaBase_AbstractSealed()
+        {
             for (int i = 0; i < 10000; i++)
                 viaBase_sealedOfAbstractClass.func();
         }
     }
 
-    public class BasicClass {
-        public int func() {
+    public class BasicClass
+    {
+        public int func()
+        {
             return 1;
         }
     }
 
-    public interface IInterface {
+    public interface IInterface
+    {
         int func();
     }
 
-    public class InterfacedClass : IInterface {
-        public int func() {
+    public class InterfacedClass : IInterface
+    {
+        public int func()
+        {
             return 1;
         }
     }
 
-    public class VirtualInterfacedClass : IInterface {
-        public virtual int func() {
+    public class VirtualInterfacedClass : IInterface
+    {
+        public virtual int func()
+        {
             return 1;
         }
     }
 
-    public sealed class SealedInterfacedClass : IInterface {
-        public int func() {
+    public sealed class SealedInterfacedClass : IInterface
+    {
+        public int func()
+        {
             return 1;
         }
     }
 
-    public class SecondInherietClass : VirtualInterfacedClass {
-        public override int func() {
+    public class SecondInherietClass : VirtualInterfacedClass
+    {
+        public override int func()
+        {
             return 1;
         }
     }
 
-    public sealed class SealedSecondInherietClass : VirtualInterfacedClass {
-        public override int func() {
+    public sealed class SealedSecondInherietClass : VirtualInterfacedClass
+    {
+        public override int func()
+        {
             return 1;
         }
     }
 
-    public abstract class AbstractClass {
+    public abstract class AbstractClass
+    {
         public abstract int func();
     }
 
-    public class OfAbstractClass : AbstractClass {
-        public override int func() {
+    public class OfAbstractClass : AbstractClass
+    {
+        public override int func()
+        {
             return 1;
         }
     }
 
-    public sealed class SealedOfAbstractClass : AbstractClass {
-        public override int func() {
+    public sealed class SealedOfAbstractClass : AbstractClass
+    {
+        public override int func()
+        {
             return 1;
         }
     }

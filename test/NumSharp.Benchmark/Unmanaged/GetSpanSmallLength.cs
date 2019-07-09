@@ -5,7 +5,8 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using OOMath;
 
-namespace NumSharp.Benchmark.Unmanaged {
+namespace NumSharp.Benchmark.Unmanaged
+{
     //|         Method | RunStrategy |         Mean |          Error |         StdDev |       Median |         Min |          Max |  Ratio | RatioSD |
     //|--------------- |------------ |-------------:|---------------:|---------------:|-------------:|------------:|-------------:|-------:|--------:|
     //|  VectorNonCopy |   ColdStart |   1,355.8 us |    774.3699 us |    891.7655 us |   1,134.7 us |  1,071.9 us |   5,124.9 us |   8.26 |    1.12 |
@@ -26,7 +27,8 @@ namespace NumSharp.Benchmark.Unmanaged {
     [SimpleJob(RunStrategy.Throughput, targetCount: 20)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public unsafe class GetSpanSmallLength {
+    public unsafe class GetSpanSmallLength
+    {
         private const int length = 100;
         private const int iterations = 20_000;
 
@@ -41,7 +43,8 @@ namespace NumSharp.Benchmark.Unmanaged {
         NDArray nd;
 
         [GlobalSetup]
-        public void Setup() {
+        public void Setup()
+        {
             @from = new UnmanagedArray<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
             to = new UnmanagedArray<int>(length);
@@ -53,9 +56,11 @@ namespace NumSharp.Benchmark.Unmanaged {
         }
 
         [BenchmarkDotNet.Attributes.IterationCleanup()]
-        public void Cleanup() {
+        public void Cleanup()
+        {
             if (memoryTrash != null)
-                for (var i = 0; i < memoryTrash.Length; i++) {
+                for (var i = 0; i < memoryTrash.Length; i++)
+                {
                     var vector = memoryTrash[i];
                     if (vector == null)
                         break;
@@ -65,8 +70,10 @@ namespace NumSharp.Benchmark.Unmanaged {
         }
 
         [Benchmark]
-        public void VectorNonCopy() {
-            for (int j = 0; j < iterations; j++) {
+        public void VectorNonCopy()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 var _ = fromvec.Get(3);
             }
         }
@@ -74,47 +81,58 @@ namespace NumSharp.Benchmark.Unmanaged {
         UnmanagedByteStorage<int>[] memoryTrash;
 
         [Benchmark]
-        public void VectorWithCopy() {
+        public void VectorWithCopy()
+        {
             memoryTrash = new UnmanagedByteStorage<int>[iterations];
-            for (int j = 0; j < iterations; j++) {
+            for (int j = 0; j < iterations; j++)
+            {
                 var _ = fromvec.GetCopy(3);
             }
         }
 
         [Benchmark]
-        public void NDArray() {
-            for (int j = 0; j < iterations; j++) {
+        public void NDArray()
+        {
+            for (int j = 0; j < iterations; j++)
+            {
                 var _ = nd[3];
             }
         }
 
         [Benchmark(Baseline = true)]
-        public void SimpleArray() {
+        public void SimpleArray()
+        {
             var fromspan = fromsimple.AsSpan();
             var tospan = tosimple.AsSpan();
-            for (int i = 0; i < iterations; i++) {
+            for (int i = 0; i < iterations; i++)
+            {
                 fromspan.CopyTo(tospan);
             }
         }
 
         [Benchmark]
-        public void ManualCopy() {
-            int* frm = (int*) Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
-            int* to = (int*) Unsafe.AsPointer(ref tosimple.GetPinnableReference());
-            for (int j = 0; j < iterations; j++) {
-                for (int i = 0; i < length; i++) {
+        public void ManualCopy()
+        {
+            int* frm = (int*)Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
+            int* to = (int*)Unsafe.AsPointer(ref tosimple.GetPinnableReference());
+            for (int j = 0; j < iterations; j++)
+            {
+                for (int i = 0; i < length; i++)
+                {
                     *(to + i) = *(frm + i);
                 }
             }
         }
 
         [Benchmark]
-        public void MemoryCopy() {
-            int* frm = (int*) Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
-            int* to = (int*) Unsafe.AsPointer(ref tosimple.GetPinnableReference());
+        public void MemoryCopy()
+        {
+            int* frm = (int*)Unsafe.AsPointer(ref fromsimple.GetPinnableReference());
+            int* to = (int*)Unsafe.AsPointer(ref tosimple.GetPinnableReference());
             var single = sizeof(int);
             var len = length * single;
-            for (int j = 0; j < iterations; j++) {
+            for (int j = 0; j < iterations; j++)
+            {
                 Buffer.MemoryCopy(frm, to, len, len);
             }
         }

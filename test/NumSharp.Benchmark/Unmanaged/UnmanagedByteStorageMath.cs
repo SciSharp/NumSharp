@@ -14,7 +14,8 @@ namespace NumSharp.Benchmark.Unmanaged
     //| NDArray_Large |   972.432 us |   5.4667 us |  14.9649 us |   967.100 us |   958.7500 us | 1,039.550 us |   743.08 |  134.96 |
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [SimpleJob(launchCount: 2, warmupCount: 10, targetCount: 50)]
-    public class DArrayMath {
+    public class DArrayMath
+    {
         private const int iterations = 10;
         UnmanagedByteStorage<int> a;
         UnmanagedByteStorage<int> b;
@@ -30,11 +31,12 @@ namespace NumSharp.Benchmark.Unmanaged
         int[] arr_b_large;
 
         [IterationSetup]
-        public void Setup() {
-            nd1 = (NDArray) Enumerable.Range(0, 25).ToArray();
-            nd2 = (NDArray) Enumerable.Range(0, 25).ToArray();
-            nd1_large = (NDArray) Enumerable.Range(0, 100000).ToArray();
-            nd2_large = (NDArray) Enumerable.Range(0, 100000).ToArray();
+        public void Setup()
+        {
+            nd1 = (NDArray)Enumerable.Range(0, 25).ToArray();
+            nd2 = (NDArray)Enumerable.Range(0, 25).ToArray();
+            nd1_large = (NDArray)Enumerable.Range(0, 100000).ToArray();
+            nd2_large = (NDArray)Enumerable.Range(0, 100000).ToArray();
             a = new UnmanagedByteStorage<int>(new Shape(5, 5), 0);
             b = new UnmanagedByteStorage<int>(Enumerable.Range(0, 25).ToArray(), new Shape(5, 5));
             a_large = new UnmanagedByteStorage<int>(new Shape(100000, 5), 0);
@@ -48,7 +50,8 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void DArray() {
+        public void DArray()
+        {
             UnmanagedByteStorage<int> c;
             //for (int i = 0; i < iterations; i++) {
             c = a + b;
@@ -60,7 +63,8 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void DArrayLarge() {
+        public void DArrayLarge()
+        {
             UnmanagedByteStorage<int> c;
             //for (int i = 0; i < iterations; i++) {
             c = a_large + b_large;
@@ -72,35 +76,41 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void DirectLarge() {
+        public void DirectLarge()
+        {
             //for (int j = 0; j < iterations; j++) {
             var len = arr_a_large.Length;
             var ret = new int[len];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a_large[i] + arr_b_large[i];
             }
 
             len = arr_a_large.Length;
             ret = new int[len];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a_large[i] + arr_b_large[i];
             }
 
             len = arr_a_large.Length;
             ret = new int[len];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a_large[i] + arr_b_large[i];
             }
 
             len = arr_a_large.Length;
             ret = new int[len];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a_large[i] + arr_b_large[i];
             }
 
             len = arr_a_large.Length;
             ret = new int[len];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a_large[i] + arr_b_large[i];
             }
 
@@ -108,35 +118,41 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark(Baseline = true)]
-        public void Direct() {
+        public void Direct()
+        {
             //for (int j = 0; j < iterations; j++) {
             var len = arr_a.Length;
             var ret = new int[25];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a[i] + arr_b[i];
             }
 
             len = arr_a.Length;
             ret = new int[25];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a[i] + arr_b[i];
             }
 
             len = arr_a.Length;
             ret = new int[25];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a[i] + arr_b[i];
             }
 
             len = arr_a.Length;
             ret = new int[25];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a[i] + arr_b[i];
             }
 
             len = arr_a.Length;
             ret = new int[25];
-            for (int i = 0; i < len; i++) {
+            for (int i = 0; i < len; i++)
+            {
                 ret[i] = arr_a[i] + arr_b[i];
             }
 
@@ -144,7 +160,8 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark()]
-        public void NDArray_() {
+        public void NDArray_()
+        {
             NDArray ret;
             //for (int j = 0; j < iterations; j++) {
             ret = nd1 + nd2;
@@ -156,7 +173,8 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark()]
-        public void NDArray_Large() {
+        public void NDArray_Large()
+        {
             NDArray ret;
             //for (int j = 0; j < iterations; j++) {
             ret = nd1_large + nd2_large;

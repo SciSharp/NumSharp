@@ -3,8 +3,8 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using OOMath;
 
-namespace NumSharp.Benchmark.Unmanaged {
-
+namespace NumSharp.Benchmark.Unmanaged
+{
     //|                      Method | RunStrategy |       Mean |     Error |     StdDev |     Median |        Min |        Max |
     //|---------------------------- |------------ |-----------:|----------:|-----------:|-----------:|-----------:|-----------:|
     //|     UnmanagedMemoryAllocate |   ColdStart |   1.632 ms | 0.5814 ms |  1.7142 ms |   1.443 ms |   1.372 ms |  18.591 ms |
@@ -27,7 +27,8 @@ namespace NumSharp.Benchmark.Unmanaged {
     [SimpleJob(RunStrategy.Throughput, targetCount: 100)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
-    public unsafe class MemoryAllocation {
+    public unsafe class MemoryAllocation
+    {
         private const int iterations_small = 20_000;
         private const int iterations_large = 20_000;
 
@@ -39,8 +40,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Small (100bytes)")]
-        public void UnmanagedMemoryAllocate() {
-            for (int j = 0; j < iterations_small; j++) {
+        public void UnmanagedMemoryAllocate()
+        {
+            for (int j = 0; j < iterations_small; j++)
+            {
                 var a = new UnmanagedArray<byte>(100);
                 a.Free();
             }
@@ -48,8 +51,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Small (100bytes)")]
-        public void MarshalAllocHGlobal() {
-            for (int j = 0; j < iterations_small; j++) {
+        public void MarshalAllocHGlobal()
+        {
+            for (int j = 0; j < iterations_small; j++)
+            {
                 var a = Marshal.AllocHGlobal(100);
                 Marshal.FreeHGlobal(a);
             }
@@ -57,8 +62,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Small (100bytes)")]
-        public void GCHandleAllocArray() {
-            for (int j = 0; j < iterations_small; j++) {
+        public void GCHandleAllocArray()
+        {
+            for (int j = 0; j < iterations_small; j++)
+            {
                 var @ref = GCHandle.Alloc(new byte[100], GCHandleType.Pinned);
                 @ref.AddrOfPinnedObject();
                 @ref.Free();
@@ -84,8 +91,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Large (100kbytes)")]
-        public void MarshalAllocHGlobal100k() {
-            for (int j = 0; j < iterations_large; j++) {
+        public void MarshalAllocHGlobal100k()
+        {
+            for (int j = 0; j < iterations_large; j++)
+            {
                 var a = Marshal.AllocHGlobal(1000000);
                 Marshal.FreeHGlobal(a);
             }
@@ -93,8 +102,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Large (100kbytes)")]
-        public void GCHandleAllocArray100k() {
-            for (int j = 0; j < iterations_large; j++) {
+        public void GCHandleAllocArray100k()
+        {
+            for (int j = 0; j < iterations_large; j++)
+            {
                 var @ref = GCHandle.Alloc(new byte[1000000], GCHandleType.Pinned);
                 @ref.AddrOfPinnedObject();
                 @ref.Free();
@@ -120,8 +131,10 @@ namespace NumSharp.Benchmark.Unmanaged {
 
         [Benchmark]
         [BenchmarkCategory("Large (100kbytes)")]
-        public void UnmanagedMemoryAllocate100k() {
-            for (int j = 0; j < iterations_large; j++) {
+        public void UnmanagedMemoryAllocate100k()
+        {
+            for (int j = 0; j < iterations_large; j++)
+            {
                 var a = new UnmanagedArray<byte>(1000000);
                 a.Free();
             }
