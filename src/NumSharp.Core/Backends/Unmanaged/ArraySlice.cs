@@ -13,7 +13,7 @@ namespace NumSharp.Backends.Unmanaged
     public unsafe struct ArraySlice<T> : ICloneable where T : unmanaged
     {
         private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
-        private readonly UnmanagedArray<T> _array;
+        private readonly UnmanagedArray<T> _memoryBlock;
         private readonly T* address;
         private readonly int length;
 
@@ -28,17 +28,17 @@ namespace NumSharp.Backends.Unmanaged
             [MethodImpl((MethodImplOptions)768)] get => new Span<T>(address, length);
         }
 
-        public ArraySlice(UnmanagedArray<T> array)
+        public ArraySlice(UnmanagedArray<T> memoryBlock)
         {
-            _array = array;
+            _memoryBlock = memoryBlock;
             IsSlice = false;
-            address = (T*)_array.Address;
-            length = _array.Count;
+            address = (T*)_memoryBlock.Address;
+            length = _memoryBlock.Count;
         }
 
-        public ArraySlice(UnmanagedArray<T> array, Span<T> slice)
+        public ArraySlice(UnmanagedArray<T> memoryBlock, Span<T> slice)
         {
-            _array = array;
+            _memoryBlock = memoryBlock;
             IsSlice = true;
             length = slice.Length;
             address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
@@ -80,7 +80,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public ArraySlice<T> Slice(int start)
         {
-            return new ArraySlice<T>(_array, _getspan.Slice(start));
+            return new ArraySlice<T>(_memoryBlock, _getspan.Slice(start));
         }
 
         /// <param name="start"></param>
@@ -89,7 +89,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public ArraySlice<T> Slice(int start, int length)
         {
-            return new ArraySlice<T>(_array, _getspan.Slice(start, length));
+            return new ArraySlice<T>(_memoryBlock, _getspan.Slice(start, length));
         }
 
         /// <param name="destination"></param>
@@ -125,7 +125,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public ArraySlice<T> Clone()
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.Copy(_array));
+            return new ArraySlice<T>(UnmanagedArray<T>.Copy(address, length));
         }
 
         object ICloneable.Clone()
@@ -143,7 +143,7 @@ namespace NumSharp.Backends.Unmanaged
         public void DangerousFree()
         {
             // ReSharper disable once ImpureMethodCallOnReadonlyValueField
-            _array.Free();
+            _memoryBlock.Free();
         }
     }
 }
