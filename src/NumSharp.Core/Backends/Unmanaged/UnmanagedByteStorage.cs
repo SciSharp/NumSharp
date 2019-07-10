@@ -13,6 +13,8 @@ namespace NumSharp.Backends.Unmanaged
     public partial class UnmanagedByteStorage<T> : IEnumerable<T> where T : unmanaged
     {
         public static readonly TypeCode TypeCode = Type.GetTypeCode(typeof(T));
+        public static readonly NPTypeCode NPTypeCode = typeof(T).GetTypeCode();
+
         private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
         private readonly unsafe T* _arrayAddress;
 

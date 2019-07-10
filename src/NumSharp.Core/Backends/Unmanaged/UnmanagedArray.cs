@@ -38,13 +38,6 @@ namespace NumSharp.Backends.Unmanaged
         }
     }
 
-    public interface IUnmanagedArray : ICollection
-    {
-        unsafe void* Address { get; }
-    }
-
-    public delegate void DisposeUnmanaged<T>(ref T addr, int length);
-
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct UnmanagedArray<T> : IEnumerable<T>, IEquatable<UnmanagedArray<T>>, ICollection<T>, IUnmanagedArray where T : unmanaged
     {
