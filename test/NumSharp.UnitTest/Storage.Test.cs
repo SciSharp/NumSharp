@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest
         public void ReshapeLayout2d()
         {
             var x = np.arange(6).MakeGeneric<int>();
-            var y = x.reshape((3, 2), order: "F").MakeGeneric<int>();
+            var y = x.reshape((3, 2), order: 'F').MakeGeneric<int>();
             string str = y.ToString();
             Assert.AreEqual(y[1, 1], 4);
             y[1, 1] = 8;
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest
             Assert.AreEqual(x[4], 8);
 
             x = np.arange(6).reshape(2, 3).MakeGeneric<int>();
-            y = x.reshape((3, 2), order: "F").MakeGeneric<int>();
+            y = x.reshape((3, 2), order: 'F').MakeGeneric<int>();
             Assert.AreEqual(y[0, 1], 4);
             Assert.AreEqual(y[1, 0], 3);
         }
@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest
         public void ReshapeLayout3d()
         {
             var x = np.arange(12).MakeGeneric<int>();
-            var y = x.reshape((2, 3, 2), order: "F").MakeGeneric<int>();
+            var y = x.reshape((2, 3, 2), order: 'F').MakeGeneric<int>();
             string str = y.ToString();
             Assert.AreEqual(y[1, 1], 4);
             y[1, 1] = 8;
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest
             Assert.AreEqual(x[4], 8);
 
             x = np.arange(6).reshape(2, 3).MakeGeneric<int>();
-            y = x.reshape((3, 2), order: "F").MakeGeneric<int>();
+            y = x.reshape((3, 2), order: 'F').MakeGeneric<int>();
             Assert.AreEqual(y[0, 1], 4);
         }
 

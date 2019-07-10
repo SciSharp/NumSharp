@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
             var b = a.flatten();
-            var c = a.flatten("F");
+            var c = a.flatten('F');
 
             Assert.IsTrue(Enumerable.SequenceEqual(c.Data<int>(), new int[] { 1, 3, 2, 4 }));
             Assert.IsTrue(Enumerable.SequenceEqual(b.Data<int>(), new int[] { 1, 2, 3, 4 }));

@@ -8,6 +8,7 @@ using System.Runtime.ConstrainedExecution;
 using System.Runtime.Serialization;
 using System.Security;
 using System.Threading;
+using NumSharp.Utilities;
 
 namespace System.Runtime {
 
