@@ -28,8 +28,7 @@ namespace NumSharp
         /// <param name="nd"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
-    public static NDArray argsort<T>(NDArray nd, int axis = -1) 
+        public static NDArray argsort<T>(NDArray nd, int axis = -1)
             => nd.argsort<T>(axis);
-
     }
 }

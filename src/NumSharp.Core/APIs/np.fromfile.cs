@@ -14,33 +14,36 @@ namespace NumSharp
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Byte:
+                {
+                    var fileSize = new System.IO.FileInfo(fileName).Length;
+                    var arraySize = fileSize / Marshal.SizeOf(dtype);
+                    byte[] dataArray;
+                    using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
                     {
-                        var fileSize = new System.IO.FileInfo(fileName).Length;
-                        var arraySize = fileSize / Marshal.SizeOf(dtype);
-                        byte[] dataArray;
-                        using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
-                        {
-                            dataArray = reader.ReadBytes((int)arraySize);
-                        }
-                        return new NDArray(dataArray);
+                        dataArray = reader.ReadBytes((int)arraySize);
                     }
+
+                    return new NDArray(dataArray);
+                }
+
                 case TypeCode.UInt16:
+                {
+                    var fileSize = new System.IO.FileInfo(fileName).Length;
+                    var arraySize = fileSize / Marshal.SizeOf(dtype);
+                    var dataArray = new ushort[arraySize];
+                    using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
                     {
-                        var fileSize = new System.IO.FileInfo(fileName).Length;
-                        var arraySize = fileSize / Marshal.SizeOf(dtype);
-                        var dataArray = new ushort[arraySize];
-                        using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
+                        for (var i = 0; i < (int)arraySize; i++)
                         {
-                            for (var i = 0; i < (int)arraySize; i++)
-                            {
-                                dataArray[i] = reader.ReadUInt16();
-                            }
+                            dataArray[i] = reader.ReadUInt16();
                         }
-                        return new NDArray(dataArray);
                     }
+
+                    return new NDArray(dataArray);
+                }
             }
+
             throw new NotImplementedException($"fromfile dtype={dtype} not implemented yet");
         }
-
     }
 }

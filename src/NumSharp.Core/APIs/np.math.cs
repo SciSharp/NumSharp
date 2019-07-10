@@ -67,7 +67,7 @@ namespace NumSharp
         /// <summary>
         /// Return the non-negative square-root of an array, element-wise.
         /// </summary>
-        public static NDArray sqrt(NDArray x) 
+        public static NDArray sqrt(NDArray x)
             => x.sqrt();
 
         /// <summary>
@@ -97,8 +97,8 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.positive.html</remarks>
         public static NDArray positive(NDArray nd)
-            => nd.positive();        
-        
+            => nd.positive();
+
         /// <summary>
         /// Numerical negative, element-wise.
         /// </summary>

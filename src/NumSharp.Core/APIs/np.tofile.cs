@@ -14,29 +14,28 @@ namespace NumSharp
             switch (Type.GetTypeCode(dtype))
             {
                 case TypeCode.Byte:
+                {
+                    using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
                     {
-                        using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
-                        {
-                            writer.Write(Array as byte[]);
-                        }
+                        writer.Write(Array as byte[]);
                     }
+                }
                     break;
                 case TypeCode.UInt16:
+                {
+                    var arr = Array as UInt16[];
+                    using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
                     {
-                        var arr = Array as UInt16[];
-                        using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
+                        for (var i = 0; i < arr.Length; i++)
                         {
-                            for (var i = 0; i < arr.Length; i++)
-                            {
-                                writer.Write(arr[i]);
-                            }
+                            writer.Write(arr[i]);
                         }
                     }
+                }
                     break;
                 default:
                     throw new NotImplementedException($"tofile dtype={dtype} not implemented yet");
-            }            
+            }
         }
-
     }
 }

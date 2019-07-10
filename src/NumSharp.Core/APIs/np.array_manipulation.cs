@@ -23,7 +23,7 @@ namespace NumSharp
         /// 
         /// A 1-D array, containing the elements of the input, is returned.A copy is made only if needed.
         /// </summary>
-        public static NDArray ravel(NDArray a) 
+        public static NDArray ravel(NDArray a)
             => a.ravel();
 
         public static NDArray transpose(NDArray x, int[] axes = null)
