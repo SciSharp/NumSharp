@@ -1,0 +1,1509 @@
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
+
+namespace NumSharp.Backends
+{
+    /// <summary>
+    ///     Serves as a typed storage for an array.
+    /// </summary>
+    /// <remarks>
+    ///     Responsible for :<br></br>
+    ///      - store data type, elements, Shape<br></br>
+    ///      - offers methods for accessing elements depending on shape<br></br>
+    ///      - offers methods for casting elements<br></br>
+    ///      - offers methods for change tensor order<br></br>
+    ///      - GetData always return reference object to the true storage<br></br>
+    ///      - GetData{T} and SetData{T} change dtype and cast storage<br></br>
+    ///      - CloneData always create a clone of storage and return this as reference object<br></br>
+    ///      - CloneData{T} clone storage and cast this clone <br></br>
+    /// </remarks>
+    public class UnmanagedStorage : IStorage
+    {
+#if _REGEN
+        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        protected ArraySlice<#2> _array#1;
+#else
+        protected ArraySlice<byte> _arrayByte;
+        protected ArraySlice<short> _arrayInt16;
+        protected ArraySlice<ushort> _arrayUInt16;
+        protected ArraySlice<int> _arrayInt32;
+        protected ArraySlice<uint> _arrayUInt32;
+        protected ArraySlice<long> _arrayInt64;
+        protected ArraySlice<ulong> _arrayUInt64;
+        protected ArraySlice<char> _arrayChar;
+        protected ArraySlice<double> _arrayDouble;
+        protected ArraySlice<float> _arraySingle;
+        protected ArraySlice<decimal> _arrayDecimal;
+#endif
+        protected unsafe void* _address;
+
+        protected Type _dtype;
+        protected NPTypeCode _typecode;
+        protected Shape _shape;
+        protected Slice _slice; //todo! Unused? theres a similar property below with get and set
+
+        /// <summary>
+        /// Flag current storage order
+        /// This flag will be different from Shape.Order when order is changed 
+        /// </summary>
+        private string order = "C";
+
+        /// <summary>
+        ///     Does this instance support spanning?
+        /// </summary>
+        public bool SupportsSpan => true;
+
+        /// <summary>
+        ///     The data type of internal storage array.
+        /// </summary>
+        /// <value>numpys equal dtype</value>
+        /// <remarks>Has to be compliant with <see cref="NPTypeCode"/>.</remarks>
+        public Type DType => _dtype;
+
+        /// <summary>
+        ///     The <see cref="NPTypeCode"/> of <see cref="IStorage.DType"/>.
+        /// </summary>
+        public NPTypeCode TypeCode => _typecode;
+
+        /// <summary>
+        ///     The size in bytes of a single value of <see cref="DType"/>
+        /// </summary>
+        /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
+        public int DTypeSize
+        {
+            get
+            {
+                if (_typecode == NPTypeCode.NDArray || _typecode == NPTypeCode.String)
+                {
+                    return IntPtr.Size;
+                }
+
+                return Marshal.SizeOf(_dtype);
+            }
+        }
+
+        /// <summary>
+        /// storage shape for outside representation
+        /// </summary>
+        /// <value>numpys equal shape</value>
+        public Shape Shape => _shape;
+
+        /// <summary>
+        ///     The current slice this <see cref="IStorage"/> instance currently represent.
+        /// </summary>
+        public Slice Slice { get; set; } //todo! shouldn't it be read-only?
+
+        /// <summary>
+        ///     The engine that was used to create this <see cref="IStorage"/>.
+        /// </summary>
+        public TensorEngine Engine { get; internal set; }
+
+        /// <summary>
+        ///     Creates an empty storage of type <paramref name="dtype"/>.
+        /// </summary>
+        /// <param name="dtype">The type of this storage</param>
+        public UnmanagedStorage(Type dtype)
+        {
+            _dtype = dtype ?? throw new ArgumentNullException(nameof(dtype));
+            _typecode = dtype.GetTypeCode();
+            _shape = new Shape(0);
+        }
+
+        /// <summary>
+        ///     Creates an empty storage of type <paramref name="typeCode"/>.
+        /// </summary>
+        /// <param name="typeCode">The type of this storage</param>
+        public UnmanagedStorage(NPTypeCode typeCode)
+        {
+            if (typeCode == NPTypeCode.Empty) throw new ArgumentNullException(nameof(typeCode));
+            _dtype = typeCode.AsType();
+            _typecode = typeCode;
+            _shape = new Shape(0);
+        }
+
+        //todo! create scalar constuctors?
+
+#if _REGEN
+        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        public UnmanagedStorage(#1[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _DType = typeof(#1);
+            _typecode = _DType.GetTypeCode();
+            _Shape = new Shape(values.Length);
+            _array#1 = new ArraySlice<#2>(UnmanagedArray<#2>.FromArray(values));
+            unsafe {
+                _CurrentAddress = _array#1.Start;
+            }
+        }
+        %
+#else
+        public UnmanagedStorage(Byte[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Byte);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayByte = new ArraySlice<byte>(UnmanagedArray<byte>.FromArray(values));
+            unsafe {
+                _address = _arrayByte.Start;
+            }
+        }
+        public UnmanagedStorage(Int16[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Int16);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayInt16 = new ArraySlice<short>(UnmanagedArray<short>.FromArray(values));
+            unsafe {
+                _address = _arrayInt16.Start;
+            }
+        }
+        public UnmanagedStorage(UInt16[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(UInt16);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayUInt16 = new ArraySlice<ushort>(UnmanagedArray<ushort>.FromArray(values));
+            unsafe {
+                _address = _arrayUInt16.Start;
+            }
+        }
+        public UnmanagedStorage(Int32[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Int32);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayInt32 = new ArraySlice<int>(UnmanagedArray<int>.FromArray(values));
+            unsafe {
+                _address = _arrayInt32.Start;
+            }
+        }
+        public UnmanagedStorage(UInt32[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(UInt32);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayUInt32 = new ArraySlice<uint>(UnmanagedArray<uint>.FromArray(values));
+            unsafe {
+                _address = _arrayUInt32.Start;
+            }
+        }
+        public UnmanagedStorage(Int64[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Int64);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayInt64 = new ArraySlice<long>(UnmanagedArray<long>.FromArray(values));
+            unsafe {
+                _address = _arrayInt64.Start;
+            }
+        }
+        public UnmanagedStorage(UInt64[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(UInt64);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayUInt64 = new ArraySlice<ulong>(UnmanagedArray<ulong>.FromArray(values));
+            unsafe {
+                _address = _arrayUInt64.Start;
+            }
+        }
+        public UnmanagedStorage(Char[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Char);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayChar = new ArraySlice<char>(UnmanagedArray<char>.FromArray(values));
+            unsafe {
+                _address = _arrayChar.Start;
+            }
+        }
+        public UnmanagedStorage(Double[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Double);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayDouble = new ArraySlice<double>(UnmanagedArray<double>.FromArray(values));
+            unsafe {
+                _address = _arrayDouble.Start;
+            }
+        }
+        public UnmanagedStorage(Single[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Single);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arraySingle = new ArraySlice<float>(UnmanagedArray<float>.FromArray(values));
+            unsafe {
+                _address = _arraySingle.Start;
+            }
+        }
+        public UnmanagedStorage(Decimal[] values)
+        {            
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _dtype = typeof(Decimal);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            _arrayDecimal = new ArraySlice<decimal>(UnmanagedArray<decimal>.FromArray(values));
+            unsafe {
+                _address = _arrayDecimal.Start;
+            }
+        }
+#endif
+
+        #region Switched Accessing
+
+        /// <summary>
+        ///     Replace internal storage array with given array.
+        /// </summary>
+        /// <param name="array">The array to set as internal storage</param>
+        /// <exception cref="InvalidCastException">When type of <paramref name="array"/> does not match <see cref="DType"/> of this storage</exception>
+        protected void SetInternalArray(Array array)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    _array#1 = ArraySlice<#2>.FromArray((#2[])array);
+                    break;
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                case NPTypeCode.Byte:
+                {
+                    _arrayByte = ArraySlice<byte>.FromArray((byte[])array);
+                    break;
+                }
+                case NPTypeCode.Int16:
+                {
+                    _arrayInt16 = ArraySlice<short>.FromArray((short[])array);
+                    break;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    _arrayUInt16 = ArraySlice<ushort>.FromArray((ushort[])array);
+                    break;
+                }
+                case NPTypeCode.Int32:
+                {
+                    _arrayInt32 = ArraySlice<int>.FromArray((int[])array);
+                    break;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    _arrayUInt32 = ArraySlice<uint>.FromArray((uint[])array);
+                    break;
+                }
+                case NPTypeCode.Int64:
+                {
+                    _arrayInt64 = ArraySlice<long>.FromArray((long[])array);
+                    break;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    _arrayUInt64 = ArraySlice<ulong>.FromArray((ulong[])array);
+                    break;
+                }
+                case NPTypeCode.Char:
+                {
+                    _arrayChar = ArraySlice<char>.FromArray((char[])array);
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    _arrayDouble = ArraySlice<double>.FromArray((double[])array);
+                    break;
+                }
+                case NPTypeCode.Single:
+                {
+                    _arraySingle = ArraySlice<float>.FromArray((float[])array);
+                    break;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    _arrayDecimal = ArraySlice<decimal>.FromArray((decimal[])array);
+                    break;
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Replace internal storage array with given array.
+        /// </summary>
+        /// <param name="array">The array to set as internal storage</param>
+        /// <exception cref="InvalidCastException">When type of <paramref name="array"/> does not match <see cref="DType"/> of this storage</exception>
+        protected void SetInternalArray(IArraySlice array)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    _array#1 = (ArraySlice<#2>)array;
+                    break;
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                case NPTypeCode.Byte:
+                {
+                    _arrayByte = (ArraySlice<byte>)array;
+                    break;
+                }
+                case NPTypeCode.Int16:
+                {
+                    _arrayInt16 = (ArraySlice<short>)array;
+                    break;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    _arrayUInt16 = (ArraySlice<ushort>)array;
+                    break;
+                }
+                case NPTypeCode.Int32:
+                {
+                    _arrayInt32 = (ArraySlice<int>)array;
+                    break;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    _arrayUInt32 = (ArraySlice<uint>)array;
+                    break;
+                }
+                case NPTypeCode.Int64:
+                {
+                    _arrayInt64 = (ArraySlice<long>)array;
+                    break;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    _arrayUInt64 = (ArraySlice<ulong>)array;
+                    break;
+                }
+                case NPTypeCode.Char:
+                {
+                    _arrayChar = (ArraySlice<char>)array;
+                    break;
+                }
+                case NPTypeCode.Double:
+                {
+                    _arrayDouble = (ArraySlice<double>)array;
+                    break;
+                }
+                case NPTypeCode.Single:
+                {
+                    _arraySingle = (ArraySlice<float>)array;
+                    break;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    _arrayDecimal = (ArraySlice<decimal>)array;
+                    break;
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Gets a single value from current 
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        protected object GetInternalValue(int index)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    return _array#1[index];
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+                case NPTypeCode.Byte:
+                {
+                    return _arrayByte[index];
+                }
+                case NPTypeCode.Int16:
+                {
+                    return _arrayInt16[index];
+                }
+                case NPTypeCode.UInt16:
+                {
+                    return _arrayUInt16[index];
+                }
+                case NPTypeCode.Int32:
+                {
+                    return _arrayInt32[index];
+                }
+                case NPTypeCode.UInt32:
+                {
+                    return _arrayUInt32[index];
+                }
+                case NPTypeCode.Int64:
+                {
+                    return _arrayInt64[index];
+                }
+                case NPTypeCode.UInt64:
+                {
+                    return _arrayUInt64[index];
+                }
+                case NPTypeCode.Char:
+                {
+                    return _arrayChar[index];
+                }
+                case NPTypeCode.Double:
+                {
+                    return _arrayDouble[index];
+                }
+                case NPTypeCode.Single:
+                {
+                    return _arraySingle[index];
+                }
+                case NPTypeCode.Decimal:
+                {
+                    return _arrayDecimal[index];
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Set value in current active array, if types do not match the <see cref="Convert"/> is used.
+        /// </summary>
+        /// <param name="index">The index to set <paramref name="value"/> at</param>
+        /// <param name="value">The value to set</param>
+        protected void SetOrConvertInternalValue(object value, int index)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                //Based on benchmark `ArrayAssignmentUnspecifiedType`
+
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    _array#1[index] = Convert.To#1(value);
+                    break;
+                    
+                }
+                %
+#else
+                //Based on benchmark `ArrayAssignmentUnspecifiedType`
+
+                case NPTypeCode.Byte:
+                {
+                    _arrayByte[index] = Convert.ToByte(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Int16:
+                {
+                    _arrayInt16[index] = Convert.ToInt16(value);
+                    break;
+                    
+                }
+                case NPTypeCode.UInt16:
+                {
+                    _arrayUInt16[index] = Convert.ToUInt16(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Int32:
+                {
+                    _arrayInt32[index] = Convert.ToInt32(value);
+                    break;
+                    
+                }
+                case NPTypeCode.UInt32:
+                {
+                    _arrayUInt32[index] = Convert.ToUInt32(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Int64:
+                {
+                    _arrayInt64[index] = Convert.ToInt64(value);
+                    break;
+                    
+                }
+                case NPTypeCode.UInt64:
+                {
+                    _arrayUInt64[index] = Convert.ToUInt64(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Char:
+                {
+                    _arrayChar[index] = Convert.ToChar(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Double:
+                {
+                    _arrayDouble[index] = Convert.ToDouble(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Single:
+                {
+                    _arraySingle[index] = Convert.ToSingle(value);
+                    break;
+                    
+                }
+                case NPTypeCode.Decimal:
+                {
+                    _arrayDecimal[index] = Convert.ToDecimal(value);
+                    break;
+                    
+                }
+#endif
+
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        /// <summary>
+        ///     Set value in current active array, if types do not match then <see cref="InvalidCastException"/> will be thrown.
+        /// </summary>
+        /// <param name="index">The index to set <paramref name="value"/> at</param>
+        /// <param name="value">The value to set</param>
+        /// <exception cref="InvalidCastException">When <see cref="value"/>'s type does not equal to <see cref="DType"/>.</exception>
+        protected void SetInternalValueUnsafe(object value, int index)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    _array#1[index] = (#1) value;
+                    break;
+                    
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                case NPTypeCode.Byte:
+                {
+                    _arrayByte[index] = (Byte) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Int16:
+                {
+                    _arrayInt16[index] = (Int16) value;
+                    break;
+                    
+                }
+                case NPTypeCode.UInt16:
+                {
+                    _arrayUInt16[index] = (UInt16) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Int32:
+                {
+                    _arrayInt32[index] = (Int32) value;
+                    break;
+                    
+                }
+                case NPTypeCode.UInt32:
+                {
+                    _arrayUInt32[index] = (UInt32) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Int64:
+                {
+                    _arrayInt64[index] = (Int64) value;
+                    break;
+                    
+                }
+                case NPTypeCode.UInt64:
+                {
+                    _arrayUInt64[index] = (UInt64) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Char:
+                {
+                    _arrayChar[index] = (Char) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Double:
+                {
+                    _arrayDouble[index] = (Double) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Single:
+                {
+                    _arraySingle[index] = (Single) value;
+                    break;
+                    
+                }
+                case NPTypeCode.Decimal:
+                {
+                    _arrayDecimal[index] = (Decimal) value;
+                    break;
+                    
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+
+            }
+        }
+
+        /// <summary>
+        ///     Gets the internal array based on <see cref="type"/>.
+        /// </summary>
+        /// <returns>Will return null if <see cref="type"/> != <see cref="DType"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected IArraySlice GetInternalArray(Type type)
+        {
+            return GetInternalArray(type.GetTypeCode());
+        }
+
+        /// <summary>
+        ///     Gets the internal array based on <see cref="DType"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected IArraySlice GetInternalArray()
+        {
+            return GetInternalArray(_typecode);
+        }
+
+        /// <summary>
+        ///     Gets the internal array based on <see cref="type"/>.
+        /// </summary>
+        /// <returns>Will return null if <see cref="typeCode"/> != <see cref="DType"/></returns>
+        protected IArraySlice GetInternalArray(NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if _REGEN
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    return _array#1;
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+
+                case NPTypeCode.Byte:
+                {
+                    return _arrayByte;
+                }
+                case NPTypeCode.Int16:
+                {
+                    return _arrayInt16;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    return _arrayUInt16;
+                }
+                case NPTypeCode.Int32:
+                {
+                    return _arrayInt32;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    return _arrayUInt32;
+                }
+                case NPTypeCode.Int64:
+                {
+                    return _arrayInt64;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    return _arrayUInt64;
+                }
+                case NPTypeCode.Char:
+                {
+                    return _arrayChar;
+                }
+                case NPTypeCode.Double:
+                {
+                    return _arrayDouble;
+                }
+                case NPTypeCode.Single:
+                {
+                    return _arraySingle;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    return _arrayDecimal;
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        ///     Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
+        /// </summary>
+        /// <param name="sourceArray">The array to change his type</param>
+        /// <param name="to_dtype">The type to change to.</param>
+        /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
+        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
+        protected static Array _ChangeTypeOfArray(Array sourceArray, Type to_dtype)
+        {
+            if (to_dtype == sourceArray.GetType().GetElementType()) return sourceArray;
+            return ArrayConvert.To(sourceArray, to_dtype);
+        }
+
+        /// <summary>
+        ///     Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
+        /// </summary>
+        /// <param name="sourceArray">The array to change his type</param>
+        /// <param name="to_dtype">The type to change to.</param>
+        /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
+        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
+        protected static IArraySlice _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
+        {
+            //TODO! unit test this.
+            if (typeof(TOut) == sourceArray.GetType().GetElementType()) return sourceArray;
+            switch (InfoOf<TOut>.NPTypeCode)
+            {
+#if _REGEN
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<#1, TOut>(sourceArray.MemoryBlock));
+                }
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+                case NPTypeCode.Byte:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Byte, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Int16:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int16, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.UInt16:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt16, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Int32:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int32, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.UInt32:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt32, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Int64:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int64, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.UInt64:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt64, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Char:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Char, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Double:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Double, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Single:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Single, TOut>(sourceArray.MemoryBlock));
+                }
+                case NPTypeCode.Decimal:
+                {
+                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Decimal, TOut>(sourceArray.MemoryBlock));
+                }
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        #region Allocation
+
+        protected void _Allocate(Shape shape, Type dtype, Array values)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            _shape = shape;
+
+            if (dtype != null)
+            {
+                _dtype = dtype;
+                _typecode = _dtype.GetTypeCode();
+                if (_typecode == NPTypeCode.Empty)
+                    throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            }
+
+            SetInternalArray(values);
+        }
+        protected void _Allocate(Shape shape, Type dtype, IArraySlice values)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            _shape = shape;
+
+            if (dtype != null)
+            {
+                _dtype = dtype;
+                _typecode = _dtype.GetTypeCode();
+                if (_typecode == NPTypeCode.Empty)
+                    throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            }
+
+            SetInternalArray(values);
+        }
+
+        /// <summary>
+        ///     Allocates a new <see cref="Array"/> into memory.
+        /// </summary>
+        /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
+        /// <param name="shape">The shape of the array.</param>
+        public void Allocate(Shape shape, Type dtype = null)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            dtype = dtype ?? DType;
+            _Allocate(shape, dtype, Arrays.Create(dtype, new int[] {shape.Size}));
+        }
+
+        /// <summary>
+        ///     Allocate <paramref name="values"/> into memory.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        public void Allocate(Array values)
+        {
+            if (values == null)
+            {
+                throw new ArgumentNullException(nameof(values));
+            }
+
+            Shape shape;
+            //get lengths incase it is multi-dimensional
+            if (values.Rank > 1)
+            {
+                int[] dim = new int[values.Rank];
+                for (int idx = 0; idx < dim.Length; idx++)
+                    dim[idx] = values.GetLength(idx);
+                shape = new Shape(dim);
+            }
+            else
+            {
+                shape = new Shape(values.Length);
+            }
+
+            Type elementType = values.GetType();
+            // ReSharper disable once PossibleNullReferenceException
+            while (elementType.IsArray)
+                elementType = elementType.GetElementType();
+
+            _Allocate(shape, elementType, values);
+        }
+
+        /// <summary>
+        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <see cref="shape"/> to it.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <param name="shape">The shape of the array.</param>
+        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        public void Allocate<T>(ArraySlice<T> values, Shape shape, bool copy = false) where T : unmanaged
+        {
+            _Allocate(shape, typeof(T), copy ? values.Clone() : values);
+        }
+
+        /// <summary>
+        ///     Allocate <paramref name="values"/> into memory.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <param name="shape">The shape of the array.</param>
+        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        public void Allocate(IArraySlice values, Shape shape, bool copy = false)
+        {
+            _Allocate(shape, values.ArrayType, (IArraySlice) (copy ? values.Clone() : values));
+        }
+
+        /// <summary>
+        ///     Allocate <paramref name="values"/> into memory.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        /// <param name="shape">The shape of given array</param>
+        public void Allocate(Array values, Shape shape)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            Type elementType = values.GetType();
+            // ReSharper disable once PossibleNullReferenceException
+            while (elementType.IsArray)
+                elementType = elementType.GetElementType();
+
+            _Allocate(shape, elementType, values);
+        }
+
+        /// <summary>
+        ///     Allocate <paramref name="values"/> into memory.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        public void Allocate<T>(T[] values)
+        {
+            if (values == null)
+            {
+                throw new ArgumentNullException(nameof(values));
+            }
+
+            Shape shape;
+            if (values.Rank > 1)
+            {
+                int[] dim = new int[values.Rank];
+                for (int idx = 0; idx < dim.Length; idx++)
+                    dim[idx] = values.GetLength(idx);
+                shape = new Shape(dim);
+            }
+            else
+            {
+                shape = new Shape(values.Length);
+            }
+
+            Type elementType = values.GetType();
+            // ReSharper disable once PossibleNullReferenceException
+            while (elementType.IsArray)
+                elementType = elementType.GetElementType();
+
+            _Allocate(shape, elementType, values);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Get reference to internal data storage
+        /// </summary>
+        /// <returns>reference to internal storage as System.Array</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public IArraySlice GetData()
+        {
+            return GetInternalArray(DType);
+        }
+
+        /// <summary>
+        ///     Clone internal storage and get reference to it
+        /// </summary>
+        /// <returns>reference to cloned storage as System.Array</returns>
+        public IArraySlice CloneData()
+        {
+            return (IArraySlice) GetInternalArray().Clone();
+        }
+
+        /// <summary>
+        ///     Get reference to internal data storage and if necessary: copy and cast elements to new dtype of <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">new storage data type</typeparam>
+        /// <returns>reference to internal (casted) storage as T[]</returns>
+        public ArraySlice<T> GetData<T>() where T : unmanaged
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        ///     Attempts to cast internal storage to an array of type <typeparamref name="T"/> and returns the result, therefore results can be null.
+        /// </summary>
+        /// <typeparam name="T">The type that is expected.</typeparam>
+        public ArraySlice<T> AsArray<T>() where T : unmanaged
+        {
+            //if (!typeof(T).IsValidNPType())
+            //    throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
+            return (ArraySlice<T>) GetInternalArray();
+        }
+
+        /// <summary>
+        ///     Get all elements from cloned storage as T[] and cast dtype
+        /// </summary>
+        /// <typeparam name="T">cloned storgae dtype</typeparam>
+        /// <returns>reference to cloned storage as T[]</returns>
+        public ArraySlice<T> CloneData<T>() where T : unmanaged
+        {
+            return (ArraySlice<T>) GetInternalArray().Clone();
+        }
+
+        /// <summary>
+        ///     Get reference to internal data storage and cast (also copies) elements to new dtype if necessary
+        /// </summary>
+        /// <typeparam name="T">new storage data type</typeparam>
+        /// <returns>reference to internal (casted) storage as T[]</returns>
+        public ArraySlice<T> GetData<T>() where T : unmanaged
+        {
+            if (!typeof(T).IsValidNPType())
+            {
+                throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
+            }
+
+            //if (typeof(T).Name != _DType.Name)
+            //{
+            //    Console.WriteLine($"Warning: GetData {typeof(T).Name} is not {_DType.Name} of storage.");
+            //}
+
+            var internalArray = GetInternalArray();
+            if (internalArray is ArraySlice<T> ret)
+                return ret;
+            
+            return (ArraySlice<T>) _ChangeTypeOfArray<T>(internalArray);
+        }
+
+        /// <summary>
+        ///     Get single value from internal storage as type T and cast dtype to T
+        /// </summary>
+        /// <param name="indices">indices</param>
+        /// <typeparam name="T">new storage data type</typeparam>
+        /// <returns>element from internal storage</returns>
+        /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
+        public T GetData<T>(params int[] indices) where T : unmanaged
+        {
+            return AsArray<T>()[Shape.GetIndexInShape(Slice, indices)];
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(object value, params int[] indices)
+        {
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+
+            if (indices.Length == 0)
+                throw new ArgumentException("indices cannot be an empty collection.", nameof(indices));
+
+
+            if (value is NDArray nd)
+            {
+                if (np.isscalar(nd))
+                {
+                    SetOrConvertInternalValue(nd.Array.GetValue(0), _shape.GetIndexInShape(Slice, indices));
+                    return;
+                }
+
+                var targetIndex = _shape.GetIndexInShape(Slice, indices);
+
+                //todo! we need to handle more dims.
+
+                int offset = 0;
+                if (Shape.NDim == 1)
+                    offset = targetIndex + (Slice?.Start ?? 0);
+                else
+                    offset = targetIndex + (Slice?.Start ?? 0) * Shape.Strides[0];
+                if (offset != 0)
+                {
+                    var from = nd.Array;
+                    Array.Copy(from, 0, GetInternalArray(DType), offset, from.Length);
+                    return;
+                }
+
+                value = nd.Array;
+                //fall back down
+            }
+
+            SetOrConvertInternalValue(value, _shape.GetIndexInShape(Slice, indices));
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Copies values only if <paramref name="values"/> type does not match <see cref="DType"/> and doesn't change shape.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReplaceData(Array values)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            SetInternalArray(_ChangeTypeOfArray(values, values.GetType().GetElementType()));
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        public void ReplaceData(IArraySlice values)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Set an Array to internal storage, cast it to new dtype and change dtype  
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="dtype"></param>
+        /// <remarks>Does not copy values unless cast in necessary and doesn't change shape.</remarks>
+        public void ReplaceData(Array values, Type dtype)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (dtype == null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            var changedArray = _ChangeTypeOfArray(values, dtype);
+            //first try to convert to dtype only then we apply changes.
+            _dtype = dtype;
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            SetInternalArray(changedArray);
+        }
+
+        /// <summary>
+        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="typeCode"></param>
+        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape.</remarks>
+        public void ReplaceData(Array values, NPTypeCode typeCode)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (typeCode == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(typeCode));
+
+            var dtype = typeCode.AsType();
+            var changedArray = _ChangeTypeOfArray(values, dtype);
+            //first try to convert to dtype only then we apply changes.
+            _dtype = dtype;
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            SetInternalArray(changedArray);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        /// </summary>
+        /// <param name="nd"></param>
+        /// <remarks>Does not copy values and does change shape and dtype.</remarks>
+        public void ReplaceData(NDArray nd)
+        {
+            if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+
+            //first try to convert to dtype only then we apply changes.
+            _shape = nd.shape;
+            _dtype = nd.dtype;
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
+            SetInternalArray(nd.Array);
+        }
+
+        public void Reshape(params int[] dimensions)
+        {
+            //todo! Shouldnt there be some verification regarding if shape is valid for this type or now?
+            _shape = new Shape(dimensions);
+        }
+
+        public ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged
+        {
+            if (slice is null)
+                slice = Slice;
+
+            if (slice is null)
+            {
+                return GetData<T>();
+            }
+            else
+            {
+                var shape = Shape.GetShape(Shape.Dimensions, axis: 0);
+                var offset = Shape.GetSize(shape);
+                return GetData<T>().Slice(slice.Start.Value * offset, slice.Length.Value * offset);
+            }
+        }
+
+        public ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged
+        {
+            int stride = Shape.NDim == 0 ? 1 : Shape.Strides[indice.Length - 1];
+            int idx = Shape.GetIndexInShape(Slice, indice);
+            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape.Strides[0];
+
+            return GetData<T>().Slice(offset, stride);
+        }
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="NDArray"/> from internal storage..
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="NDArray"/></exception>
+        public NDArray GetNDArray(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="Complex"/> from internal storage..
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Complex"/></exception>
+        public Complex GetComplex(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="bool"/> from internal storage..
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        public bool GetBoolean(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        public UnmanagedStorage Clone()
+        {
+            var puffer = (UnmanagedStorage)Engine.GetStorage(_dtype);
+            puffer.Allocate(_shape.Clone()); //allocate is necessary if non-C# memory storage is used.
+            puffer.ReplaceData((Array)GetData().Clone()); //todo! check if theres a faster way to clone.
+
+            return puffer;
+        }
+
+        object ICloneable.Clone()
+        {
+            return Clone();
+        }
+
+        #region Getters
+
+#if _REGEN
+        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        /// <summary>
+        ///     Retrieves value of type <see cref="#2"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
+        public #2 Get#1(params int[] indices)
+            => _array#1[Shape.GetIndexInShape(Slice, indices)];
+
+        %
+#else
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="byte"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
+        public byte GetByte(params int[] indices)
+            => _arrayByte[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="short"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
+        public short GetInt16(params int[] indices)
+            => _arrayInt16[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="ushort"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
+        public ushort GetUInt16(params int[] indices)
+            => _arrayUInt16[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="int"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
+        public int GetInt32(params int[] indices)
+            => _arrayInt32[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="uint"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
+        public uint GetUInt32(params int[] indices)
+            => _arrayUInt32[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="long"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
+        public long GetInt64(params int[] indices)
+            => _arrayInt64[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="ulong"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
+        public ulong GetUInt64(params int[] indices)
+            => _arrayUInt64[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="char"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
+        public char GetChar(params int[] indices)
+            => _arrayChar[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="double"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
+        public double GetDouble(params int[] indices)
+            => _arrayDouble[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="float"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
+        public float GetSingle(params int[] indices)
+            => _arraySingle[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="decimal"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
+        public decimal GetDecimal(params int[] indices)
+            => _arrayDecimal[Shape.GetIndexInShape(Slice, indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="string"/> from internal storage..
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="string"/></exception>
+        public string GetString(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
+        public object GetValue(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+#endif
+
+        #endregion
+    }
+}

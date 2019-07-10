@@ -28,7 +28,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         private static unsafe Span<TTo> Cast<TFrom, TTo>(UnmanagedByteStorage<T> unmanagedByteStorage)
         {
-            return new Span<TTo>(unmanagedByteStorage._arrayAddress, checked(unmanagedByteStorage._array.Length * Unsafe.SizeOf<TFrom>()) / Unsafe.SizeOf<TTo>());
+            return new Span<TTo>(unmanagedByteStorage.Address, checked(unmanagedByteStorage._array.Length * Unsafe.SizeOf<TFrom>()) / Unsafe.SizeOf<TTo>());
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -52,7 +52,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         private static unsafe Span<Vector<T>> CastVector<T>(UnmanagedByteStorage<T> unmanagedByteStorage) where T : unmanaged
         {
-            return new Span<Vector<T>>(unmanagedByteStorage._arrayAddress, checked(unmanagedByteStorage._array.Length * Unsafe.SizeOf<T>()) / Unsafe.SizeOf<Vector<T>>());
+            return new Span<Vector<T>>(unmanagedByteStorage.Address, checked(unmanagedByteStorage._array.Length * Unsafe.SizeOf<T>()) / Unsafe.SizeOf<Vector<T>>());
         }
     }
 

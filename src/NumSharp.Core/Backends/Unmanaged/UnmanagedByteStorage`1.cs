@@ -8,36 +8,27 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using NumSharp.Memory.Pooling;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
-    public partial class UnmanagedByteStorage<T> : IEnumerable<T> where T : unmanaged
+    public partial class UnmanagedByteStorage<T> : IEnumerable<T>, ICloneable where T : unmanaged
     {
-        public static readonly NPTypeCode NPTypeCode = typeof(T).GetTypeCode();
-
+        public static readonly NPTypeCode TypeCode = typeof(T).GetTypeCode();
         private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
-        private readonly unsafe T* _arrayAddress;
 
+        public const int ParallelLimit = 84999; 
+
+        public readonly unsafe T* Address;
         private ArraySlice<T> _array;
         private Shape _shape;
 
-        /// <summary>
-        ///     The <see cref="Backends.NPTypeCode"/> of <see cref="IStorage.DType"/>.
-        /// </summary>
-        public NPTypeCode TypeCode
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get
-            {
-                return NPTypeCode;
-            }
-        }
 
         /// <summary>
         ///     The size in bytes of a single value of <see cref="IStorage.DType"/>
         /// </summary>
         /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
-        public int DTypeSize { get; }
+        public int DTypeSize => InfoOf<T>.Size;
 
         public Shape Shape
         {
@@ -76,7 +67,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(assignZeros ? new UnmanagedArray<T>(shape.Size, default) : new UnmanagedArray<T>(shape.Size));
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         /// <summary>
@@ -89,7 +80,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedArray<T>(shape.Size));
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         /// <summary>
@@ -103,7 +94,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedArray<T>(shape.Size, fill));
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object" /> class.</summary>
@@ -112,28 +103,28 @@ namespace NumSharp.Backends.Unmanaged
             _shape = Shape.Scalar;
             var mem = UnmanagedArray<T>.FromPool(1, _scalarPool);
             _array = new ArraySlice<T>(mem);
-            *(_arrayAddress = _array.Start) = scalar;
+            *(Address = _array.Start) = scalar;
         }
 
         public unsafe UnmanagedByteStorage(T[] arr, Shape shape)
         {
             _shape = shape;
             _array = new ArraySlice<T>(UnmanagedArray<T>.FromArray(arr));
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         public unsafe UnmanagedByteStorage(ArraySlice<T> arr, Shape shape)
         {
             _shape = shape;
             _array = arr;
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         public unsafe UnmanagedByteStorage(UnmanagedArray<T> array, Shape shape)
         {
             _shape = shape;
             _array = new ArraySlice<T>(array);
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         /// <summary>
@@ -147,7 +138,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedArray<T>(ptr, lengthInSizeOfT, dispose));
-            _arrayAddress = _array.Start;
+            Address = _array.Start;
         }
 
         #endregion
@@ -196,7 +187,7 @@ namespace NumSharp.Backends.Unmanaged
             if (indices.Length != _shape.NDim)
                 throw new InvalidOperationException();
 #endif
-            *(_arrayAddress + _shape.GetIndexInShape(indices)) = value;
+            *(Address + _shape.GetIndexInShape(indices)) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -206,19 +197,19 @@ namespace NumSharp.Backends.Unmanaged
             if (shape != value.Shape)
                 throw new Exception("Shape do not match"); //todo! ShapeMissmatchException.
 
-            value._array.CopyTo(new Span<T>(_arrayAddress + offset, shape.Size));
+            value._array.CopyTo(new Span<T>(Address + offset, shape.Size));
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public unsafe void SetIndex(T value, int index)
         {
-            *(_arrayAddress + index) = value;
+            *(Address + index) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public unsafe T GetIndex(int index)
         {
-            return *(_arrayAddress + index);
+            return *(Address + index);
         }
 
         //public override T this[int index0] {
@@ -269,7 +260,7 @@ namespace NumSharp.Backends.Unmanaged
         public static unsafe UnmanagedByteStorage<T> Scalar(T val)
         {
             var ret = new UnmanagedByteStorage<T>(UnmanagedArray<T>.FromPool(1, _scalarPool), Shape.Scalar);
-            *(ret._arrayAddress) = val;
+            *(ret.Address) = val;
 
             return ret;
         }

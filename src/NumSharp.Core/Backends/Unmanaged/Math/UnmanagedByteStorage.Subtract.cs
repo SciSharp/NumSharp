@@ -32,66 +32,67 @@ namespace NumSharp.Backends.Unmanaged
                 {
 #if _REGEN
                 %foreach supported_numericals,supported_numericals_lowercase%
-                    case TypeCode.#1: {
+                    case NPTypeCode.#1: 
+                    {
                         return Scalar((T) (ValueType) (*(#2*) lhs._arrayAddress - *(#2*) rhs._arrayAddress));
                     }
                 %
                     default:
                         throw new NotSupportedException();
 #else
-                    case TypeCode.Byte:
+                    case NPTypeCode.Byte:
                     {
-                        return Scalar((T)(ValueType)(*(byte*)lhs._arrayAddress - *(byte*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(byte*)lhs.Address - *(byte*)rhs.Address));
                     }
 
-                    case TypeCode.Int16:
+                    case NPTypeCode.Int16:
                     {
-                        return Scalar((T)(ValueType)(*(short*)lhs._arrayAddress - *(short*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(short*)lhs.Address - *(short*)rhs.Address));
                     }
 
-                    case TypeCode.UInt16:
+                    case NPTypeCode.UInt16:
                     {
-                        return Scalar((T)(ValueType)(*(ushort*)lhs._arrayAddress - *(ushort*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(ushort*)lhs.Address - *(ushort*)rhs.Address));
                     }
 
-                    case TypeCode.Int32:
+                    case NPTypeCode.Int32:
                     {
-                        return Scalar((T)(ValueType)(*(int*)lhs._arrayAddress - *(int*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(int*)lhs.Address - *(int*)rhs.Address));
                     }
 
-                    case TypeCode.UInt32:
+                    case NPTypeCode.UInt32:
                     {
-                        return Scalar((T)(ValueType)(*(uint*)lhs._arrayAddress - *(uint*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(uint*)lhs.Address - *(uint*)rhs.Address));
                     }
 
-                    case TypeCode.Int64:
+                    case NPTypeCode.Int64:
                     {
-                        return Scalar((T)(ValueType)(*(long*)lhs._arrayAddress - *(long*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(long*)lhs.Address - *(long*)rhs.Address));
                     }
 
-                    case TypeCode.UInt64:
+                    case NPTypeCode.UInt64:
                     {
-                        return Scalar((T)(ValueType)(*(ulong*)lhs._arrayAddress - *(ulong*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(ulong*)lhs.Address - *(ulong*)rhs.Address));
                     }
 
-                    case TypeCode.Char:
+                    case NPTypeCode.Char:
                     {
-                        return Scalar((T)(ValueType)(*(char*)lhs._arrayAddress - *(char*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(char*)lhs.Address - *(char*)rhs.Address));
                     }
 
-                    case TypeCode.Double:
+                    case NPTypeCode.Double:
                     {
-                        return Scalar((T)(ValueType)(*(double*)lhs._arrayAddress - *(double*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(double*)lhs.Address - *(double*)rhs.Address));
                     }
 
-                    case TypeCode.Single:
+                    case NPTypeCode.Single:
                     {
-                        return Scalar((T)(ValueType)(*(float*)lhs._arrayAddress - *(float*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(float*)lhs.Address - *(float*)rhs.Address));
                     }
 
-                    case TypeCode.Decimal:
+                    case NPTypeCode.Decimal:
                     {
-                        return Scalar((T)(ValueType)(*(decimal*)lhs._arrayAddress - *(decimal*)rhs._arrayAddress));
+                        return Scalar((T)(ValueType)(*(decimal*)lhs.Address - *(decimal*)rhs.Address));
                     }
 
                     default:
@@ -114,7 +115,7 @@ namespace NumSharp.Backends.Unmanaged
                 {
 #if _REGEN
 	            %foreach supported_numericals,supported_numericals_lowercase%
-                    case TypeCode.#1: {
+                    case NPTypeCode.#1: {
                         var resultStart = (#2*) results._arrayAddress;
                         var leftStart = (#2*) lhs._arrayAddress;
                         var rightStart = (#2*) rhs._arrayAddress;
@@ -135,12 +136,12 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
 
-                    case TypeCode.Byte:
+                    case NPTypeCode.Byte:
                     {
-                        var resultStart = (byte*)results._arrayAddress;
-                        var leftStart = (byte*)lhs._arrayAddress;
-                        var rightStart = (byte*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (byte*)results.Address;
+                        var leftStart = (byte*)lhs.Address;
+                        var rightStart = (byte*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (byte)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -155,12 +156,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int16:
+                    case NPTypeCode.Int16:
                     {
-                        var resultStart = (short*)results._arrayAddress;
-                        var leftStart = (short*)lhs._arrayAddress;
-                        var rightStart = (short*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (short*)results.Address;
+                        var leftStart = (short*)lhs.Address;
+                        var rightStart = (short*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (short)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -175,12 +176,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt16:
+                    case NPTypeCode.UInt16:
                     {
-                        var resultStart = (ushort*)results._arrayAddress;
-                        var leftStart = (ushort*)lhs._arrayAddress;
-                        var rightStart = (ushort*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ushort*)results.Address;
+                        var leftStart = (ushort*)lhs.Address;
+                        var rightStart = (ushort*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ushort)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -195,12 +196,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int32:
+                    case NPTypeCode.Int32:
                     {
-                        var resultStart = (int*)results._arrayAddress;
-                        var leftStart = (int*)lhs._arrayAddress;
-                        var rightStart = (int*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (int*)results.Address;
+                        var leftStart = (int*)lhs.Address;
+                        var rightStart = (int*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (int)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -215,12 +216,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt32:
+                    case NPTypeCode.UInt32:
                     {
-                        var resultStart = (uint*)results._arrayAddress;
-                        var leftStart = (uint*)lhs._arrayAddress;
-                        var rightStart = (uint*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (uint*)results.Address;
+                        var leftStart = (uint*)lhs.Address;
+                        var rightStart = (uint*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (uint)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -235,12 +236,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int64:
+                    case NPTypeCode.Int64:
                     {
-                        var resultStart = (long*)results._arrayAddress;
-                        var leftStart = (long*)lhs._arrayAddress;
-                        var rightStart = (long*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (long*)results.Address;
+                        var leftStart = (long*)lhs.Address;
+                        var rightStart = (long*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (long)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -255,12 +256,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt64:
+                    case NPTypeCode.UInt64:
                     {
-                        var resultStart = (ulong*)results._arrayAddress;
-                        var leftStart = (ulong*)lhs._arrayAddress;
-                        var rightStart = (ulong*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ulong*)results.Address;
+                        var leftStart = (ulong*)lhs.Address;
+                        var rightStart = (ulong*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ulong)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -275,12 +276,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Char:
+                    case NPTypeCode.Char:
                     {
-                        var resultStart = (char*)results._arrayAddress;
-                        var leftStart = (char*)lhs._arrayAddress;
-                        var rightStart = (char*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (char*)results.Address;
+                        var leftStart = (char*)lhs.Address;
+                        var rightStart = (char*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (char)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -295,12 +296,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Double:
+                    case NPTypeCode.Double:
                     {
-                        var resultStart = (double*)results._arrayAddress;
-                        var leftStart = (double*)lhs._arrayAddress;
-                        var rightStart = (double*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (double*)results.Address;
+                        var leftStart = (double*)lhs.Address;
+                        var rightStart = (double*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (double)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -315,12 +316,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Single:
+                    case NPTypeCode.Single:
                     {
-                        var resultStart = (float*)results._arrayAddress;
-                        var leftStart = (float*)lhs._arrayAddress;
-                        var rightStart = (float*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (float*)results.Address;
+                        var leftStart = (float*)lhs.Address;
+                        var rightStart = (float*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (float)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -335,12 +336,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Decimal:
+                    case NPTypeCode.Decimal:
                     {
-                        var resultStart = (decimal*)results._arrayAddress;
-                        var leftStart = (decimal*)lhs._arrayAddress;
-                        var rightStart = (decimal*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (decimal*)results.Address;
+                        var leftStart = (decimal*)lhs.Address;
+                        var rightStart = (decimal*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (decimal)(*(leftStart + i) - *(rightStart + i)); });
                         }
@@ -376,7 +377,7 @@ namespace NumSharp.Backends.Unmanaged
                 {
 #if _REGEN
                 %foreach supported_numericals,supported_numericals_lowercase%
-                    case TypeCode.#1: {
+                    case NPTypeCode.#1: {
                         var resultStart = (#2*) results._arrayAddress;
                         var rightStart = (#2*) rhs._arrayAddress;
                         var leftScalar = *(#2*) lhs._arrayAddress;
@@ -394,12 +395,12 @@ namespace NumSharp.Backends.Unmanaged
                     default:
                         throw new NotSupportedException();
 #else
-                    case TypeCode.Byte:
+                    case NPTypeCode.Byte:
                     {
-                        var resultStart = (byte*)results._arrayAddress;
-                        var rightStart = (byte*)rhs._arrayAddress;
-                        var leftScalar = *(byte*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (byte*)results.Address;
+                        var rightStart = (byte*)rhs.Address;
+                        var leftScalar = *(byte*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (byte)(leftScalar - *(rightStart + i)); });
                         }
@@ -414,12 +415,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int16:
+                    case NPTypeCode.Int16:
                     {
-                        var resultStart = (short*)results._arrayAddress;
-                        var rightStart = (short*)rhs._arrayAddress;
-                        var leftScalar = *(short*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (short*)results.Address;
+                        var rightStart = (short*)rhs.Address;
+                        var leftScalar = *(short*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (short)(leftScalar - *(rightStart + i)); });
                         }
@@ -434,12 +435,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt16:
+                    case NPTypeCode.UInt16:
                     {
-                        var resultStart = (ushort*)results._arrayAddress;
-                        var rightStart = (ushort*)rhs._arrayAddress;
-                        var leftScalar = *(ushort*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ushort*)results.Address;
+                        var rightStart = (ushort*)rhs.Address;
+                        var leftScalar = *(ushort*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ushort)(leftScalar - *(rightStart + i)); });
                         }
@@ -454,12 +455,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int32:
+                    case NPTypeCode.Int32:
                     {
-                        var resultStart = (int*)results._arrayAddress;
-                        var rightStart = (int*)rhs._arrayAddress;
-                        var leftScalar = *(int*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (int*)results.Address;
+                        var rightStart = (int*)rhs.Address;
+                        var leftScalar = *(int*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (int)(leftScalar - *(rightStart + i)); });
                         }
@@ -474,12 +475,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt32:
+                    case NPTypeCode.UInt32:
                     {
-                        var resultStart = (uint*)results._arrayAddress;
-                        var rightStart = (uint*)rhs._arrayAddress;
-                        var leftScalar = *(uint*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (uint*)results.Address;
+                        var rightStart = (uint*)rhs.Address;
+                        var leftScalar = *(uint*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (uint)(leftScalar - *(rightStart + i)); });
                         }
@@ -494,12 +495,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int64:
+                    case NPTypeCode.Int64:
                     {
-                        var resultStart = (long*)results._arrayAddress;
-                        var rightStart = (long*)rhs._arrayAddress;
-                        var leftScalar = *(long*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (long*)results.Address;
+                        var rightStart = (long*)rhs.Address;
+                        var leftScalar = *(long*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (long)(leftScalar - *(rightStart + i)); });
                         }
@@ -514,12 +515,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt64:
+                    case NPTypeCode.UInt64:
                     {
-                        var resultStart = (ulong*)results._arrayAddress;
-                        var rightStart = (ulong*)rhs._arrayAddress;
-                        var leftScalar = *(ulong*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ulong*)results.Address;
+                        var rightStart = (ulong*)rhs.Address;
+                        var leftScalar = *(ulong*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ulong)(leftScalar - *(rightStart + i)); });
                         }
@@ -534,12 +535,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Char:
+                    case NPTypeCode.Char:
                     {
-                        var resultStart = (char*)results._arrayAddress;
-                        var rightStart = (char*)rhs._arrayAddress;
-                        var leftScalar = *(char*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (char*)results.Address;
+                        var rightStart = (char*)rhs.Address;
+                        var leftScalar = *(char*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (char)(leftScalar - *(rightStart + i)); });
                         }
@@ -554,12 +555,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Double:
+                    case NPTypeCode.Double:
                     {
-                        var resultStart = (double*)results._arrayAddress;
-                        var rightStart = (double*)rhs._arrayAddress;
-                        var leftScalar = *(double*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (double*)results.Address;
+                        var rightStart = (double*)rhs.Address;
+                        var leftScalar = *(double*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (double)(leftScalar - *(rightStart + i)); });
                         }
@@ -574,12 +575,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Single:
+                    case NPTypeCode.Single:
                     {
-                        var resultStart = (float*)results._arrayAddress;
-                        var rightStart = (float*)rhs._arrayAddress;
-                        var leftScalar = *(float*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (float*)results.Address;
+                        var rightStart = (float*)rhs.Address;
+                        var leftScalar = *(float*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (float)(leftScalar - *(rightStart + i)); });
                         }
@@ -594,12 +595,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Decimal:
+                    case NPTypeCode.Decimal:
                     {
-                        var resultStart = (decimal*)results._arrayAddress;
-                        var rightStart = (decimal*)rhs._arrayAddress;
-                        var leftScalar = *(decimal*)lhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (decimal*)results.Address;
+                        var rightStart = (decimal*)rhs.Address;
+                        var leftScalar = *(decimal*)lhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (decimal)(leftScalar - *(rightStart + i)); });
                         }
@@ -632,7 +633,7 @@ namespace NumSharp.Backends.Unmanaged
                 {
 #if _REGEN
 	                %foreach supported_numericals,supported_numericals_lowercase%
-                        case TypeCode.#1: {
+                        case NPTypeCode.#1: {
                             var resultStart = (#2*) results._arrayAddress;
                             var leftStart = (#2*) lhs._arrayAddress;
                             var rightScalar = *(#2*)rhs._arrayAddress;
@@ -651,12 +652,12 @@ namespace NumSharp.Backends.Unmanaged
                         default:
                             throw new NotSupportedException();
 #else
-                    case TypeCode.Byte:
+                    case NPTypeCode.Byte:
                     {
-                        var resultStart = (byte*)results._arrayAddress;
-                        var leftStart = (byte*)lhs._arrayAddress;
-                        var rightScalar = *(byte*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (byte*)results.Address;
+                        var leftStart = (byte*)lhs.Address;
+                        var rightScalar = *(byte*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (byte)(*(leftStart + i) - rightScalar); });
                         }
@@ -671,12 +672,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int16:
+                    case NPTypeCode.Int16:
                     {
-                        var resultStart = (short*)results._arrayAddress;
-                        var leftStart = (short*)lhs._arrayAddress;
-                        var rightScalar = *(short*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (short*)results.Address;
+                        var leftStart = (short*)lhs.Address;
+                        var rightScalar = *(short*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (short)(*(leftStart + i) - rightScalar); });
                         }
@@ -691,12 +692,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt16:
+                    case NPTypeCode.UInt16:
                     {
-                        var resultStart = (ushort*)results._arrayAddress;
-                        var leftStart = (ushort*)lhs._arrayAddress;
-                        var rightScalar = *(ushort*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ushort*)results.Address;
+                        var leftStart = (ushort*)lhs.Address;
+                        var rightScalar = *(ushort*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ushort)(*(leftStart + i) - rightScalar); });
                         }
@@ -711,12 +712,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int32:
+                    case NPTypeCode.Int32:
                     {
-                        var resultStart = (int*)results._arrayAddress;
-                        var leftStart = (int*)lhs._arrayAddress;
-                        var rightScalar = *(int*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (int*)results.Address;
+                        var leftStart = (int*)lhs.Address;
+                        var rightScalar = *(int*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (int)(*(leftStart + i) - rightScalar); });
                         }
@@ -731,12 +732,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt32:
+                    case NPTypeCode.UInt32:
                     {
-                        var resultStart = (uint*)results._arrayAddress;
-                        var leftStart = (uint*)lhs._arrayAddress;
-                        var rightScalar = *(uint*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (uint*)results.Address;
+                        var leftStart = (uint*)lhs.Address;
+                        var rightScalar = *(uint*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (uint)(*(leftStart + i) - rightScalar); });
                         }
@@ -751,12 +752,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Int64:
+                    case NPTypeCode.Int64:
                     {
-                        var resultStart = (long*)results._arrayAddress;
-                        var leftStart = (long*)lhs._arrayAddress;
-                        var rightScalar = *(long*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (long*)results.Address;
+                        var leftStart = (long*)lhs.Address;
+                        var rightScalar = *(long*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (long)(*(leftStart + i) - rightScalar); });
                         }
@@ -771,12 +772,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.UInt64:
+                    case NPTypeCode.UInt64:
                     {
-                        var resultStart = (ulong*)results._arrayAddress;
-                        var leftStart = (ulong*)lhs._arrayAddress;
-                        var rightScalar = *(ulong*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (ulong*)results.Address;
+                        var leftStart = (ulong*)lhs.Address;
+                        var rightScalar = *(ulong*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (ulong)(*(leftStart + i) - rightScalar); });
                         }
@@ -791,12 +792,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Char:
+                    case NPTypeCode.Char:
                     {
-                        var resultStart = (char*)results._arrayAddress;
-                        var leftStart = (char*)lhs._arrayAddress;
-                        var rightScalar = *(char*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (char*)results.Address;
+                        var leftStart = (char*)lhs.Address;
+                        var rightScalar = *(char*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (char)(*(leftStart + i) - rightScalar); });
                         }
@@ -811,12 +812,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Double:
+                    case NPTypeCode.Double:
                     {
-                        var resultStart = (double*)results._arrayAddress;
-                        var leftStart = (double*)lhs._arrayAddress;
-                        var rightScalar = *(double*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (double*)results.Address;
+                        var leftStart = (double*)lhs.Address;
+                        var rightScalar = *(double*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (double)(*(leftStart + i) - rightScalar); });
                         }
@@ -831,12 +832,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Single:
+                    case NPTypeCode.Single:
                     {
-                        var resultStart = (float*)results._arrayAddress;
-                        var leftStart = (float*)lhs._arrayAddress;
-                        var rightScalar = *(float*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (float*)results.Address;
+                        var leftStart = (float*)lhs.Address;
+                        var rightScalar = *(float*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (float)(*(leftStart + i) - rightScalar); });
                         }
@@ -851,12 +852,12 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     }
 
-                    case TypeCode.Decimal:
+                    case NPTypeCode.Decimal:
                     {
-                        var resultStart = (decimal*)results._arrayAddress;
-                        var leftStart = (decimal*)lhs._arrayAddress;
-                        var rightScalar = *(decimal*)rhs._arrayAddress;
-                        if (lhsCount > ParallelAbove)
+                        var resultStart = (decimal*)results.Address;
+                        var leftStart = (decimal*)lhs.Address;
+                        var rightScalar = *(decimal*)rhs.Address;
+                        if (lhsCount > ParallelLimit)
                         {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (decimal)(*(leftStart + i) - rightScalar); });
                         }

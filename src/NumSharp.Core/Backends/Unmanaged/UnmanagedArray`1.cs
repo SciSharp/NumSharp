@@ -99,10 +99,16 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> FromArray(T[] arr)
+        {
+            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> FromArray(T[] arr, bool copy)
         {
             if (!copy)
-                return FromArray(arr);
+                return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
 
             var ret = new UnmanagedArray<T>(arr.Length);
             new Span<T>(arr).CopyTo(ret.AsSpan());
@@ -111,15 +117,15 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromArray(T[] arr)
+        public static UnmanagedArray<T> FromBuffer(byte[] arr)
         {
-            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromBuffer(byte[] arr)
+        public static UnmanagedArray<T> FromBuffer(byte[] arr, bool copy)
         {
-            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / SizeOf<T>.Size);
+            return new UnmanagedArray<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
         /// <summary>
@@ -132,7 +138,7 @@ namespace NumSharp.Backends.Unmanaged
         public static UnmanagedArray<T> FromPool(int length, InternalBufferManager manager)
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
+            var buffer = manager.TakeBuffer(length * InfoOf<T>.Size);
             return new UnmanagedArray<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
         }
 
@@ -140,7 +146,7 @@ namespace NumSharp.Backends.Unmanaged
         public static UnmanagedArray<T> Copy(UnmanagedArray<T> source)
         {
             var itemCount = source.Count;
-            var len = itemCount * SizeOf<T>.Size;
+            var len = itemCount * InfoOf<T>.Size;
             var ret = new UnmanagedArray<T>(itemCount);
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
@@ -156,7 +162,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> Copy(void* address, int count)
         {
-            var len = count * SizeOf<T>.Size;
+            var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedArray<T>(count);
             Buffer.MemoryCopy(address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
@@ -199,7 +205,7 @@ namespace NumSharp.Backends.Unmanaged
             if (copyOldValues)
             {
                 var @new = new UnmanagedArray<T>(length);
-                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
+                var bytes = Math.Min(Count, length) * InfoOf<T>.Size;
                 Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
                 Free();
                 this = @new;
@@ -218,7 +224,7 @@ namespace NumSharp.Backends.Unmanaged
             if (copyOldValues)
             {
                 var @new = new UnmanagedArray<T>(length);
-                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
+                var bytes = Math.Min(Count, length) * InfoOf<T>.Size;
                 Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
 
                 if (length > Count)
@@ -332,31 +338,31 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(UnmanagedArray<T> array, int arrayIndex)
         {
             var length = Count - arrayIndex;
-            Buffer.MemoryCopy(Address + arrayIndex, array.Address, SizeOf<T>.Size * array.Count, SizeOf<T>.Size * length);
+            Buffer.MemoryCopy(Address + arrayIndex, array.Address, InfoOf<T>.Size * array.Count, InfoOf<T>.Size * length);
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T* array, int arrayIndex, int lengthToCopy)
         {
-            Buffer.MemoryCopy(Address + arrayIndex, array, SizeOf<T>.Size * lengthToCopy, SizeOf<T>.Size * lengthToCopy);
+            Buffer.MemoryCopy(Address + arrayIndex, array, InfoOf<T>.Size * lengthToCopy, InfoOf<T>.Size * lengthToCopy);
         }
 
         /// <summary>Copies the elements of the <see cref="T:System.Collections.ICollection" /> to an <see cref="T:System.Array" />, starting at a particular <see cref="T:System.Array" /> index.</summary>
         /// <param name="array">The one-dimensional <see cref="T:System.Array" /> that is the destination of the elements copied from <see cref="T:System.Collections.ICollection" />. The <see cref="T:System.Array" /> must have zero-based indexing. </param>
-        /// <param name="index">The zero-based index in <paramref name="array" /> at which copying begins. </param>
+        /// <param name="arrayIndex">The zero-based index in <paramref name="array" /> at which copying begins. </param>
         /// <exception cref="T:System.ArgumentNullException">
         /// <paramref name="array" /> is <see langword="null" />. </exception>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
-        /// <paramref name="index" /> is less than zero. </exception>
+        /// <paramref name="arrayIndex" /> is less than zero. </exception>
         /// <exception cref="T:System.ArgumentException">
-        /// <paramref name="array" /> is multidimensional.-or- The number of elements in the source <see cref="T:System.Collections.ICollection" /> is greater than the available space from <paramref name="index" /> to the end of the destination <paramref name="array" />.-or-The type of the source <see cref="T:System.Collections.ICollection" /> cannot be cast automatically to the type of the destination <paramref name="array" />.</exception>
+        /// <paramref name="array" /> is multidimensional.-or- The number of elements in the source <see cref="T:System.Collections.ICollection" /> is greater than the available space from <paramref name="arrayIndex" /> to the end of the destination <paramref name="array" />.-or-The type of the source <see cref="T:System.Collections.ICollection" /> cannot be cast automatically to the type of the destination <paramref name="array" />.</exception>
         [MethodImpl((MethodImplOptions)512)]
-        public void CopyTo(Array array, int index)
+        public void CopyTo(Array array, int arrayIndex)
         {
-            for (var i = 0; i < Count; i++)
-            {
-                array.SetValue((object)*(Address + i), i + index);
-            }
+            if (!(array is T[] arr))
+                throw new InvalidCastException("Unable to CopyTo a type that is not " + typeof(T).Name + "[]");
+
+            CopyTo(arr, arrayIndex);
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -471,5 +477,7 @@ namespace NumSharp.Backends.Unmanaged
         #endregion
 
         unsafe void* IUnmanagedArray.Address => Address;
+
+        int IUnmanagedArray.ItemLength => InfoOf<T>.Size;
     }
 }

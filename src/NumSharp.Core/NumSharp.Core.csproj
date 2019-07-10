@@ -27,7 +27,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>7.3</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
@@ -36,7 +36,7 @@
     <Version>0.10.3</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
   </PropertyGroup>
-
+  
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
     <DefineConstants>NETFRAMEWORK</DefineConstants>
     <RuntimeIdentifier>win-x86</RuntimeIdentifier>
@@ -53,7 +53,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>1701;1702;IDE1006</NoWarn>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

@@ -12,18 +12,18 @@ namespace NumSharp
         {
             if (dtype.Name == "Int32")
             {
-                var size = bytes.Length / SizeOf<int>.Size;
+                var size = bytes.Length / InfoOf<int>.Size;
                 var ints = new int[size];
                 for (var index = 0; index < size; index++)
                 {
-                    ints[index] = BitConverter.ToInt32(bytes, index * SizeOf<int>.Size);
+                    ints[index] = BitConverter.ToInt32(bytes, index * InfoOf<int>.Size);
                 }
 
                 return new NDArray(ints);
             }
             else if (dtype.Name == "Byte")
             {
-                var size = bytes.Length / SizeOf<byte>.Size;
+                var size = bytes.Length / InfoOf<byte>.Size;
                 var ints = bytes;
                 return new NDArray(bytes);
             }
@@ -35,7 +35,7 @@ namespace NumSharp
         {
             if (dtype == ">u4")
             {
-                var size = bytes.Length / SizeOf<uint>.Size;
+                var size = bytes.Length / InfoOf<uint>.Size;
                 var ints = new uint[size];
                 for (var index = 0; index < size; index++)
                 {

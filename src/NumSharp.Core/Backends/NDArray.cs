@@ -46,7 +46,6 @@ namespace NumSharp
             TensorEngine = storage.Engine;
         }
 
-
         /// <summary>
         /// Constructor for init data type
         /// internal storage is 1D with 1 element
@@ -274,7 +273,7 @@ namespace NumSharp
         // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
         public NDArray astype(Type dtype, bool copy = false)
         {
-            return BackendFactory.GetEngine().Cast(this, dtype, copy);
+            return TensorEngine.Cast(this, dtype, copy);
         }
 
         /// <summary>

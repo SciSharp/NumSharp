@@ -200,7 +200,7 @@ namespace NumSharp.Memory.Pooling {
                 return new char[size];
             } catch (OutOfMemoryException exception) {
                 // Convert OOM into an exception that can be safely handled by higher layers.
-                throw new InsufficientMemoryException($"BufferAllocationFailed(size: {size * SizeOf<char>.Size})", exception);
+                throw new InsufficientMemoryException($"BufferAllocationFailed(size: {size * InfoOf<char>.Size})", exception);
             }
         }
 

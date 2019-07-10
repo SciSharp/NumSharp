@@ -3,6 +3,7 @@ using NumSharp.Backends;
 using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -76,6 +77,24 @@ namespace NumSharp
         void Allocate(Array values);
 
         /// <summary>
+        ///     Assign this <see cref="ArraySlice{T}"/> as the internal array storage and assign <see cref="shape"/> to it.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <param name="shape">The shape of the array.</param>
+        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        void Allocate<T>(ArraySlice<T> values, Shape shape, bool copy = false) where T : unmanaged;
+
+        /// <summary>
+        ///     Allocate <paramref name="values"/> into memory.
+        /// </summary>
+        /// <param name="values">The array to set as internal data storage</param>
+        /// <param name="shape">The shape of the array.</param>
+        /// <param name="copy">Should perform a copy of <paramref name="values"/></param>
+        /// <remarks>Does not copy <paramref name="values"/></remarks>
+        void Allocate(IArraySlice values, Shape shape, bool copy = false);
+
+        /// <summary>
         ///     Allocate <paramref name="values"/> into memory.
         /// </summary>
         /// <param name="values">The array to set as internal data storage</param>
@@ -88,39 +107,39 @@ namespace NumSharp
         /// </summary>
         /// <param name="values">The array to set as internal data storage</param>
         /// <remarks>Does not copy <paramref name="values"/></remarks>
-        void Allocate<T>(T[] values);
+        void Allocate<T>(T[] values) where T : unmanaged;
 
         /// <summary>
         ///     Get reference to internal data storage
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
-        Array GetData();
+        IArraySlice GetData();
 
         /// <summary>
         ///     Clone internal storage and returns reference to it
         /// </summary>
         /// <returns>reference to cloned storage as System.Array</returns>
-        Array CloneData();
+        IArraySlice CloneData();
 
         /// <summary>
         ///     Get reference to internal data storage and if necessary: copy and cast elements to new dtype of <typeparamref name="T"/>.
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
-        T[] GetData<T>();
+        ArraySlice<T> GetData<T>() where T : unmanaged;
 
         /// <summary>
         ///     Attempts to cast internal storage to an array of type <typeparamref name="T"/> and returns the result, therefore results can be null.
         /// </summary>
         /// <typeparam name="T">The type that is expected.</typeparam>
-        T[] AsArray<T>();
+        ArraySlice<T> AsArray<T>() where T : unmanaged;
 
         /// <summary>
         ///     Get all elements from cloned storage as T[] and cast dtype
         /// </summary>
         /// <typeparam name="T">cloned storgae dtype</typeparam>
         /// <returns>reference to cloned storage as T[]</returns>
-        T[] CloneData<T>();
+        ArraySlice<T> CloneData<T>() where T : unmanaged;
 
         /// <summary>
         ///     Get single value from internal storage as type T and cast dtype to T
@@ -145,6 +164,13 @@ namespace NumSharp
         /// <param name="values"></param>
         /// <remarks>Does not copy values and doesn't change shape.</remarks>
         void ReplaceData(Array values);
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        void ReplaceData(IArraySlice values);
 
         /// <summary>
         ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
@@ -175,9 +201,9 @@ namespace NumSharp
         /// <param name="dimensions"></param>
         void Reshape(params int[] dimensions);
 
-        Span<T> View<T>(Slice slice = null);
+        ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged;
 
-        Span<T> GetSpanData<T>(Slice slice, params int[] indice);
+        ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged;
 
         #region Get Methods
 
