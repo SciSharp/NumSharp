@@ -118,6 +118,15 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Extracts <see cref="NPTypeCode"/> from given <typeparamref name="T"/>.
+        /// </summary>
+        /// <remarks>In case there was no successful cast to <see cref="NPTypeCode"/>, return will be <see cref="NPTypeCode.Empty"/></remarks>
+        public static NPTypeCode GetTypeCode<T>()
+        {
+            return NPTypeCodeCacher<T>.Value;
+        }
+
+        /// <summary>
         ///     Convert <see cref="NPTypeCode"/> into its <see cref="Type"/>
         /// </summary>
         /// <param name="typeCode"></param>
@@ -170,5 +179,10 @@ namespace NumSharp.Backends
         {
             return type.GetTypeCode() != NPTypeCode.Empty;
         }
+    }
+
+    internal static class NPTypeCodeCacher<T>
+    {
+        public static readonly NPTypeCode Value = typeof(T).GetTypeCode();
     }
 }
