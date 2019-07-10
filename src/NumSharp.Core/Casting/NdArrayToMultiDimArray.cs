@@ -32,24 +32,25 @@ namespace NumSharp
     {
         public Array ToMuliDimArray<T>()
         {
-            Array dotNetArray = Arrays.Create(typeof(T), this.shape);
+            return null;
+            //Array dotNetArray = Arrays.Create(typeof(T), this.shape);
 
-            var pufferShape = new Shape(shape);
-            pufferShape.ChangeTensorLayout();
+            //var pufferShape = new Shape(shape);
+            //pufferShape.ChangeTensorLayout();
 
-            int[] indexes = null;
-            object idxValue = null;
+            //int[] indexes = null;
+            //object idxValue = null;
 
-            T[] array = Storage.GetData<T>();
+            //T[] array = Storage.GetData<T>();
 
-            for(int idx = 0; idx < this.size;idx++)
-            {
-                indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
-                dotNetArray.SetValue(idxValue,indexes);
-            }
+            //for(int idx = 0; idx < this.size;idx++)
+            //{
+            //    indexes = pufferShape.GetDimIndexOutShape(idx);
+            //    idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
+            //    dotNetArray.SetValue(idxValue,indexes);
+            //}
 
-            return dotNetArray;
+            //return dotNetArray;
         }
         
     }

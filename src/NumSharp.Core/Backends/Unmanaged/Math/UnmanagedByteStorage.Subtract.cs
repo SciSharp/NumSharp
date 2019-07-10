@@ -17,7 +17,6 @@ namespace NumSharp.Backends.Unmanaged
         public static unsafe UnmanagedByteStorage<T> operator -(UnmanagedByteStorage<T> lhs, UnmanagedByteStorage<T> rhs)
         {
             int lhsCount = lhs.Count > rhs.Count ? lhs.Count : rhs.Count;
-            const int ParallelAbove = 84999;
             UnmanagedByteStorage<T> results;
             var isLeftScalar = lhs.Shape.IsScalar;
             var isRightScalar = rhs.Shape.IsScalar;

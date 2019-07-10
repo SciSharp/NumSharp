@@ -40,82 +40,84 @@ namespace NumSharp
 
         public static NDArray<bool> operator ==(NDArray np, object obj)
         {
-            if (obj is NDArray np2)
-            {
-                return np.equal(np2);
-            }
-            var boolTensor = new NDArray(typeof(bool),np.shape);
-            bool[] bools = boolTensor.Storage.GetData() as bool[];
+            //TODO! what the hell is that? write a saner equality function
+            return null;
+            //if (obj is NDArray np2)
+            //{
+            //    return np.equal(np2);
+            //}
+            //var boolTensor = new NDArray(typeof(bool),np.shape);
+            //bool[] bools = boolTensor.Storage.GetData() as bool[];
 
-            switch (np.Storage.GetData())
-            {
-                case int[] values :
-                {
-                    int value = Convert.ToInt32(obj);                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }
-                case Int64[] values :
-                {
-                    Int64 value = Convert.ToInt64(obj);                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }
-                case float[] values :
-                {
-                    float value = Convert.ToSingle(obj);                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }
-                case double[] values :
-                {
-                    double value = Convert.ToDouble(obj);                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }
-                case Complex[] values :
-                {
-                    Complex value = (Complex) obj;                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }
-                /*case Quaternion[] values :
-                {
-                    Quaternion value = (Quaternion) obj;                 
-                    for(int idx =0; idx < bools.Length;idx++)
-                    {
-                        if ( values[idx] == value )
-                            bools[idx] = true;
-                    }
-                    break;
-                }*/
-                default :
-                {
-                    throw new IncorrectTypeException();
-                } 
-            }
+            //switch (np.Storage.GetData())
+            //{
+            //    case int[] values :
+            //    {
+            //        int value = Convert.ToInt32(obj);                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }
+            //    case Int64[] values :
+            //    {
+            //        Int64 value = Convert.ToInt64(obj);                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }
+            //    case float[] values :
+            //    {
+            //        float value = Convert.ToSingle(obj);                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }
+            //    case double[] values :
+            //    {
+            //        double value = Convert.ToDouble(obj);                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }
+            //    case Complex[] values :
+            //    {
+            //        Complex value = (Complex) obj;                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }
+            //    /*case Quaternion[] values :
+            //    {
+            //        Quaternion value = (Quaternion) obj;                 
+            //        for(int idx =0; idx < bools.Length;idx++)
+            //        {
+            //            if ( values[idx] == value )
+            //                bools[idx] = true;
+            //        }
+            //        break;
+            //    }*/
+            //    default :
+            //    {
+            //        throw new IncorrectTypeException();
+            //    } 
+            //}
 
-            return boolTensor.MakeGeneric<bool>();
+            //return boolTensor.MakeGeneric<bool>();
         }
 
         /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
@@ -126,24 +128,25 @@ namespace NumSharp
         /// <returns>NDArray with result of each element compare</returns>
         private NDArray<bool> equal(NDArray np2)
         {
-            if (this.size != np2.size)
-            {
-                throw new ArgumentException("Different sized NDArray's in not yet supported by the equal operation", nameof(np2));
-            }
-            var boolTensor = new NDArray(typeof(bool), this.shape);
-            bool[] bools = boolTensor.Storage.GetData() as bool[];
+            return null;
+            //if (this.size != np2.size)
+            //{
+            //    throw new ArgumentException("Different sized NDArray's in not yet supported by the equal operation", nameof(np2));
+            //}
+            //var boolTensor = new NDArray(typeof(bool), this.shape);
+            //bool[] bools = boolTensor.Storage.GetData() as bool[];
 
-            var values1 = this.Storage.GetData();
-            var values2 = np2.Storage.GetData();
-            for (int idx = 0; idx < bools.Length; idx++)
-            {
-                var v1 = values1.GetValue(idx);
-                var v2 = values2.GetValue(idx);
-                if (v1.Equals(v2))
-                    bools[idx] = true;
-            }
-            
-            return boolTensor.MakeGeneric<bool>();
+            //var values1 = this.Storage.GetData();
+            //var values2 = np2.Storage.GetData();
+            //for (int idx = 0; idx < bools.Length; idx++)
+            //{
+            //    var v1 = values1.GetValue(idx);
+            //    var v2 = values2.GetValue(idx);
+            //    if (v1.Equals(v2))
+            //        bools[idx] = true;
+            //}
+
+            //return boolTensor.MakeGeneric<bool>();
         }
 
         /// NumPy signature: numpy.array_equal(a1, a2)[source]
@@ -154,21 +157,23 @@ namespace NumSharp
         /// <returns>True if two arrays have the same shape and elements, False otherwise.</returns>
         public bool array_equal(NDArray np2)
         {
-            if (!Enumerable.SequenceEqual(this.shape, np2.shape))
-            {
-                return false;
-            }
-            var values1 = this.Storage.GetData();
-            var values2 = np2.Storage.GetData();
-            for (int idx = 0; idx < values1.Length; idx++)
-            {
-                var v1 = values1.GetValue(idx);
-                var v2 = values2.GetValue(idx);
-                if (!v1.Equals(v2))
-                    return false;
-            }
+            return false;
+            //return null;
+            //if (!Enumerable.SequenceEqual(this.shape, np2.shape))
+            //{
+            //    return false;
+            //}
+            //var values1 = this.Storage.GetData();
+            //var values2 = np2.Storage.GetData();
+            //for (int idx = 0; idx < values1.Length; idx++)
+            //{
+            //    var v1 = values1.GetValue(idx);
+            //    var v2 = values2.GetValue(idx);
+            //    if (!v1.Equals(v2))
+            //        return false;
+            //}
 
-            return true;
+            //return true;
         }
 
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -13,12 +14,12 @@ namespace NumSharp
         /// <summary>
         ///     Get storage for given <paramref name="dtype"/>.
         /// </summary>
-        public abstract IStorage GetStorage(Type dtype);
+        public abstract UnmanagedStorage GetStorage(Type dtype);
 
         /// <summary>
         ///     Get storage for given <paramref name="typeCode"/>.
         /// </summary>
-        public abstract IStorage GetStorage(NPTypeCode typeCode);
+        public abstract UnmanagedStorage GetStorage(NPTypeCode typeCode);
 
         #endregion
 
@@ -51,7 +52,8 @@ namespace NumSharp
 
         #region Array Manipulation
 
-        public abstract NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F');
+        public abstract NDArray CreateNDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'C');
+        public abstract NDArray CreateNDArray(Shape shape, Type dtype = null, IArraySlice buffer = null, char order = 'C');
         public abstract NDArray Transpose(NDArray nd, int[] axes = null);
         public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
 

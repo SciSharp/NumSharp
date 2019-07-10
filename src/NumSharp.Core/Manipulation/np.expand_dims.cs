@@ -12,15 +12,16 @@ namespace NumSharp
 
         public static NDArray expand_dims(NDArray a, int axis)
         {
-            //test if the ndarray is empty.
-            if (a.size == 0)
-                return a;
+            return null;
+            ////test if the ndarray is empty.
+            //if (a.size == 0)
+            //    return a;
 
-            var shape = np.array(a.shape);
-            var left = shape[$":{axis}"].Array.Cast<int>();
-            var right = shape[$"{axis}:"].Array.Cast<int>();
+            //var shape = np.array(a.shape);
+            //var left = shape[$":{axis}"].Array.Cast<int>();
+            //var right = shape[$"{axis}:"].Array.Cast<int>();
 
-            return a.reshape(_combineEnumerables(left, __one, right).ToArray());
+            //return a.reshape(_combineEnumerables(left, __one, right).ToArray());
         }
 
         private static IEnumerable<T> _combineEnumerables<T>(params IEnumerable<T>[] arrays)

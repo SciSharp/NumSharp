@@ -8,19 +8,20 @@ namespace NumSharp
     {
         public static NDArray ravel(matrix mx)
         {
-            var nd = new NDArray(mx.dtype, mx.size);
+            return null;
+            //var nd = new NDArray(mx.dtype, mx.size);
 
-            switch (mx.dtype.Name)
-            {
-                case "Double":
-                    nd.ReplaceData(mx.Data<double>());
-                    break;
-                case "Int32":
-                    nd.ReplaceData(mx.Data<int>());
-                    break;
-            }
+            //switch (mx.dtype.Name)
+            //{
+            //    case "Double":
+            //        nd.ReplaceData(mx.Data<double>());
+            //        break;
+            //    case "Int32":
+            //        nd.ReplaceData(mx.Data<int>());
+            //        break;
+            //}
 
-            return nd;
+            //return nd;
         }
     }
 }

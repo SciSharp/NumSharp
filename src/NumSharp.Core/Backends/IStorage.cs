@@ -148,15 +148,40 @@ namespace NumSharp
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>element from internal storage</returns>
         /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
-        T GetData<T>(params int[] indices);
+        T GetData<T>(params int[] indices) where T : unmanaged;
 
         /// <summary>
         ///     Set a single value at given <see cref="indices"/>.
         /// </summary>
         /// <param name="value">The value to set</param>
         /// <param name="indices">The </param>
-        /// <remarks>Does not change internal storage data type</remarks>
-        void SetData(object value, params int[] indices);
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged;
+
+        /// <summary>
+        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        void SetData(IArraySlice value, params int[] indices);
+
+        /// <summary>
+        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        void SetData(NDArray value, params int[] indices);
 
         /// <summary>
         ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
@@ -172,6 +197,7 @@ namespace NumSharp
         /// <remarks>Does not copy values and doesn't change shape.</remarks>
         void ReplaceData(IArraySlice values);
 
+        void ReplaceData(IArraySlice values, Type dtype);
         /// <summary>
         ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
         /// </summary>
@@ -208,7 +234,7 @@ namespace NumSharp
         #region Get Methods
 
 #if _REGEN
-        %foreach supported_dtypes, supported_dtypes_lowercase%
+        %foreach supported_currently_supported,supported_currently_supported_lowercase%
 
         /// <summary>
         ///     Retrieves value of type <see cref="#2"/> from internal storage..
@@ -218,27 +244,6 @@ namespace NumSharp
         @#1 Get#1(params int[] indices);
         %
 #else
-        /// <summary>
-        ///     Retrieves value of type <see cref="NDArray"/> from internal storage..
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="NDArray"/></exception>
-        @NDArray GetNDArray(params int[] indices);
-
-        /// <summary>
-        ///     Retrieves value of type <see cref="Complex"/> from internal storage..
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Complex"/></exception>
-        @Complex GetComplex(params int[] indices);
-
-        /// <summary>
-        ///     Retrieves value of type <see cref="bool"/> from internal storage..
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
-        @Boolean GetBoolean(params int[] indices);
-
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage..
         /// </summary>
@@ -315,13 +320,6 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         @Decimal GetDecimal(params int[] indices);
-
-        /// <summary>
-        ///     Retrieves value of type <see cref="string"/> from internal storage..
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="string"/></exception>
-        @String GetString(params int[] indices);
 #endif
 
         /// <summary>

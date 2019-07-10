@@ -29,13 +29,14 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public static implicit operator string(NDArray nd)
-        {
-            if (nd.ndim > 0)
-                throw new IncorrectShapeException();
+        //return null;
+        //public static implicit operator string(NDArray nd)
+        //{
+        //    if (nd.ndim > 0)
+        //        throw new IncorrectShapeException();
 
-            return nd.Data<string>(0);
-        }
+        //    return nd.Data<string>(0);
+        //}
 
         public static implicit operator NDArray(bool d)
         {
@@ -67,7 +68,7 @@ namespace NumSharp
                 throw new IncorrectShapeException();
 
             if (nd.dtype.Name == "NDArray")
-                return (nd.Array.GetValue(0) as NDArray).GetSingle(0);
+                return nd.Array.GetIndex<float>(0);
             else
                 return nd.GetSingle(0);
         }

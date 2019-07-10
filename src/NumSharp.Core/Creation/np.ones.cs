@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Numerics;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -52,6 +53,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, Type dtype = null)
         {
+            //TODO! allocate with fill..
             dtype = dtype ?? typeof(double);
             var nd = new NDArray(dtype, shape); //already allocates inside.
             object one = null;
@@ -75,89 +77,69 @@ namespace NumSharp
             {
 
 #if _REGEN
-                %foreach except(supported_dtypes, "String")%
+                %foreach supported_currently_supported, supported_currently_supported_lowercase%
                 case NPTypeCode.#1:
                 {
-                    new Span<#1>((#1[]) nd.Array).Fill((#1)one);
+                    ((ArraySlice<#2>) nd.Array).AsSpan.Fill((#2)one);
                     break;
                 }
                 %
                 default:
                     throw new NotImplementedException();
 #else
-                case NPTypeCode.NDArray:
-                {
-                    new Span<NDArray>((NDArray[]) nd.Array).Fill((NDArray)one);
-                    break;
-                }
-                case NPTypeCode.Complex:
-                {
-                    new Span<Complex>((Complex[]) nd.Array).Fill((Complex)one);
-                    break;
-                }
-                case NPTypeCode.Boolean:
-                {
-                    new Span<Boolean>((Boolean[]) nd.Array).Fill((Boolean)one);
-                    break;
-                }
                 case NPTypeCode.Byte:
                 {
-                    new Span<Byte>((Byte[]) nd.Array).Fill((Byte)one);
+                    ((ArraySlice<byte>) nd.Array).AsSpan.Fill((byte)one);
                     break;
                 }
                 case NPTypeCode.Int16:
                 {
-                    new Span<Int16>((Int16[]) nd.Array).Fill((Int16)one);
+                    ((ArraySlice<short>) nd.Array).AsSpan.Fill((short)one);
                     break;
                 }
                 case NPTypeCode.UInt16:
                 {
-                    new Span<UInt16>((UInt16[]) nd.Array).Fill((UInt16)one);
+                    ((ArraySlice<ushort>) nd.Array).AsSpan.Fill((ushort)one);
                     break;
                 }
                 case NPTypeCode.Int32:
                 {
-                    new Span<Int32>((Int32[]) nd.Array).Fill((Int32)one);
+                    ((ArraySlice<int>) nd.Array).AsSpan.Fill((int)one);
                     break;
                 }
                 case NPTypeCode.UInt32:
                 {
-                    new Span<UInt32>((UInt32[]) nd.Array).Fill((UInt32)one);
+                    ((ArraySlice<uint>) nd.Array).AsSpan.Fill((uint)one);
                     break;
                 }
                 case NPTypeCode.Int64:
                 {
-                    new Span<Int64>((Int64[]) nd.Array).Fill((Int64)one);
+                    ((ArraySlice<long>) nd.Array).AsSpan.Fill((long)one);
                     break;
                 }
                 case NPTypeCode.UInt64:
                 {
-                    new Span<UInt64>((UInt64[]) nd.Array).Fill((UInt64)one);
+                    ((ArraySlice<ulong>) nd.Array).AsSpan.Fill((ulong)one);
                     break;
                 }
                 case NPTypeCode.Char:
                 {
-                    new Span<Char>((Char[]) nd.Array).Fill((Char)one);
+                    ((ArraySlice<char>) nd.Array).AsSpan.Fill((char)one);
                     break;
                 }
                 case NPTypeCode.Double:
                 {
-                    new Span<Double>((Double[]) nd.Array).Fill((Double)one);
+                    ((ArraySlice<double>) nd.Array).AsSpan.Fill((double)one);
                     break;
                 }
                 case NPTypeCode.Single:
                 {
-                    new Span<Single>((Single[]) nd.Array).Fill((Single)one);
+                    ((ArraySlice<float>) nd.Array).AsSpan.Fill((float)one);
                     break;
                 }
                 case NPTypeCode.Decimal:
                 {
-                    new Span<Decimal>((Decimal[]) nd.Array).Fill((Decimal)one);
-                    break;
-                }
-                case NPTypeCode.String:
-                {
-                    new Span<String>((String[]) nd.Array).Fill((String)one);
+                    ((ArraySlice<decimal>) nd.Array).AsSpan.Fill((decimal)one);
                     break;
                 }
                 default:

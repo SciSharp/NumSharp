@@ -13,119 +13,120 @@ namespace NumSharp
         /// </summary>
         public NDArray negative()
         {
-            var outputNDArray = new NDArray(this.dtype, this.shape);
+            return null;
+            //var outputNDArray = new NDArray(this.dtype, this.shape);
 
-            Array inputArray = this.Storage.GetData();
-            Array outputArray = outputNDArray.Storage.GetData();
+            //Array inputArray = this.Storage.GetData();
+            //Array outputArray = outputNDArray.Storage.GetData();
 
-            switch (outputArray)
-            {
-                case int[] output:
-                {
-                    var @in = inputArray as int[];
-                    Parallel.For(0, @in.Length, compute);
+            //switch (outputArray)
+            //{
+            //    case int[] output:
+            //    {
+            //        var @in = inputArray as int[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val > 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            if (val > 0)
+            //                output[idx] = -val;
+            //            else
+            //                output[idx] = val;
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case long[] output:
-                {
-                    var @in = inputArray as long[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case long[] output:
+            //    {
+            //        var @in = inputArray as long[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val > 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            if (val > 0)
+            //                output[idx] = -val;
+            //            else
+            //                output[idx] = val;
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case double[] output:
-                {
-                    var @in = inputArray as double[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case double[] output:
+            //    {
+            //        var @in = inputArray as double[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val > 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            if (val > 0)
+            //                output[idx] = -val;
+            //            else
+            //                output[idx] = val;
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case float[] output:
-                {
-                    var @in = inputArray as float[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case float[] output:
+            //    {
+            //        var @in = inputArray as float[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val > 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            if (val > 0)
+            //                output[idx] = -val;
+            //            else
+            //                output[idx] = val;
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case Complex[] output:
-                {
-                    var @in = inputArray as Complex[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case Complex[] output:
+            //    {
+            //        var @in = inputArray as Complex[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        output[idx] = new Complex(val.Real > 0 ? -val.Real : val.Real, val.Imaginary > 0 ? -val.Imaginary : val.Imaginary);
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            output[idx] = new Complex(val.Real > 0 ? -val.Real : val.Real, val.Imaginary > 0 ? -val.Imaginary : val.Imaginary);
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case decimal[] output:
-                {
-                    var @in = inputArray as decimal[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case decimal[] output:
+            //    {
+            //        var @in = inputArray as decimal[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val > 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+            //        void compute(int idx)
+            //        {
+            //            var val = @in[idx];
+            //            if (val > 0)
+            //                output[idx] = -val;
+            //            else
+            //                output[idx] = val;
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                default:
-                {
-                    throw new IncorrectTypeException();
-                }
-            }
+            //    default:
+            //    {
+            //        throw new IncorrectTypeException();
+            //    }
+            //}
 
-            return outputNDArray;
+            //return outputNDArray;
         }
     }
 }

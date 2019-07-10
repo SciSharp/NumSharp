@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,6 +11,8 @@ namespace NumSharp.Backends.Unmanaged
 {
     public static class ArraySlice
     {
+        private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
+
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedArray<T>.FromArray(array, copy));
@@ -27,13 +31,95 @@ namespace NumSharp.Backends.Unmanaged
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             return new ArraySlice<T>(UnmanagedArray<T>.FromPool(count, pool));
         }
+
+
+        /// <summary>
+        ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
+        /// </summary>
+        /// <param name="val"></param>
+        /// <returns></returns>
+        public static IArraySlice Scalar(object val)
+        {
+            switch (val.GetType().GetTypeCode())
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1:
+	            {
+                    return new ArraySlice<#1>(UnmanagedArray<#1>.FromPool(1, _scalarPool));
+	            }
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+
+                case NPTypeCode.Byte:
+                {
+                    return new ArraySlice<Byte>(UnmanagedArray<Byte>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Int16:
+                {
+                    return new ArraySlice<Int16>(UnmanagedArray<Int16>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.UInt16:
+                {
+                    return new ArraySlice<UInt16>(UnmanagedArray<UInt16>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Int32:
+                {
+                    return new ArraySlice<Int32>(UnmanagedArray<Int32>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.UInt32:
+                {
+                    return new ArraySlice<UInt32>(UnmanagedArray<UInt32>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Int64:
+                {
+                    return new ArraySlice<Int64>(UnmanagedArray<Int64>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.UInt64:
+                {
+                    return new ArraySlice<UInt64>(UnmanagedArray<UInt64>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Char:
+                {
+                    return new ArraySlice<Char>(UnmanagedArray<Char>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Double:
+                {
+                    return new ArraySlice<Double>(UnmanagedArray<Double>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Single:
+                {
+                    return new ArraySlice<Single>(UnmanagedArray<Single>.FromPool(1, _scalarPool));
+                }
+
+                case NPTypeCode.Decimal:
+                {
+                    return new ArraySlice<Decimal>(UnmanagedArray<Decimal>.FromPool(1, _scalarPool));
+                }
+
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
     }
 
     /// <summary>
     ///     <see cref="ArraySlice{T}"/> is similar to <see cref="Span{T}"/> but it can be moved around without having to follow `ref struct` rules.
     /// </summary>
     /// <typeparam name="T">The type of the internal unmanaged memory</typeparam>
-    public readonly unsafe struct ArraySlice<T> : IArraySlice where T : unmanaged
+    public readonly unsafe struct ArraySlice<T> : IArraySlice, IEnumerable<T> where T : unmanaged
     {
         private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
 
@@ -166,16 +252,21 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         Type IArraySlice.ArrayType => typeof(T);
+
+        /// <summary>
+        ///     The size of a single item.
+        /// </summary>
+        public int ItemSize
+        {
+            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
+        }
+
         void* IArraySlice.Address => Address;
         int IArraySlice.Count => Count;
 
         IUnmanagedArray IArraySlice.MemoryBlock
         {
-            [MethodImpl((MethodImplOptions)768)]
-            get
-            {
-                return MemoryBlock;
-            }
+            [MethodImpl((MethodImplOptions)768)] get => MemoryBlock;
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -184,10 +275,20 @@ namespace NumSharp.Backends.Unmanaged
             return *(T1*)(void*)Address;
         }
 
+        public object GetIndex(int index)
+        {
+            return *(Address + index);
+        }
+
         [MethodImpl((MethodImplOptions)768)]
         void IArraySlice.SetIndex<T1>(int index, T1 value)
         {
             *(T1*)(void*)Address = value;
+        }
+
+        public void SetIndex(int index, object value)
+        {
+            throw new NotImplementedException();
         }
 
         #endregion
@@ -293,5 +394,28 @@ namespace NumSharp.Backends.Unmanaged
 #endif
 
         #endregion
+
+        /// <summary>Returns an enumerator that iterates through the collection.</summary>
+        /// <returns>An enumerator that can be used to iterate through the collection.</returns>
+        public IEnumerator<T> GetEnumerator()
+        {
+            return _enumerate().GetEnumerator();
+        }
+
+        private IEnumerable<T> _enumerate()
+        {
+            var len = this.Length;
+            for (int i = 0; i < len; i++)
+            {
+                yield return this[i];
+            }
+        }
+
+        /// <summary>Returns an enumerator that iterates through a collection.</summary>
+        /// <returns>An <see cref="T:System.Collections.IEnumerator"></see> object that can be used to iterate through the collection.</returns>
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
     }
 }

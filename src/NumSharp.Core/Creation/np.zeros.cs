@@ -39,11 +39,6 @@ namespace NumSharp
         {
             dtype = dtype ?? np.float64;
             var nd = new NDArray(dtype, shape); //already allocates inside.
-            if (dtype == typeof(NDArray)) //todo-NDArray Is it what is expected from NDArray dtype?
-            {
-                ((NDArray[])nd.Array).AsSpan().Fill(NDArray.Scalar(0, typeof(int))); //todo-NDArray! should it be int?
-            }
-
             return nd;
         }
     }

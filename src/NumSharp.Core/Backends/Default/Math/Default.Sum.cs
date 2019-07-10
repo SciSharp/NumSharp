@@ -40,6 +40,7 @@ namespace NumSharp.Backends
 
         private NDArray Sum(NDArray x)
         {
+            return null;
             #region Sum Methods
 
             Double SumDouble(Double[] arr)
@@ -198,59 +199,59 @@ namespace NumSharp.Backends
 
             #endregion
 
-            switch (Type.GetTypeCode(x.dtype))
-            {
-                case TypeCode.Double:
-                    return SumDouble(x.Data<Double>());
-                case TypeCode.Single:
-                    return SumSingle(x.Data<Single>());
-                case TypeCode.Byte:
-                case TypeCode.Char:
-                {
-                    var sum = SumByte(x.Data<Byte>());
-                    var nd = new NDArray(typeof(Byte), 1);
-                    nd.Array.SetValue(0, sum);
-                    return nd;
-                }
+            //switch (Type.GetTypeCode(x.dtype))
+            //{
+            //    case TypeCode.Double:
+            //        return SumDouble(x.Data<Double>());
+            //    case TypeCode.Single:
+            //        return SumSingle(x.Data<Single>());
+            //    case TypeCode.Byte:
+            //    case TypeCode.Char:
+            //    {
+            //        var sum = SumByte(x.Data<Byte>());
+            //        var nd = new NDArray(typeof(Byte), 1);
+            //        nd.Array.SetValue(0, sum);
+            //        return nd;
+            //    }
 
-                case TypeCode.Int32:
-                    return SumInt32(x.Data<Int32>());
-                case TypeCode.Int64:
-                    return SumInt64(x.Data<Int64>());
-                case TypeCode.SByte:
-                    return SumSByte(x.Data<SByte>());
-                case TypeCode.Int16:
-                    return SumInt16(x.Data<Int16>());
-                case TypeCode.UInt32:
-                {
-                    var sum = SumUInt32(x.Data<UInt32>());
-                    var nd = new NDArray(typeof(UInt32), 1);
-                    nd.Array.SetValue(0, sum);
-                    return nd;
-                }
+            //    case TypeCode.Int32:
+            //        return SumInt32(x.Data<Int32>());
+            //    case TypeCode.Int64:
+            //        return SumInt64(x.Data<Int64>());
+            //    case TypeCode.SByte:
+            //        return SumSByte(x.Data<SByte>());
+            //    case TypeCode.Int16:
+            //        return SumInt16(x.Data<Int16>());
+            //    case TypeCode.UInt32:
+            //    {
+            //        var sum = SumUInt32(x.Data<UInt32>());
+            //        var nd = new NDArray(typeof(UInt32), 1);
+            //        nd.Array.SetValue(0, sum);
+            //        return nd;
+            //    }
 
-                case TypeCode.UInt64:
-                    return SumUInt64(x.Data<UInt64>());
-                case TypeCode.UInt16:
-                {
-                    var sum = SumUInt16(x.Data<UInt16>());
-                    var nd = new NDArray(typeof(UInt16), 1);
-                    nd.Array.SetValue(0, sum);
-                    return nd;
-                }
+            //    case TypeCode.UInt64:
+            //        return SumUInt64(x.Data<UInt64>());
+            //    case TypeCode.UInt16:
+            //    {
+            //        var sum = SumUInt16(x.Data<UInt16>());
+            //        var nd = new NDArray(typeof(UInt16), 1);
+            //        nd.Array.SetValue(0, sum);
+            //        return nd;
+            //    }
 
-                case TypeCode.Decimal:
-                    return SumDecimal(x.Data<Decimal>());
+            //    case TypeCode.Decimal:
+            //        return SumDecimal(x.Data<Decimal>());
 
-                default:
-                    if (x.dtype == typeof(Complex))
-                    {
-                        var cplx = x.Data<Complex>();
-                        return new Complex(cplx.Select(c => c.Real).Sum(), cplx.Select(c => c.Imaginary).Sum());
-                    }
+            //    default:
+            //        if (x.dtype == typeof(Complex))
+            //        {
+            //            var cplx = x.Data<Complex>();
+            //            return new Complex(cplx.Select(c => c.Real).Sum(), cplx.Select(c => c.Imaginary).Sum());
+            //        }
 
-                    throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name}");
-            }
+            //        throw new NotImplementedException($"DefaultEngine sum {x.dtype.Name}");
+            //}
         }
 
         private NDArray Sum0(NDArray x, int axis)

@@ -14,17 +14,20 @@ namespace NumSharp
         /// </summary>
         public void itemset<T>(Shape shape, T val)
         {
-            SetData<T>(val, shape);
+            return;
+            //SetData<T>(val, shape);
         }
 
         public void itemset<T>(int[] shape, T val)
         {
-            SetData<T>(val, shape);
+            return;
+            //SetData<T>(val, shape);
         }
 
         public void itemset<T>(int index, T val)
         {
-            Data<T>()[index] = val;
+            return;
+            //Data<T>()[index] = val;
         }
     }
 }

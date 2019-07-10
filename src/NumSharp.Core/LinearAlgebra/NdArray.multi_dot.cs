@@ -19,28 +19,29 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray multi_dot(params NDArray[] np2Multi)
         {
-            var np2 = np2Multi.Last(); 
+            return null;
+            //var np2 = np2Multi.Last(); 
 
-            if ((this.ndim == 1 ) & (np2.ndim == 1))
-                if (this.shape[0] != np2.shape[0])
-                    throw new IncorrectShapeException(); 
-                else 
-                {
-                    np2.Storage.Reshape(np2.Storage.GetData().Length,1);
-                    this.Storage.Reshape(1,this.Storage.GetData().Length);
-                }
-            else
-                if (this.shape[1] != np2.shape[0])
-                    throw new IncorrectShapeException();
-            
-            var prod = BackendFactory.GetEngine().Dot(this, np2Multi[0]);
+            //if ((this.ndim == 1 ) & (np2.ndim == 1))
+            //    if (this.shape[0] != np2.shape[0])
+            //        throw new IncorrectShapeException(); 
+            //    else 
+            //    {
+            //        np2.Storage.Reshape(np2.Storage.GetData().Length,1);
+            //        this.Storage.Reshape(1,this.Storage.GetData().Length);
+            //    }
+            //else
+            //    if (this.shape[1] != np2.shape[0])
+            //        throw new IncorrectShapeException();
 
-            for(int idx = 1;idx < np2Multi.Length;idx++)
-            {
-                prod = BackendFactory.GetEngine().Dot(prod, np2Multi[idx]);
-            }
-            
-            return prod;
+            //var prod = BackendFactory.GetEngine().Dot(this, np2Multi[0]);
+
+            //for(int idx = 1;idx < np2Multi.Length;idx++)
+            //{
+            //    prod = BackendFactory.GetEngine().Dot(prod, np2Multi[idx]);
+            //}
+
+            //return prod;
         }
     }
 }

@@ -22,8 +22,8 @@ namespace NumSharp.Backends
                     case BackendType.MKL:
                     case BackendType.SIMD:
                         return cache[backendType] = new SimdEngine();
-                    case BackendType.ArrayFire:
-                        return cache[backendType] = new ArrayFireEngine();
+                    //case BackendType.ArrayFire:
+                    //    return cache[backendType] = new ArrayFireEngine();
                     default:
                         throw new NotImplementedException($"Storage {backendType} not found.");
                 }

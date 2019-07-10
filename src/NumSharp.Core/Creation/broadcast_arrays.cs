@@ -41,28 +41,29 @@ namespace NumSharp
 
         private static NDArray _broadcast_to<T>(NDArray nd, Shape shape, bool subok, bool rdonly)
         {
-            T[,] table = new T[shape.Dimensions[0], shape.Dimensions[1]];
-            if (nd.shape[0] == 1) 
-            {// (1,2,3)
-                for (int i = 0; i < shape.Dimensions[0]; i++)
-                {
-                    for (int j = 0; j < shape.Dimensions[1]; j++)
-                    {
-                        table[i, j] = nd.Data<T>(0, j); 
-                    }
-                }
-            }
-            else if (nd.shape[1] == 1)
-            {
-                for (int i = 0; i < shape.Dimensions[0]; i++)
-                {
-                    for (int j = 0; j < shape.Dimensions[1]; j++)
-                    {
-                        table[i, j] = nd.Data<T>(i, 0);
-                    }
-                }
-            }
-            return np.array<T>(table);
+            return null;
+            //T[,] table = new T[shape.Dimensions[0], shape.Dimensions[1]];
+            //if (nd.shape[0] == 1) 
+            //{// (1,2,3)
+            //    for (int i = 0; i < shape.Dimensions[0]; i++)
+            //    {
+            //        for (int j = 0; j < shape.Dimensions[1]; j++)
+            //        {
+            //            table[i, j] = nd.Data<T>(0, j); 
+            //        }
+            //    }
+            //}
+            //else if (nd.shape[1] == 1)
+            //{
+            //    for (int i = 0; i < shape.Dimensions[0]; i++)
+            //    {
+            //        for (int j = 0; j < shape.Dimensions[1]; j++)
+            //        {
+            //            table[i, j] = nd.Data<T>(i, 0);
+            //        }
+            //    }
+            //}
+            //return np.array<T>(table);
         }
     }
 }

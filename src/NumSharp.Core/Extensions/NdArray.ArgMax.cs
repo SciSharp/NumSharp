@@ -7,11 +7,13 @@ namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
     {
-        public static int ArgMax<T>(this NDArray np )
+        public static int ArgMax<T>(this NDArray np)
         {
-            var max = np.Data<T>().Max();
-
-            return np.Data<T>().ToList().IndexOf(max);
+            return -1;
+            //return;
+            //var max = np.Data<T>().Max();
+            //
+            //return np.Data<T>().ToList().IndexOf(max);
         }
     }
 }

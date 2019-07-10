@@ -10,15 +10,17 @@ namespace NumSharp
 
         public static NDArray<bool> operator !(NDArray np_)
         {
-            var boolTensor = new NDArray(typeof(bool), np_.shape);
-            bool[] bools = boolTensor.Storage.GetData<bool>();
+            return null;
 
-            bool[] np = np_.Storage.GetData<bool>();
+            //var boolTensor = new NDArray(typeof(bool), np_.shape);
+            //bool[] bools = boolTensor.Storage.GetData<bool>();
 
-            for (int i = 0; i < bools.Length; i++)
-                bools[i] = !np[i];
+            //bool[] np = np_.Storage.GetData<bool>();
 
-            return boolTensor.MakeGeneric<bool>();
+            //for (int i = 0; i < bools.Length; i++)
+            //    bools[i] = !np[i];
+
+            //return boolTensor.MakeGeneric<bool>();
         }
     }
 }

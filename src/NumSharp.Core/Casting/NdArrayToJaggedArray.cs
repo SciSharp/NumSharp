@@ -31,57 +31,58 @@ namespace NumSharp
     {
         public Array ToJaggedArray<T>()
         {
-            Array dotNetArray = null;
+            return null;
+            //Array dotNetArray = null;
 
-            switch (ndim)
-            {
-                case 1 : 
-                {
-                    dotNetArray = Storage.GetData<T>() ;    
-                    break;
-                }
-                case 2 : 
-                {
-                    T[][] dotNetArrayPuffer = new T[shape[0]][]; 
-                    for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-                        dotNetArrayPuffer[idx] = new T[shape[1]];
-                        
-                    for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
-                        for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
-                            dotNetArrayPuffer[idx][jdx] = Data<T>(idx,jdx);
-                    
-                    dotNetArray = dotNetArrayPuffer;
-                    
-                    break;
-                }
-                case 3 : 
-                {
-                    T[] data = Storage.GetData<T>();
-                    T[][][] dotNetArrayPuffer = new T[shape[0]][][]; 
-                    for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-                    {
-                        dotNetArrayPuffer[idx] = new T[shape[1]][];
-                        for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
-                            dotNetArrayPuffer[idx][jdx] = new T[shape[2]];
-                    }
+            //switch (ndim)
+            //{
+            //    case 1 : 
+            //    {
+            //        dotNetArray = Storage.GetData<T>() ;    
+            //        break;
+            //    }
+            //    case 2 : 
+            //    {
+            //        T[][] dotNetArrayPuffer = new T[shape[0]][]; 
+            //        for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
+            //            dotNetArrayPuffer[idx] = new T[shape[1]];
 
-                    for (int idx = 0; idx < shape[0]; idx++)
-                        for (int jdx = 0; jdx < shape[1]; jdx++)
-                            for (int kdx = 0; kdx < shape[2]; kdx++)
-                                dotNetArrayPuffer[idx][jdx][kdx] = Data<T>(idx, jdx, kdx);
-                     
-                    dotNetArray = dotNetArrayPuffer;
-                    
-                    break;
-                }
-                default : 
-                {
-                    throw new IncorrectShapeException();
-                }
+            //        for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
+            //            for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
+            //                dotNetArrayPuffer[idx][jdx] = Data<T>(idx,jdx);
 
-            }
+            //        dotNetArray = dotNetArrayPuffer;
 
-            return dotNetArray;
+            //        break;
+            //    }
+            //    case 3 : 
+            //    {
+            //        T[] data = Storage.GetData<T>();
+            //        T[][][] dotNetArrayPuffer = new T[shape[0]][][]; 
+            //        for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
+            //        {
+            //            dotNetArrayPuffer[idx] = new T[shape[1]][];
+            //            for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
+            //                dotNetArrayPuffer[idx][jdx] = new T[shape[2]];
+            //        }
+
+            //        for (int idx = 0; idx < shape[0]; idx++)
+            //            for (int jdx = 0; jdx < shape[1]; jdx++)
+            //                for (int kdx = 0; kdx < shape[2]; kdx++)
+            //                    dotNetArrayPuffer[idx][jdx][kdx] = Data<T>(idx, jdx, kdx);
+
+            //        dotNetArray = dotNetArrayPuffer;
+
+            //        break;
+            //    }
+            //    default : 
+            //    {
+            //        throw new IncorrectShapeException();
+            //    }
+
+            //}
+
+            //return dotNetArray;
         }
         
     }

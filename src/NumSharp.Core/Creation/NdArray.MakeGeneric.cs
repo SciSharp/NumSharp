@@ -10,7 +10,7 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray<T> MakeGeneric<T>() where T : struct
+        public NDArray<T> MakeGeneric<T>() where T : unmanaged
         {
             if (typeof(T) == dtype)
             {
@@ -32,7 +32,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of the generic</typeparam>
         /// <returns>This NDArray as a generic version.</returns>
         /// <exception cref="InvalidOperationException">When <typeparamref name="T"/> != <see cref="dtype"/></exception>
-        public NDArray<T> AsGeneric<T>() where T : struct
+        public NDArray<T> AsGeneric<T>() where T : unmanaged
         {
             if (typeof(T) != dtype)
                 throw new InvalidOperationException($"Given constraint type {typeof(T).Name} does not match dtype {dtype.Name}. If you intended to cast if necessary then use MakeGeneric.");

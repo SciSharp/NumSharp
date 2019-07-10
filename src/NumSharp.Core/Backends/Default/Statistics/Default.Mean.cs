@@ -11,74 +11,76 @@ namespace NumSharp.Backends
     {
         public override NDArray Mean(NDArray x, int axis = -1)
         {
-            var mean = new NDArray(typeof(double));
+            return null;
 
-            // axis == -1: DEFAULT; to compute the mean of the flattened array.
-            if (axis == -1)
-            {
-                var data = x.Array;
+            //var mean = new NDArray(typeof(double));
 
-                double sum = 0;
+            //// axis == -1: DEFAULT; to compute the mean of the flattened array.
+            //if (axis == -1)
+            //{
+            //    var data = x.Array;
 
-                switch (data)
-                {
-                    case double[] values:
-                        for (int idx = 0; idx < values.Length; idx++)
-                            sum += values[idx];
-                        break;
-                    case int[] values:
-                        for (int idx = 0; idx < values.Length; idx++)
-                            sum += values[idx];
-                        break;
-                    default:
-                        throw new NotImplementedException($"mean {x.dtype.Name}");
-                }
+            //    double sum = 0;
 
-                mean.ReplaceData(new double[] { sum / x.size });
-            }
-            // to compute mean by compressing row and row
-            else if (axis == 0)
-            {
-                double[] sumVec = new double[x.shape[0]];
+            //    switch (data)
+            //    {
+            //        case double[] values:
+            //            for (int idx = 0; idx < values.Length; idx++)
+            //                sum += values[idx];
+            //            break;
+            //        case int[] values:
+            //            for (int idx = 0; idx < values.Length; idx++)
+            //                sum += values[idx];
+            //            break;
+            //        default:
+            //            throw new NotImplementedException($"mean {x.dtype.Name}");
+            //    }
 
-                for (int d = 0; d < sumVec.Length; d++)
-                {
-                    for (int p = 0; p < x.shape[1]; p++)
-                    {
-                        sumVec[p] += x.Data<double>(d, p);
-                    }
-                }
-                var puffer = new List<double>();
+            //    mean.ReplaceData(new double[] { sum / x.size });
+            //}
+            //// to compute mean by compressing row and row
+            //else if (axis == 0)
+            //{
+            //    double[] sumVec = new double[x.shape[0]];
 
-                for (int d = 0; d < x.shape[1]; d++)
-                {
-                    puffer.Add(sumVec[d] / x.shape[0]);
-                }
-                mean.ReplaceData(puffer.ToArray());
+            //    for (int d = 0; d < sumVec.Length; d++)
+            //    {
+            //        for (int p = 0; p < x.shape[1]; p++)
+            //        {
+            //            sumVec[p] += x.Data<double>(d, p);
+            //        }
+            //    }
+            //    var puffer = new List<double>();
 
-                mean.reshape(mean.Array.Length);
-            }
-            else if (axis == 1)
-            {
-                var puffer = new List<double>();
+            //    for (int d = 0; d < x.shape[1]; d++)
+            //    {
+            //        puffer.Add(sumVec[d] / x.shape[0]);
+            //    }
+            //    mean.ReplaceData(puffer.ToArray());
 
-                for (int d = 0; d < x.shape[0]; d++)
-                {
-                    double rowSum = 0;
+            //    mean.reshape(mean.Array.Length);
+            //}
+            //else if (axis == 1)
+            //{
+            //    var puffer = new List<double>();
 
-                    for (int p = 0; p < x.shape[1]; p++)
-                    {
-                        rowSum += x.Data<double>(d, p);
-                    }
-                    puffer.Add(rowSum / x.shape[1]);
-                }
+            //    for (int d = 0; d < x.shape[0]; d++)
+            //    {
+            //        double rowSum = 0;
 
-                mean.ReplaceData(puffer.ToArray());
+            //        for (int p = 0; p < x.shape[1]; p++)
+            //        {
+            //            rowSum += x.Data<double>(d, p);
+            //        }
+            //        puffer.Add(rowSum / x.shape[1]);
+            //    }
 
-                mean.reshape(mean.Array.Length);
-            }
+            //    mean.ReplaceData(puffer.ToArray());
 
-            return mean;
+            //    mean.reshape(mean.Array.Length);
+            //}
+
+            //return mean;
         }
     }
 

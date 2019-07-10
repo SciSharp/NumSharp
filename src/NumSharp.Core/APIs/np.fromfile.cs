@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -11,39 +13,81 @@ namespace NumSharp
         // NumPy Signature: numpy.fromfile(file, dtype=float, count=-1, sep='')
         public static NDArray fromfile(string fileName, Type dtype)
         {
-            switch (Type.GetTypeCode(dtype))
+            unsafe
             {
-                case TypeCode.Byte: //todo! more types support.
+                var bytes = File.ReadAllBytes(fileName);
+                switch (dtype.GetTypeCode())
                 {
-                    var fileSize = new System.IO.FileInfo(fileName).Length;
-                    var arraySize = fileSize / Marshal.SizeOf(dtype);
-                    byte[] dataArray;
-                    using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
+#if _REGEN
+	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                case NPTypeCode.#1:
+	                {
+                        return new NDArray(new ArraySlice<#2>(UnmanagedArray<#2>.FromBuffer(bytes, false)));
+	                }
+	                %
+	                default:
+		                throw new NotSupportedException();
+#else
+                    case NPTypeCode.Byte:
                     {
-                        dataArray = reader.ReadBytes((int)arraySize);
+                        return new NDArray(new ArraySlice<byte>(UnmanagedArray<byte>.FromBuffer(bytes, false)));
                     }
 
-                    return new NDArray(dataArray);
-                }
-
-                case TypeCode.UInt16:
-                {
-                    var fileSize = new System.IO.FileInfo(fileName).Length;
-                    var arraySize = fileSize / Marshal.SizeOf(dtype);
-                    var dataArray = new ushort[arraySize];
-                    using (BinaryReader reader = new BinaryReader(File.Open(fileName, FileMode.Open)))
+                    case NPTypeCode.Int16:
                     {
-                        for (var i = 0; i < (int)arraySize; i++)
-                        {
-                            dataArray[i] = reader.ReadUInt16();
-                        }
+                        return new NDArray(new ArraySlice<short>(UnmanagedArray<short>.FromBuffer(bytes, false)));
                     }
 
-                    return new NDArray(dataArray);
+                    case NPTypeCode.UInt16:
+                    {
+                        return new NDArray(new ArraySlice<ushort>(UnmanagedArray<ushort>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Int32:
+                    {
+                        return new NDArray(new ArraySlice<int>(UnmanagedArray<int>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.UInt32:
+                    {
+                        return new NDArray(new ArraySlice<uint>(UnmanagedArray<uint>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Int64:
+                    {
+                        return new NDArray(new ArraySlice<long>(UnmanagedArray<long>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.UInt64:
+                    {
+                        return new NDArray(new ArraySlice<ulong>(UnmanagedArray<ulong>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Char:
+                    {
+                        return new NDArray(new ArraySlice<char>(UnmanagedArray<char>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Double:
+                    {
+                        return new NDArray(new ArraySlice<double>(UnmanagedArray<double>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Single:
+                    {
+                        return new NDArray(new ArraySlice<float>(UnmanagedArray<float>.FromBuffer(bytes, false)));
+                    }
+
+                    case NPTypeCode.Decimal:
+                    {
+                        return new NDArray(new ArraySlice<decimal>(UnmanagedArray<decimal>.FromBuffer(bytes, false)));
+                    }
+
+                    default:
+                        throw new NotSupportedException();
+#endif
                 }
             }
-
-            throw new NotImplementedException($"fromfile dtype={dtype} not implemented yet");
         }
     }
 }

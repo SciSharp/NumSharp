@@ -13,114 +13,115 @@ namespace NumSharp
         /// </summary>
         public NDArray negate()
         {
-            var outputNDArray = new NDArray(this.dtype, this.shape);
+            return null;
+            //var outputNDArray = new NDArray(this.dtype, this.shape);
 
-            if (len == 0)
-                return outputNDArray; //return new to maintain immutability.
+            //if (len == 0)
+            //    return outputNDArray; //return new to maintain immutability.
 
-            Array inputArray = this.Storage.GetData();
-            Array outputArray = outputNDArray.Storage.GetData();
+            //Array inputArray = this.Storage.GetData();
+            //Array outputArray = outputNDArray.Storage.GetData();
 
-            switch (outputArray)
-            {
-                case int[] output:
-                {
-                    var @in = inputArray as int[];
-                    Parallel.For(0, @in.Length, compute);
+            //switch (outputArray)
+            //{
+            //    case int[] output:
+            //    {
+            //        var @in = inputArray as int[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case long[] output:
-                {
-                    var @in = inputArray as long[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case long[] output:
+            //    {
+            //        var @in = inputArray as long[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case short[] output:
-                {
-                    var @in = inputArray as short[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case short[] output:
+            //    {
+            //        var @in = inputArray as short[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = (short)-@in[idx]; //must be casted because C# automatically converts it to int
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = (short)-@in[idx]; //must be casted because C# automatically converts it to int
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case double[] output:
-                {
-                    var @in = inputArray as double[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case double[] output:
+            //    {
+            //        var @in = inputArray as double[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case float[] output:
-                {
-                    var @in = inputArray as float[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case float[] output:
+            //    {
+            //        var @in = inputArray as float[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case Complex[] output:
-                {
-                    var @in = inputArray as Complex[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case Complex[] output:
+            //    {
+            //        var @in = inputArray as Complex[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                case decimal[] output:
-                {
-                    var @in = inputArray as decimal[];
-                    Parallel.For(0, @in.Length, compute);
+            //    case decimal[] output:
+            //    {
+            //        var @in = inputArray as decimal[];
+            //        Parallel.For(0, @in.Length, compute);
 
-                    void compute(int idx)
-                    {
-                        output[idx] = -@in[idx];
-                    }
+            //        void compute(int idx)
+            //        {
+            //            output[idx] = -@in[idx];
+            //        }
 
-                    break;
-                }
+            //        break;
+            //    }
 
-                default:
-                {
-                    throw new IncorrectTypeException();
-                }
-            }
+            //    default:
+            //    {
+            //        throw new IncorrectTypeException();
+            //    }
+            //}
 
-            return outputNDArray;
+            //return outputNDArray;
         }
     }
 }

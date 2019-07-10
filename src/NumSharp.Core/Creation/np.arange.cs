@@ -103,24 +103,25 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(float start, float stop, float step = 1)
         {
-            if (start > stop)
-            {
-                throw new Exception("parameters invalid, start is greater than stop.");
-            }
+            return null;
+            //if (start > stop)
+            //{
+            //    throw new Exception("parameters invalid, start is greater than stop.");
+            //}
 
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            //int length = (int)Math.Ceiling((stop - start + 0.0) / step);
 
-            var nd = new NDArray(typeof(float), new Shape(length));
+            //var nd = new NDArray(typeof(float), new Shape(length));
 
-            float[] puffer = (float[])nd.Array;
+            //float[] puffer = (float[])nd.Array;
 
-            for (int index = 0; index < length; index++)
-            {
-                float value = start + index * step;
-                puffer[index] = value;
-            }
+            //for (int index = 0; index < length; index++)
+            //{
+            //    float value = start + index * step;
+            //    puffer[index] = value;
+            //}
 
-            return nd;
+            //return nd;
         }
 
         /// <summary>
@@ -159,24 +160,25 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(double start, double stop, double step = 1)
         {
-            if (start > stop)
-            {
-                throw new Exception("parameters invalid, start is greater than stop.");
-            }
+            return null;
+            //if (start > stop)
+            //{
+            //    throw new Exception("parameters invalid, start is greater than stop.");
+            //}
 
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            //int length = (int)Math.Ceiling((stop - start + 0.0) / step);
 
-            var nd = new NDArray(typeof(double), new Shape(length));
+            //var nd = new NDArray(typeof(double), new Shape(length));
 
-            double[] puffer = (double[])nd.Array;
+            //double[] puffer = (double[])nd.Array;
 
-            for (int index = 0; index < length; index++)
-            {
-                double value = start + index * step;
-                puffer[index] = value;
-            }
+            //for (int index = 0; index < length; index++)
+            //{
+            //    double value = start + index * step;
+            //    puffer[index] = value;
+            //}
 
-            return nd;
+            //return nd;
         }
 
         /// <summary>

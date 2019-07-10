@@ -11,70 +11,72 @@ namespace NumSharp.Backends
     {
         public override NDArray Cast(NDArray nd, Type dtype, bool copy)
         {
-            if (dtype == null)
-            {
-                throw new ArgumentNullException(nameof(dtype));
-            }
+            return null;
+            //if (dtype == null)
+            //{
+            //    throw new ArgumentNullException(nameof(dtype));
+            //}
 
-            NDArray clone()
-            {
-                var copied = new NDArray(nd.dtype, nd.TensorEngine);
-                copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
+            //NDArray clone()
+            //{
+            //    var copied = new NDArray(nd.dtype, nd.TensorEngine);
+            //    copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
 
-                return copied;
-            }
+            //    return copied;
+            //}
 
-            if (nd.dtype == dtype)
-            {
-                //casting not needed
-                return copy ? clone() : nd;
-            }
-            else
-            {
-                //casting needed
-                if (copy)
-                {
-                    return clone();
-                }
+            //if (nd.dtype == dtype)
+            //{
+            //    //casting not needed
+            //    return copy ? clone() : nd;
+            //}
+            //else
+            //{
+            //    //casting needed
+            //    if (copy)
+            //    {
+            //        return clone();
+            //    }
 
-                //just re-set the data, conversion is handled inside.
-                nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
-                return nd;
-            }
+            //    //just re-set the data, conversion is handled inside.
+            //    nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
+            //    return nd;
+            //}
         }
-        
+
         public NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
         {
-            if (dtype == NPTypeCode.Empty)
-            {
-                throw new ArgumentNullException(nameof(dtype));
-            }
+            return null;
+            //if (dtype == NPTypeCode.Empty)
+            //{
+            //    throw new ArgumentNullException(nameof(dtype));
+            //}
 
-            NDArray clone()
-            {
-                var copied = new NDArray(nd.dtype, nd.TensorEngine);
-                copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
+            //NDArray clone()
+            //{
+            //    var copied = new NDArray(nd.dtype, nd.TensorEngine);
+            //    copied.Storage.Allocate(ArrayConvert.To(nd.Array, dtype), nd.shape);
 
-                return copied;
-            }
+            //    return copied;
+            //}
 
-            if (nd.GetTypeCode == dtype)
-            {
-                //casting not needed
-                return copy ? clone() : nd;
-            }
-            else
-            {
-                //casting needed
-                if (copy)
-                {
-                    return clone();
-                }
+            //if (nd.GetTypeCode == dtype)
+            //{
+            //    //casting not needed
+            //    return copy ? clone() : nd;
+            //}
+            //else
+            //{
+            //    //casting needed
+            //    if (copy)
+            //    {
+            //        return clone();
+            //    }
 
-                //just re-set the data, conversion is handled inside.
-                nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
-                return nd;
-            }
+            //    //just re-set the data, conversion is handled inside.
+            //    nd.Storage.ReplaceData(nd.Storage.GetData(), dtype);
+            //    return nd;
+            //}
         }
     }
 }

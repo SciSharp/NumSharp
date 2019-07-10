@@ -77,11 +77,12 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCast1()
         {
-            NDArray nd = "hello";
-
-            string str = nd;
-
-            Assert.IsTrue(str == "hello");
+            throw new NotSupportedException();
+            //NDArray nd = "hello";
+            //
+            //string str = nd;
+            //
+            //Assert.IsTrue(str == "hello");
         }
 
         [TestMethod]

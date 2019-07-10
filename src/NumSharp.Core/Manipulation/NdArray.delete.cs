@@ -9,43 +9,45 @@ namespace NumSharp
     {
         public NDArray delete(IEnumerable delete)
         {
-            var sysArr = this.Storage.GetData();
+            return null;
 
-            NDArray res = null;
+            //var sysArr = this.Storage.GetData();
 
-            switch( sysArr)
-            {
-                case double[] castedSysArr : 
-                {
-                    var castedDelete = delete as double[];
+            //NDArray res = null;
 
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
+            //switch( sysArr)
+            //{
+            //    case double[] castedSysArr : 
+            //    {
+            //        var castedDelete = delete as double[];
 
-                    break;
-                }
-                case float[] castedSysArr : 
-                {
-                    var castedDelete = delete as float[];
+            //        res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
 
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
+            //        break;
+            //    }
+            //    case float[] castedSysArr : 
+            //    {
+            //        var castedDelete = delete as float[];
 
-                    break;
-                }
-                case int[] castedSysArr :
-                {
-                    var castedDelete = delete as int[];
+            //        res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
 
-                    res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
+            //        break;
+            //    }
+            //    case int[] castedSysArr :
+            //    {
+            //        var castedDelete = delete as int[];
 
-                    break;
-                }
-                default : 
-                {
-                    throw new IncorrectTypeException();
-                }
-            }
+            //        res = np.array(castedSysArr.Where(x => !castedDelete.Contains(x) ).ToArray());
+
+            //        break;
+            //    }
+            //    default : 
+            //    {
+            //        throw new IncorrectTypeException();
+            //    }
+            //}
             
-            return res;
+            //return res;
         }
     }
 }

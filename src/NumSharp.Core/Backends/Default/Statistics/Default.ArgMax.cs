@@ -19,28 +19,29 @@ namespace NumSharp.Backends
 
         private NDArray ArgMaxByAxis(NDArray nd, int axis)
         {
-            var shape = Shape.GetShape(nd.shape, axis: axis);
-            var nd2 = new NDArray(np.int32, shape);
+            return null;
+            //var shape = Shape.GetShape(nd.shape, axis: axis);
+            //var nd2 = new NDArray(np.int32, shape);
 
-            switch (shape.Length)
-            {
-                case 1: // 2 dimension
-                    switch (Type.GetTypeCode(nd.dtype))
-                    {
-                        case TypeCode.Int32:
-                            nd2.Array = ArgMax2dInt32(nd, shape, axis);
-                            break;
-                        case TypeCode.Single:
-                            nd2.Array = ArgMax2dSingle(nd, shape, axis);
-                            break;
-                        default:
-                            throw new NotImplementedException($"ArgMaxByAxis for {nd.dtype.Name}");
-                    }
+            //switch (shape.Length)
+            //{
+            //    case 1: // 2 dimension
+            //        switch (Type.GetTypeCode(nd.dtype))
+            //        {
+            //            case TypeCode.Int32:
+            //                nd2.Array = ArgMax2dInt32(nd, shape, axis);
+            //                break;
+            //            case TypeCode.Single:
+            //                nd2.Array = ArgMax2dSingle(nd, shape, axis);
+            //                break;
+            //            default:
+            //                throw new NotImplementedException($"ArgMaxByAxis for {nd.dtype.Name}");
+            //        }
 
-                    break;
-            }
+            //        break;
+            //}
 
-            return nd2;
+            //return nd2;
         }
 
         private int[] ArgMax2dInt32(NDArray nd, int[] shape, int axis)

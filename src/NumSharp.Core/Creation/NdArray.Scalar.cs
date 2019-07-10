@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -33,6 +34,23 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value)
         {
+            var dtype = value.GetType();
+            var ndArray = new NDArray(dtype, new int[0]);
+            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
+
+            return ndArray;
+        }        
+
+        /// <summary>
+        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value of the scalar</param>
+        /// <returns></returns>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
+        public static NDArray Scalar<T>(T value) where T : unmanaged
+        {
+            var nd = new NDArray(typeof(T));
+            nd.Storage = new UnmanagedStorage(value);
             var dtype = value.GetType();
             var ndArray = new NDArray(dtype, new int[0]);
             ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));

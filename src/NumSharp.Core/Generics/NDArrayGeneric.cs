@@ -25,16 +25,17 @@ using System.Globalization;
 using System.Collections;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Generic
 {
-    public class NDArray<T> : NDArray where T : struct
+    public class NDArray<T> : NDArray where T : unmanaged
     {
         public NDArray() : base(typeof(T))
         {
         }
 
-        public NDArray(IStorage storage) : base(storage)
+        public NDArray(UnmanagedStorage storage) : base(storage)
         {
             if (typeof(T) != storage.DType)
             {
@@ -66,7 +67,7 @@ namespace NumSharp.Generic
         /// Array access to storage data - overridden on purpose
         /// </summary>
         /// <value></value>
-        internal new T[] Array
+        internal new ArraySlice<T> Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
@@ -136,7 +137,7 @@ namespace NumSharp.Generic
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator T[] (NDArray<T> nd)
+        public static implicit operator ArraySlice<T>(NDArray<T> nd)
         {
             return nd.Array;
         }

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
@@ -39,7 +40,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var error = A - ACreated;
 
-            double[] errorElements = error.Data<double>();
+            ArraySlice<double> errorElements = error.Data<double>();
 
             for(int idx = 0; idx < errorElements.Length;idx++)
                 Assert.IsTrue(Math.Abs(errorElements[idx]) < 0.01 );

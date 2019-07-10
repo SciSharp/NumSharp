@@ -26,6 +26,7 @@ using System.Collections;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -39,8 +40,7 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html</remarks>
     public partial class NDArray : ICloneable, IEnumerable
     {
-
-        protected NDArray(IStorage storage)
+        protected NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
             TensorEngine = storage.Engine;
@@ -110,6 +110,25 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Constructor which takes .NET array
+        /// dtype and shape is determined from array
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="shape"></param>
+        /// <param name="order"></param>
+        /// <returns>Array with values</returns>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
+        {
+            if (shape.IsEmpty)
+                shape = new Shape(values.Count);
+
+            shape.ChangeTensorLayout(order);
+            Storage.Allocate(shape);
+            Storage.ReplaceData(values);
+        }
+
+        /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
@@ -119,6 +138,11 @@ namespace NumSharp
         public NDArray(Type dtype, Shape shape) : this(dtype)
         {
             Storage.Allocate(shape);
+        }
+
+        private NDArray(IArraySlice array, Shape shape)
+        {
+            Storage.Allocate(array, shape);
         }
 
         /// <summary>
@@ -164,7 +188,7 @@ namespace NumSharp
         /// The internal storage that stores data for this <see cref="NDArray"/>.
         /// </summary>
 
-        internal IStorage Storage
+        internal UnmanagedStorage Storage
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get;
@@ -179,19 +203,19 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public T[] Data<T>()
+        public ArraySlice<T> Data<T>() where T : unmanaged
         {
             if (slice is null)
                 return Storage.GetData<T>();
             else if (Storage.SupportsSpan)
-                return Storage.View<T>().ToArray();
+                return Storage.View<T>();
             else
                 return Storage.GetData<T>();
         }
 
-        public T Data<T>(params int[] indice) => Storage.GetData<T>(indice);
+        public T Data<T>(params int[] indice) where T : unmanaged => (T)Storage.GetValue(indice); //TODO! this should use unmanaged address
 
-        public void SetData<T>(T value, params int[] indice) => Storage.SetData(value, indice);
+        public void SetData<T>(T value, params int[] indice) where T : unmanaged => Storage.SetData(value, indice);
 
         /// <summary>
         ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="dtype"/> and casts <see cref="values"/> if necessary.
@@ -216,11 +240,43 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="values"/> type.
+        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        /// </summary>
+        /// <param name="nd"></param>
+        /// <remarks>Does not copy values and does change shape and dtype.</remarks>
+        public void ReplaceData(NDArray nd)
+        {
+            Storage.ReplaceData(nd);
+        }
+
+        /// <summary>
+        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
         /// </summary>
         /// <param name="values"></param>
-        /// <remarks>Does not copy values.</remarks>
-        public void ReplaceData(NDArray values)
+        /// <param name="typeCode"></param>
+        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape.</remarks>
+        public void ReplaceData(Array values, NPTypeCode typeCode)
+        {
+            Storage.ReplaceData(values, typeCode);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="dtype"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        public void ReplaceData(IArraySlice values, Type dtype)
+        {
+            Storage.ReplaceData(values, dtype);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        public void ReplaceData(IArraySlice values)
         {
             Storage.ReplaceData(values);
         }
@@ -230,7 +286,7 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The returned type.</typeparam>
         /// <returns>An array of type <typeparamref name="T"/></returns>
-        public T[] GetData<T>()
+        public ArraySlice<T> GetData<T>() where T : unmanaged
         {
             return Storage.GetData<T>();
         }
@@ -239,7 +295,7 @@ namespace NumSharp
         ///     Get reference to internal data storage
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
-        public Array GetData()
+        public IArraySlice GetData()
         {
             return Storage.GetData();
         }
@@ -251,7 +307,7 @@ namespace NumSharp
         ///     Set: Replace internal storage by calling <see cref="IStorage.ReplaceData(System.Array)"/>
         /// </summary>
         /// <remarks>Setting does not replace internal storage array.</remarks>
-        internal Array Array
+        internal IArraySlice Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
@@ -266,9 +322,8 @@ namespace NumSharp
             }
         }
 
-        public T[] CloneData<T>() => Storage.CloneData() as T[];
-
-        public T Max<T>() => Data<T>().Max();
+        public ArraySlice<T> CloneData<T>() where T : unmanaged => Storage.CloneData<T>();
+        public IArraySlice CloneData() => Storage.CloneData();
 
         // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
         public NDArray astype(Type dtype, bool copy = false)
@@ -356,18 +411,6 @@ namespace NumSharp
         #region Getters
 
         /// <summary>
-        ///     Retrieves value of type <see cref="bool"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool GetBoolean(params int[] indices)
-        {
-            return Storage.GetBoolean(indices);
-        }
-
-        /// <summary>
         ///     Retrieves value of type <see cref="byte"/>.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -389,18 +432,6 @@ namespace NumSharp
         public char GetChar(params int[] indices)
         {
             return Storage.GetChar(indices);
-        }
-
-        /// <summary>
-        ///     Retrieves value of type <see cref="Complex"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Complex"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Complex GetComplex(params int[] indices)
-        {
-            return Storage.GetComplex(indices);
         }
 
         /// <summary>
@@ -461,18 +492,6 @@ namespace NumSharp
         public long GetInt64(params int[] indices)
         {
             return Storage.GetInt64(indices);
-        }
-
-        /// <summary>
-        ///     Retrieves value of type <see cref="NDArray"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="NDArray"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public NDArray GetNDArray(params int[] indices)
-        {
-            return Storage.GetNDArray(indices);
         }
 
         /// <summary>

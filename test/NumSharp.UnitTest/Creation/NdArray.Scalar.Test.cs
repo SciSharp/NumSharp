@@ -34,7 +34,7 @@ namespace NumSharp.UnitTest.Creation
             var sc = NDArray.Scalar(val);
             sc.ndim.Should().Be(0);
             sc.size.Should().Be(1);
-            sc.Array.GetValue(0).Should().Be(val);
+            sc.Array.GetIndex(0).Should().Be(val);
         }
         
     }

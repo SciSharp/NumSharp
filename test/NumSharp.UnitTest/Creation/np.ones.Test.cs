@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var np1 = np.ones(new Shape(3, 3, 3), dtype);
             Assert.IsTrue(np1.dtype == dtype);
-            Assert.IsTrue(np1.Array.GetValue(0).GetType() == dtype);
+            Assert.IsTrue(np1.Array.GetIndex(0).GetType() == dtype);
         }
     }
 }

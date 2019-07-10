@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -23,7 +24,7 @@ namespace NumSharp
         /// </summary>
         public NDArray rand(Shape shape) {
             NDArray ndArray = new NDArray(typeof(double), shape);
-            double[] numArray = ndArray.Data<double>();
+            ArraySlice<double> numArray = ndArray.Data<double>();
             for (int index = 0; index < ndArray.size; ++index) {
                 numArray[index] = randomizer.NextDouble();
             }

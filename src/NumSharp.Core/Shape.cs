@@ -27,7 +27,7 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static Shape Scalar { get; } = new Shape(Array.Empty<int>()) {size = 1};
+        public static readonly Shape Scalar = new Shape(Array.Empty<int>()) {size = 1};
 
         [MethodImpl((MethodImplOptions)768)]
         public static Shape Empty(int ndim)

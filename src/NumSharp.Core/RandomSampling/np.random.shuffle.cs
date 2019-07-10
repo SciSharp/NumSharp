@@ -10,18 +10,19 @@ namespace NumSharp
     {
         public void shuffle(NDArray list)
         {
-            var count = list.size;
+            return;
+            //var count = list.size;
 
-            Array listArr = list.Array;
+            //Array listArr = list.Array;
 
-            while (count > 1)
-            {
-                count--;
-                var k = randomizer.Next(count + 1);
-                var value = listArr.GetValue(k);
-                listArr.SetValue(listArr.GetValue(count),k); 
-                listArr.SetValue(value,count);
-            }
+            //while (count > 1)
+            //{
+            //    count--;
+            //    var k = randomizer.Next(count + 1);
+            //    var value = listArr.GetValue(k);
+            //    listArr.SetValue(listArr.GetValue(count),k); 
+            //    listArr.SetValue(value,count);
+            //}
         }
     }
 }

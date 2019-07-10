@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Drawing;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -71,10 +72,10 @@ namespace NumSharp
             return new NDArray(data.Cast<T>().ToArray(), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3)));
         }
 
-        public static NDArray array<T>(params T[] data)
+        public static NDArray array<T>(params T[] data) where T : unmanaged
         {
             var nd = new NDArray(typeof(T), data.Length);
-            nd.Array = data;
+            nd.Array = ArraySlice<T>.FromArray(data);
             return nd;
         }
     }

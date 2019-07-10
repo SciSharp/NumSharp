@@ -15,50 +15,51 @@ namespace NumSharp
         /// </summary>
         public NDArray argsort<T>(int axis = -1)
         {
-            if (ndim < axis + 1) {
-                throw new IndexOutOfRangeException($"Axis = {axis} is out bounds for dimension = {ndim}");
-            }
+            return null;
+            //if (ndim < axis + 1) {
+            //    throw new IndexOutOfRangeException($"Axis = {axis} is out bounds for dimension = {ndim}");
+            //}
 
-            // Axis -1 means that sort with respect to last axis
-            if (axis == -1) {
-                axis = ndim-1;
-            }
+            //// Axis -1 means that sort with respect to last axis
+            //if (axis == -1) {
+            //    axis = ndim-1;
+            //}
 
-            // Example: If shape is 3x2x3 and we are soritng w.r.t axis = 2 required size is 3x2
-            var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).ToArray();
+            //// Example: If shape is 3x2x3 and we are soritng w.r.t axis = 2 required size is 3x2
+            //var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).ToArray();
 
-            if (requiredSize.Length == 0)
-            {
-                var data = Data<T>();
-                var sorted = Enumerable.Range(0, size)
-                    .Select(_ => new {Data = data[_], Index = _})
-                    .OrderBy(_ => _.Data)
-                    .Select(_ => _.Index)
-                    .ToArray();
-                return np.array(sorted);
-            }
+            //if (requiredSize.Length == 0)
+            //{
+            //    var data = Data<T>();
+            //    var sorted = Enumerable.Range(0, size)
+            //        .Select(_ => new {Data = data[_], Index = _})
+            //        .OrderBy(_ => _.Data)
+            //        .Select(_ => _.Index)
+            //        .ToArray();
+            //    return np.array(sorted);
+            //}
 
-            // Sorted arguments array
-            var resultArray = new NDArray(typeof(T), shape);
+            //// Sorted arguments array
+            //var resultArray = new NDArray(typeof(T), shape);
 
-            var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
+            //var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 
-            // Append the previous indices the sorting accessors
-            var append = Enumerable.Range(0, shape[axis]);
-            var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedData>(), (allSortedData, seq) =>
-            {
-                var sortMe = append.Select(value => Appendor(value, axis, seq));
-                var sortedIndex = Sort<T>(sortMe);
-                return allSortedData.Concat(sortMe.Zip(sortedIndex, (a, b) => new SortedData(a.ToArray(), b)));
-            });
-           
-            foreach (var arg in argSort)
-            {
-                resultArray[arg.DataAccessor] = arg.Index;
-            }
+            //// Append the previous indices the sorting accessors
+            //var append = Enumerable.Range(0, shape[axis]);
+            //var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedData>(), (allSortedData, seq) =>
+            //{
+            //    var sortMe = append.Select(value => Appendor(value, axis, seq));
+            //    var sortedIndex = Sort<T>(sortMe);
+            //    return allSortedData.Concat(sortMe.Zip(sortedIndex, (a, b) => new SortedData(a.ToArray(), b)));
+            //});
 
-            return resultArray;
-          
+            //foreach (var arg in argSort)
+            //{
+            //    resultArray[arg.DataAccessor] = arg.Index;
+            //}
+
+            //return resultArray;
+
         }
 
         /// <summary>

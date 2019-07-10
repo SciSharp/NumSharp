@@ -16,7 +16,7 @@ namespace NumSharp
         {
             if (nd.size != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
-            var value = nd.Storage.GetData().GetValue(0);
+            var value = nd.Storage.GetIndex(0);
             if (nd.dtype != typeof(T))
                 return (T)Convert.ChangeType(value, typeof(T));
             return (T)value;
@@ -48,7 +48,7 @@ namespace NumSharp
         {
             if (nd.size != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
-            return nd.Storage.GetData().GetValue(0);
+            return nd.Storage.GetIndex(0);
         }
 
         /// <summary>

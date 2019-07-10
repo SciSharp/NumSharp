@@ -19,13 +19,14 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray unique<T>()
         {
-            var nd = new NDArray(dtype);
-            var data = Storage.GetData<T>().Distinct().ToArray();
-            nd.Storage.ReplaceData(data);
+            return null;
+            //var nd = new NDArray(dtype);
+            //var data = Storage.GetData<T>().Distinct().ToArray();
+            //nd.Storage.ReplaceData(data);
             
-            nd.Storage.Reshape(data.Length);
+            //nd.Storage.Reshape(data.Length);
 
-            return nd;
+            //return nd;
         }
     }
 }

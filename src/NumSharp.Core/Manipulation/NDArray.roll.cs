@@ -70,28 +70,29 @@ namespace NumSharp
 
         public NDArray roll(int shift)
         {
-            shift = (-1) * shift;
+            return null;
+            //shift = (-1) * shift;
 
-            Array cpy = Arrays.Create(this.dtype, this.size);
+            //Array cpy = Arrays.Create(this.dtype, this.size);
 
-            shift = ((shift % this.size) < 0) ? shift + this.size : shift;
+            //shift = ((shift % this.size) < 0) ? shift + this.size : shift;
 
-            //shift = shift % this.size;
+            ////shift = shift % this.size;
 
-            var strg = this.Storage.GetData();
+            //var strg = this.Storage.GetData();
 
-            Array.Copy(strg, shift, cpy, 0, this.size - shift);
+            //Array.Copy(strg, shift, cpy, 0, this.size - shift);
 
-            for (int idx = 0; idx < shift; idx++)
-                cpy.SetValue(strg.GetValue(idx), this.size - shift + idx);
+            //for (int idx = 0; idx < shift; idx++)
+            //    cpy.SetValue(strg.GetValue(idx), this.size - shift + idx);
 
-            var returnValue = new NDArray(this.dtype);
+            //var returnValue = new NDArray(this.dtype);
 
-            returnValue.Storage.Allocate(new Shape(this.shape));
+            //returnValue.Storage.Allocate(new Shape(this.shape));
 
-            returnValue.Storage.ReplaceData(cpy);
+            //returnValue.Storage.ReplaceData(cpy);
 
-            return returnValue;
+            //return returnValue;
         }
     }
 }

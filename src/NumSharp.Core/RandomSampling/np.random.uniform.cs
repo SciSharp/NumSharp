@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -29,7 +30,7 @@ namespace NumSharp
             }
 
             var result = new NDArray<double>(size);
-            double[] resultArray = result.Data<double>();
+            ArraySlice<double> resultArray = result.Data<double>();
 
             //parallelism is prohibited to make sure the result come out presistant
             double diff = high - low;

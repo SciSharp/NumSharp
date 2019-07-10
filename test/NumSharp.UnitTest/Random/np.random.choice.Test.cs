@@ -94,20 +94,20 @@ namespace NumSharp.UnitTest.RandomSampling
         [Ignore("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
-            int nrSamples = 5;
+            //int nrSamples = 5;
 
-            NDArray aa_milne_arr = new string[] { "pooh", "rabbit", "piglet", "Christopher" };
-            double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
+            //NDArray aa_milne_arr = new string[] { "pooh", "rabbit", "piglet", "Christopher" };
+            //double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
 
-            NDArray actual = np.random.choice(aa_milne_arr, nrSamples, probabilities: probabilities);
+            //NDArray actual = np.random.choice(aa_milne_arr, nrSamples, probabilities: probabilities);
 
-            Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
+            //Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
 
-            // Verify that all elements in output are within the possibilities
-            for (int i = 0; i < actual.len; i++)
-            {
-                Assert.IsTrue((string)actual[i] != (string)aa_milne_arr[2], "Sampled zero-probability element");
-            }
+            //// Verify that all elements in output are within the possibilities
+            //for (int i = 0; i < actual.len; i++)
+            //{
+            //    Assert.IsTrue((string)actual[i] != (string)aa_milne_arr[2], "Sampled zero-probability element");
+            //}
         }
 
         [TestMethod]

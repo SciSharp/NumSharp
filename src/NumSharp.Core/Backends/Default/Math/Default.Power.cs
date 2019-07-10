@@ -16,56 +16,57 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Power(NDArray x, ValueType y)
         {
-            var powerArray = new NDArray(x.dtype, x.shape);
+            return null;
+            //var powerArray = new NDArray(x.dtype, x.shape);
 
-            Array dataSysArr = x.Array;
-            Array powerDataSysArr = powerArray.Array;
+            //var dataSysArr = x.Array;
+            //var powerDataSysArr = powerArray.Array;
 
-            switch (dataSysArr)
-            {
-                case double[] data:
-                    {
-                        var powerData = powerDataSysArr as double[];
+            //switch (dataSysArr)
+            //{
+            //    case double[] data:
+            //        {
+            //            var powerData = powerDataSysArr as double[];
 
-                        for (int idx = 0; idx < data.Length; idx++)
-                            powerData[idx] = Math.Pow(data[idx], (double)y);
+            //            for (int idx = 0; idx < data.Length; idx++)
+            //                powerData[idx] = Math.Pow(data[idx], (double)y);
 
-                        break;
-                    }
-                case float[] data:
-                    {
-                        var powerData = powerDataSysArr as float[];
+            //            break;
+            //        }
+            //    case float[] data:
+            //        {
+            //            var powerData = powerDataSysArr as float[];
 
-                        for (int idx = 0; idx < data.Length; idx++)
-                            powerData[idx] = Convert.ToSingle(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(y)));
+            //            for (int idx = 0; idx < data.Length; idx++)
+            //                powerData[idx] = Convert.ToSingle(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(y)));
 
-                        break;
-                    }
-                case Complex[] data:
-                    {
-                        var powerData = powerDataSysArr as Complex[];
+            //            break;
+            //        }
+            //    case Complex[] data:
+            //        {
+            //            var powerData = powerDataSysArr as Complex[];
 
-                        for (int idx = 0; idx < data.Length; idx++)
-                            powerData[idx] = Complex.Pow(data[idx], Convert.ToDouble(y));
+            //            for (int idx = 0; idx < data.Length; idx++)
+            //                powerData[idx] = Complex.Pow(data[idx], Convert.ToDouble(y));
 
-                        break;
-                    }
-                case int[] data:
-                    {
-                        var powerData = powerDataSysArr as int[];
+            //            break;
+            //        }
+            //    case int[] data:
+            //        {
+            //            var powerData = powerDataSysArr as int[];
 
-                        for (int idx = 0; idx < data.Length; idx++)
-                            powerData[idx] = Convert.ToInt32(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(y)));
+            //            for (int idx = 0; idx < data.Length; idx++)
+            //                powerData[idx] = Convert.ToInt32(Math.Pow(Convert.ToDouble(data[idx]), Convert.ToDouble(y)));
 
-                        break;
-                    }
-                default:
-                    {
-                        throw new IncorrectTypeException();
-                    }
+            //            break;
+            //        }
+            //    default:
+            //        {
+            //            throw new IncorrectTypeException();
+            //        }
 
-            }
-            return powerArray;
+            //}
+            //return powerArray;
         }
     }
 

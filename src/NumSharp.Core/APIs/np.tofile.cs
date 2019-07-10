@@ -11,30 +11,14 @@ namespace NumSharp
         // ndarray.tofile(fid, sep="", format="%s")
         public void tofile(string fileName)
         {
-            switch (Type.GetTypeCode(dtype))
+            unsafe
             {
-                case TypeCode.Byte:
+                using (var fs = File.Open(fileName, FileMode.OpenOrCreate))
+                using (var ums = new UnmanagedMemoryStream((byte*)this.Array.Address, this.Array.Count * this.dtypesize))
                 {
-                    using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
-                    {
-                        writer.Write(Array as byte[]);
-                    }
+                    fs.SetLength(0);
+                    ums.CopyTo(fs);
                 }
-                    break;
-                case TypeCode.UInt16:
-                {
-                    var arr = Array as UInt16[];
-                    using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
-                    {
-                        for (var i = 0; i < arr.Length; i++)
-                        {
-                            writer.Write(arr[i]);
-                        }
-                    }
-                }
-                    break;
-                default:
-                    throw new NotImplementedException($"tofile dtype={dtype} not implemented yet");
             }
         }
     }
