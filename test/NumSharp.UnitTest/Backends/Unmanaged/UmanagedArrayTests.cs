@@ -1,11 +1,9 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Unmanaged;
-using OOMath;
 
-namespace OMath.Test
+namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     [TestClass]
     public class UmanagedArrayTests

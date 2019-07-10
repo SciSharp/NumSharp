@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using NumSharp.Backends.Unmanaged;
-using OOMath;
 
 namespace NumSharp.Benchmark.Unmanaged
 {

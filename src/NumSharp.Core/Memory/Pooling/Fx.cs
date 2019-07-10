@@ -1,7 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
@@ -10,10 +9,7 @@ using System.Security;
 using System.Threading;
 using NumSharp.Utilities;
 
-namespace System.Runtime {
-
-    using Microsoft.Win32;
-
+namespace NumSharp.Memory.Pooling {
     static class Fx {
         const string defaultEventSource = "System.Runtime";
 

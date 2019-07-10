@@ -1,10 +1,6 @@
-﻿using OOMath.MemoryPooling;
+﻿using System;
 
-namespace System.ServiceModel.Channels {
-    using System;
-    using System.Runtime;
-    using System.ServiceModel;
-
+namespace NumSharp.Memory.Pooling {
     public abstract class BufferManager {
         public abstract byte[] TakeBuffer(int bufferSize);
         public abstract void ReturnBuffer(byte[] buffer);

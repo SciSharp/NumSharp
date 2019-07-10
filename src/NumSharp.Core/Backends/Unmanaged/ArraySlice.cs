@@ -1,8 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using OOMath;
-using OOMath.MemoryPooling;
+using NumSharp.Memory.Pooling;
 
 namespace NumSharp.Backends.Unmanaged
 {

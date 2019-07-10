@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace OOMath.MemoryPooling {
+namespace NumSharp.Memory.Pooling {
     /// <summary>
     /// Types of exceptions that can happen while dealing with unmanaged memory
     /// </summary>

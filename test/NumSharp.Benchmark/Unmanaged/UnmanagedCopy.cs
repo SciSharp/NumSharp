@@ -5,8 +5,7 @@ using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using NumSharp.Backends.Unmanaged;
-using OOMath;
-using OOMath.MemoryPooling;
+using NumSharp.Memory.Pooling;
 
 namespace NumSharp.Benchmark.Unmanaged
 {

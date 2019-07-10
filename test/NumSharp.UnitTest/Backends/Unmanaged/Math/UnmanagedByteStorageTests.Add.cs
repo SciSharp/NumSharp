@@ -2,11 +2,9 @@
 using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp;
 using NumSharp.Backends.Unmanaged;
-using OOMath;
 
-namespace OMath.Test
+namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
     [TestClass]
     public partial class UnmanagedByteStorageTestsOperatorTests

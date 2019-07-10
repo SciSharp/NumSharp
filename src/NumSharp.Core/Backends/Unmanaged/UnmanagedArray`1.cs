@@ -5,8 +5,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Memory.Pooling;
 using NumSharp.Utilities;
-using OOMath.MemoryPooling;
 
 namespace NumSharp.Backends.Unmanaged
 {

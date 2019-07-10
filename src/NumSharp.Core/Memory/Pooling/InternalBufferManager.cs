@@ -3,14 +3,12 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Runtime;
 using System.Runtime.CompilerServices;
 using System.Security;
-using System.Security.Permissions;
 using System.Threading;
-using OOMath.MemoryPooling.System.Runtime;
+using NumSharp.Memory.Pooling.System.Runtime;
 
-namespace OOMath.MemoryPooling {
+namespace NumSharp.Memory.Pooling {
     public abstract class InternalBufferManager {
         protected InternalBufferManager() { }
 

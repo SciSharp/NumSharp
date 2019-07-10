@@ -5,8 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
-using OOMath;
-using OOMath.MemoryPooling;
+using NumSharp.Memory.Pooling;
 
 namespace NumSharp.Backends.Unmanaged
 {
