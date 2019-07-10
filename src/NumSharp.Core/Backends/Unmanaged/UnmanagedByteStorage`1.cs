@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using NumSharp.Memory.Pooling;
 
@@ -11,7 +13,6 @@ namespace NumSharp.Backends.Unmanaged
 {
     public partial class UnmanagedByteStorage<T> : IEnumerable<T> where T : unmanaged
     {
-        public static readonly TypeCode TypeCode = Type.GetTypeCode(typeof(T));
         public static readonly NPTypeCode NPTypeCode = typeof(T).GetTypeCode();
 
         private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
@@ -19,6 +20,24 @@ namespace NumSharp.Backends.Unmanaged
 
         private ArraySlice<T> _array;
         private Shape _shape;
+
+        /// <summary>
+        ///     The <see cref="Backends.NPTypeCode"/> of <see cref="IStorage.DType"/>.
+        /// </summary>
+        public NPTypeCode TypeCode
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                return NPTypeCode;
+            }
+        }
+
+        /// <summary>
+        ///     The size in bytes of a single value of <see cref="IStorage.DType"/>
+        /// </summary>
+        /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
+        public int DTypeSize { get; }
 
         public Shape Shape
         {
@@ -32,6 +51,13 @@ namespace NumSharp.Backends.Unmanaged
                 _shape = value;
             }
         }
+
+        /// <summary>
+        ///     The current slice this <see cref="IStorage"/> instance currently represent.
+        /// </summary>
+        public Slice Slice { get; set; }
+
+        #region Constructors
 
         static UnmanagedByteStorage()
         {
@@ -124,21 +150,7 @@ namespace NumSharp.Backends.Unmanaged
             _arrayAddress = _array.Start;
         }
 
-        //use getindex or setindex instead public T this[int index] {
-        //use getindex or setindex instead     [MethodImpl((MethodImplOptions) 768)]
-        //use getindex or setindex instead     private get {
-        //use getindex or setindex instead         //private because it hides this[params int[]]
-        //use getindex or setindex instead         unsafe {
-        //use getindex or setindex instead             return *(_arrayAddress + index);
-        //use getindex or setindex instead         }
-        //use getindex or setindex instead     }
-        //use getindex or setindex instead     [MethodImpl((MethodImplOptions) 768)]
-        //use getindex or setindex instead     set {
-        //use getindex or setindex instead         unsafe {
-        //use getindex or setindex instead             *(_arrayAddress + index) = value;
-        //use getindex or setindex instead         }
-        //use getindex or setindex instead     }
-        //use getindex or setindex instead }
+        #endregion
 
         public UnmanagedByteStorage<T> this[params int[] indices]
         {
@@ -301,6 +313,13 @@ namespace NumSharp.Backends.Unmanaged
         public override string ToString()
         {
             return ToString(flat: false);
+        }
+
+        /// <summary>Creates a new object that is a copy of the current instance.</summary>
+        /// <returns>A new object that is a copy of this instance.</returns>
+        object ICloneable.Clone()
+        {
+            return Clone();
         }
 
         public string ToString(bool flat)
