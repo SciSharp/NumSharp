@@ -9,7 +9,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray Cast(NDArray nd, Type dtype, bool copy)
+        public override NDArray Cast(NDArray nd, Type dtype, bool copy)
         {
             if (dtype == null)
             {

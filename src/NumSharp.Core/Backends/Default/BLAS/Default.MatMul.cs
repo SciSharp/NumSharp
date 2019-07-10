@@ -7,7 +7,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray MatMul(NDArray x, NDArray y)
+        public override NDArray MatMul(NDArray x, NDArray y)
         {
             if (x.ndim == 2 && y.ndim == 2)
             {

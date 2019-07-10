@@ -8,7 +8,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F')
+        public override NDArray NDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'F')
         {
             if (dtype == null)
                 dtype = np.float32;

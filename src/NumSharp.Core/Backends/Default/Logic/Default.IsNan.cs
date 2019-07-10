@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         /// Test element-wise for Not a Number.
         /// </summary>
         /// <returns>The result is returned as a boolean array.</returns>
-        public NDArray<bool> IsNan(NDArray a)
+        public override NDArray<bool> IsNan(NDArray a)
         {
             var result = new NDArray<bool>(a.shape);
             var data = a.Array;

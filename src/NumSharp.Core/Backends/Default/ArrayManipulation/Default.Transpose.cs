@@ -8,7 +8,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray Transpose(NDArray x, int[] axes = null)
+        public override NDArray Transpose(NDArray x, int[] axes = null)
         {
             NDArray nd;
 

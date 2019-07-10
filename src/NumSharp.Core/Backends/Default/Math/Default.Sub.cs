@@ -18,7 +18,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-       public virtual NDArray Sub(NDArray np1, NDArray np2)
+       public override NDArray Sub(NDArray np1, NDArray np2)
        {
             /// following code is for determine if scalar or not
             /// also for determine result

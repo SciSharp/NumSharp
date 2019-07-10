@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Array elements raised to given powers, element-wise.
         /// </summary>
-        public NDArray Power(NDArray x, ValueType y)
+        public override NDArray Power(NDArray x, ValueType y)
         {
             var powerArray = new NDArray(x.dtype, x.shape);
 

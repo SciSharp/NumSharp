@@ -9,7 +9,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray Mean(NDArray x, int axis = -1)
+        public override NDArray Mean(NDArray x, int axis = -1)
         {
             var mean = new NDArray(typeof(double));
 

@@ -18,7 +18,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray Log(NDArray x)
+        public override NDArray Log(NDArray x)
         {
             var logArray = new NDArray(x.dtype, x.shape);
 

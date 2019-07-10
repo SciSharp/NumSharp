@@ -46,7 +46,7 @@ namespace NumSharp
         /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
-        public ITensorEngine Engine { get; } //initialized in constructors (from Storage.TensorEngine).
+        public TensorEngine Engine { get; } //initialized in constructors (from Storage.TensorEngine).
 
         /// <summary>
         ///     The <see cref="NPTypeCode"/> of <see cref="IStorage.DType"/>.

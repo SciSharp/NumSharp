@@ -54,7 +54,7 @@ namespace NumSharp
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(Type dtype, ITensorEngine engine)
+        internal NDArray(Type dtype, TensorEngine engine)
         {
             TensorEngine = engine;
             Storage = TensorEngine.GetStorage(dtype);
@@ -67,7 +67,7 @@ namespace NumSharp
         /// <param name="typeCode">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(NPTypeCode typeCode, ITensorEngine engine)
+        internal NDArray(NPTypeCode typeCode, TensorEngine engine)
         {
             TensorEngine = engine;
             Storage = TensorEngine.GetStorage(typeCode);
@@ -173,7 +173,7 @@ namespace NumSharp
             set;
         }
 
-        public ITensorEngine TensorEngine { get; set; }
+        public TensorEngine TensorEngine { get; set; }
 
         /// <summary>
         /// Shortcut for access internal elements

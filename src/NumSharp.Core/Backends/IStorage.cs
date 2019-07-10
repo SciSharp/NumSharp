@@ -59,7 +59,7 @@ namespace NumSharp
         /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
-        ITensorEngine Engine { get; }
+        TensorEngine Engine { get; }
 
         /// <summary>
         ///     Allocates a new <see cref="Array"/> into memory.

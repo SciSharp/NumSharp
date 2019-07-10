@@ -19,7 +19,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray Sum(NDArray x, int? axis = null)
+        public override NDArray Sum(NDArray x, int? axis = null)
         {
             if (axis == -1) axis = x.ndim - 1;
 

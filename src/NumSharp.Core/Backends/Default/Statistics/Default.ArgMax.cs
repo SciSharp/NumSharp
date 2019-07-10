@@ -9,7 +9,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray ArgMax(NDArray nd, int axis = -1)
+        public override NDArray ArgMax(NDArray nd, int axis = -1)
         {
             if (axis == -1)
                 return nd.argmax();

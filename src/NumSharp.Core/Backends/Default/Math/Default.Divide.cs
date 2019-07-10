@@ -18,7 +18,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray Divide(NDArray x, NDArray y)
+        public override NDArray Divide(NDArray x, NDArray y)
         {
             /// following code is for determine if scalar or not
             /// also for determine result

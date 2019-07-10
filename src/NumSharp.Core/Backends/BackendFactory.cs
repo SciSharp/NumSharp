@@ -7,11 +7,11 @@ namespace NumSharp.Backends
 {
     public class BackendFactory
     {
-        private static Dictionary<BackendType, ITensorEngine> cache
-            = new Dictionary<BackendType, ITensorEngine>();
+        private static Dictionary<BackendType, TensorEngine> cache
+            = new Dictionary<BackendType, TensorEngine>();
 
         [DebuggerNonUserCode]
-        public static ITensorEngine GetEngine(BackendType backendType = BackendType.Default)
+        public static TensorEngine GetEngine(BackendType backendType = BackendType.Default)
         {
             if (!cache.ContainsKey(backendType))
             {

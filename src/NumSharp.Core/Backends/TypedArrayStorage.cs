@@ -104,7 +104,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
-        public ITensorEngine Engine { get; internal set; }
+        public TensorEngine Engine { get; internal set; }
 
         /// <summary>
         ///     Creates an empty storage of type <paramref name="dtype"/>.

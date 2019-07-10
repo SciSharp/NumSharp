@@ -45,7 +45,7 @@ namespace NumSharp.Backends
         /// given tolerance.If both `a` and `b` are scalars, returns a single
         /// boolean value.
         ///</returns>
-        public NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
+        public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
             if (a.size > b.size)
                 throw new ArgumentException("Array a must not be larger in size than array b");

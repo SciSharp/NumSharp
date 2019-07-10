@@ -7,7 +7,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray Dot(NDArray x, NDArray y)
+        public override NDArray Dot(NDArray x, NDArray y)
         {
             var dtype = x.dtype;
 

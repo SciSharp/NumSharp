@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="a"></param>
         /// <returns>The result is returned as a boolean array.</returns>
-        public NDArray<bool> IsFinite(NDArray a)
+        public override NDArray<bool> IsFinite(NDArray a)
         {
             var result = new NDArray<bool>(a.shape);
             var data = a.Array;

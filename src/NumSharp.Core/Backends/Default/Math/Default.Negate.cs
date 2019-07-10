@@ -20,7 +20,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public virtual NDArray Negate(NDArray x)
+        public override NDArray Negate(NDArray x)
         {
             return x.negate();
         }

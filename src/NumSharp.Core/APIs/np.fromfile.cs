@@ -13,7 +13,7 @@ namespace NumSharp
         {
             switch (Type.GetTypeCode(dtype))
             {
-                case TypeCode.Byte:
+                case TypeCode.Byte: //todo! more types support.
                 {
                     var fileSize = new System.IO.FileInfo(fileName).Length;
                     var arraySize = fileSize / Marshal.SizeOf(dtype);

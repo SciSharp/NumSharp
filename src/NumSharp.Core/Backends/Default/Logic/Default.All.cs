@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="nd"></param>
         /// <returns></returns>
-        public bool All(NDArray nd)
+        public override bool All(NDArray nd)
         {
             var data = nd.Data<bool>();
             for (int i = 0; i < data.Length; i++)
@@ -29,7 +29,7 @@ namespace NumSharp.Backends
         /// <param name="nd"></param>
         /// <param name="axis"></param>
         /// <returns>Returns an array of bools</returns>
-        public NDArray<bool> All(NDArray nd, int axis)
+        public override NDArray<bool> All(NDArray nd, int axis)
         {
             throw new NotImplementedException($"np.all axis {axis}");
         }
