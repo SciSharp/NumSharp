@@ -94,7 +94,7 @@ namespace OMath.Test
                     mem[i] = i;
                 }
 
-                mem.Reallocate(15, true, -5);
+                mem.Reallocate(15, -5, true);
                 mem.Count.Should().Be(15);
                 mem.ToArray().Should().ContainInOrder(Enumerable.Range(0, 10).Concat(Enumerable.Repeat(-5, 5)));
 
@@ -118,7 +118,7 @@ namespace OMath.Test
                     mem[i] = i;
                 }
 
-                mem.Reallocate(5, true, -5);
+                mem.Reallocate(5, -5, true);
                 mem.Count.Should().Be(5);
                 mem.ToArray().Should().ContainInOrder(Enumerable.Range(0, 5));
                 mem[3].Should().Be(3);

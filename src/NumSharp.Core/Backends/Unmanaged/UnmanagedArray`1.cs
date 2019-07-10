@@ -13,34 +13,42 @@ namespace NumSharp.Backends.Unmanaged
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct UnmanagedArray<T> : IEnumerable<T>, IEquatable<UnmanagedArray<T>>, ICollection<T>, IUnmanagedArray where T : unmanaged
     {
-        const int AllocHGlobalAfter = int.MaxValue; //530
-
         private Action _dispose;
         public int Count;
         public T* Address;
         public GCHandle? _gcHandle;
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         [MethodImpl((MethodImplOptions)512)]
         public UnmanagedArray(int length)
         {
-            var bytes = length * SizeOf<T>.Size;
-            if (false)
-            {
-                //bytes > AllocHGlobalAfter
-                Address = (T*)Marshal.AllocHGlobal(bytes).ToPointer();
-                _gcHandle = null;
-            }
-            else
-            {
-                var handle = GCHandle.Alloc(new T[length], GCHandleType.Pinned);
-                _gcHandle = handle;
-                Address = (T*)handle.AddrOfPinnedObject();
-            }
+            //var bytes = length * SizeOf<T>.Size;
+            //if (false)
+            //{
+            //    //bytes > AllocHGlobalAfter
+            //    Address = (T*)Marshal.AllocHGlobal(bytes).ToPointer();
+            //    _gcHandle = null;
+            //}
+            //else
+            //{
+            var handle = GCHandle.Alloc(new T[length], GCHandleType.Pinned);
+            _gcHandle = handle;
+            Address = (T*)handle.AddrOfPinnedObject();
+            //}
 
             _dispose = null;
             Count = length;
         }
 
+        /// <summary>
+        ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="dispose"></param>
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedArray(T* start, int length, Action dispose)
         {
@@ -50,6 +58,40 @@ namespace NumSharp.Backends.Unmanaged
             _gcHandle = null;
         }
 
+        /// <summary>
+        ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
+        /// </summary>
+        /// <param name="handle"></param>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        [MethodImpl((MethodImplOptions)768)]
+        internal UnmanagedArray(GCHandle handle, int length)
+        {
+            Count = length;
+            _dispose = null;
+            Address = (T*)handle.AddrOfPinnedObject();
+            _gcHandle = handle;
+        }
+
+        /// <summary>
+        ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
+        /// </summary>
+        /// <param name="handle"></param>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="dipose"></param>
+        [MethodImpl((MethodImplOptions)768)]
+        internal UnmanagedArray(GCHandle handle, int length, Action dipose)
+        {
+            Count = length;
+            _dispose = dipose;
+            Address = (T*)handle.AddrOfPinnedObject();
+            _gcHandle = handle;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="fill"></param>
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedArray(int length, T fill) : this(length)
         {
@@ -71,39 +113,22 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> FromArray(T[] arr)
         {
-            var ret = new UnmanagedArray<T>();
-            var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
-            ret._gcHandle = handle;
-            ret.Address = (T*)handle.AddrOfPinnedObject();
-            ret.Count = arr.Length;
-
-            return ret;
+            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> FromBuffer(byte[] arr)
         {
-            var ret = new UnmanagedArray<T>();
-            ret.Count = arr.Length / SizeOf<T>.Size;
-            var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
-            ret._gcHandle = handle;
-            ret.Address = (T*)handle.AddrOfPinnedObject();
-
-            return ret;
+            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / SizeOf<T>.Size);
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> FromPool(int length, InternalBufferManager manager)
         {
+            //internal UnmanagedArray(GCHandle handle, int length, Action dipose)
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            var ret = new UnmanagedArray<T>();
-            ret.Count = length;
             var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
-            var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            ret._gcHandle = handle;
-            ret.Address = (T*)handle.AddrOfPinnedObject();
-            ret._dispose = () => manager.ReturnBuffer(buffer);
-            return ret;
+            return new UnmanagedArray<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -126,7 +151,7 @@ namespace NumSharp.Backends.Unmanaged
             var len = itemCount * SizeOf<T>.Size;
             var ret = new UnmanagedArray<T>(itemCount);
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
-            //source.AsSpan().CopyTo(ret.AsSpan());
+            //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
         }
 
@@ -139,53 +164,45 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void Reallocate(int length, bool copyOldValues = false)
         {
-            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
             if (copyOldValues)
             {
-                var tptr = (T*)ptr;
+                var @new = new UnmanagedArray<T>(length);
                 var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
-                Buffer.MemoryCopy(Address, tptr, bytes, bytes);
-            }
-
-            Free();
-            Count = length;
-            Address = (T*)ptr;
-        }
-
-        [MethodImpl((MethodImplOptions)512)]
-        public void Reallocate(int length, bool copyOldValues, T fill)
-        {
-            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
-            var tptr = (T*)ptr;
-            if (copyOldValues)
-            {
-                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
-                Buffer.MemoryCopy(Address, tptr, bytes, bytes);
-
-                if (length > Count)
-                {
-                    new Span<T>(tptr + Count, length - Count).Fill(fill);
-                }
+                Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
+                Free();
+                this = @new;
             }
             else
             {
-                new Span<T>(tptr, length).Fill(fill);
+                //we do not have to allocate first in we do not copy values.
+                Free();
+                this = new UnmanagedArray<T>(length);
             }
-
-            Free();
-            Count = length;
-            Address = (T*)ptr;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
-        private void Reallocate(int length, T fill)
+        [MethodImpl((MethodImplOptions)512)]
+        public void Reallocate(int length, T fill, bool copyOldValues = false)
         {
-            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
+            if (copyOldValues)
+            {
+                var @new = new UnmanagedArray<T>(length);
+                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
+                Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
 
-            Free();
-            Count = length;
-            Address = (T*)ptr;
-            new Span<T>(ptr, Count).Fill(fill);
+                if (length > Count)
+                {
+                    new Span<T>(@new.Address + Count, length - Count).Fill(fill);
+                }
+
+                Free();
+                this = @new;
+            }
+            else
+            {
+                //we do not have to allocate first in we do not copy values.
+                Free();
+                this = new UnmanagedArray<T>(length, fill);
+            }
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -212,6 +229,7 @@ namespace NumSharp.Backends.Unmanaged
             *(Address + index) = value;
         }
 
+        [MethodImpl((MethodImplOptions)512)]
         public void Free()
         {
             if (_dispose != null)
@@ -421,7 +439,5 @@ namespace NumSharp.Backends.Unmanaged
         #endregion
 
         unsafe void* IUnmanagedArray.Address => Address;
-
-
     }
 }
