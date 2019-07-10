@@ -198,6 +198,7 @@ namespace NumSharp
         void ReplaceData(IArraySlice values);
 
         void ReplaceData(IArraySlice values, Type dtype);
+
         /// <summary>
         ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
         /// </summary>

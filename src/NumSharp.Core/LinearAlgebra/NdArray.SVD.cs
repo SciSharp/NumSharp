@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Shared;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public (NDArray,NDArray,NDArray) svd()
+        public (NDArray, NDArray, NDArray) svd()
         {
             return default;
             //return;
@@ -22,7 +21,7 @@ namespace NumSharp
             //int ldvt = n; 
             //int info = 0;
             //int lwork = -1;
-        
+
             //double[] work = new double[Math.Max(m,n)];
 
             //double[] s = new double[n]; 

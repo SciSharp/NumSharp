@@ -20,6 +20,7 @@ namespace NumSharp.Backends
                 if (!data[i])
                     return false;
             }
+
             return true;
         }
 

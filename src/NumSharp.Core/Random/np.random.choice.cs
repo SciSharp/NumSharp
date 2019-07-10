@@ -36,6 +36,7 @@ namespace NumSharp
             {
                 shape = 1;
             }
+
             NDArray arr = np.arange(a);
             NDArray idx = null;
             //Debug.WriteLine($"arr: {arr}");
@@ -50,6 +51,7 @@ namespace NumSharp
                 NDArray uniformSamples = np.random.uniform(0, 1, shape);
                 idx = np.searchsorted(cdf, uniformSamples);
             }
+
             return idx;
         }
     }

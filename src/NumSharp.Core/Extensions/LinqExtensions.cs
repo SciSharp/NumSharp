@@ -9,7 +9,6 @@ namespace NumSharp
 {
     public static class LinqExtensions
     {
-
         /// <summary>
         /// 
         /// </summary>
@@ -20,6 +19,5 @@ namespace NumSharp
         {
             yield return item;
         }
-
     }
 }

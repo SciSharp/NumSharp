@@ -19,23 +19,23 @@ namespace NumSharp
             switch (obj)
             {
                 case NDArray safeCastObj:
+                {
+                    var thatData = safeCastObj.Storage?.GetData();
+                    if (thatData == null)
                     {
-                        var thatData = safeCastObj.Storage?.GetData();
-                        if (thatData == null)
-                        {
-                            return false;
-                        }
-
-                        var thisData = this.Storage?.GetData();
-                        return thisData == thatData && safeCastObj.shape == this.shape;
+                        return false;
                     }
+
+                    var thisData = this.Storage?.GetData();
+                    return thisData == thatData && safeCastObj.shape == this.shape;
+                }
+
                 case int val:
                     return Data<int>(0) == val;
                 // Other object is not of Type NDArray, return false immediately.
                 default:
                     return false;
             }
-
         }
 
         public static NDArray<bool> operator ==(NDArray np, object obj)
@@ -175,7 +175,5 @@ namespace NumSharp
 
             //return true;
         }
-
-
     }
 }

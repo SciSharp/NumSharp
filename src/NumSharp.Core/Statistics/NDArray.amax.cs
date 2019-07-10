@@ -8,7 +8,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-
         /// <summary>
         /// Return the maximum of an array or minimum along an axis
         /// </summary>
@@ -18,21 +17,23 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
-                    {
-                        var npArr = Data<int>();
-                        int max = npArr[0];
-                        for (int i = 0; i < npArr.Length; i++)
-                            max = Math.Max(max, npArr[i]);
-                        return (T)(object)max;
-                    }
+                {
+                    var npArr = Data<int>();
+                    int max = npArr[0];
+                    for (int i = 0; i < npArr.Length; i++)
+                        max = Math.Max(max, npArr[i]);
+                    return (T)(object)max;
+                }
+
                 case "Double":
-                    {
-                        var npArr = Data<double>();
-                        double max = npArr[0];
-                        for (int i = 0; i < npArr.Length; i++)
-                            max = Math.Max(max, npArr[i]);
-                        return (T)(object)max;
-                    }
+                {
+                    var npArr = Data<double>();
+                    double max = npArr[0];
+                    for (int i = 0; i < npArr.Length; i++)
+                        max = Math.Max(max, npArr[i]);
+                    return (T)(object)max;
+                }
+
                 default:
                     throw new NotImplementedException($"Data type not supported yet {dtype.Name}");
             }

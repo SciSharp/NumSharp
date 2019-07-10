@@ -25,6 +25,7 @@ namespace NumSharp
                 int idx = binarySearchRightmost(a, target);
                 output[i] = idx;
             }
+
             return output;
         }
 
@@ -55,6 +56,7 @@ namespace NumSharp
                     R = m;
                 }
             }
+
             return L;
         }
     }

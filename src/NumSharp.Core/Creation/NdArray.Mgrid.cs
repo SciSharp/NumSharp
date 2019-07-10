@@ -5,7 +5,7 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public (NDArray,NDArray) mgrid(NDArray nd2)
+        public (NDArray, NDArray) mgrid(NDArray nd2)
         {
             return default;
             //return null;
@@ -38,7 +38,5 @@ namespace NumSharp
 
             //return (res1,res2);
         }
-
     }
-
 }

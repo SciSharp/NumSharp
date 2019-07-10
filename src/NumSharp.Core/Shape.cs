@@ -15,6 +15,7 @@ namespace NumSharp
         ///     1: Column major
         /// </summary>
         internal char layout;
+
         internal int _hashCode;
         internal int size;
         internal int[] dimensions;

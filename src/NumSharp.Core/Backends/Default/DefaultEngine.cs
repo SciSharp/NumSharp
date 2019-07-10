@@ -7,5 +7,6 @@ namespace NumSharp.Backends
     /// <summary>
     ///     Default Tensor Engine implemented in pure micro-optimized C#.
     /// </summary>
-    public partial class DefaultEngine : TensorEngine { }
+    public partial class DefaultEngine : TensorEngine
+    { }
 }

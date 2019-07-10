@@ -1,4 +1,4 @@
-using NumSharp.Backends;
+﻿using NumSharp.Backends;
 using System;
 
 namespace NumSharp
@@ -12,11 +12,11 @@ namespace NumSharp
 
             NDArray product = this.copy();
 
-            for(int idx = 2; idx <= power;idx++)
+            for (int idx = 2; idx <= power; idx++)
                 product = BackendFactory.GetEngine().Dot(product, this);
 
             product = (power == 0) ? np.eye(product.shape[0]) : product;
-            
+
             return product;
         }
     }

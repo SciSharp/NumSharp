@@ -6,7 +6,5 @@ using System.Runtime.InteropServices;
 namespace NumSharp.Backends.Unmanaged
 {
     public partial class UnmanagedByteStorage<T>
-    {
-
-    }
+    { }
 }

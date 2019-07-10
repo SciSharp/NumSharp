@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Shared;
 
 namespace NumSharp
 {
@@ -56,8 +55,6 @@ namespace NumSharp
             //slnArr.Storage.ReplaceData(sln);
 
             //return slnArr;
-
         }
-        
     }
 }

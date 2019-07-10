@@ -25,43 +25,46 @@ namespace NumSharp
             switch (dtype.Name)
             {
                 case "Int32":
+                {
+                    var data = this.Data<int>();
+                    var newData = new int[this.size];
+                    for (int idx = 0; idx < this.size; idx++)
                     {
-                        var data = this.Data<int>();
-                        var newData = new int[this.size];
-                        for (int idx = 0; idx < this.size; idx++)
-                        {
-                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
-                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                            newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
-                        }
-                        return new NDArray(newData, this.shape);
+                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
                     }
+
+                    return new NDArray(newData, this.shape);
+                }
 
                 case "Single":
+                {
+                    var data = this.Data<float>();
+                    var newData = new float[this.size];
+                    for (int idx = 0; idx < this.size; idx++)
                     {
-                        var data = this.Data<float>();
-                        var newData = new float[this.size];
-                        for (int idx = 0; idx < this.size; idx++)
-                        {
-                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
-                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                            newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
-                        }
-                        return new NDArray(newData, this.shape);
+                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
                     }
 
+                    return new NDArray(newData, this.shape);
+                }
+
                 case "Double":
+                {
+                    var data = this.Data<double>();
+                    var newData = new double[this.size];
+                    for (int idx = 0; idx < this.size; idx++)
                     {
-                        var data = this.Data<double>();
-                        var newData = new double[this.size];
-                        for (int idx = 0; idx < this.size; idx++)
-                        {
-                            int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
-                            indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                            newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
-                        }
-                        return new NDArray(newData, this.shape);
+                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
+                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
                     }
+
+                    return new NDArray(newData, this.shape);
+                }
 
                 default:
                     throw new NotImplementedException($"NDArray.roll {dtype.Name}");

@@ -37,7 +37,7 @@ namespace NumSharp
 
         public static NDArray array<T>(T[][][] data)
         {
-            var array = data.SelectMany(inner => inner  //todo! not use selectmany.
+            var array = data.SelectMany(inner => inner //todo! not use selectmany.
                     .SelectMany(innerInner => innerInner))
                 .ToArray();
 
@@ -46,7 +46,7 @@ namespace NumSharp
 
         public static NDArray array<T>(T[][][][] data)
         {
-            var array = data.SelectMany(inner => inner  //todo! not use selectmany.
+            var array = data.SelectMany(inner => inner //todo! not use selectmany.
                     .SelectMany(innerInner => innerInner
                         .SelectMany(innerInnerInner => innerInnerInner)))
                 .ToArray();

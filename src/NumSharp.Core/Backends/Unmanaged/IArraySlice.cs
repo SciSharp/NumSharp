@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections;
 
-namespace NumSharp.Backends.Unmanaged {
+namespace NumSharp.Backends.Unmanaged
+{
     public interface IArraySlice : ICloneable, IEnumerable
     {
         Type ArrayType { get; }
@@ -10,6 +11,7 @@ namespace NumSharp.Backends.Unmanaged {
         ///     The size of a single item.
         /// </summary>
         int ItemSize { get; }
+
         unsafe void* Address { get; }
         int Count { get; }
         IUnmanagedArray MemoryBlock { get; }

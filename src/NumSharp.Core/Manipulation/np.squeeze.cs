@@ -4,11 +4,11 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
- 
+
 namespace NumSharp
 {
-	public static partial class np
-	{
+    public static partial class np
+    {
         /// <summary>
         /// Remove single-dimensional entries from the shape of an array.
         /// </summary>

@@ -445,7 +445,7 @@
 //                case NPTypeCode.#1:
 //                {
 //                    return _array#1[index];
-                    
+
 //                }
 //                %
 //                default:
@@ -550,7 +550,7 @@
 //                {
 //                    _array#1[index] = Convert.To#1(value);
 //                    break;
-                    
+
 //                }
 //                %
 //#else
@@ -668,7 +668,7 @@
 //                {
 //                    _array#1[index] = (#1) value;
 //                    break;
-                    
+
 //                }
 //                %
 //#else
@@ -1090,7 +1090,7 @@
 //                    throw new NotImplementedException("Array GetData() Order C Changed.");
 //                }
 
-                
+
 //            }*/
 
 //            #endregion
@@ -1512,3 +1512,5 @@
 //        #endregion
 //    }
 //}
+
+

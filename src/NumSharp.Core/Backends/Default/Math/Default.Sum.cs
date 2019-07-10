@@ -13,7 +13,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Shared;
 
 namespace NumSharp.Backends
 {
@@ -41,6 +40,7 @@ namespace NumSharp.Backends
         private NDArray Sum(NDArray x)
         {
             return null;
+
             #region Sum Methods
 
             Double SumDouble(Double[] arr)

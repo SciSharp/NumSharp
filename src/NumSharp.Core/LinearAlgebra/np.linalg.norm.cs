@@ -59,7 +59,6 @@ namespace NumSharp
             /// </remarks>
             private static object norm(NDArray x, object ord = null, object axis_obj = null)
             {
-
                 // Check the default case first and handle it immediately.
                 if (ord == null && axis_obj == null)
                 {
@@ -79,7 +78,7 @@ namespace NumSharp
                 if (axis_obj == null)
                     axis = py.range(dim);
                 else if (axis_obj is int)
-                    axis = new int[] { (int)axis_obj };
+                    axis = new int[] {(int)axis_obj};
                 else if (axis_obj is int[])
                     axis = (int[])axis_obj;
                 else
@@ -119,7 +118,7 @@ namespace NumSharp
 //                abs(absx, out=absx)
 //        absx **= ord
 //        return add.reduce(absx, axis=axis) ** (1.0 / ord)
-                    
+
 //                }
 //elif len(axis) == 2:
 //    row_axis, col_axis = axis
@@ -154,72 +153,72 @@ namespace NumSharp
 //        raise ValueError("Invalid norm order for matrices.")
 //else:
 //    raise ValueError("Improper number of dimensions to norm.")
-throw new NotImplementedException();
+                throw new NotImplementedException();
             }
 
-        /*
-          >>> from numpy import linalg as LA
->>> a = np.arange(9) - 4
->>> a
-array([-4, -3, -2, -1,  0,  1,  2,  3,  4])
->>> b = a.reshape((3, 3))
->>> b
-array([[-4, -3, -2],
-       [-1,  0,  1],
-       [ 2,  3,  4]])
->>> LA.norm(a)
-7.745966692414834
->>> LA.norm(b)
-7.745966692414834
->>> LA.norm(b, 'fro')
-7.745966692414834
->>> LA.norm(a, np.inf)
-4
->>> LA.norm(b, np.inf)
-9
->>> LA.norm(a, -np.inf)
-0
->>> LA.norm(b, -np.inf)
-2
->>> LA.norm(a, 1)
-20
->>> LA.norm(b, 1)
-7
->>> LA.norm(a, -1)
--4.6566128774142013e-010
->>> LA.norm(b, -1)
-6
->>> LA.norm(a, 2)
-7.745966692414834
->>> LA.norm(b, 2)
-7.3484692283495345
->>> LA.norm(a, -2)
-nan
->>> LA.norm(b, -2)
-1.8570331885190563e-016
->>> LA.norm(a, 3)
-5.8480354764257312
->>> LA.norm(a, -3)
-nan
-Using the `axis` argument to compute vector norms:
->>> c = np.array([[1, 2, 3],
-...               [-1, 1, 4]])
->>> LA.norm(c, axis=0)
-array([ 1.41421356,  2.23606798,  5.        ])
->>> LA.norm(c, axis=1)
-array([ 3.74165739,  4.24264069])
->>> LA.norm(c, ord=1, axis=1)
-array([6, 6])
-Using the `axis` argument to compute matrix norms:
->>> m = np.arange(8).reshape(2,2,2)
->>> LA.norm(m, axis=(1,2))
-array([  3.74165739,  11.22497216])
->>> LA.norm(m[0, :, :]), LA.norm(m[1, :, :])
-(3.7416573867739413, 11.224972160321824)
-"""
-
-
-         */
+            /*
+              >>> from numpy import linalg as LA
+    >>> a = np.arange(9) - 4
+    >>> a
+    array([-4, -3, -2, -1,  0,  1,  2,  3,  4])
+    >>> b = a.reshape((3, 3))
+    >>> b
+    array([[-4, -3, -2],
+           [-1,  0,  1],
+           [ 2,  3,  4]])
+    >>> LA.norm(a)
+    7.745966692414834
+    >>> LA.norm(b)
+    7.745966692414834
+    >>> LA.norm(b, 'fro')
+    7.745966692414834
+    >>> LA.norm(a, np.inf)
+    4
+    >>> LA.norm(b, np.inf)
+    9
+    >>> LA.norm(a, -np.inf)
+    0
+    >>> LA.norm(b, -np.inf)
+    2
+    >>> LA.norm(a, 1)
+    20
+    >>> LA.norm(b, 1)
+    7
+    >>> LA.norm(a, -1)
+    -4.6566128774142013e-010
+    >>> LA.norm(b, -1)
+    6
+    >>> LA.norm(a, 2)
+    7.745966692414834
+    >>> LA.norm(b, 2)
+    7.3484692283495345
+    >>> LA.norm(a, -2)
+    nan
+    >>> LA.norm(b, -2)
+    1.8570331885190563e-016
+    >>> LA.norm(a, 3)
+    5.8480354764257312
+    >>> LA.norm(a, -3)
+    nan
+    Using the `axis` argument to compute vector norms:
+    >>> c = np.array([[1, 2, 3],
+    ...               [-1, 1, 4]])
+    >>> LA.norm(c, axis=0)
+    array([ 1.41421356,  2.23606798,  5.        ])
+    >>> LA.norm(c, axis=1)
+    array([ 3.74165739,  4.24264069])
+    >>> LA.norm(c, ord=1, axis=1)
+    array([6, 6])
+    Using the `axis` argument to compute matrix norms:
+    >>> m = np.arange(8).reshape(2,2,2)
+    >>> LA.norm(m, axis=(1,2))
+    array([  3.74165739,  11.22497216])
+    >>> LA.norm(m[0, :, :]), LA.norm(m[1, :, :])
+    (3.7416573867739413, 11.224972160321824)
+    """
+    
+    
+             */
+        }
     }
-}
 }

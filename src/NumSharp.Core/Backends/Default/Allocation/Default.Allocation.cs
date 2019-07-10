@@ -6,12 +6,12 @@ namespace NumSharp.Backends
     {
         public override UnmanagedStorage GetStorage(Type dtype)
         {
-            return new UnmanagedStorage(dtype) { Engine = this };
+            return new UnmanagedStorage(dtype) {Engine = this};
         }
 
         public override UnmanagedStorage GetStorage(NPTypeCode typeCode)
         {
-            return new UnmanagedStorage(typeCode) { Engine = this };
+            return new UnmanagedStorage(typeCode) {Engine = this};
         }
     }
 }

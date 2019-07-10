@@ -11,7 +11,7 @@ namespace NumSharp
     {
         public override string ToString()
         {
-            return ToString(flat:false);
+            return ToString(flat: false);
         }
 
         public string ToString(bool flat)
@@ -27,6 +27,7 @@ namespace NumSharp
                 PrettyPrint(s, flat);
                 s.Append(")");
             }
+
             return s.ToString();
         }
 
@@ -61,6 +62,4 @@ namespace NumSharp
             //s.Append("]");
         }
     }
-    
 }
-

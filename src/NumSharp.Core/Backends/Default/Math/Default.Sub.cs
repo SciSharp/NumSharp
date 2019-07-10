@@ -6,20 +6,20 @@ In case you want to do some changes do the following
 2 ) execute powershell file "GenerateCode.ps1" on root level
 
 */
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Shared;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-       public override NDArray Sub(NDArray np1, NDArray np2)
-       {
+        public override NDArray Sub(NDArray np1, NDArray np2)
+        {
             return null;
             /// following code is for determine if scalar or not
             /// also for determine result
@@ -225,8 +225,5 @@ namespace NumSharp.Backends
 
             //        return result;
         }
-
     }
-
 }
-

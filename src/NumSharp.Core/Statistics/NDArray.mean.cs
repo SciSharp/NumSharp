@@ -6,7 +6,5 @@ using System.Text;
 namespace NumSharp.Extensions
 {
     public static partial class NDArrayExtensions
-    {
-        
-    }
+    { }
 }

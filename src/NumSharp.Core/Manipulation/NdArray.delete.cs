@@ -46,7 +46,7 @@ namespace NumSharp
             //        throw new IncorrectTypeException();
             //    }
             //}
-            
+
             //return res;
         }
     }

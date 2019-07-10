@@ -98,5 +98,4 @@ namespace NumSharp.Backends
             return data;
         }
     }
-
 }

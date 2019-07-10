@@ -2,13 +2,15 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Memory.Pooling {
+namespace NumSharp.Memory.Pooling
+{
     /// <summary>
     /// Types of exceptions that can happen while dealing with unmanaged memory
     /// </summary>
     /// <author>Jackson Dunstan, http://JacksonDunstan.com</author>
     /// <license>MIT</license>
-    public enum UnmanagedMemoryExceptionType {
+    public enum UnmanagedMemoryExceptionType
+    {
         PointerCanNotBeNull,
         CountMustBeNonNegative,
         AllocationSizeMustBePositive,
@@ -27,13 +29,15 @@ namespace NumSharp.Memory.Pooling {
     /// </summary>
     /// <author>Jackson Dunstan, http://JacksonDunstan.com</author>
     /// <license>MIT</license>
-    public unsafe class UnmanagedMemoryException : Exception {
+    public unsafe class UnmanagedMemoryException : Exception
+    {
         /// <summary>
         /// Create the exception
         /// </summary>
         /// <param name="type">Type of the exception</param>
         /// <param name="pointer">Pointer related to the exception</param>
-        public UnmanagedMemoryException(UnmanagedMemoryExceptionType type, void* pointer = null) {
+        public UnmanagedMemoryException(UnmanagedMemoryExceptionType type, void* pointer = null)
+        {
             Type = type;
             Pointer = pointer;
         }
@@ -54,11 +58,12 @@ namespace NumSharp.Memory.Pooling {
         /// Get a string version of this exception
         /// </summary>
         /// <returns>A string version of this exception</returns>
-        public override string ToString() {
+        public override string ToString()
+        {
             return string.Format(
                 "[UnmanagedMemoryException: Type={0}, Pointer={1}]",
                 Type,
-                (IntPtr) Pointer
+                (IntPtr)Pointer
             );
         }
     }
@@ -69,7 +74,8 @@ namespace NumSharp.Memory.Pooling {
     /// </summary>
     /// <author>Jackson Dunstan, http://JacksonDunstan.com</author>
     /// <license>MIT</license>
-    public unsafe struct UnmanagedMemoryPool {
+    public unsafe struct UnmanagedMemoryPool
+    {
         /// <summary>
         /// Unmanaged memory containing all the blocks
         /// </summary>
@@ -96,7 +102,8 @@ namespace NumSharp.Memory.Pooling {
     /// </summary>
     /// <author>Jackson Dunstan, http://JacksonDunstan.com</author>
     /// <license>MIT</license>
-    public static unsafe class UnmanagedMemory {
+    public static unsafe class UnmanagedMemory
+    {
 #if UNITY_EDITOR
 		/// <summary>
 		/// Hash table that keeps track of all the allocations that haven't been freed
@@ -132,7 +139,8 @@ namespace NumSharp.Memory.Pooling {
         /// </summary>
         /// <param name="maxAllocations">Maximum number of allocations expected</param>
         [Conditional("UNITY_EDITOR")]
-        public static void SetUp(int maxAllocations) {
+        public static void SetUp(int maxAllocations)
+        {
 #if UNITY_EDITOR
 			// Create the allocations hash table
 			if (allocations == null)
@@ -150,7 +158,8 @@ namespace NumSharp.Memory.Pooling {
         /// <see cref="SetUp"/> was called.
         /// </summary>
         [Conditional("UNITY_EDITOR")]
-        public static void TearDown() {
+        public static void TearDown()
+        {
 #if UNITY_EDITOR
 			if (allocations != null)
 			{
@@ -173,7 +182,8 @@ namespace NumSharp.Memory.Pooling {
         }
 
         [Conditional("UNITY_ASSERTIONS"), Conditional("UNMANAGED_MEMORY_DEBUG")]
-        public static void Assert(bool condition, UnmanagedMemoryExceptionType type, void* data = null) {
+        public static void Assert(bool condition, UnmanagedMemoryExceptionType type, void* data = null)
+        {
 #if UNITY_ASSERTIONS
 			if (!condition)
 			{
@@ -188,7 +198,8 @@ namespace NumSharp.Memory.Pooling {
         /// <param name="ptr">Pointer to the first byte to set</param>
         /// <param name="value">Value to set to all the bytes</param>
         /// <param name="count">Number of bytes to set</param>
-        public static void Memset(void* ptr, byte value, int count) {
+        public static void Memset(void* ptr, byte value, int count)
+        {
             Assert(ptr != null, UnmanagedMemoryExceptionType.PointerCanNotBeNull);
             Assert(count >= 0, UnmanagedMemoryExceptionType.CountMustBeNonNegative);
 
@@ -204,7 +215,8 @@ namespace NumSharp.Memory.Pooling {
         /// Allocate unmanaged heap memory and track it
         /// </summary>
         /// <param name="size">Number of bytes of unmanaged heap memory to allocate</param>
-        public static IntPtr Alloc(int size) {
+        public static IntPtr Alloc(int size)
+        {
             Assert(size > 0, UnmanagedMemoryExceptionType.AllocationSizeMustBePositive);
 
             IntPtr intPtr = Marshal.AllocHGlobal(size);
@@ -236,9 +248,10 @@ namespace NumSharp.Memory.Pooling {
         /// Allocate unmanaged heap memory filled with zeroes and track it
         /// </summary>
         /// <param name="size">Number of bytes of unmanaged heap memory to allocate</param>
-        public static IntPtr Calloc(int size) {
+        public static IntPtr Calloc(int size)
+        {
             IntPtr intPtr = Alloc(size);
-            Memset((void*) intPtr, 0, size);
+            Memset((void*)intPtr, 0, size);
             return intPtr;
         }
 
@@ -246,7 +259,8 @@ namespace NumSharp.Memory.Pooling {
         /// Allocate a block of memory from a pool
         /// </summary>
         /// <param name="pool">Pool to allocate from</param>
-        public static void* Alloc(UnmanagedMemoryPool* pool) {
+        public static void* Alloc(UnmanagedMemoryPool* pool)
+        {
             Assert(pool != null, UnmanagedMemoryExceptionType.NullPool);
             Assert(pool->Alloc != null, UnmanagedMemoryExceptionType.UninitializedOrDestroyedPool);
             Assert(pool->Free != null, UnmanagedMemoryExceptionType.PoolIsDry);
@@ -262,7 +276,7 @@ namespace NumSharp.Memory.Pooling {
 #endif
 
             // Return the head of the free list and advance the free list pointer
-            pool->Free = *((byte**) pool->Free);
+            pool->Free = *((byte**)pool->Free);
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 			*((ulong*)(((byte*)pRet)+pool->BlockSize-sizeof(ulong))) = SentinelValue;
 #endif
@@ -273,7 +287,8 @@ namespace NumSharp.Memory.Pooling {
         /// Allocate a zero-filled block of memory from a pool
         /// </summary>
         /// <param name="pool">Pool to allocate from</param>
-        public static void* Calloc(UnmanagedMemoryPool* pool) {
+        public static void* Calloc(UnmanagedMemoryPool* pool)
+        {
             void* ptr = Alloc(pool);
             Memset(ptr, 0, pool->BlockSize);
             return ptr;
@@ -286,7 +301,8 @@ namespace NumSharp.Memory.Pooling {
         /// <returns>The allocated pool</returns>
         /// <param name="blockSize">Size of each block, in bytes</param>
         /// <param name="numBlocks">The number of blocks in the pool</param>
-        public static UnmanagedMemoryPool AllocPool(int blockSize, int numBlocks) {
+        public static UnmanagedMemoryPool AllocPool(int blockSize, int numBlocks)
+        {
             Assert(
                 blockSize >= MinimumPoolBlockSize,
                 UnmanagedMemoryExceptionType.BlockSizeBelowMinimum
@@ -305,7 +321,7 @@ namespace NumSharp.Memory.Pooling {
             pool.BlockSize = blockSize;
 
             // Allocate unmanaged memory large enough to fit all the blocks
-            pool.Alloc = (byte*) Alloc(blockSize * numBlocks);
+            pool.Alloc = (byte*)Alloc(blockSize * numBlocks);
 
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 		{
@@ -330,8 +346,10 @@ namespace NumSharp.Memory.Pooling {
         /// </summary>
         /// <param name="ptr">Pointer to the unmanaged heap memory to free. If null, this is a no-op.
         /// </param>
-        public static void Free(IntPtr ptr) {
-            if (ptr != IntPtr.Zero) {
+        public static void Free(IntPtr ptr)
+        {
+            if (ptr != IntPtr.Zero)
+            {
                 Marshal.FreeHGlobal(ptr);
 #if UNITY_EDITOR
 				void* voidPtr = (void*)ptr;
@@ -361,17 +379,19 @@ namespace NumSharp.Memory.Pooling {
         /// </summary>
         /// <param name="pool">Pool the block is from</param>
         /// <param name="ptr">Pointer to the block to free. If null, this is a no-op.</param>
-        public static void Free(UnmanagedMemoryPool* pool, void* ptr) {
+        public static void Free(UnmanagedMemoryPool* pool, void* ptr)
+        {
             Assert(pool != null, UnmanagedMemoryExceptionType.NullPool);
             Assert(pool->Alloc != null, UnmanagedMemoryExceptionType.UninitializedOrDestroyedPool);
 
             // Freeing a null pointer is a no-op, not an error
-            if (ptr != null) {
+            if (ptr != null)
+            {
                 // Pointer must be in the pool and on a block boundary
                 Assert(
                     ptr >= pool->Alloc
                     && ptr < pool->Alloc + pool->BlockSize * pool->NumBlocks
-                    && (((uint) ((byte*) ptr - pool->Alloc)) % pool->BlockSize) == 0,
+                    && (((uint)((byte*)ptr - pool->Alloc)) % pool->BlockSize) == 0,
                     UnmanagedMemoryExceptionType.PointerDoesNotPointToBlockInPool
                 );
 
@@ -396,7 +416,7 @@ namespace NumSharp.Memory.Pooling {
 #endif
 
                 // Insert the block to free at the start of the free list
-                void** pHead = (void**) ptr;
+                void** pHead = (void**)ptr;
                 *pHead = pool->Free;
                 pool->Free = pHead;
             }
@@ -407,18 +427,20 @@ namespace NumSharp.Memory.Pooling {
         /// its blocks available for allocation again.
         /// </summary>
         /// <param name="pool">Pool whose blocks should be freed</param>
-        public static void FreeAll(UnmanagedMemoryPool* pool) {
+        public static void FreeAll(UnmanagedMemoryPool* pool)
+        {
             Assert(pool != null, UnmanagedMemoryExceptionType.NullPool);
             Assert(pool->Alloc != null, UnmanagedMemoryExceptionType.UninitializedOrDestroyedPool);
 
             // Point each block except the last one to the next block. Check their sentinels while we're
             // at it.
-            void** pCur = (void**) pool->Alloc;
+            void** pCur = (void**)pool->Alloc;
             byte* pNext = pool->Alloc + pool->BlockSize;
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 			byte* pSentinel = pool->Alloc + pool->BlockSize - sizeof(ulong);
 #endif
-            for (int i = 0, count = pool->NumBlocks - 1; i < count; ++i) {
+            for (int i = 0, count = pool->NumBlocks - 1; i < count; ++i)
+            {
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 				if (*((ulong*)pSentinel) != SentinelValue)
 				{
@@ -427,7 +449,7 @@ namespace NumSharp.Memory.Pooling {
 				pSentinel += pool->BlockSize;
 #endif
                 *pCur = pNext;
-                pCur = (void**) pNext;
+                pCur = (void**)pNext;
                 pNext += pool->BlockSize;
             }
 
@@ -450,11 +472,12 @@ namespace NumSharp.Memory.Pooling {
         /// Free a pool and all of its blocks. Double-freeing a pool is a no-op.
         /// </summary>
         /// <param name="pool">Pool to free</param>
-        public static void FreePool(UnmanagedMemoryPool* pool) {
+        public static void FreePool(UnmanagedMemoryPool* pool)
+        {
             Assert(pool != null, UnmanagedMemoryExceptionType.NullPool);
 
             // Free the unmanaged memory for all the blocks and set to null to allow double-Destroy()
-            Free((IntPtr) pool->Alloc);
+            Free((IntPtr)pool->Alloc);
             pool->Alloc = null;
             pool->Free = null;
         }

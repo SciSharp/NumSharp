@@ -17,7 +17,7 @@ namespace NumSharp.Backends.Unmanaged
         public static readonly NPTypeCode TypeCode = typeof(T).GetTypeCode();
         private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
 
-        public const int ParallelLimit = 84999; 
+        public const int ParallelLimit = 84999;
 
         public readonly unsafe T* Address;
         private ArraySlice<T> _array;

@@ -6,13 +6,13 @@ In case you want to do some changes do the following
 2 ) execute powershell file "GenerateCode.ps1" on root level
 
 */
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Shared;
 
 namespace NumSharp.Backends
 {
@@ -69,4 +69,3 @@ namespace NumSharp.Backends
         }
     }
 }
-

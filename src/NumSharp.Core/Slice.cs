@@ -50,7 +50,6 @@ namespace NumSharp
     /// Example:
     /// a=[[1, 2], [3, 4]]
     /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector
-
     /// </summary>
     public class Slice
     {
@@ -74,7 +73,7 @@ namespace NumSharp
         /// <param name="start">Start index of the slice, null means from the start of the array</param>
         /// <param name="stop">Stop index (first index after end of slice), null means to the end of the array</param>
         /// <param name="step">Optional step to select every n-th element, defaults to 1</param>
-        public Slice(int? start=null, int? stop=null, int step = 1)
+        public Slice(int? start = null, int? stop = null, int step = 1)
         {
             Start = start;
             Stop = stop;
@@ -91,7 +90,7 @@ namespace NumSharp
         /// </summary>
         public static Slice[] ParseSlices(string multi_slice_notation)
         {
-            return Regex.Split(multi_slice_notation, @",\s*").Where(s=>!string.IsNullOrWhiteSpace(s)).Select(token=>new Slice(token)).ToArray();
+            return Regex.Split(multi_slice_notation, @",\s*").Where(s => !string.IsNullOrWhiteSpace(s)).Select(token => new Slice(token)).ToArray();
         }
 
         /// <summary>
@@ -99,17 +98,17 @@ namespace NumSharp
         /// </summary>
         public static string FormatSlices(params Slice[] slices)
         {
-            return string.Join(",", slices.Select(s=>s.ToString()));
+            return string.Join(",", slices.Select(s => s.ToString()));
         }
 
         private void Parse(string slice_notation)
         {
             if (string.IsNullOrEmpty(slice_notation))
                 throw new ArgumentException("Slice notation expected, got empty string or null");
-            var match=Regex.Match(slice_notation, @"^\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*\d+)?)?\s*$|^\s*([+-]?\s*\d+)\s*$");
+            var match = Regex.Match(slice_notation, @"^\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*\d+)?)?\s*$|^\s*([+-]?\s*\d+)\s*$");
             if (!match.Success)
                 throw new ArgumentException("Invalid slice notation");
-            var start_string = Regex.Replace(match.Groups[1].Value??"", @"\s+", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
+            var start_string = Regex.Replace(match.Groups[1].Value ?? "", @"\s+", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
             var stop_string = Regex.Replace(match.Groups[2].Value ?? "", @"\s+", "");
             var step_string = Regex.Replace(match.Groups[4].Value ?? "", @"\s+", "");
             var single_pick_string = match.Groups[5].Value;
@@ -118,11 +117,12 @@ namespace NumSharp
                 if (!int.TryParse(Regex.Replace(single_pick_string ?? "", @"\s+", ""), out var start))
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
-                Stop = start+1;
+                Stop = start + 1;
                 Step = 1; // special case for dimensionality reduction by picking a single element
                 IsIndex = true;
                 return;
             }
+
             if (string.IsNullOrWhiteSpace(start_string))
                 Start = null;
             else
@@ -131,6 +131,7 @@ namespace NumSharp
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
             }
+
             if (string.IsNullOrWhiteSpace(stop_string))
                 Stop = null;
             else
@@ -139,6 +140,7 @@ namespace NumSharp
                     throw new ArgumentException($"Invalid value for start: {stop_string}");
                 Stop = stop;
             }
+
             if (string.IsNullOrWhiteSpace(step_string))
                 Step = 1;
             else
@@ -190,7 +192,7 @@ namespace NumSharp
 
         public static Slice Index(int index)
         {
-            return new Slice(index, index + 1) { IsIndex = true };
+            return new Slice(index, index + 1) {IsIndex = true};
         }
 
         public override string ToString()
@@ -207,13 +209,14 @@ namespace NumSharp
             var absStart = GetAbsStart(dim);
             var absStop = GetAbsStop(dim);
             var absStep = GetAbsStep();
-            return ((absStop - absStart)+(absStep-1)) / absStep;
+            return ((absStop - absStart) + (absStep - 1)) / absStep;
         }
 
         public int GetAbsStep()
         {
             return Math.Abs(Step);
         }
+
         public int GetAbsStart(int dim)
         {
             // Note: No handling of out of range
@@ -229,6 +232,5 @@ namespace NumSharp
             var absStop = Step < 0 ? (absStopN ?? 0) : (absStopN ?? dim);
             return absStop;
         }
-
     }
 }

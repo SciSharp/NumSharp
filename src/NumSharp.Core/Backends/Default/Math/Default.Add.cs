@@ -15,7 +15,6 @@ using System.Linq;
 using System.Text;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using NumSharp.Shared;
 using System.Threading.Tasks;
 using NumSharp.Backends.Unmanaged;
 

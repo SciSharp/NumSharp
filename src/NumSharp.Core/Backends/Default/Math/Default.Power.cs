@@ -69,5 +69,4 @@ namespace NumSharp.Backends
             //return powerArray;
         }
     }
-
 }

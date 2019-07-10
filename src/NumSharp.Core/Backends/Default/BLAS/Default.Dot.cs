@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             //}
             //else if (x.ndim == 1 && x.ndim == 1)
             //{
-                
+
             //    switch (dtype.Name)
             //    {
             //        case "Int32":

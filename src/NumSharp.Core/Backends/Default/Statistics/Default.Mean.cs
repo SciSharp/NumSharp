@@ -83,5 +83,4 @@ namespace NumSharp.Backends
             //return mean;
         }
     }
-
 }

@@ -26,7 +26,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sqrtData[idx] = Math.Sqrt(data[idx]);
-                    
+
             //        break;
             //    }
             //    case float[] data : 
@@ -35,7 +35,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sqrtData[idx] = (float) Math.Sqrt((double)data[idx]) ;
-                    
+
             //        break;
             //    }
             //    case Complex[] data : 
@@ -44,7 +44,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sqrtData[idx] = Complex.Sqrt(data[idx]);
-                    
+
             //        break;
             //    }
             //    case int[] data : 
@@ -53,7 +53,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sqrtData[idx] = (int) Math.Sqrt((double)data[idx]); 
-                    
+
             //        break;
             //    }
             //    default : 
@@ -63,6 +63,5 @@ namespace NumSharp
             //}
             //return sqrtArray;
         }
-
     }
 }

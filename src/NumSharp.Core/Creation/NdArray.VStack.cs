@@ -21,12 +21,12 @@ namespace NumSharp
             //{
             //    if (nps[0].shape != ele.shape)
             //        throw new Exception("Arrays mush have same shapes");
-                
+
             //    list.AddRange(ele.Storage.GetData<T>());
             //}
 
             //np.Storage.ReplaceData(list.ToArray());
-            
+
             //if (nps[0].ndim == 1)
             //{
             //    np.Storage.Reshape(new int[] { nps.Length +1, nps[0].shape[0] });
@@ -40,5 +40,4 @@ namespace NumSharp
             //return np;
         }
     }
-  
 }

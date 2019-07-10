@@ -9,14 +9,14 @@ namespace NumSharp
         public static NDArray asanyarray(string data)
         {
             var nd = new NDArray(typeof(string), new int[0]);
-            nd.ReplaceData(new string[] { data });
+            nd.ReplaceData(new string[] {data});
             return nd;
         }
 
         public static NDArray asanyarray<T>(T data) where T : struct
         {
             var nd = new NDArray(typeof(T), new int[0]);
-            nd.ReplaceData(new T[] { data });
+            nd.ReplaceData(new T[] {data});
             return nd;
         }
 

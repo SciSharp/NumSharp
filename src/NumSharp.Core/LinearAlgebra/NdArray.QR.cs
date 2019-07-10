@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using NumSharp.Shared;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public (NDArray,NDArray) qr()
+        public (NDArray, NDArray) qr()
         {
             return default;
             //return;

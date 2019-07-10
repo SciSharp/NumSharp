@@ -30,7 +30,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-
         /// <summary>
         /// User-defined conversion from double to Digit
         /// </summary>
@@ -109,12 +108,13 @@ namespace NumSharp
             var methods = nd.GetType().GetMethods().Where(x => x.Name.Equals("ToMuliDimArray") && x.IsGenericMethod && x.ReturnType.Name.Equals("Array"));
             var genMethods = methods.First().MakeGenericMethod(nd.dtype);
 
-            return (Array) genMethods.Invoke(nd,null) ;
+            return (Array)genMethods.Invoke(nd, null);
         }
+
         public static implicit operator NDArray(string str)
         {
             // process "[1, 2, 3]" 
-            if(new Regex(@"^\[[\d,\s\.]+\]$").IsMatch(str))
+            if (new Regex(@"^\[[\d,\s\.]+\]$").IsMatch(str))
             {
                 var data = str.Substring(1, str.Length - 2)
                     .Split(',')
@@ -135,22 +135,21 @@ namespace NumSharp
                 if (str.Contains(","))
                 {
                     splitted = str.Split(';')
-                                .Select(x => x.Split(','))
-                                .ToArray();
-
+                        .Select(x => x.Split(','))
+                        .ToArray();
                 }
                 else
                 {
                     splitted = str.Split(';')
-                                .Select(x => x.Split(' '))
-                                .ToArray();
+                        .Select(x => x.Split(' '))
+                        .ToArray();
                 }
 
 
                 int dim0 = splitted.Length;
                 int dim1 = splitted[0].Length;
 
-                var shape = new Shape(new int[] { dim0, dim1 });
+                var shape = new Shape(new int[] {dim0, dim1});
 
                 nd = new NDArray(typeof(double), shape);
 
@@ -167,7 +166,7 @@ namespace NumSharp
             else
             {
                 var nd = new NDArray(typeof(string), new int[0]);
-                nd.Storage.ReplaceData((Array) new string[] { str });
+                nd.Storage.ReplaceData((Array)new string[] {str});
 
                 return nd;
             }

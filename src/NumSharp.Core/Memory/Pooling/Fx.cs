@@ -9,8 +9,10 @@ using System.Security;
 using System.Threading;
 using NumSharp.Utilities;
 
-namespace NumSharp.Memory.Pooling {
-    static class Fx {
+namespace NumSharp.Memory.Pooling
+{
+    static class Fx
+    {
         const string defaultEventSource = "System.Runtime";
 
 #if DEBUG
@@ -33,7 +35,8 @@ namespace NumSharp.Memory.Pooling {
         [Fx.Tag.SecurityNote(Critical = "This delegate is called from within a ConstrainedExecutionRegion, must not be settable from PT code")] [SecurityCritical]
         static ExceptionHandler asynchronousThreadExceptionHandler;
 
-        public static ExceptionHandler AsynchronousThreadExceptionHandler {
+        public static ExceptionHandler AsynchronousThreadExceptionHandler
+        {
             [Fx.Tag.SecurityNote(Critical = "access critical field", Safe = "ok for get-only access")]
             [SecuritySafeCritical]
             [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
@@ -46,51 +49,65 @@ namespace NumSharp.Memory.Pooling {
 
         // Do not call the parameter "message" or else FxCop thinks it should be localized.
         [Conditional("DEBUG")]
-        public static void Assert(bool condition, string description) {
-            if (!condition) {
+        public static void Assert(bool condition, string description)
+        {
+            if (!condition)
+            {
                 Assert(description);
             }
         }
 
         [Conditional("DEBUG")]
-        public static void Assert(string description) {
-            try {
+        public static void Assert(string description)
+        {
+            try
+            {
 #if DEBUG_FOR_REALS
                 InternalFireAssert(ref message);
 #endif
-            } finally {
+            }
+            finally
+            {
                 Debug.Assert(false, description);
             }
         }
 
-        public static void AssertAndThrow(bool condition, string description) {
-            if (!condition) {
+        public static void AssertAndThrow(bool condition, string description)
+        {
+            if (!condition)
+            {
                 AssertAndThrow(description);
             }
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Exception AssertAndThrow(string description) {
+        public static Exception AssertAndThrow(string description)
+        {
             Fx.Assert(description);
             //TraceCore.ShipAssertExceptionMessage(Trace, description);
             throw new InternalException(description);
         }
 
-        public static void AssertAndThrowFatal(bool condition, string description) {
-            if (!condition) {
+        public static void AssertAndThrowFatal(bool condition, string description)
+        {
+            if (!condition)
+            {
                 AssertAndThrowFatal(description);
             }
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Exception AssertAndThrowFatal(string description) {
+        public static Exception AssertAndThrowFatal(string description)
+        {
             Fx.Assert(description);
             //TraceCore.ShipAssertExceptionMessage(Trace, description);
             throw new FatalInternalException(description);
         }
 
-        public static void AssertAndFailFast(bool condition, string description) {
-            if (!condition) {
+        public static void AssertAndFailFast(bool condition, string description)
+        {
+            if (!condition)
+            {
                 AssertAndFailFast(description);
             }
         }
@@ -101,30 +118,40 @@ namespace NumSharp.Memory.Pooling {
             Safe = "The side affect of the app crashing is actually intended here")]
         [SecuritySafeCritical]
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Exception AssertAndFailFast(string description) {
+        public static Exception AssertAndFailFast(string description)
+        {
             Fx.Assert(description);
             //string failFastMessage = InternalSR.FailFastMessage(description);
 
             // The catch is here to force the finally to run, as finallys don't run until the stack walk gets to a catch.  
             // The catch makes sure that the finally will run before the stack-walk leaves the frame, but the code inside is impossible to reach.
-            try {
-                try {
+            try
+            {
+                try
+                {
                     Assert(description);
-                } finally {
+                }
+                finally
+                {
                     Environment.FailFast(description);
                 }
-            } catch {
+            }
+            catch
+            {
                 throw;
             }
 
             return null; // we'll never get here since we've just fail-fasted
         }
 
-        public static bool IsFatal(Exception exception) {
-            while (exception != null) {
+        public static bool IsFatal(Exception exception)
+        {
+            while (exception != null)
+            {
                 if ((exception is OutOfMemoryException && !(exception is InsufficientMemoryException)) ||
                     exception is ThreadAbortException ||
-                    exception is FatalInternalException) {
+                    exception is FatalInternalException)
+                {
                     return true;
                 }
 
@@ -132,21 +159,28 @@ namespace NumSharp.Memory.Pooling {
                 // we want to check to see whether they've been used to wrap a fatal exception.  If so, then they
                 // count as fatal.
                 if (exception is TypeInitializationException ||
-                    exception is TargetInvocationException) {
+                    exception is TargetInvocationException)
+                {
                     exception = exception.InnerException;
-                } else if (exception is AggregateException) {
+                }
+                else if (exception is AggregateException)
+                {
                     // AggregateExceptions have a collection of inner exceptions, which may themselves be other
                     // wrapping exceptions (including nested AggregateExceptions).  Recursively walk this
                     // hierarchy.  The (singular) InnerException is included in the collection.
-                    ReadOnlyCollection<Exception> innerExceptions = ((AggregateException) exception).InnerExceptions;
-                    foreach (Exception innerException in innerExceptions) {
-                        if (IsFatal(innerException)) {
+                    ReadOnlyCollection<Exception> innerExceptions = ((AggregateException)exception).InnerExceptions;
+                    foreach (Exception innerException in innerExceptions)
+                    {
+                        if (IsFatal(innerException))
+                        {
                             return true;
                         }
                     }
 
                     break;
-                } else {
+                }
+                else
+                {
                     break;
                 }
             }
@@ -154,51 +188,66 @@ namespace NumSharp.Memory.Pooling {
             return false;
         }
 
-        public static Action<T1> ThunkCallback<T1>(Action<T1> callback) {
+        public static Action<T1> ThunkCallback<T1>(Action<T1> callback)
+        {
             return (new ActionThunk<T1>(callback)).ThunkFrame;
         }
 
-        public static AsyncCallback ThunkCallback(AsyncCallback callback) {
+        public static AsyncCallback ThunkCallback(AsyncCallback callback)
+        {
             return (new AsyncThunk(callback)).ThunkFrame;
         }
 
-        public static WaitCallback ThunkCallback(WaitCallback callback) {
+        public static WaitCallback ThunkCallback(WaitCallback callback)
+        {
             return (new WaitThunk(callback)).ThunkFrame;
         }
 
-        public static TimerCallback ThunkCallback(TimerCallback callback) {
+        public static TimerCallback ThunkCallback(TimerCallback callback)
+        {
             return (new TimerThunk(callback)).ThunkFrame;
         }
 
-        public static WaitOrTimerCallback ThunkCallback(WaitOrTimerCallback callback) {
+        public static WaitOrTimerCallback ThunkCallback(WaitOrTimerCallback callback)
+        {
             return (new WaitOrTimerThunk(callback)).ThunkFrame;
         }
 
-        public static SendOrPostCallback ThunkCallback(SendOrPostCallback callback) {
+        public static SendOrPostCallback ThunkCallback(SendOrPostCallback callback)
+        {
             return (new SendOrPostThunk(callback)).ThunkFrame;
         }
 
         [Fx.Tag.SecurityNote(Critical = "Construct the unsafe object IOCompletionThunk")]
         [SecurityCritical]
-        public static IOCompletionCallback ThunkCallback(IOCompletionCallback callback) {
+        public static IOCompletionCallback ThunkCallback(IOCompletionCallback callback)
+        {
             return (new IOCompletionThunk(callback)).ThunkFrame;
         }
 
-        public static byte[] AllocateByteArray(int size) {
-            try {
+        public static byte[] AllocateByteArray(int size)
+        {
+            try
+            {
                 // Safe to catch OOM from this as long as the ONLY thing it does is a simple allocation of a primitive type (no method calls).
                 return new byte[size];
-            } catch (OutOfMemoryException exception) {
+            }
+            catch (OutOfMemoryException exception)
+            {
                 // Convert OOM into an exception that can be safely handled by higher layers.
                 throw new InsufficientMemoryException($"BufferAllocationFailed(size: {size})", exception);
             }
         }
 
-        public static char[] AllocateCharArray(int size) {
-            try {
+        public static char[] AllocateCharArray(int size)
+        {
+            try
+            {
                 // Safe to catch OOM from this as long as the ONLY thing it does is a simple allocation of a primitive type (no method calls).
                 return new char[size];
-            } catch (OutOfMemoryException exception) {
+            }
+            catch (OutOfMemoryException exception)
+            {
                 // Convert OOM into an exception that can be safely handled by higher layers.
                 throw new InsufficientMemoryException($"BufferAllocationFailed(size: {size * InfoOf<char>.Size})", exception);
             }
@@ -206,12 +255,15 @@ namespace NumSharp.Memory.Pooling {
 
         [Fx.Tag.SecurityNote(Miscellaneous = "Must not call into PT code as it is called within a CER.")]
         [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-        static void TraceExceptionNoThrow(Exception exception) {
-            try {
+        static void TraceExceptionNoThrow(Exception exception)
+        {
+            try
+            {
                 // This call exits the CER.  However, when still inside a catch, normal ThreadAbort is prevented.
                 // Rude ThreadAbort will still be allowed to terminate processing.
-                
-            } catch {
+            }
+            catch
+            {
                 // This empty catch is only acceptable because we are a) in a CER and b) processing an exception
                 // which is about to crash the process anyway.
             }
@@ -219,19 +271,24 @@ namespace NumSharp.Memory.Pooling {
 
         [Fx.Tag.SecurityNote(Miscellaneous = "Must not call into PT code as it is called within a CER.")]
         [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-        static bool HandleAtThreadBase(Exception exception) {
+        static bool HandleAtThreadBase(Exception exception)
+        {
             // This area is too sensitive to do anything but return.
-            if (exception == null) {
+            if (exception == null)
+            {
                 Fx.Assert("Null exception in HandleAtThreadBase.");
                 return false;
             }
 
             TraceExceptionNoThrow(exception);
 
-            try {
+            try
+            {
                 ExceptionHandler handler = Fx.AsynchronousThreadExceptionHandler;
                 return handler == null ? false : handler.HandleException(exception);
-            } catch (Exception secondException) {
+            }
+            catch (Exception secondException)
+            {
                 // Don't let a new exception hide the original exception.
                 TraceExceptionNoThrow(secondException);
             }
@@ -239,13 +296,16 @@ namespace NumSharp.Memory.Pooling {
             return false;
         }
 
-        public abstract class ExceptionHandler {
+        public abstract class ExceptionHandler
+        {
             [Fx.Tag.SecurityNote(Miscellaneous = "Must not call into PT code as it is called within a CER.")]
             public abstract bool HandleException(Exception exception);
         }
 
-        public static class Tag {
-            public enum CacheAttrition {
+        public static class Tag
+        {
+            public enum CacheAttrition
+            {
                 None,
                 ElementOnTimer,
 
@@ -264,18 +324,21 @@ namespace NumSharp.Memory.Pooling {
                 PartialPurgeOnEachAccess,
             }
 
-            public enum ThrottleAction {
+            public enum ThrottleAction
+            {
                 Reject,
                 Pause,
             }
 
-            public enum ThrottleMetric {
+            public enum ThrottleMetric
+            {
                 Count,
                 Rate,
                 Other,
             }
 
-            public enum Location {
+            public enum Location
+            {
                 InProcess,
                 OutOfProcess,
                 LocalSystem,
@@ -283,7 +346,8 @@ namespace NumSharp.Memory.Pooling {
                 RemoteSystem,
             }
 
-            public enum SynchronizationKind {
+            public enum SynchronizationKind
+            {
                 LockStatement,
                 MonitorWait,
                 MonitorExplicit,
@@ -295,7 +359,8 @@ namespace NumSharp.Memory.Pooling {
             }
 
             [Flags]
-            public enum BlocksUsing {
+            public enum BlocksUsing
+            {
                 MonitorEnter,
                 MonitorWait,
                 ManualResetEvent,
@@ -314,7 +379,8 @@ namespace NumSharp.Memory.Pooling {
                 NonBlocking, // For use by non-blocking SynchronizationPrimitives such as IOThreadScheduler
             }
 
-            public static class Strings {
+            public static class Strings
+            {
                 internal const string ExternallyManaged = "externally managed";
                 internal const string AppDomain = "AppDomain";
                 internal const string DeclaringInstance = "instance of declaring class";
@@ -325,40 +391,49 @@ namespace NumSharp.Memory.Pooling {
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Property | AttributeTargets.Class,
                 AllowMultiple = true, Inherited = false)]
             [Conditional("DEBUG")]
-            public sealed class FriendAccessAllowedAttribute : Attribute {
+            public sealed class FriendAccessAllowedAttribute : Attribute
+            {
                 public FriendAccessAllowedAttribute(string assemblyName) :
-                    base() {
+                    base()
+                {
                     this.AssemblyName = assemblyName;
                 }
 
                 public string AssemblyName { get; set; }
             }
 
-            public static class Throws {
+            public static class Throws
+            {
                 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor,
                     AllowMultiple = true, Inherited = false)]
                 [Conditional("CODE_ANALYSIS_CDF")]
-                public sealed class TimeoutAttribute : ThrowsAttribute {
+                public sealed class TimeoutAttribute : ThrowsAttribute
+                {
                     public TimeoutAttribute() :
-                        this("The operation timed out.") { }
+                        this("The operation timed out.")
+                    { }
 
                     public TimeoutAttribute(string diagnosis) :
-                        base(typeof(TimeoutException), diagnosis) { }
+                        base(typeof(TimeoutException), diagnosis)
+                    { }
                 }
             }
 
             [AttributeUsage(AttributeTargets.Field)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class CacheAttribute : Attribute {
+            public sealed class CacheAttribute : Attribute
+            {
                 readonly Type elementType;
                 readonly CacheAttrition cacheAttrition;
 
-                public CacheAttribute(Type elementType, CacheAttrition cacheAttrition) {
+                public CacheAttribute(Type elementType, CacheAttrition cacheAttrition)
+                {
                     Scope = Strings.DeclaringInstance;
                     SizeLimit = Strings.Unbounded;
                     Timeout = Strings.Infinite;
 
-                    if (elementType == null) {
+                    if (elementType == null)
+                    {
                         throw new ArgumentNullException(nameof(elementType));
                     }
 
@@ -366,11 +441,13 @@ namespace NumSharp.Memory.Pooling {
                     this.cacheAttrition = cacheAttrition;
                 }
 
-                public Type ElementType {
+                public Type ElementType
+                {
                     get { return this.elementType; }
                 }
 
-                public CacheAttrition CacheAttrition {
+                public CacheAttrition CacheAttrition
+                {
                     get { return this.cacheAttrition; }
                 }
 
@@ -381,21 +458,25 @@ namespace NumSharp.Memory.Pooling {
 
             [AttributeUsage(AttributeTargets.Field)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class QueueAttribute : Attribute {
+            public sealed class QueueAttribute : Attribute
+            {
                 readonly Type elementType;
 
-                public QueueAttribute(Type elementType) {
+                public QueueAttribute(Type elementType)
+                {
                     Scope = Strings.DeclaringInstance;
                     SizeLimit = Strings.Unbounded;
 
-                    if (elementType == null) {
+                    if (elementType == null)
+                    {
                         throw new ArgumentNullException(nameof(elementType));
                     }
 
                     this.elementType = elementType;
                 }
 
-                public Type ElementType {
+                public Type ElementType
+                {
                     get { return this.elementType; }
                 }
 
@@ -407,15 +488,18 @@ namespace NumSharp.Memory.Pooling {
 
             [AttributeUsage(AttributeTargets.Field)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class ThrottleAttribute : Attribute {
+            public sealed class ThrottleAttribute : Attribute
+            {
                 readonly ThrottleAction throttleAction;
                 readonly ThrottleMetric throttleMetric;
                 readonly string limit;
 
-                public ThrottleAttribute(ThrottleAction throttleAction, ThrottleMetric throttleMetric, string limit) {
+                public ThrottleAttribute(ThrottleAction throttleAction, ThrottleMetric throttleMetric, string limit)
+                {
                     Scope = Strings.AppDomain;
 
-                    if (string.IsNullOrEmpty(limit)) {
+                    if (string.IsNullOrEmpty(limit))
+                    {
                         throw new ArgumentNullException(nameof(limit));
                     }
 
@@ -424,15 +508,18 @@ namespace NumSharp.Memory.Pooling {
                     this.limit = limit;
                 }
 
-                public ThrottleAction ThrottleAction {
+                public ThrottleAction ThrottleAction
+                {
                     get { return this.throttleAction; }
                 }
 
-                public ThrottleMetric ThrottleMetric {
+                public ThrottleMetric ThrottleMetric
+                {
                     get { return this.throttleMetric; }
                 }
 
-                public string Limit {
+                public string Limit
+                {
                     get { return this.limit; }
                 }
 
@@ -442,20 +529,24 @@ namespace NumSharp.Memory.Pooling {
             [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method | AttributeTargets.Constructor,
                 AllowMultiple = true, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class ExternalResourceAttribute : Attribute {
+            public sealed class ExternalResourceAttribute : Attribute
+            {
                 readonly Location location;
                 readonly string description;
 
-                public ExternalResourceAttribute(Location location, string description) {
+                public ExternalResourceAttribute(Location location, string description)
+                {
                     this.location = location;
                     this.description = description;
                 }
 
-                public Location Location {
+                public Location Location
+                {
                     get { return this.location; }
                 }
 
-                public string Description {
+                public string Description
+                {
                     get { return this.description; }
                 }
             }
@@ -464,8 +555,10 @@ namespace NumSharp.Memory.Pooling {
             //     private object this;
             [AttributeUsage(AttributeTargets.Field | AttributeTargets.Class, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class SynchronizationObjectAttribute : Attribute {
-                public SynchronizationObjectAttribute() {
+            public sealed class SynchronizationObjectAttribute : Attribute
+            {
+                public SynchronizationObjectAttribute()
+                {
                     Blocking = true;
                     Scope = Strings.DeclaringInstance;
                     Kind = SynchronizationKind.FromFieldType;
@@ -478,14 +571,17 @@ namespace NumSharp.Memory.Pooling {
 
             [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = true)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class SynchronizationPrimitiveAttribute : Attribute {
+            public sealed class SynchronizationPrimitiveAttribute : Attribute
+            {
                 readonly BlocksUsing blocksUsing;
 
-                public SynchronizationPrimitiveAttribute(BlocksUsing blocksUsing) {
+                public SynchronizationPrimitiveAttribute(BlocksUsing blocksUsing)
+                {
                     this.blocksUsing = blocksUsing;
                 }
 
-                public BlocksUsing BlocksUsing {
+                public BlocksUsing BlocksUsing
+                {
                     get { return this.blocksUsing; }
                 }
 
@@ -496,7 +592,8 @@ namespace NumSharp.Memory.Pooling {
 
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class BlockingAttribute : Attribute {
+            public sealed class BlockingAttribute : Attribute
+            {
                 public BlockingAttribute() { }
 
                 public string CancelMethod { get; set; }
@@ -512,29 +609,35 @@ namespace NumSharp.Memory.Pooling {
             // they do not require this attribute.
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class GuaranteeNonBlockingAttribute : Attribute {
+            public sealed class GuaranteeNonBlockingAttribute : Attribute
+            {
                 public GuaranteeNonBlockingAttribute() { }
             }
 
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class NonThrowingAttribute : Attribute {
+            public sealed class NonThrowingAttribute : Attribute
+            {
                 public NonThrowingAttribute() { }
             }
 
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor,
                 AllowMultiple = true, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public class ThrowsAttribute : Attribute {
+            public class ThrowsAttribute : Attribute
+            {
                 readonly Type exceptionType;
                 readonly string diagnosis;
 
-                public ThrowsAttribute(Type exceptionType, string diagnosis) {
-                    if (exceptionType == null) {
+                public ThrowsAttribute(Type exceptionType, string diagnosis)
+                {
+                    if (exceptionType == null)
+                    {
                         throw new ArgumentNullException(nameof(exceptionType));
                     }
 
-                    if (string.IsNullOrEmpty(diagnosis)) {
+                    if (string.IsNullOrEmpty(diagnosis))
+                    {
                         throw new ArgumentNullException(nameof(diagnosis));
                     }
 
@@ -542,18 +645,21 @@ namespace NumSharp.Memory.Pooling {
                     this.diagnosis = diagnosis;
                 }
 
-                public Type ExceptionType {
+                public Type ExceptionType
+                {
                     get { return this.exceptionType; }
                 }
 
-                public string Diagnosis {
+                public string Diagnosis
+                {
                     get { return this.diagnosis; }
                 }
             }
 
             [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class InheritThrowsAttribute : Attribute {
+            public sealed class InheritThrowsAttribute : Attribute
+            {
                 public InheritThrowsAttribute() { }
 
                 public Type FromDeclaringType { get; set; }
@@ -562,17 +668,21 @@ namespace NumSharp.Memory.Pooling {
 
             [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class KnownXamlExternalAttribute : Attribute {
+            public sealed class KnownXamlExternalAttribute : Attribute
+            {
                 public KnownXamlExternalAttribute() { }
             }
 
             [AttributeUsage(AttributeTargets.Assembly | AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class XamlVisibleAttribute : Attribute {
+            public sealed class XamlVisibleAttribute : Attribute
+            {
                 public XamlVisibleAttribute()
-                    : this(true) { }
+                    : this(true)
+                { }
 
-                public XamlVisibleAttribute(bool visible) {
+                public XamlVisibleAttribute(bool visible)
+                {
                     this.Visible = visible;
                 }
 
@@ -584,7 +694,8 @@ namespace NumSharp.Memory.Pooling {
                             AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Event | AttributeTargets.Interface |
                             AttributeTargets.Delegate, AllowMultiple = false, Inherited = false)]
             [Conditional("CODE_ANALYSIS_CDF")]
-            public sealed class SecurityNoteAttribute : Attribute {
+            public sealed class SecurityNoteAttribute : Attribute
+            {
                 public SecurityNoteAttribute() { }
 
                 public string Critical { get; set; }
@@ -593,149 +704,194 @@ namespace NumSharp.Memory.Pooling {
             }
         }
 
-        abstract class Thunk<T> where T : class {
+        abstract class Thunk<T> where T : class
+        {
             [Fx.Tag.SecurityNote(Critical = "Make these safe to use in SecurityCritical contexts.")] [SecurityCritical]
             T callback;
 
             [Fx.Tag.SecurityNote(Critical = "Accesses critical field.", Safe = "Data provided by caller.")]
             [SecuritySafeCritical]
-            protected Thunk(T callback) {
+            protected Thunk(T callback)
+            {
                 this.callback = callback;
             }
 
-            internal T Callback {
+            internal T Callback
+            {
                 [Fx.Tag.SecurityNote(Critical = "Accesses critical field.", Safe = "Data is not privileged.")]
                 [SecuritySafeCritical]
                 get { return this.callback; }
             }
         }
 
-        sealed class ActionThunk<T1> : Thunk<Action<T1>> {
+        sealed class ActionThunk<T1> : Thunk<Action<T1>>
+        {
             public ActionThunk(Action<T1> callback) : base(callback) { }
 
-            public Action<T1> ThunkFrame {
+            public Action<T1> ThunkFrame
+            {
                 get { return new Action<T1>(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(T1 result) {
+            void UnhandledExceptionFrame(T1 result)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(result);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
             }
         }
 
-        sealed class AsyncThunk : Thunk<AsyncCallback> {
+        sealed class AsyncThunk : Thunk<AsyncCallback>
+        {
             public AsyncThunk(AsyncCallback callback) : base(callback) { }
 
-            public AsyncCallback ThunkFrame {
+            public AsyncCallback ThunkFrame
+            {
                 get { return new AsyncCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(IAsyncResult result) {
+            void UnhandledExceptionFrame(IAsyncResult result)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(result);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
             }
         }
 
-        sealed class WaitThunk : Thunk<WaitCallback> {
+        sealed class WaitThunk : Thunk<WaitCallback>
+        {
             public WaitThunk(WaitCallback callback) : base(callback) { }
 
-            public WaitCallback ThunkFrame {
+            public WaitCallback ThunkFrame
+            {
                 get { return new WaitCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(object state) {
+            void UnhandledExceptionFrame(object state)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(state);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
             }
         }
 
-        sealed class TimerThunk : Thunk<TimerCallback> {
+        sealed class TimerThunk : Thunk<TimerCallback>
+        {
             public TimerThunk(TimerCallback callback) : base(callback) { }
 
-            public TimerCallback ThunkFrame {
+            public TimerCallback ThunkFrame
+            {
                 get { return new TimerCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(object state) {
+            void UnhandledExceptionFrame(object state)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(state);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
             }
         }
 
-        sealed class WaitOrTimerThunk : Thunk<WaitOrTimerCallback> {
+        sealed class WaitOrTimerThunk : Thunk<WaitOrTimerCallback>
+        {
             public WaitOrTimerThunk(WaitOrTimerCallback callback) : base(callback) { }
 
-            public WaitOrTimerCallback ThunkFrame {
+            public WaitOrTimerCallback ThunkFrame
+            {
                 get { return new WaitOrTimerCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(object state, bool timedOut) {
+            void UnhandledExceptionFrame(object state, bool timedOut)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(state, timedOut);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
             }
         }
 
-        sealed class SendOrPostThunk : Thunk<SendOrPostCallback> {
+        sealed class SendOrPostThunk : Thunk<SendOrPostCallback>
+        {
             public SendOrPostThunk(SendOrPostCallback callback) : base(callback) { }
 
-            public SendOrPostCallback ThunkFrame {
+            public SendOrPostCallback ThunkFrame
+            {
                 get { return new SendOrPostCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Guaranteed not to call into PT user code from the finally.")]
             [SecuritySafeCritical]
-            void UnhandledExceptionFrame(object state) {
+            void UnhandledExceptionFrame(object state)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     Callback(state);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
@@ -745,28 +901,36 @@ namespace NumSharp.Memory.Pooling {
         // This can't derive from Thunk since T would be unsafe.
         [Fx.Tag.SecurityNote(Critical = "unsafe object")]
         [SecurityCritical]
-        unsafe sealed class IOCompletionThunk {
+        unsafe sealed class IOCompletionThunk
+        {
             [Fx.Tag.SecurityNote(Critical = "Make these safe to use in SecurityCritical contexts.")]
             IOCompletionCallback callback;
 
             [Fx.Tag.SecurityNote(Critical = "Accesses critical field.", Safe = "Data provided by caller.")]
-            public IOCompletionThunk(IOCompletionCallback callback) {
+            public IOCompletionThunk(IOCompletionCallback callback)
+            {
                 this.callback = callback;
             }
 
-            public IOCompletionCallback ThunkFrame {
+            public IOCompletionCallback ThunkFrame
+            {
                 [Fx.Tag.SecurityNote(Safe = "returns a delegate around the safe method UnhandledExceptionFrame")]
                 get { return new IOCompletionCallback(UnhandledExceptionFrame); }
             }
 
             [Fx.Tag.SecurityNote(Critical = "Accesses critical field, calls PrepareConstrainedRegions which has a LinkDemand",
                 Safe = "Delegates can be invoked, guaranteed not to call into PT user code from the finally.")]
-            void UnhandledExceptionFrame(uint error, uint bytesRead, NativeOverlapped* nativeOverlapped) {
+            void UnhandledExceptionFrame(uint error, uint bytesRead, NativeOverlapped* nativeOverlapped)
+            {
                 RuntimeHelpers.PrepareConstrainedRegions();
-                try {
+                try
+                {
                     this.callback(error, bytesRead, nativeOverlapped);
-                } catch (Exception exception) {
-                    if (!Fx.HandleAtThreadBase(exception)) {
+                }
+                catch (Exception exception)
+                {
+                    if (!Fx.HandleAtThreadBase(exception))
+                    {
                         throw;
                     }
                 }
@@ -774,21 +938,27 @@ namespace NumSharp.Memory.Pooling {
         }
 
         [Serializable]
-        class InternalException : SystemException {
+        class InternalException : SystemException
+        {
             public InternalException(string description)
-                : base(description) { }
+                : base(description)
+            { }
 
             protected InternalException(SerializationInfo info, StreamingContext context)
-                : base(info, context) { }
+                : base(info, context)
+            { }
         }
 
         [Serializable]
-        class FatalInternalException : InternalException {
+        class FatalInternalException : InternalException
+        {
             public FatalInternalException(string description)
-                : base(description) { }
+                : base(description)
+            { }
 
             protected FatalInternalException(SerializationInfo info, StreamingContext context)
-                : base(info, context) { }
+                : base(info, context)
+            { }
         }
     }
 }

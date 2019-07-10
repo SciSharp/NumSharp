@@ -30,74 +30,74 @@ namespace NumSharp.Backends
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Byte:
-	            {
+                case NPTypeCode.Byte:
+                {
                     slice = new ArraySlice<byte>(buffer == null ? new UnmanagedArray<byte>(shape.size, 0) : UnmanagedArray<byte>.FromArray((byte[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Int16:
-	            {
+                case NPTypeCode.Int16:
+                {
                     slice = new ArraySlice<short>(buffer == null ? new UnmanagedArray<short>(shape.size, 0) : UnmanagedArray<short>.FromArray((short[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.UInt16:
-	            {
+                case NPTypeCode.UInt16:
+                {
                     slice = new ArraySlice<ushort>(buffer == null ? new UnmanagedArray<ushort>(shape.size, 0) : UnmanagedArray<ushort>.FromArray((ushort[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Int32:
-	            {
+                case NPTypeCode.Int32:
+                {
                     slice = new ArraySlice<int>(buffer == null ? new UnmanagedArray<int>(shape.size, 0) : UnmanagedArray<int>.FromArray((int[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.UInt32:
-	            {
+                case NPTypeCode.UInt32:
+                {
                     slice = new ArraySlice<uint>(buffer == null ? new UnmanagedArray<uint>(shape.size, 0u) : UnmanagedArray<uint>.FromArray((uint[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Int64:
-	            {
+                case NPTypeCode.Int64:
+                {
                     slice = new ArraySlice<long>(buffer == null ? new UnmanagedArray<long>(shape.size, 0L) : UnmanagedArray<long>.FromArray((long[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.UInt64:
-	            {
+                case NPTypeCode.UInt64:
+                {
                     slice = new ArraySlice<ulong>(buffer == null ? new UnmanagedArray<ulong>(shape.size, 0UL) : UnmanagedArray<ulong>.FromArray((ulong[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Char:
-	            {
+                case NPTypeCode.Char:
+                {
                     slice = new ArraySlice<char>(buffer == null ? new UnmanagedArray<char>(shape.size, '\0') : UnmanagedArray<char>.FromArray((char[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Double:
-	            {
+                case NPTypeCode.Double:
+                {
                     slice = new ArraySlice<double>(buffer == null ? new UnmanagedArray<double>(shape.size, 0d) : UnmanagedArray<double>.FromArray((double[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Single:
-	            {
+                case NPTypeCode.Single:
+                {
                     slice = new ArraySlice<float>(buffer == null ? new UnmanagedArray<float>(shape.size, 0f) : UnmanagedArray<float>.FromArray((float[])buffer));
                     break;
-	            }
+                }
 
-	            case NPTypeCode.Decimal:
-	            {
+                case NPTypeCode.Decimal:
+                {
                     slice = new ArraySlice<decimal>(buffer == null ? new UnmanagedArray<decimal>(shape.size, 0m) : UnmanagedArray<decimal>.FromArray((decimal[])buffer));
                     break;
-	            }
+                }
 
-	            default:
-		            throw new NotSupportedException();
+                default:
+                    throw new NotSupportedException();
 #endif
             }
 
@@ -124,74 +124,74 @@ namespace NumSharp.Backends
 	                default:
 		                throw new NotSupportedException();
 #else
-	                case NPTypeCode.Byte:
-	                {
+                    case NPTypeCode.Byte:
+                    {
                         buffer = new ArraySlice<byte>(new UnmanagedArray<byte>(shape.size, 0));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Int16:
-	                {
+                    case NPTypeCode.Int16:
+                    {
                         buffer = new ArraySlice<short>(new UnmanagedArray<short>(shape.size, 0));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.UInt16:
-	                {
+                    case NPTypeCode.UInt16:
+                    {
                         buffer = new ArraySlice<ushort>(new UnmanagedArray<ushort>(shape.size, 0));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Int32:
-	                {
+                    case NPTypeCode.Int32:
+                    {
                         buffer = new ArraySlice<int>(new UnmanagedArray<int>(shape.size, 0));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.UInt32:
-	                {
+                    case NPTypeCode.UInt32:
+                    {
                         buffer = new ArraySlice<uint>(new UnmanagedArray<uint>(shape.size, 0u));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Int64:
-	                {
+                    case NPTypeCode.Int64:
+                    {
                         buffer = new ArraySlice<long>(new UnmanagedArray<long>(shape.size, 0L));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.UInt64:
-	                {
+                    case NPTypeCode.UInt64:
+                    {
                         buffer = new ArraySlice<ulong>(new UnmanagedArray<ulong>(shape.size, 0UL));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Char:
-	                {
+                    case NPTypeCode.Char:
+                    {
                         buffer = new ArraySlice<char>(new UnmanagedArray<char>(shape.size, '\0'));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Double:
-	                {
+                    case NPTypeCode.Double:
+                    {
                         buffer = new ArraySlice<double>(new UnmanagedArray<double>(shape.size, 0d));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Single:
-	                {
+                    case NPTypeCode.Single:
+                    {
                         buffer = new ArraySlice<float>(new UnmanagedArray<float>(shape.size, 0f));
                         break;
-	                }
+                    }
 
-	                case NPTypeCode.Decimal:
-	                {
+                    case NPTypeCode.Decimal:
+                    {
                         buffer = new ArraySlice<decimal>(new UnmanagedArray<decimal>(shape.size, 0m));
                         break;
-	                }
+                    }
 
-	                default:
-		                throw new NotSupportedException();
+                    default:
+                        throw new NotSupportedException();
 #endif
                 }
 

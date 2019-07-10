@@ -24,8 +24,8 @@ namespace NumSharp
             ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), Convert.ChangeType(value, dtype)));
 
             return ndArray;
-        }        
-        
+        }
+
         /// <summary>
         ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
         /// </summary>
@@ -39,7 +39,7 @@ namespace NumSharp
             ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
 
             return ndArray;
-        }        
+        }
 
         /// <summary>
         ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.

@@ -26,7 +26,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sinData[idx] = Math.Sin(data[idx]);
-                    
+
             //        break;
             //    }
             //    case float[] data : 
@@ -35,7 +35,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sinData[idx] = (float) Math.Sin((double)data[idx]) ;
-                    
+
             //        break;
             //    }
             //    case Complex[] data : 
@@ -44,7 +44,7 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sinData[idx] = Complex.Sin(data[idx]);
-                    
+
             //        break;
             //    }
             //    case int[] data : 
@@ -53,14 +53,14 @@ namespace NumSharp
 
             //        for (int idx = 0; idx < data.Length;idx++)
             //            sinData[idx] = (int) Math.Sin((double)data[idx]); 
-                    
+
             //        break;
             //    }
             //    default : 
             //    {
             //        throw new IncorrectTypeException();
             //    }
-                
+
             //}
             //return sinArray;
         }

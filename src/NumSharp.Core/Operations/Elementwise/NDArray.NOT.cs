@@ -7,7 +7,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-
         public static NDArray<bool> operator !(NDArray np_)
         {
             return null;

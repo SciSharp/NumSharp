@@ -29,7 +29,8 @@ namespace NumSharp.Backends.Unmanaged
                 return ret;
             }
         }
-/// <summary>
+
+        /// <summary>
         /// 
         /// </summary>
         /// <param name="source"></param>
@@ -53,6 +54,5 @@ namespace NumSharp.Backends.Unmanaged
                 return ret;
             }
         }
-
     }
 }

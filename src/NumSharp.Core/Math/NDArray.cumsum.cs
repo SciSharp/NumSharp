@@ -36,12 +36,14 @@ namespace NumSharp
                 // TODO currently no support for multidimensional a
                 throw new NotImplementedException();
             }
+
             NDArray cs = np.zeros(arr.shape[0]);
             cs[0] = arr[0];
             for (int i = 1; i < arr.shape[0]; i++)
             {
                 cs[i] = cs[i - 1] + arr[i];
             }
+
             return cs;
         }
     }

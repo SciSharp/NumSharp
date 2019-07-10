@@ -11,8 +11,9 @@ namespace NumSharp
         {
             dtype = (dtype == null) ? typeof(double) : dtype;
 
-            return new NDArray(dtype).linspace(start,stop,num,entdpoint);
+            return new NDArray(dtype).linspace(start, stop, num, entdpoint);
         }
+
         public static NDArray linspace(float start, float stop, int num, bool entdpoint = true, Type dtype = null)
         {
             dtype = (dtype == null) ? typeof(float) : dtype;

@@ -49,7 +49,7 @@ namespace NumSharp
 //	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
 //	                case NPTypeCode.#1:
 //	                {
-		                
+
 //	                }
 //	                %
 //	                default:
@@ -319,7 +319,5 @@ namespace NumSharp
             //    throw new ArgumentException("Too many index dimensions for shape " + Storage.Shape);
             //}
         }
-
-
     }
 }

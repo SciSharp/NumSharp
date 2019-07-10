@@ -13,7 +13,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
-using NumSharp.Shared;
 using System.Threading.Tasks;
 
 namespace NumSharp.Backends

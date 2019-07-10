@@ -21,6 +21,7 @@ namespace NumSharp
                         for (int j = 0; j < dtypesize; j++)
                             bytes[i * dtypesize + j] = cache[j];
                     }
+
                     break;
                 case "Int32":
                     for (int i = 0; i < size; i++)
@@ -29,6 +30,7 @@ namespace NumSharp
                         for (int j = 0; j < dtypesize; j++)
                             bytes[i * dtypesize + j] = cache[j];
                     }
+
                     break;
                 case "Int64":
                     for (int i = 0; i < size; i++)
@@ -37,6 +39,7 @@ namespace NumSharp
                         for (int j = 0; j < dtypesize; j++)
                             bytes[i * dtypesize + j] = cache[j];
                     }
+
                     break;
                 case "Single":
                     for (int i = 0; i < size; i++)
@@ -45,6 +48,7 @@ namespace NumSharp
                         for (int j = 0; j < dtypesize; j++)
                             bytes[i * dtypesize + j] = cache[j];
                     }
+
                     break;
                 case "Double":
                     for (int i = 0; i < size; i++)
@@ -53,6 +57,7 @@ namespace NumSharp
                         for (int j = 0; j < dtypesize; j++)
                             bytes[i * dtypesize + j] = cache[j];
                     }
+
                     break;
                 default:
                     throw new NotImplementedException("NDArray ToByteArray() not implemented");

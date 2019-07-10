@@ -15,16 +15,16 @@ namespace NumSharp
 
             NDArray puffer = null;
 
-            if((ndim == 1) && (dim != 1))
+            if ((ndim == 1) && (dim != 1))
             {
                 puffer = new NDArray(this.dtype, new Shape(dim, dim));
             }
-            else 
+            else
             {
-                puffer = new NDArray(this.dtype,this.shape);
+                puffer = new NDArray(this.dtype, this.shape);
             }
 
-            puffer.Storage.ReplaceData(Arrays.Create(dtype,puffer.size));
+            puffer.Storage.ReplaceData(Arrays.Create(dtype, puffer.size));
 
             if (diagonalIndex >= 0)
             {
@@ -39,7 +39,7 @@ namespace NumSharp
                             puffer.SetData(1, idx, idx + diagonalIndex);
                         break;
                     default:
-                        throw new NotImplementedException($"eye {dtype.Name}"); 
+                        throw new NotImplementedException($"eye {dtype.Name}");
                 }
             }
             else

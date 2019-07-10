@@ -128,8 +128,8 @@ namespace NumSharp.Backends
             _dtype = dtype ?? throw new ArgumentNullException(nameof(dtype));
             _typecode = dtype.GetTypeCode();
             _shape = new Shape(0);
-        }        
-        
+        }
+
         /// <summary>
         ///     Creates an empty storage of type <paramref name="dtype"/>.
         /// </summary>
@@ -186,7 +186,7 @@ namespace NumSharp.Backends
         %
 #else
         public UnmanagedStorage(byte scalar)
-        {            
+        {
             _dtype = typeof(Byte);
             _typecode = InfoOf<byte>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -196,8 +196,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(short scalar)
-        {            
+        {
             _dtype = typeof(Int16);
             _typecode = InfoOf<short>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -207,8 +208,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(ushort scalar)
-        {            
+        {
             _dtype = typeof(UInt16);
             _typecode = InfoOf<ushort>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -218,8 +220,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(int scalar)
-        {            
+        {
             _dtype = typeof(Int32);
             _typecode = InfoOf<int>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -229,8 +232,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(uint scalar)
-        {            
+        {
             _dtype = typeof(UInt32);
             _typecode = InfoOf<uint>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -240,8 +244,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(long scalar)
-        {            
+        {
             _dtype = typeof(Int64);
             _typecode = InfoOf<long>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -251,8 +256,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(ulong scalar)
-        {            
+        {
             _dtype = typeof(UInt64);
             _typecode = InfoOf<ulong>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -262,8 +268,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(char scalar)
-        {            
+        {
             _dtype = typeof(Char);
             _typecode = InfoOf<char>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -273,8 +280,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(double scalar)
-        {            
+        {
             _dtype = typeof(Double);
             _typecode = InfoOf<double>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -284,8 +292,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(float scalar)
-        {            
+        {
             _dtype = typeof(Single);
             _typecode = InfoOf<float>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -295,8 +304,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(decimal scalar)
-        {            
+        {
             _dtype = typeof(Decimal);
             _typecode = InfoOf<decimal>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -325,7 +335,7 @@ namespace NumSharp.Backends
         %
 #else
         public UnmanagedStorage(Byte[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Byte);
@@ -337,8 +347,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayByte.Start;
             }
         }
+
         public UnmanagedStorage(Int16[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int16);
@@ -350,8 +361,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayInt16.Start;
             }
         }
+
         public UnmanagedStorage(UInt16[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt16);
@@ -363,8 +375,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayUInt16.Start;
             }
         }
+
         public UnmanagedStorage(Int32[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int32);
@@ -376,8 +389,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayInt32.Start;
             }
         }
+
         public UnmanagedStorage(UInt32[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt32);
@@ -389,8 +403,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayUInt32.Start;
             }
         }
+
         public UnmanagedStorage(Int64[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int64);
@@ -402,8 +417,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayInt64.Start;
             }
         }
+
         public UnmanagedStorage(UInt64[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt64);
@@ -415,8 +431,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayUInt64.Start;
             }
         }
+
         public UnmanagedStorage(Char[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Char);
@@ -428,8 +445,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayChar.Start;
             }
         }
+
         public UnmanagedStorage(Double[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Double);
@@ -441,8 +459,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arrayDouble.Start;
             }
         }
+
         public UnmanagedStorage(Single[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Single);
@@ -454,8 +473,9 @@ namespace NumSharp.Backends
                 _address = (byte*)_arraySingle.Start;
             }
         }
+
         public UnmanagedStorage(Decimal[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Decimal);
@@ -1730,6 +1750,7 @@ namespace NumSharp.Backends
 #endif
 
         #endregion
+
         //TODO! THESE:
         public object GetIndex(int index)
         {

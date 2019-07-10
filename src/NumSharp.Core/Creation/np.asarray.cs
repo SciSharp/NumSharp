@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
- 
+
 namespace NumSharp
 {
     public static partial class np
@@ -12,14 +12,14 @@ namespace NumSharp
         public static NDArray asarray(string data)
         {
             var nd = new NDArray(typeof(string), new int[0]);
-            nd.ReplaceData(new string[] { data });
+            nd.ReplaceData(new string[] {data});
             return nd;
         }
 
         public static NDArray asarray<T>(T data) where T : struct
         {
             var nd = new NDArray(typeof(T), new int[0]);
-            nd.ReplaceData(new T[] { data });
+            nd.ReplaceData(new T[] {data});
             return nd;
         }
 

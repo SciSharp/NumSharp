@@ -17,20 +17,21 @@ namespace NumSharp
         /// <param name="x1"> 1-D arrays representing the coordinates of a grid</param>
         /// /// <param name="x2"> 1-D arrays representing the coordinates of a grid</param>
         /// <returns></returns>
-        public static (NDArray, NDArray) meshgrid(NDArray x1, NDArray x2, Kwargs kwargs =null)
+        public static (NDArray, NDArray) meshgrid(NDArray x1, NDArray x2, Kwargs kwargs = null)
         {
             if (kwargs == null)
             {
                 kwargs = new Kwargs();
             }
+
             int ndim = 2;
-            var s0 = (1,1);
-            var output = new NDArray[] { x1.reshape(x1.size, 1), x2.reshape(1, x2.size) };
+            var s0 = (1, 1);
+            var output = new NDArray[] {x1.reshape(x1.size, 1), x2.reshape(1, x2.size)};
 
             if (kwargs.indexing == "xy" && ndim > 1)
             {
                 // Switch first and second axis
-                output = new NDArray[] { x1.reshape(1, x1.size), x2.reshape(x2.size, 1) };
+                output = new NDArray[] {x1.reshape(1, x1.size), x2.reshape(x2.size, 1)};
             }
 
             if (!kwargs.sparse)
@@ -40,13 +41,10 @@ namespace NumSharp
             }
 
             if (kwargs.copy)
-            {
-
-            }
+            { }
 
             return (output[0], output[1]);
         }
-
     }
 
     public class Kwargs
@@ -54,6 +52,7 @@ namespace NumSharp
         public string indexing { get; set; }
         public bool sparse { get; set; }
         public bool copy { get; set; }
+
         /// <summary>
         /// Kwargs constructor
         /// </summary>

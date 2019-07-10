@@ -8,24 +8,31 @@ using System.Security;
 using System.Threading;
 using NumSharp.Memory.Pooling.System.Runtime;
 
-namespace NumSharp.Memory.Pooling {
-    public abstract class InternalBufferManager {
+namespace NumSharp.Memory.Pooling
+{
+    public abstract class InternalBufferManager
+    {
         protected InternalBufferManager() { }
 
         public abstract byte[] TakeBuffer(int bufferSize);
         public abstract void ReturnBuffer(byte[] buffer);
         public abstract void Clear();
 
-        public static InternalBufferManager Create(long maxBufferPoolSize, int maxBufferSize) {
-            if (maxBufferPoolSize == 0) {
+        public static InternalBufferManager Create(long maxBufferPoolSize, int maxBufferSize)
+        {
+            if (maxBufferPoolSize == 0)
+            {
                 return GCBufferManager.Value;
-            } else {
+            }
+            else
+            {
                 //Fx.Assert(maxBufferPoolSize > 0 && maxBufferSize >= 0, "bad params, caller should verify");
                 return new PooledBufferManager(maxBufferPoolSize, maxBufferSize);
             }
         }
 
-        public class PooledBufferManager : InternalBufferManager {
+        public class PooledBufferManager : InternalBufferManager
+        {
             const int minBufferSize = 128;
             const int maxMissesBeforeTuning = 8;
             const int initialBufferCount = 1;
@@ -41,58 +48,69 @@ namespace NumSharp.Memory.Pooling {
             ConcurrentDictionary<int, string> buffersPooled = new ConcurrentDictionary<int, string>();
 #endif //DEBUG
 
-            [MethodImpl((MethodImplOptions) 512)]
-            public PooledBufferManager(long maxMemoryToPool, int maxBufferSize) {
+            [MethodImpl((MethodImplOptions)512)]
+            public PooledBufferManager(long maxMemoryToPool, int maxBufferSize)
+            {
                 this.tuningLock = new object();
                 this.memoryLimit = maxMemoryToPool;
                 this.remainingMemory = maxMemoryToPool;
                 List<BufferPool> bufferPoolList = new List<BufferPool>();
 
-                for (int bufferSize = minBufferSize;;) {
+                for (int bufferSize = minBufferSize;;)
+                {
                     long bufferCountLong = this.remainingMemory / bufferSize;
 
-                    int bufferCount = bufferCountLong > int.MaxValue ? int.MaxValue : (int) bufferCountLong;
+                    int bufferCount = bufferCountLong > int.MaxValue ? int.MaxValue : (int)bufferCountLong;
 
-                    if (bufferCount > initialBufferCount) {
+                    if (bufferCount > initialBufferCount)
+                    {
                         bufferCount = initialBufferCount;
                     }
 
                     bufferPoolList.Add(BufferPool.CreatePool(bufferSize, bufferCount));
 
-                    this.remainingMemory -= (long) bufferCount * bufferSize;
+                    this.remainingMemory -= (long)bufferCount * bufferSize;
 
-                    if (bufferSize >= maxBufferSize) {
+                    if (bufferSize >= maxBufferSize)
+                    {
                         break;
                     }
 
-                    long newBufferSizeLong = (long) bufferSize * 2;
+                    long newBufferSizeLong = (long)bufferSize * 2;
 
-                    if (newBufferSizeLong > (long) maxBufferSize) {
+                    if (newBufferSizeLong > (long)maxBufferSize)
+                    {
                         bufferSize = maxBufferSize;
-                    } else {
-                        bufferSize = (int) newBufferSizeLong;
+                    }
+                    else
+                    {
+                        bufferSize = (int)newBufferSizeLong;
                     }
                 }
 
                 this.bufferPools = bufferPoolList.ToArray();
                 this.bufferSizes = new int[bufferPools.Length];
-                for (int i = 0; i < bufferPools.Length; i++) {
+                for (int i = 0; i < bufferPools.Length; i++)
+                {
                     this.bufferSizes[i] = bufferPools[i].BufferSize;
                 }
             }
 
-            public override void Clear() {
+            public override void Clear()
+            {
 #if DEBUG
                 this.buffersPooled.Clear();
 #endif //DEBUG
 
-                for (int i = 0; i < this.bufferPools.Length; i++) {
+                for (int i = 0; i < this.bufferPools.Length; i++)
+                {
                     BufferPool bufferPool = this.bufferPools[i];
                     bufferPool.Clear();
                 }
             }
 
-            void ChangeQuota(ref BufferPool bufferPool, int delta) {
+            void ChangeQuota(ref BufferPool bufferPool, int delta)
+            {
                 //if (TraceCore.BufferPoolChangeQuotaIsEnabled(Fx.Trace))
                 //{
                 //    TraceCore.BufferPoolChangeQuota(Fx.Trace, bufferPool.BufferSize, delta);
@@ -101,9 +119,11 @@ namespace NumSharp.Memory.Pooling {
                 BufferPool oldBufferPool = bufferPool;
                 int newLimit = oldBufferPool.Limit + delta;
                 BufferPool newBufferPool = BufferPool.CreatePool(oldBufferPool.BufferSize, newLimit);
-                for (int i = 0; i < newLimit; i++) {
+                for (int i = 0; i < newLimit; i++)
+                {
                     byte[] buffer = oldBufferPool.Take();
-                    if (buffer == null) {
+                    if (buffer == null)
+                    {
                         break;
                     }
 
@@ -115,21 +135,26 @@ namespace NumSharp.Memory.Pooling {
                 bufferPool = newBufferPool;
             }
 
-            void DecreaseQuota(ref BufferPool bufferPool) {
+            void DecreaseQuota(ref BufferPool bufferPool)
+            {
                 ChangeQuota(ref bufferPool, -1);
             }
 
-            int FindMostExcessivePool() {
+            int FindMostExcessivePool()
+            {
                 long maxBytesInExcess = 0;
                 int index = -1;
 
-                for (int i = 0; i < this.bufferPools.Length; i++) {
+                for (int i = 0; i < this.bufferPools.Length; i++)
+                {
                     BufferPool bufferPool = this.bufferPools[i];
 
-                    if (bufferPool.Peak < bufferPool.Limit) {
-                        long bytesInExcess = (bufferPool.Limit - bufferPool.Peak) * (long) bufferPool.BufferSize;
+                    if (bufferPool.Peak < bufferPool.Limit)
+                    {
+                        long bytesInExcess = (bufferPool.Limit - bufferPool.Peak) * (long)bufferPool.BufferSize;
 
-                        if (bytesInExcess > maxBytesInExcess) {
+                        if (bytesInExcess > maxBytesInExcess)
+                        {
                             index = i;
                             maxBytesInExcess = bytesInExcess;
                         }
@@ -139,17 +164,21 @@ namespace NumSharp.Memory.Pooling {
                 return index;
             }
 
-            int FindMostStarvedPool() {
+            int FindMostStarvedPool()
+            {
                 long maxBytesMissed = 0;
                 int index = -1;
 
-                for (int i = 0; i < this.bufferPools.Length; i++) {
+                for (int i = 0; i < this.bufferPools.Length; i++)
+                {
                     BufferPool bufferPool = this.bufferPools[i];
 
-                    if (bufferPool.Peak == bufferPool.Limit) {
-                        long bytesMissed = bufferPool.Misses * (long) bufferPool.BufferSize;
+                    if (bufferPool.Peak == bufferPool.Limit)
+                    {
+                        long bytesMissed = bufferPool.Misses * (long)bufferPool.BufferSize;
 
-                        if (bytesMissed > maxBytesMissed) {
+                        if (bytesMissed > maxBytesMissed)
+                        {
                             index = i;
                             maxBytesMissed = bytesMissed;
                         }
@@ -159,10 +188,13 @@ namespace NumSharp.Memory.Pooling {
                 return index;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            BufferPool FindPool(int desiredBufferSize) {
-                for (int i = 0; i < this.bufferSizes.Length; i++) {
-                    if (desiredBufferSize <= this.bufferSizes[i]) {
+            [MethodImpl((MethodImplOptions)768)]
+            BufferPool FindPool(int desiredBufferSize)
+            {
+                for (int i = 0; i < this.bufferSizes.Length; i++)
+                {
+                    if (desiredBufferSize <= this.bufferSizes[i])
+                    {
                         return this.bufferPools[i];
                     }
                 }
@@ -170,19 +202,23 @@ namespace NumSharp.Memory.Pooling {
                 return null;
             }
 
-            void IncreaseQuota(ref BufferPool bufferPool) {
+            void IncreaseQuota(ref BufferPool bufferPool)
+            {
                 ChangeQuota(ref bufferPool, 1);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public override void ReturnBuffer(byte[] buffer) {
+            [MethodImpl((MethodImplOptions)768)]
+            public override void ReturnBuffer(byte[] buffer)
+            {
                 Fx.Assert(buffer != null, "caller must verify");
 
 #if DEBUG
                 int hash = buffer.GetHashCode();
-                if (!this.buffersPooled.TryAdd(hash, CaptureStackTrace())) {
+                if (!this.buffersPooled.TryAdd(hash, CaptureStackTrace()))
+                {
                     string originalStack;
-                    if (!this.buffersPooled.TryGetValue(hash, out originalStack)) {
+                    if (!this.buffersPooled.TryGetValue(hash, out originalStack))
+                    {
                         originalStack = "NULL";
                     }
 
@@ -197,32 +233,42 @@ namespace NumSharp.Memory.Pooling {
 #endif //DEBUG
 
                 BufferPool bufferPool = FindPool(buffer.Length);
-                if (bufferPool != null) {
-                    if (buffer.Length != bufferPool.BufferSize) {
+                if (bufferPool != null)
+                {
+                    if (buffer.Length != bufferPool.BufferSize)
+                    {
                         throw new ArgumentException("BufferIsNotRightSizeForBufferManager", nameof(buffer));
                     }
 
-                    if (bufferPool.Return(buffer)) {
+                    if (bufferPool.Return(buffer))
+                    {
                         bufferPool.IncrementCount();
                     }
                 }
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public override byte[] TakeBuffer(int bufferSize) {
+            [MethodImpl((MethodImplOptions)768)]
+            public override byte[] TakeBuffer(int bufferSize)
+            {
                 Fx.Assert(bufferSize >= 0, "caller must ensure a non-negative argument");
 
                 BufferPool bufferPool = FindPool(bufferSize);
                 byte[] returnValue;
-                if (bufferPool != null) {
+                if (bufferPool != null)
+                {
                     byte[] buffer = bufferPool.Take();
-                    if (buffer != null) {
+                    if (buffer != null)
+                    {
                         bufferPool.DecrementCount();
                         returnValue = buffer;
-                    } else {
-                        if (bufferPool.Peak == bufferPool.Limit) {
+                    }
+                    else
+                    {
+                        if (bufferPool.Peak == bufferPool.Limit)
+                        {
                             bufferPool.Misses++;
-                            if (++totalMisses >= maxMissesBeforeTuning) {
+                            if (++totalMisses >= maxMissesBeforeTuning)
+                            {
                                 TuneQuotas();
                             }
                         }
@@ -234,7 +280,9 @@ namespace NumSharp.Memory.Pooling {
 
                         returnValue = Fx.AllocateByteArray(bufferPool.BufferSize);
                     }
-                } else {
+                }
+                else
+                {
                     //if (TraceCore.BufferPoolAllocationIsEnabled(Fx.Trace))
                     //{
                     //    TraceCore.BufferPoolAllocation(Fx.Trace, bufferSize);
@@ -253,54 +301,67 @@ namespace NumSharp.Memory.Pooling {
 
 #if DEBUG
             [SecuritySafeCritical]
-            private static string CaptureStackTrace() {
+            private static string CaptureStackTrace()
+            {
                 return new StackTrace(true).ToString();
             }
 #endif //DEBUG
 
-            void TuneQuotas() {
-                if (this.areQuotasBeingTuned) {
+            void TuneQuotas()
+            {
+                if (this.areQuotasBeingTuned)
+                {
                     return;
                 }
 
                 bool lockHeld = false;
-                try {
+                try
+                {
                     Monitor.TryEnter(this.tuningLock, ref lockHeld);
 
                     // Don't bother if another thread already has the lock
-                    if (!lockHeld || this.areQuotasBeingTuned) {
+                    if (!lockHeld || this.areQuotasBeingTuned)
+                    {
                         return;
                     }
 
                     this.areQuotasBeingTuned = true;
-                } finally {
-                    if (lockHeld) {
+                }
+                finally
+                {
+                    if (lockHeld)
+                    {
                         Monitor.Exit(this.tuningLock);
                     }
                 }
 
                 // find the "poorest" pool
                 int starvedIndex = FindMostStarvedPool();
-                if (starvedIndex >= 0) {
+                if (starvedIndex >= 0)
+                {
                     BufferPool starvedBufferPool = this.bufferPools[starvedIndex];
 
-                    if (this.remainingMemory < starvedBufferPool.BufferSize) {
+                    if (this.remainingMemory < starvedBufferPool.BufferSize)
+                    {
                         // find the "richest" pool
                         int excessiveIndex = FindMostExcessivePool();
-                        if (excessiveIndex >= 0) {
+                        if (excessiveIndex >= 0)
+                        {
                             // steal from the richest
                             DecreaseQuota(ref this.bufferPools[excessiveIndex]);
                         }
                     }
 
-                    if (this.remainingMemory >= starvedBufferPool.BufferSize) {
+                    if (this.remainingMemory >= starvedBufferPool.BufferSize)
+                    {
                         // give to the poorest
                         IncreaseQuota(ref this.bufferPools[starvedIndex]);
                     }
                 }
 
                 // reset statistics
-                for (int i = 0; i < this.bufferPools.Length; i++) {
+                for (int i = 0; i < this.bufferPools.Length; i++)
+                {
                     BufferPool bufferPool = this.bufferPools[i];
                     bufferPool.Misses = 0;
                 }
@@ -309,55 +370,67 @@ namespace NumSharp.Memory.Pooling {
                 this.areQuotasBeingTuned = false;
             }
 
-            abstract class BufferPool {
+            abstract class BufferPool
+            {
                 readonly int bufferSize;
                 int count;
                 readonly int limit;
                 int misses;
                 int peak;
 
-                public BufferPool(int bufferSize, int limit) {
+                public BufferPool(int bufferSize, int limit)
+                {
                     this.bufferSize = bufferSize;
                     this.limit = limit;
                 }
 
-                public int BufferSize {
-                    [MethodImpl((MethodImplOptions) 768)] get { return this.bufferSize; }
+                public int BufferSize
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return this.bufferSize; }
                 }
 
-                public int Limit {
-                    [MethodImpl((MethodImplOptions) 768)] get { return this.limit; }
+                public int Limit
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return this.limit; }
                 }
 
-                public int Misses {
-                    [MethodImpl((MethodImplOptions) 768)] get { return this.misses; }
-                    [MethodImpl((MethodImplOptions) 768)] set { this.misses = value; }
+                public int Misses
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return this.misses; }
+                    [MethodImpl((MethodImplOptions)768)] set { this.misses = value; }
                 }
 
-                public int Peak {
-                    [MethodImpl((MethodImplOptions) 768)] get { return this.peak; }
+                public int Peak
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return this.peak; }
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public void Clear() {
+                [MethodImpl((MethodImplOptions)768)]
+                public void Clear()
+                {
                     this.OnClear();
                     this.count = 0;
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public void DecrementCount() {
+                [MethodImpl((MethodImplOptions)768)]
+                public void DecrementCount()
+                {
                     int newValue = this.count - 1;
-                    if (newValue >= 0) {
+                    if (newValue >= 0)
+                    {
                         this.count = newValue;
                     }
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public void IncrementCount() {
+                [MethodImpl((MethodImplOptions)768)]
+                public void IncrementCount()
+                {
                     int newValue = this.count + 1;
-                    if (newValue <= this.limit) {
+                    if (newValue <= this.limit)
+                    {
                         this.count = newValue;
-                        if (newValue > this.peak) {
+                        if (newValue > this.peak)
+                        {
                             this.peak = newValue;
                         }
                     }
@@ -367,61 +440,78 @@ namespace NumSharp.Memory.Pooling {
                 internal abstract bool Return(byte[] buffer);
                 internal abstract void OnClear();
 
-                internal static BufferPool CreatePool(int bufferSize, int limit) {
+                internal static BufferPool CreatePool(int bufferSize, int limit)
+                {
                     // To avoid many buffer drops during training of large objects which
                     // get allocated on the LOH, we use the LargeBufferPool and for 
                     // bufferSize < 85000, the SynchronizedPool. However if bufferSize < 85000
                     // and (bufferSize + array-overhead) > 85000, this would still use 
                     // the SynchronizedPool even though it is allocated on the LOH.
-                    if (bufferSize < 85000) {
+                    if (bufferSize < 85000)
+                    {
                         return new SynchronizedBufferPool(bufferSize, limit);
-                    } else {
+                    }
+                    else
+                    {
                         return new LargeBufferPool(bufferSize, limit);
                     }
                 }
 
-                class SynchronizedBufferPool : BufferPool {
+                class SynchronizedBufferPool : BufferPool
+                {
                     readonly SynchronizedPool<byte[]> innerPool;
 
                     internal SynchronizedBufferPool(int bufferSize, int limit)
-                        : base(bufferSize, limit) {
+                        : base(bufferSize, limit)
+                    {
                         this.innerPool = new SynchronizedPool<byte[]>(limit);
                     }
 
-                    internal override void OnClear() {
+                    internal override void OnClear()
+                    {
                         this.innerPool.Clear();
                     }
 
-                    internal override byte[] Take() {
+                    internal override byte[] Take()
+                    {
                         return this.innerPool.Take();
                     }
 
-                    internal override bool Return(byte[] buffer) {
+                    internal override bool Return(byte[] buffer)
+                    {
                         return this.innerPool.Return(buffer);
                     }
                 }
 
-                class LargeBufferPool : BufferPool {
+                class LargeBufferPool : BufferPool
+                {
                     readonly Stack<byte[]> items;
 
                     internal LargeBufferPool(int bufferSize, int limit)
-                        : base(bufferSize, limit) {
+                        : base(bufferSize, limit)
+                    {
                         this.items = new Stack<byte[]>(limit);
                     }
 
-                    object ThisLock {
-                        [MethodImpl((MethodImplOptions) 768)] get => this.items;
+                    object ThisLock
+                    {
+                        [MethodImpl((MethodImplOptions)768)] get => this.items;
                     }
 
-                    internal override void OnClear() {
-                        lock (ThisLock) {
+                    internal override void OnClear()
+                    {
+                        lock (ThisLock)
+                        {
                             this.items.Clear();
                         }
                     }
 
-                    internal override byte[] Take() {
-                        lock (ThisLock) {
-                            if (this.items.Count > 0) {
+                    internal override byte[] Take()
+                    {
+                        lock (ThisLock)
+                        {
+                            if (this.items.Count > 0)
+                            {
                                 return this.items.Pop();
                             }
                         }
@@ -429,9 +519,12 @@ namespace NumSharp.Memory.Pooling {
                         return null;
                     }
 
-                    internal override bool Return(byte[] buffer) {
-                        lock (ThisLock) {
-                            if (this.items.Count < this.Limit) {
+                    internal override bool Return(byte[] buffer)
+                    {
+                        lock (ThisLock)
+                        {
+                            if (this.items.Count < this.Limit)
+                            {
                                 this.items.Push(buffer);
                                 return true;
                             }
@@ -443,32 +536,37 @@ namespace NumSharp.Memory.Pooling {
             }
         }
 
-        class GCBufferManager : InternalBufferManager {
+        class GCBufferManager : InternalBufferManager
+        {
             static readonly GCBufferManager value = new GCBufferManager();
 
             GCBufferManager() { }
 
-            public static GCBufferManager Value {
-                [MethodImpl((MethodImplOptions) 768)] get => value;
+            public static GCBufferManager Value
+            {
+                [MethodImpl((MethodImplOptions)768)] get => value;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
+            [MethodImpl((MethodImplOptions)768)]
             public override void Clear() { }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public override byte[] TakeBuffer(int bufferSize) {
+            [MethodImpl((MethodImplOptions)768)]
+            public override byte[] TakeBuffer(int bufferSize)
+            {
                 return Fx.AllocateByteArray(bufferSize);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public override void ReturnBuffer(byte[] buffer) {
+            [MethodImpl((MethodImplOptions)768)]
+            public override void ReturnBuffer(byte[] buffer)
+            {
                 // do nothing, GC will reclaim this buffer
             }
         }
     }
 
 
-    namespace System.Runtime {
+    namespace System.Runtime
+    {
         // A simple synchronized pool would simply lock a stack and push/pop on return/take.
         //
         // This implementation tries to reduce locking by exploiting the case where an item
@@ -506,7 +604,8 @@ namespace NumSharp.Memory.Pooling {
         // do not need to be perfect.
         // 
         [Fx.Tag.SynchronizationObject(Blocking = false)]
-        class SynchronizedPool<T> where T : class {
+        class SynchronizedPool<T> where T : class
+        {
             const int maxPendingEntries = 128;
             const int maxPromotionFailures = 64;
             const int maxReturnsBeforePromotion = 64;
@@ -517,10 +616,12 @@ namespace NumSharp.Memory.Pooling {
             PendingEntry[] pending;
             int promotionFailures;
 
-            public SynchronizedPool(int maxCount) {
+            public SynchronizedPool(int maxCount)
+            {
                 int threadCount = maxCount;
                 int maxThreadCount = maxThreadItemsPerProcessor + SynchronizedPoolHelper.ProcessorCount;
-                if (threadCount > maxThreadCount) {
+                if (threadCount > maxThreadCount)
+                {
                     threadCount = maxThreadCount;
                 }
 
@@ -530,47 +631,61 @@ namespace NumSharp.Memory.Pooling {
                 this.globalPool = new GlobalPool(maxCount);
             }
 
-            object ThisLock {
+            object ThisLock
+            {
                 get { return this; }
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public void Clear() {
+            [MethodImpl((MethodImplOptions)768)]
+            public void Clear()
+            {
                 Entry[] entries = this.entries;
 
-                for (int i = 0; i < entries.Length; i++) {
+                for (int i = 0; i < entries.Length; i++)
+                {
                     entries[i].value = null;
                 }
 
                 globalPool.Clear();
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            void HandlePromotionFailure(int thisThreadID) {
+            [MethodImpl((MethodImplOptions)768)]
+            void HandlePromotionFailure(int thisThreadID)
+            {
                 int newPromotionFailures = this.promotionFailures + 1;
 
-                if (newPromotionFailures >= maxPromotionFailures) {
-                    lock (ThisLock) {
+                if (newPromotionFailures >= maxPromotionFailures)
+                {
+                    lock (ThisLock)
+                    {
                         this.entries = new Entry[this.entries.Length];
 
                         globalPool.MaxCount = maxCount;
                     }
 
                     PromoteThread(thisThreadID);
-                } else {
+                }
+                else
+                {
                     this.promotionFailures = newPromotionFailures;
                 }
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            bool PromoteThread(int thisThreadID) {
-                lock (ThisLock) {
-                    for (int i = 0; i < this.entries.Length; i++) {
+            [MethodImpl((MethodImplOptions)768)]
+            bool PromoteThread(int thisThreadID)
+            {
+                lock (ThisLock)
+                {
+                    for (int i = 0; i < this.entries.Length; i++)
+                    {
                         int threadID = this.entries[i].threadID;
 
-                        if (threadID == thisThreadID) {
+                        if (threadID == thisThreadID)
+                        {
                             return true;
-                        } else if (threadID == 0) {
+                        }
+                        else if (threadID == 0)
+                        {
                             globalPool.DecrementMaxCount();
                             this.entries[i].threadID = thisThreadID;
                             return true;
@@ -581,45 +696,61 @@ namespace NumSharp.Memory.Pooling {
                 return false;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            void RecordReturnToGlobalPool(int thisThreadID) {
+            [MethodImpl((MethodImplOptions)768)]
+            void RecordReturnToGlobalPool(int thisThreadID)
+            {
                 PendingEntry[] localPending = this.pending;
 
-                for (int i = 0; i < localPending.Length; i++) {
+                for (int i = 0; i < localPending.Length; i++)
+                {
                     int threadID = localPending[i].threadID;
 
-                    if (threadID == thisThreadID) {
+                    if (threadID == thisThreadID)
+                    {
                         int newReturnCount = localPending[i].returnCount + 1;
 
-                        if (newReturnCount >= maxReturnsBeforePromotion) {
+                        if (newReturnCount >= maxReturnsBeforePromotion)
+                        {
                             localPending[i].returnCount = 0;
 
-                            if (!PromoteThread(thisThreadID)) {
+                            if (!PromoteThread(thisThreadID))
+                            {
                                 HandlePromotionFailure(thisThreadID);
                             }
-                        } else {
+                        }
+                        else
+                        {
                             localPending[i].returnCount = newReturnCount;
                         }
 
                         break;
-                    } else if (threadID == 0) {
+                    }
+                    else if (threadID == 0)
+                    {
                         break;
                     }
                 }
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            void RecordTakeFromGlobalPool(int thisThreadID) {
+            [MethodImpl((MethodImplOptions)768)]
+            void RecordTakeFromGlobalPool(int thisThreadID)
+            {
                 PendingEntry[] localPending = this.pending;
 
-                for (int i = 0; i < localPending.Length; i++) {
+                for (int i = 0; i < localPending.Length; i++)
+                {
                     int threadID = localPending[i].threadID;
 
-                    if (threadID == thisThreadID) {
+                    if (threadID == thisThreadID)
+                    {
                         return;
-                    } else if (threadID == 0) {
-                        lock (localPending) {
-                            if (localPending[i].threadID == 0) {
+                    }
+                    else if (threadID == 0)
+                    {
+                        lock (localPending)
+                        {
+                            if (localPending[i].threadID == 0)
+                            {
                                 localPending[i].threadID = thisThreadID;
                                 return;
                             }
@@ -627,45 +758,59 @@ namespace NumSharp.Memory.Pooling {
                     }
                 }
 
-                if (localPending.Length >= maxPendingEntries) {
+                if (localPending.Length >= maxPendingEntries)
+                {
                     this.pending = new PendingEntry[localPending.Length];
-                } else {
+                }
+                else
+                {
                     PendingEntry[] newPending = new PendingEntry[localPending.Length * 2];
                     Array.Copy(localPending, newPending, localPending.Length);
                     this.pending = newPending;
                 }
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public bool Return(T value) {
+            [MethodImpl((MethodImplOptions)768)]
+            public bool Return(T value)
+            {
                 int thisThreadID = Thread.CurrentThread.ManagedThreadId;
 
-                if (thisThreadID == 0) {
+                if (thisThreadID == 0)
+                {
                     return false;
                 }
 
-                if (ReturnToPerThreadPool(thisThreadID, value)) {
+                if (ReturnToPerThreadPool(thisThreadID, value))
+                {
                     return true;
                 }
 
                 return ReturnToGlobalPool(thisThreadID, value);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            bool ReturnToPerThreadPool(int thisThreadID, T value) {
+            [MethodImpl((MethodImplOptions)768)]
+            bool ReturnToPerThreadPool(int thisThreadID, T value)
+            {
                 Entry[] entries = this.entries;
 
-                for (int i = 0; i < entries.Length; i++) {
+                for (int i = 0; i < entries.Length; i++)
+                {
                     int threadID = entries[i].threadID;
 
-                    if (threadID == thisThreadID) {
-                        if (entries[i].value == null) {
+                    if (threadID == thisThreadID)
+                    {
+                        if (entries[i].value == null)
+                        {
                             entries[i].value = value;
                             return true;
-                        } else {
+                        }
+                        else
+                        {
                             return false;
                         }
-                    } else if (threadID == 0) {
+                    }
+                    else if (threadID == 0)
+                    {
                         break;
                     }
                 }
@@ -673,47 +818,59 @@ namespace NumSharp.Memory.Pooling {
                 return false;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            bool ReturnToGlobalPool(int thisThreadID, T value) {
+            [MethodImpl((MethodImplOptions)768)]
+            bool ReturnToGlobalPool(int thisThreadID, T value)
+            {
                 RecordReturnToGlobalPool(thisThreadID);
 
                 return globalPool.Return(value);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            public T Take() {
+            [MethodImpl((MethodImplOptions)768)]
+            public T Take()
+            {
                 int thisThreadID = Thread.CurrentThread.ManagedThreadId;
 
-                if (thisThreadID == 0) {
+                if (thisThreadID == 0)
+                {
                     return null;
                 }
 
                 T value = TakeFromPerThreadPool(thisThreadID);
 
-                if (value != null) {
+                if (value != null)
+                {
                     return value;
                 }
 
                 return TakeFromGlobalPool(thisThreadID);
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            T TakeFromPerThreadPool(int thisThreadID) {
+            [MethodImpl((MethodImplOptions)768)]
+            T TakeFromPerThreadPool(int thisThreadID)
+            {
                 Entry[] entries = this.entries;
 
-                for (int i = 0; i < entries.Length; i++) {
+                for (int i = 0; i < entries.Length; i++)
+                {
                     int threadID = entries[i].threadID;
 
-                    if (threadID == thisThreadID) {
+                    if (threadID == thisThreadID)
+                    {
                         T value = entries[i].value;
 
-                        if (value != null) {
+                        if (value != null)
+                        {
                             entries[i].value = null;
                             return value;
-                        } else {
+                        }
+                        else
+                        {
                             return null;
                         }
-                    } else if (threadID == 0) {
+                    }
+                    else if (threadID == 0)
+                    {
                         break;
                     }
                 }
@@ -721,50 +878,61 @@ namespace NumSharp.Memory.Pooling {
                 return null;
             }
 
-            [MethodImpl((MethodImplOptions) 768)]
-            T TakeFromGlobalPool(int thisThreadID) {
+            [MethodImpl((MethodImplOptions)768)]
+            T TakeFromGlobalPool(int thisThreadID)
+            {
                 RecordTakeFromGlobalPool(thisThreadID);
 
                 return globalPool.Take();
             }
 
-            struct Entry {
+            struct Entry
+            {
                 public int threadID;
                 public T value;
             }
 
-            struct PendingEntry {
+            struct PendingEntry
+            {
                 public int returnCount;
                 public int threadID;
             }
 
-            static class SynchronizedPoolHelper {
+            static class SynchronizedPoolHelper
+            {
                 public static readonly int ProcessorCount = GetProcessorCount();
 
                 [Fx.Tag.SecurityNote(Critical = "Asserts in order to get the processor count from the environment", Safe = "This data isn't actually protected so it's ok to leak")]
                 [SecuritySafeCritical]
-                static int GetProcessorCount() {
+                static int GetProcessorCount()
+                {
                     return Environment.ProcessorCount;
                 }
             }
 
             [Fx.Tag.SynchronizationObject(Blocking = false)]
-            class GlobalPool {
+            class GlobalPool
+            {
                 readonly Stack<T> items;
 
                 int maxCount;
 
-                public GlobalPool(int maxCount) {
+                public GlobalPool(int maxCount)
+                {
                     this.items = new Stack<T>();
                     this.maxCount = maxCount;
                 }
 
-                public int MaxCount {
-                    [MethodImpl((MethodImplOptions) 768)] get { return maxCount; }
-                    [MethodImpl((MethodImplOptions) 768)]
-                    set {
-                        lock (ThisLock) {
-                            while (items.Count > value) {
+                public int MaxCount
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return maxCount; }
+                    [MethodImpl((MethodImplOptions)768)]
+                    set
+                    {
+                        lock (ThisLock)
+                        {
+                            while (items.Count > value)
+                            {
                                 items.Pop();
                             }
 
@@ -773,14 +941,18 @@ namespace NumSharp.Memory.Pooling {
                     }
                 }
 
-                object ThisLock {
-                    [MethodImpl((MethodImplOptions) 768)] get { return this; }
+                object ThisLock
+                {
+                    [MethodImpl((MethodImplOptions)768)] get { return this; }
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public void DecrementMaxCount() {
-                    lock (ThisLock) {
-                        if (items.Count == maxCount) {
+                [MethodImpl((MethodImplOptions)768)]
+                public void DecrementMaxCount()
+                {
+                    lock (ThisLock)
+                    {
+                        if (items.Count == maxCount)
+                        {
                             items.Pop();
                         }
 
@@ -788,11 +960,15 @@ namespace NumSharp.Memory.Pooling {
                     }
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public T Take() {
-                    if (this.items.Count > 0) {
-                        lock (ThisLock) {
-                            if (this.items.Count > 0) {
+                [MethodImpl((MethodImplOptions)768)]
+                public T Take()
+                {
+                    if (this.items.Count > 0)
+                    {
+                        lock (ThisLock)
+                        {
+                            if (this.items.Count > 0)
+                            {
                                 return this.items.Pop();
                             }
                         }
@@ -801,11 +977,15 @@ namespace NumSharp.Memory.Pooling {
                     return null;
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public bool Return(T value) {
-                    if (this.items.Count < this.MaxCount) {
-                        lock (ThisLock) {
-                            if (this.items.Count < this.MaxCount) {
+                [MethodImpl((MethodImplOptions)768)]
+                public bool Return(T value)
+                {
+                    if (this.items.Count < this.MaxCount)
+                    {
+                        lock (ThisLock)
+                        {
+                            if (this.items.Count < this.MaxCount)
+                            {
                                 this.items.Push(value);
                                 return true;
                             }
@@ -815,9 +995,11 @@ namespace NumSharp.Memory.Pooling {
                     return false;
                 }
 
-                [MethodImpl((MethodImplOptions) 768)]
-                public void Clear() {
-                    lock (ThisLock) {
+                [MethodImpl((MethodImplOptions)768)]
+                public void Clear()
+                {
+                    lock (ThisLock)
+                    {
                         this.items.Clear();
                     }
                 }

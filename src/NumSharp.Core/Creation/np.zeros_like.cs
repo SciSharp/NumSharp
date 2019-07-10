@@ -27,9 +27,9 @@ namespace NumSharp
         /// <seealso cref="full_like"/>: Return a new array with shape of input filled with value.
         /// <seealso cref="zeros"/>: Return a new array setting values to zero.
         ///  <returns>Array of zeros with the same shape and type as `nd`.</returns>
-        public static NDArray zeros_like(NDArray nd, Type dtype=null, string order = "K")
+        public static NDArray zeros_like(NDArray nd, Type dtype = null, string order = "K")
         {
-            return np.zeros(new Shape(nd.shape), dtype!=null ? dtype : nd.dtype);
+            return np.zeros(new Shape(nd.shape), dtype != null ? dtype : nd.dtype);
         }
     }
 }

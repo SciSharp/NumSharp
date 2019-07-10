@@ -23,7 +23,7 @@ namespace NumSharp
             //var nd = new NDArray(dtype);
             //var data = Storage.GetData<T>().Distinct().ToArray();
             //nd.Storage.ReplaceData(data);
-            
+
             //nd.Storage.Reshape(data.Length);
 
             //return nd;

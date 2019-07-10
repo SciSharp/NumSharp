@@ -61,6 +61,7 @@ namespace NumSharp
 
             return indexOfNegOne;
         }
+
         protected static int[] CalculateNegativeShape(int negativeIndex, IList<int> currentShape, params int[] shapeParams)
         {
             var currentShapeCount = currentShape.Count;
@@ -108,6 +109,5 @@ namespace NumSharp
 
             return newShape.ToArray();
         }
-
     }
 }

@@ -27,13 +27,13 @@ using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
+// ReSharper disable once CheckNamespace
 namespace NumSharp.Generic
 {
     public class NDArray<T> : NDArray where T : unmanaged
     {
         public NDArray() : base(typeof(T))
-        {
-        }
+        { }
 
         public NDArray(UnmanagedStorage storage) : base(storage)
         {
@@ -81,6 +81,7 @@ namespace NumSharp.Generic
                 Storage.ReplaceData(value);
             }
         }
+
         /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
@@ -146,7 +147,5 @@ namespace NumSharp.Generic
         {
             return new NDArray(tArray).MakeGeneric<T>(); //TODO! unit test it
         }
-
     }
-
 }

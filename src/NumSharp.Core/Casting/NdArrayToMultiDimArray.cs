@@ -52,6 +52,5 @@ namespace NumSharp
 
             //return dotNetArray;
         }
-        
     }
 }

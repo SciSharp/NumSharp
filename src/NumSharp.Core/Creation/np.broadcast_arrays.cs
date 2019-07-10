@@ -1,5 +1,4 @@
-﻿using NumSharp.Casting;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -13,19 +12,19 @@ namespace NumSharp
 
             if (nd1.shape == shape && nd2.shape == shape)
             {
-                return new NDArray[] { nd1, nd2 };
+                return new NDArray[] {nd1, nd2};
             }
             else if (nd1.dtype == typeof(int))
             {
-                return new NDArray[] { _broadcast_to<int>(nd1, shape, subok, false), _broadcast_to<int>(nd2, shape, subok, false) };
+                return new NDArray[] {_broadcast_to<int>(nd1, shape, subok, false), _broadcast_to<int>(nd2, shape, subok, false)};
             }
             else if (nd1.dtype == typeof(float))
             {
-                return new NDArray[] { _broadcast_to<float>(nd1, shape, subok, false), _broadcast_to<float>(nd2, shape, subok, false) };
+                return new NDArray[] {_broadcast_to<float>(nd1, shape, subok, false), _broadcast_to<float>(nd2, shape, subok, false)};
             }
             else if (nd1.dtype == typeof(double))
             {
-                return new NDArray[] { _broadcast_to<double>(nd1, shape, subok, false), _broadcast_to<double>(nd2, shape, subok, false) };
+                return new NDArray[] {_broadcast_to<double>(nd1, shape, subok, false), _broadcast_to<double>(nd2, shape, subok, false)};
             }
             else
             {
@@ -35,12 +34,14 @@ namespace NumSharp
 
         private static Shape _broadcast_shape(NDArray nd1, NDArray nd2)
         {
-            Broadcast b = np.broadcast(nd1, nd2);
+            //TODO!
+            var b = np.broadcast(nd1, nd2);
             return b.shape;
         }
 
         private static NDArray _broadcast_to<T>(NDArray nd, Shape shape, bool subok, bool rdonly)
         {
+            //TODO!
             return null;
             //T[,] table = new T[shape.Dimensions[0], shape.Dimensions[1]];
             //if (nd.shape[0] == 1) 

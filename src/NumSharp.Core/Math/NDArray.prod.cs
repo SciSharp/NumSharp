@@ -18,27 +18,27 @@ namespace NumSharp
             NDArray result = null;
             if (nd.size == 0) return 1;
 
-            if(axis == -1)
+            if (axis == -1)
             {
                 switch (nd.dtype.Name)
                 {
                     case "Int32":
-                        {
-                            int prod = 1;
-                            var data = nd.Data<int>();
-                            for (int i = 0; i < nd.size; i++)
-                                prod *= data[i];
-                            result = prod;
-                        }
+                    {
+                        int prod = 1;
+                        var data = nd.Data<int>();
+                        for (int i = 0; i < nd.size; i++)
+                            prod *= data[i];
+                        result = prod;
+                    }
                         break;
                     case "Int64":
-                        {
-                            long prod = 1;
-                            var data = nd.Data<long>();
-                            for (int i = 0; i < nd.size; i++)
-                                prod *= data[i];
-                            result = prod;
-                        }
+                    {
+                        long prod = 1;
+                        var data = nd.Data<long>();
+                        for (int i = 0; i < nd.size; i++)
+                            prod *= data[i];
+                        result = prod;
+                    }
                         break;
                 }
             }

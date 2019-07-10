@@ -12,5 +12,4 @@ namespace NumSharp
         public NDArray transpose()
             => np.transpose(this);
     }
-
 }

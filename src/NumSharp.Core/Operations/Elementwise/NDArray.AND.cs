@@ -8,7 +8,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        
         public static NDArray<bool> operator &(NDArray lhs, NDArray rhs)
         {
             return null;
@@ -26,7 +25,6 @@ namespace NumSharp
 
         public static NDArray<byte> operator &(NDArray lhs, byte rhs)
         {
-
             return null;
             //var result = new NDArray(typeof(byte), lhs.shape);
             //byte[] resultBytes = result.Storage.GetData<byte>();
@@ -38,6 +36,5 @@ namespace NumSharp
 
             //return result.MakeGeneric<byte>();
         }
-
     }
 }

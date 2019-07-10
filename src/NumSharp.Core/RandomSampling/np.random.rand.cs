@@ -14,7 +14,8 @@ namespace NumSharp
         ///     Random values in a given shape.
         ///     Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).
         /// </summary>
-        public NDArray rand(params int[] size) {
+        public NDArray rand(params int[] size)
+        {
             return rand(new Shape(size));
         }
 
@@ -22,10 +23,12 @@ namespace NumSharp
         ///     Random values in a given shape.
         ///     Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).
         /// </summary>
-        public NDArray rand(Shape shape) {
+        public NDArray rand(Shape shape)
+        {
             NDArray ndArray = new NDArray(typeof(double), shape);
             ArraySlice<double> numArray = ndArray.Data<double>();
-            for (int index = 0; index < ndArray.size; ++index) {
+            for (int index = 0; index < ndArray.size; ++index)
+            {
                 numArray[index] = randomizer.NextDouble();
             }
 
@@ -41,7 +44,7 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray random_sample(params int[] size)
         {
-            return rand(size); 
+            return rand(size);
         }
 
         /// <summary>

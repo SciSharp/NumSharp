@@ -11,9 +11,9 @@ namespace NumSharp
         {
             var np1 = nps[0];
 
-            var npn = new NDArray[nps.Length-1];
-            for (int idx = 1;idx < nps.Length;idx++)
-                npn[idx-1] = nps[idx];
+            var npn = new NDArray[nps.Length - 1];
+            for (int idx = 1; idx < nps.Length; idx++)
+                npn[idx - 1] = nps[idx];
 
             return np1.hstack<T>(npn);
         }

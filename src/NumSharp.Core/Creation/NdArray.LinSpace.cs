@@ -9,13 +9,13 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public NDArray linspace(double start, double stop,int num, bool entdpoint = true)
+        public NDArray linspace(double start, double stop, int num, bool entdpoint = true)
         {
-            double steps = (stop - start)/((entdpoint) ? (double) num - 1.0 : (double) num);
+            double steps = (stop - start) / ((entdpoint) ? (double)num - 1.0 : (double)num);
 
             double[] doubleArray = new double[num];
 
-            for (int idx = 0; idx < doubleArray.Length;idx++)
+            for (int idx = 0; idx < doubleArray.Length; idx++)
                 doubleArray[idx] = start + idx * steps;
 
             Storage.ReplaceData(doubleArray);

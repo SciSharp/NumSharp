@@ -11,6 +11,7 @@ namespace NumSharp
         {
             return (np > (System.Object)obj);
         }
+
         public static NumSharp.Generic.NDArray<bool> operator >(NDArray np, object obj)
         {
             return null;
