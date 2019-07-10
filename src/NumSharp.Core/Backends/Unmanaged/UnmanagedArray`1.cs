@@ -122,26 +122,18 @@ namespace NumSharp.Backends.Unmanaged
             return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / SizeOf<T>.Size);
         }
 
+        /// <summary>
+        ///     
+        /// </summary>
+        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="manager"></param>
+        /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> FromPool(int length, InternalBufferManager manager)
         {
-            //internal UnmanagedArray(GCHandle handle, int length, Action dipose)
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
             return new UnmanagedArray<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromStackalloc(int length, InternalBufferManager manager)
-        {
-            var ret = new UnmanagedArray<T>();
-            ret.Count = length;
-            var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
-            var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            ret._gcHandle = handle;
-            ret.Address = (T*)handle.AddrOfPinnedObject();
-            ret._dispose = () => manager.ReturnBuffer(buffer);
-            return ret;
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -153,6 +145,46 @@ namespace NumSharp.Backends.Unmanaged
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
+        }
+
+        /// <summary>
+        ///     
+        /// </summary>
+        /// <param name="address">The address of the first <typeparamref name="T"/></param>
+        /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy(void* address, int count)
+        {
+            var len = count * SizeOf<T>.Size;
+            var ret = new UnmanagedArray<T>(count);
+            Buffer.MemoryCopy(address, ret.Address, len, len);
+            //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
+            return ret;
+        }
+
+        /// <summary>
+        ///     
+        /// </summary>
+        /// <param name="address"></param>
+        /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy(IntPtr address, int count)
+        {
+            return Copy((void*)address, count);
+        }
+
+        /// <summary>
+        ///     
+        /// </summary>
+        /// <param name="address">The address of the first <typeparamref name="T"/></param>
+        /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedArray<T> Copy(T* address, int count)
+        {
+            return Copy((void*)address, count);
         }
 
         public T this[int index]
