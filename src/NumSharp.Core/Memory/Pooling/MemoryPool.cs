@@ -112,7 +112,7 @@ namespace OOMath.MemoryPooling {
         /// <summary>
         /// The size of a pointer, in bytes
         /// </summary>
-        public static readonly int SizeOfPointer = sizeof(void*);
+        public static readonly int SizeOfPointer = SizeOf<void*>.Size;
 
         /// <summary>
         /// The minimum size of an <see cref="UnmanagedMemoryPool"/> block, in bytes
@@ -255,7 +255,7 @@ namespace OOMath.MemoryPooling {
 
             // Make sure the sentinel is still intact
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
-			if (*((ulong*)(((byte*)pRet)+pool->BlockSize-sizeof(ulong))) != SentinelValue)
+			if (*((ulong*)(((byte*)pRet)+pool->BlockSize-SizeOf<ulong>.Size)) != SentinelValue)
 			{
 				Assert(false, UnmanagedMemoryExceptionType.SentinelOverwritten, pRet);
 			}
@@ -264,7 +264,7 @@ namespace OOMath.MemoryPooling {
             // Return the head of the free list and advance the free list pointer
             pool->Free = *((byte**) pool->Free);
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
-			*((ulong*)(((byte*)pRet)+pool->BlockSize-sizeof(ulong))) = SentinelValue;
+			*((ulong*)(((byte*)pRet)+pool->BlockSize-SizeOf<ulong>.Size)) = SentinelValue;
 #endif
             return pRet;
         }
@@ -295,7 +295,7 @@ namespace OOMath.MemoryPooling {
 
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 			// Add room for the sentinel
-			blockSize += sizeof(ulong);
+			blockSize += SizeOf<ulong>.Size;
 #endif
 
             UnmanagedMemoryPool pool = new UnmanagedMemoryPool();
@@ -310,7 +310,7 @@ namespace OOMath.MemoryPooling {
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
 		{
 			// Set the sentinel value at the end of each block
-			byte* pCur = pool.Alloc + blockSize - sizeof(ulong);
+			byte* pCur = pool.Alloc + blockSize - SizeOf<ulong>.Size;
 			for (int i = 0; i < numBlocks; ++i)
 			{
 				*((ulong*)pCur) = SentinelValue;
@@ -377,7 +377,7 @@ namespace OOMath.MemoryPooling {
 
                 // Make sure the sentinel is still intact for this block and the one before it
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
-				if (*((ulong*)(((byte*)ptr)+pool->BlockSize-sizeof(ulong))) != SentinelValue)
+				if (*((ulong*)(((byte*)ptr)+pool->BlockSize-SizeOf<ulong>.Size)) != SentinelValue)
 				{
 					Assert(
 						false,
@@ -385,12 +385,12 @@ namespace OOMath.MemoryPooling {
 						ptr
 					);
 				}
-				if (ptr != pool->Alloc && *((ulong*)(((byte*)ptr)-sizeof(ulong))) != SentinelValue)
+				if (ptr != pool->Alloc && *((ulong*)(((byte*)ptr)-SizeOf<ulong>.Size)) != SentinelValue)
 				{
 					Assert(
 						false,
 						UnmanagedMemoryExceptionType.SentinelOverwritten,
-						(((byte*)ptr)-sizeof(ulong))
+						(((byte*)ptr)-SizeOf<ulong>.Size)
 					);
 				}
 #endif
@@ -416,7 +416,7 @@ namespace OOMath.MemoryPooling {
             void** pCur = (void**) pool->Alloc;
             byte* pNext = pool->Alloc + pool->BlockSize;
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG
-			byte* pSentinel = pool->Alloc + pool->BlockSize - sizeof(ulong);
+			byte* pSentinel = pool->Alloc + pool->BlockSize - SizeOf<ulong>.Size;
 #endif
             for (int i = 0, count = pool->NumBlocks - 1; i < count; ++i) {
 #if UNITY_ASSERTIONS || UNMANAGED_MEMORY_DEBUG

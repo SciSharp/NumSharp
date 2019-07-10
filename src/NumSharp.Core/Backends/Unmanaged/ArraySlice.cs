@@ -14,8 +14,8 @@ namespace NumSharp.Backends.Unmanaged
     {
         private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
         private readonly UnmanagedArray<T> _array;
-        private readonly T* offset;
-        private readonly int offsetLength;
+        private readonly T* address;
+        private readonly int length;
 
         /// <summary>
         ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
@@ -25,47 +25,47 @@ namespace NumSharp.Backends.Unmanaged
         /// A Span representing this slice.
         private Span<T> _getspan
         {
-            [MethodImpl((MethodImplOptions)768)] get => new Span<T>(offset, offsetLength);
+            [MethodImpl((MethodImplOptions)768)] get => new Span<T>(address, length);
         }
 
         public ArraySlice(UnmanagedArray<T> array)
         {
             _array = array;
             IsSlice = false;
-            offset = (T*)_array._itemBuffer;
-            offsetLength = _array._itemCounts;
+            address = (T*)_array.Address;
+            length = _array.Count;
         }
 
         public ArraySlice(UnmanagedArray<T> array, Span<T> slice)
         {
             _array = array;
             IsSlice = true;
-            offsetLength = slice.Length;
-            offset = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
+            length = slice.Length;
+            address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
         }
 
         /// <returns></returns>
         public bool IsEmpty
         {
-            [MethodImpl((MethodImplOptions)768)] get => Length == 0;
+            [MethodImpl((MethodImplOptions)768)] get => length == 0;
         }
 
         /// <param name="index"></param>
         /// <returns></returns>
         public T this[int index]
         {
-            [MethodImpl((MethodImplOptions)768)] get => *(offset + index);
-            [MethodImpl((MethodImplOptions)768)] set => *(offset + index) = value;
+            [MethodImpl((MethodImplOptions)768)] get => *(address + index);
+            [MethodImpl((MethodImplOptions)768)] set => *(address + index) = value;
         }
 
         public int Length
         {
-            [MethodImpl((MethodImplOptions)768)] get => offsetLength;
+            [MethodImpl((MethodImplOptions)768)] get => length;
         }
 
         public T* Start
         {
-            [MethodImpl((MethodImplOptions)768)] get => offset;
+            [MethodImpl((MethodImplOptions)768)] get => address;
         }
 
         /// <param name="value"></param>
@@ -103,7 +103,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T GetPinnableReference()
         {
-            return ref Unsafe.AsRef<T>(offset);
+            return ref Unsafe.AsRef<T>(address);
         }
 
         /// <summary>
@@ -111,7 +111,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="val"></param>
         /// <returns></returns>
-        public static ArraySlice<T> Scalar(T val)
+        public static ArraySlice<T> Scalar(T val) //TODO! use it, why is it not used.
         {
             return new ArraySlice<T>(UnmanagedArray<T>.FromPool(1, _buffer));
         }
@@ -132,7 +132,6 @@ namespace NumSharp.Backends.Unmanaged
         {
             return Clone();
         }
-
 
         /// <summary>
         ///     Performs dispose on the internal unmanaged array.<br></br>

@@ -307,7 +307,7 @@ namespace NumSharp.Backends.Unmanaged
             var s = new StringBuilder();
             if (_shape.NDim == 0)
             {
-                s.Append($"{this._array[0]}");
+                s.Append(this._array[0].ToString());
             }
             else
             {

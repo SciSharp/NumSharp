@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Utilities;
 using OOMath.MemoryPooling;
 
 namespace NumSharp.Backends.Unmanaged
@@ -22,15 +23,15 @@ namespace NumSharp.Backends.Unmanaged
         {
             unsafe
             {
-                var ret = new UnmanagedArray<TOut>(source._itemCounts);
-                var src = source._itemBuffer;
-                var dst = ret._itemBuffer;
+                var ret = new UnmanagedArray<TOut>(source.Count);
+                var src = source.Address;
+                var dst = ret.Address;
                 var len = source.Count;
                 var tc = Type.GetTypeCode(typeof(TOut));
                 for (int i = 0; i < len; i++)
                 {
-                    *(dst + i) = (TOut)Convert.ChangeType((object) *(src + i), tc);
-                }
+                    *(dst + i) = (TOut)Convert.ChangeType((object)*(src + i), tc);
+                } //TODO! support NPTypeCode
 
                 return ret;
             }
@@ -39,8 +40,7 @@ namespace NumSharp.Backends.Unmanaged
 
     public interface IUnmanagedArray : ICollection
     {
-        unsafe void* _itemBuffer { get; }
-        int _itemCounts { get; }
+        unsafe void* Address { get; }
     }
 
     public delegate void DisposeUnmanaged<T>(ref T addr, int length);
@@ -50,45 +50,45 @@ namespace NumSharp.Backends.Unmanaged
     {
         const int AllocHGlobalAfter = int.MaxValue; //530
 
-        public int _itemCounts;
         private Action _dispose;
-        public T* _itemBuffer;
+        public int Count;
+        public T* Address;
         public GCHandle? _gcHandle;
 
         [MethodImpl((MethodImplOptions)512)]
         public UnmanagedArray(int length)
         {
-            var bytes = length * sizeof(T);
+            var bytes = length * SizeOf<T>.Size;
             if (false)
             {
                 //bytes > AllocHGlobalAfter
-                _itemBuffer = (T*)Marshal.AllocHGlobal(bytes).ToPointer();
+                Address = (T*)Marshal.AllocHGlobal(bytes).ToPointer();
                 _gcHandle = null;
             }
             else
             {
                 var handle = GCHandle.Alloc(new T[length], GCHandleType.Pinned);
                 _gcHandle = handle;
-                _itemBuffer = (T*)handle.AddrOfPinnedObject();
+                Address = (T*)handle.AddrOfPinnedObject();
             }
 
             _dispose = null;
-            _itemCounts = length;
+            Count = length;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedArray(T* start, int length, Action dispose)
         {
-            _itemCounts = length;
+            Count = length;
             _dispose = dispose;
-            _itemBuffer = start;
+            Address = start;
             _gcHandle = null;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedArray(int length, T fill) : this(length)
         {
-            new Span<T>(_itemBuffer, length).Fill(fill);
+            new Span<T>(Address, length).Fill(fill);
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -109,8 +109,8 @@ namespace NumSharp.Backends.Unmanaged
             var ret = new UnmanagedArray<T>();
             var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
             ret._gcHandle = handle;
-            ret._itemBuffer = (T*)handle.AddrOfPinnedObject();
-            ret._itemCounts = arr.Length;
+            ret.Address = (T*)handle.AddrOfPinnedObject();
+            ret.Count = arr.Length;
 
             return ret;
         }
@@ -119,10 +119,10 @@ namespace NumSharp.Backends.Unmanaged
         public static UnmanagedArray<T> FromBuffer(byte[] arr)
         {
             var ret = new UnmanagedArray<T>();
-            ret._itemCounts = arr.Length / sizeof(T);
+            ret.Count = arr.Length / SizeOf<T>.Size;
             var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
             ret._gcHandle = handle;
-            ret._itemBuffer = (T*)handle.AddrOfPinnedObject();
+            ret.Address = (T*)handle.AddrOfPinnedObject();
 
             return ret;
         }
@@ -132,11 +132,11 @@ namespace NumSharp.Backends.Unmanaged
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             var ret = new UnmanagedArray<T>();
-            ret._itemCounts = length;
-            var buffer = manager.TakeBuffer(length * sizeof(T));
+            ret.Count = length;
+            var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
             var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             ret._gcHandle = handle;
-            ret._itemBuffer = (T*)handle.AddrOfPinnedObject();
+            ret.Address = (T*)handle.AddrOfPinnedObject();
             ret._dispose = () => manager.ReturnBuffer(buffer);
             return ret;
         }
@@ -145,11 +145,11 @@ namespace NumSharp.Backends.Unmanaged
         public static UnmanagedArray<T> FromStackalloc(int length, InternalBufferManager manager)
         {
             var ret = new UnmanagedArray<T>();
-            ret._itemCounts = length;
-            var buffer = manager.TakeBuffer(length * sizeof(T));
+            ret.Count = length;
+            var buffer = manager.TakeBuffer(length * SizeOf<T>.Size);
             var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
             ret._gcHandle = handle;
-            ret._itemBuffer = (T*)handle.AddrOfPinnedObject();
+            ret.Address = (T*)handle.AddrOfPinnedObject();
             ret._dispose = () => manager.ReturnBuffer(buffer);
             return ret;
         }
@@ -157,51 +157,49 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> Copy(UnmanagedArray<T> source)
         {
-            var itemCount = source._itemCounts;
-            var len = itemCount * sizeof(T);
+            var itemCount = source.Count;
+            var len = itemCount * SizeOf<T>.Size;
             var ret = new UnmanagedArray<T>(itemCount);
-            Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
+            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
 
-        public int Count => _itemCounts;
-
         public T this[int index]
         {
-            [MethodImpl((MethodImplOptions)768)] get => *(_itemBuffer + index);
-            [MethodImpl((MethodImplOptions)768)] set => *(_itemBuffer + index) = value;
+            [MethodImpl((MethodImplOptions)768)] get => *(Address + index);
+            [MethodImpl((MethodImplOptions)768)] set => *(Address + index) = value;
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void Reallocate(int length, bool copyOldValues = false)
         {
-            var ptr = Marshal.AllocHGlobal(length * sizeof(T)).ToPointer();
+            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
             if (copyOldValues)
             {
                 var tptr = (T*)ptr;
-                var bytes = Math.Min(_itemCounts, length) * sizeof(T);
-                Buffer.MemoryCopy(_itemBuffer, tptr, bytes, bytes);
+                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
+                Buffer.MemoryCopy(Address, tptr, bytes, bytes);
             }
 
             Free();
-            _itemCounts = length;
-            _itemBuffer = (T*)ptr;
+            Count = length;
+            Address = (T*)ptr;
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void Reallocate(int length, bool copyOldValues, T fill)
         {
-            var ptr = Marshal.AllocHGlobal(length * sizeof(T)).ToPointer();
+            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
             var tptr = (T*)ptr;
             if (copyOldValues)
             {
-                var bytes = Math.Min(_itemCounts, length) * sizeof(T);
-                Buffer.MemoryCopy(_itemBuffer, tptr, bytes, bytes);
+                var bytes = Math.Min(Count, length) * SizeOf<T>.Size;
+                Buffer.MemoryCopy(Address, tptr, bytes, bytes);
 
-                if (length > _itemCounts)
+                if (length > Count)
                 {
-                    new Span<T>(tptr + _itemCounts, length - _itemCounts).Fill(fill);
+                    new Span<T>(tptr + Count, length - Count).Fill(fill);
                 }
             }
             else
@@ -210,43 +208,43 @@ namespace NumSharp.Backends.Unmanaged
             }
 
             Free();
-            _itemCounts = length;
-            _itemBuffer = (T*)ptr;
+            Count = length;
+            Address = (T*)ptr;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         private void Reallocate(int length, T fill)
         {
-            var ptr = Marshal.AllocHGlobal(length * sizeof(T)).ToPointer();
+            var ptr = Marshal.AllocHGlobal(length * SizeOf<T>.Size).ToPointer();
 
             Free();
-            _itemCounts = length;
-            _itemBuffer = (T*)ptr;
-            new Span<T>(ptr, _itemCounts).Fill(fill);
+            Count = length;
+            Address = (T*)ptr;
+            new Span<T>(ptr, Count).Fill(fill);
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public T GetValue(int index)
         {
-            return *(_itemBuffer + index);
+            return *(Address + index);
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public ref T GetRefTo(int index)
         {
-            return ref *(_itemBuffer + index);
+            return ref *(Address + index);
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public void SetValue(int index, ref T value)
         {
-            *(_itemBuffer + index) = value;
+            *(Address + index) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public void SetValue(int index, T value)
         {
-            *(_itemBuffer + index) = value;
+            *(Address + index) = value;
         }
 
         public void Free()
@@ -262,14 +260,14 @@ namespace NumSharp.Backends.Unmanaged
             {
                 _gcHandle.Value.Free();
                 _gcHandle = null;
-                _itemBuffer = null;
+                Address = null;
                 return;
             }
 
-            if (_itemBuffer != null)
+            if (Address != null)
             {
-                Marshal.FreeHGlobal((IntPtr)_itemBuffer);
-                _itemBuffer = null;
+                Marshal.FreeHGlobal((IntPtr)Address);
+                Address = null;
                 return;
             }
         }
@@ -277,7 +275,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public IEnumerator<T> GetEnumerator()
         {
-            for (var i = 0; i < _itemCounts; i++) yield return GetValue(i);
+            for (var i = 0; i < Count; i++) yield return GetValue(i);
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -298,9 +296,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public bool Contains(T item)
         {
-            for (var i = 0; i < _itemCounts; i++)
+            for (var i = 0; i < Count; i++)
             {
-                if ((*(_itemBuffer + i)).Equals(item)) return true;
+                if ((*(Address + i)).Equals(item)) return true;
             }
 
             return false;
@@ -309,23 +307,23 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T[] array, int arrayIndex)
         {
-            for (var i = 0; i < _itemCounts; i++)
+            for (var i = 0; i < Count; i++)
             {
-                array[i + arrayIndex] = *(_itemBuffer + i);
+                array[i + arrayIndex] = *(Address + i);
             }
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(UnmanagedArray<T> array, int arrayIndex)
         {
-            var length = _itemCounts - arrayIndex;
-            Buffer.MemoryCopy(_itemBuffer + arrayIndex, array._itemBuffer, sizeof(T) * array._itemCounts, sizeof(T) * length);
+            var length = Count - arrayIndex;
+            Buffer.MemoryCopy(Address + arrayIndex, array.Address, SizeOf<T>.Size * array.Count, SizeOf<T>.Size * length);
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T* array, int arrayIndex, int lengthToCopy)
         {
-            Buffer.MemoryCopy(_itemBuffer + arrayIndex, array, sizeof(T) * lengthToCopy, sizeof(T) * lengthToCopy);
+            Buffer.MemoryCopy(Address + arrayIndex, array, SizeOf<T>.Size * lengthToCopy, SizeOf<T>.Size * lengthToCopy);
         }
 
         /// <summary>Copies the elements of the <see cref="T:System.Collections.ICollection" /> to an <see cref="T:System.Array" />, starting at a particular <see cref="T:System.Array" /> index.</summary>
@@ -340,14 +338,14 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(Array array, int index)
         {
-            for (var i = 0; i < _itemCounts; i++)
+            for (var i = 0; i < Count; i++)
             {
-                array.SetValue((object) *(_itemBuffer + i), i + index);
+                array.SetValue((object)*(Address + i), i + index);
             }
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public Span<T> AsSpan() => new Span<T>(_itemBuffer, _itemCounts);
+        public Span<T> AsSpan() => new Span<T>(Address, Count);
 
         #region Explicit Implementations
 
@@ -357,6 +355,14 @@ namespace NumSharp.Backends.Unmanaged
         bool ICollection.IsSynchronized => false;
 
         bool ICollection<T>.IsReadOnly => false;
+
+        /// <summary>Gets the number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</summary>
+        /// <returns>The number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</returns>
+        int ICollection.Count => Count;
+
+        /// <summary>Gets the number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</summary>
+        /// <returns>The number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</returns>
+        int ICollection<T>.Count => Count;
 
         /// <summary>Gets an object that can be used to synchronize access to the <see cref="T:System.Collections.ICollection" />.</summary>
         /// <returns>An object that can be used to synchronize access to the <see cref="T:System.Collections.ICollection" />.</returns>
@@ -374,6 +380,7 @@ namespace NumSharp.Backends.Unmanaged
             throw new NotSupportedException();
         }
 
+
         /// <summary>
         /// NotSupported
         /// </summary>
@@ -388,7 +395,7 @@ namespace NumSharp.Backends.Unmanaged
         [EditorBrowsable(EditorBrowsableState.Never)]
         public ref T GetPinnableReference()
         {
-            return ref *_itemBuffer;
+            return ref *Address;
         }
 
         #endregion
@@ -402,7 +409,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public bool Equals(UnmanagedArray<T> other)
         {
-            return _itemCounts == other._itemCounts && _itemBuffer == other._itemBuffer;
+            return Count == other.Count && Address == other.Address;
         }
 
         /// <summary>Indicates whether this instance and a specified object are equal.</summary>
@@ -422,7 +429,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             unchecked
             {
-                return (_itemCounts * 397) ^ unchecked((int)(long)_itemBuffer);
+                return (Count * 397) ^ unchecked((int)(long)Address);
             }
         }
 
@@ -448,7 +455,8 @@ namespace NumSharp.Backends.Unmanaged
 
         #endregion
 
-        unsafe void* IUnmanagedArray._itemBuffer => _itemBuffer;
-        int IUnmanagedArray._itemCounts => _itemCounts;
+        unsafe void* IUnmanagedArray.Address => Address;
+
+
     }
 }

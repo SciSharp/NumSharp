@@ -125,9 +125,9 @@ namespace NumSharp.Benchmark.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> Copy3<T>(UnmanagedArray<T> source) where T : unmanaged
         {
-            var len = source._itemCounts * sizeof(T);
+            var len = source.Count * sizeof(T);
             var ret = new UnmanagedArray<T>(source.Count);
-            MemCopy(ret._itemBuffer, source._itemBuffer, (UIntPtr)len);
+            MemCopy(ret.Address, source.Address, (UIntPtr)len);
             //Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
@@ -136,10 +136,10 @@ namespace NumSharp.Benchmark.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedArray<T> Copy2<T>(UnmanagedArray<T> source) where T : unmanaged
         {
-            var len = source._itemCounts * sizeof(T);
+            var len = source.Count * sizeof(T);
             var buffer = pool.TakeBuffer(len);
             var ret = new UnmanagedArray<T>((T*)Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
-            Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
+            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
@@ -148,8 +148,8 @@ namespace NumSharp.Benchmark.Unmanaged
         public static UnmanagedArray<T> Copy1<T>(UnmanagedArray<T> source) where T : unmanaged
         {
             var ret = new UnmanagedArray<T>(source.Count);
-            var len = ret._itemCounts * sizeof(T);
-            Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
+            var len = ret.Count * sizeof(T);
+            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
