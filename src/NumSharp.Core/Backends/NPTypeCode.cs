@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Numerics;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -123,7 +124,7 @@ namespace NumSharp.Backends
         /// <remarks>In case there was no successful cast to <see cref="NPTypeCode"/>, return will be <see cref="NPTypeCode.Empty"/></remarks>
         public static NPTypeCode GetTypeCode<T>()
         {
-            return NPTypeCodeCacher<T>.Value;
+            return InfoOf<T>.NPTypeCode;
         }
 
         /// <summary>
@@ -179,10 +180,5 @@ namespace NumSharp.Backends
         {
             return type.GetTypeCode() != NPTypeCode.Empty;
         }
-    }
-
-    internal static class NPTypeCodeCacher<T>
-    {
-        public static readonly NPTypeCode Value = typeof(T).GetTypeCode();
     }
 }

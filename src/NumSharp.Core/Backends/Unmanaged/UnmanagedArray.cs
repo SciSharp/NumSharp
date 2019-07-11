@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace NumSharp.Backends.Unmanaged
 {
@@ -41,14 +42,14 @@ namespace NumSharp.Backends.Unmanaged
         {
             unsafe
             {
-                var ret = new UnmanagedArray<TOut>(source.Count);
+                var len = ((IMemoryBlock)source).Count;
+                var ret = new UnmanagedArray<TOut>(len);
                 var src = (TIn*)source.Address;
                 var dst = ret.Address;
-                var len = source.Count;
                 var tc = Type.GetTypeCode(typeof(TOut));
                 for (int i = 0; i < len; i++)
                 {
-                    *(dst + i) = (TOut)Convert.ChangeType((object)*(src + i), tc);
+                    *(dst + i) = (TOut)Convert.ChangeType(*(src + i), tc);
                 } //TODO! seperate class for NP!
 
                 return ret;

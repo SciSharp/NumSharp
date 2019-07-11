@@ -152,7 +152,7 @@ namespace NumSharp.Backends
         /// <param name="arraySlice">The slice to wrap </param>
         public UnmanagedStorage(IArraySlice arraySlice, Shape shape)
         {
-            _Allocate(shape, arraySlice.ArrayType, arraySlice);
+            _Allocate(shape, arraySlice.TypeCode, arraySlice);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(0);
         }
@@ -1171,20 +1171,18 @@ namespace NumSharp.Backends
             SetInternalArray(values);
         }
 
-        protected void _Allocate(Shape shape, Type dtype, IArraySlice values)
+        protected void _Allocate(Shape shape, NPTypeCode typeCode, IArraySlice values)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
             _shape = shape;
 
-            if (dtype != null)
-            {
-                _dtype = dtype;
-                _typecode = _dtype.GetTypeCode();
-                if (_typecode == NPTypeCode.Empty)
-                    throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
-            }
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{typeCode} as a dtype is not supported.");
+
+            _typecode = typeCode;
+            _dtype = typeCode.AsType();
 
             SetInternalArray(values);
         }
@@ -1246,7 +1244,7 @@ namespace NumSharp.Backends
         /// <remarks>Does not copy <paramref name="values"/></remarks>
         public void Allocate<T>(ArraySlice<T> values, Shape shape, bool copy = false) where T : unmanaged
         {
-            _Allocate(shape, typeof(T), copy ? values.Clone() : values);
+            _Allocate(shape, InfoOf<T>.NPTypeCode, copy ? values.Clone() : values);
         }
 
         /// <summary>
@@ -1258,7 +1256,7 @@ namespace NumSharp.Backends
         /// <remarks>Does not copy <paramref name="values"/></remarks>
         public void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {
-            _Allocate(shape, values.ArrayType, (IArraySlice)(copy ? values.Clone() : values));
+            _Allocate(shape, values.TypeCode, (IArraySlice)(copy ? values.Clone() : values));
         }
 
         /// <summary>
@@ -1458,7 +1456,7 @@ namespace NumSharp.Backends
                 if (subShape.size != value.Count)
                     throw new IncorrectShapeException();
 
-                var step = value.ItemSize;
+                var step = value.ItemLength;
                 var len = step * value.Count;
                 Buffer.MemoryCopy(value.Address, _address + offset * step, len, len);
                 //TODO! TEST!

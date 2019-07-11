@@ -11,13 +11,13 @@ using NumSharp.Utilities;
 namespace NumSharp.Backends.Unmanaged
 {
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct UnmanagedArray<T> : IEnumerable<T>, IEquatable<UnmanagedArray<T>>, ICollection<T>, IUnmanagedArray where T : unmanaged
+    public unsafe struct UnmanagedArray<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedArray<T>>,  IUnmanagedArray where T : unmanaged
     {
         private Action _dispose;
+        private GCHandle? _gcHandle;
         public int Count;
         public T* Address;
-        public GCHandle? _gcHandle;
-
+        public int BytesCount;
         /// <summary>
         /// 
         /// </summary>
@@ -41,6 +41,7 @@ namespace NumSharp.Backends.Unmanaged
 
             _dispose = null;
             Count = length;
+            BytesCount = InfoOf<T>.Size * Count;
         }
 
         /// <summary>
@@ -53,6 +54,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedArray(T* start, int length, Action dispose)
         {
             Count = length;
+            BytesCount = InfoOf<T>.Size * Count;
             _dispose = dispose;
             Address = start;
             _gcHandle = null;
@@ -67,6 +69,7 @@ namespace NumSharp.Backends.Unmanaged
         internal UnmanagedArray(GCHandle handle, int length)
         {
             Count = length;
+            BytesCount = InfoOf<T>.Size * Count;
             _dispose = null;
             Address = (T*)handle.AddrOfPinnedObject();
             _gcHandle = handle;
@@ -82,6 +85,7 @@ namespace NumSharp.Backends.Unmanaged
         internal UnmanagedArray(GCHandle handle, int length, Action dipose)
         {
             Count = length;
+            BytesCount = InfoOf<T>.Size * Count;
             _dispose = dipose;
             Address = (T*)handle.AddrOfPinnedObject();
             _gcHandle = handle;
@@ -244,7 +248,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public T GetValue(int index)
+        public T GetIndex(int index)
         {
             return *(Address + index);
         }
@@ -256,13 +260,13 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public void SetValue(int index, ref T value)
+        public void SetIndex(int index, ref T value)
         {
             *(Address + index) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public void SetValue(int index, T value)
+        public void SetIndex(int index, T value)
         {
             *(Address + index) = value;
         }
@@ -296,7 +300,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public IEnumerator<T> GetEnumerator()
         {
-            for (var i = 0; i < Count; i++) yield return GetValue(i);
+            for (var i = 0; i < Count; i++) yield return GetIndex(i);
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -317,7 +321,8 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public bool Contains(T item)
         {
-            for (var i = 0; i < Count; i++)
+            int len = Count;
+            for (var i = 0; i < len; i++)
             {
                 if ((*(Address + i)).Equals(item)) return true;
             }
@@ -328,7 +333,8 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T[] array, int arrayIndex)
         {
-            for (var i = 0; i < Count; i++)
+            int len = Count;
+            for (var i = 0; i < len; i++)
             {
                 array[i + arrayIndex] = *(Address + i);
             }
@@ -337,8 +343,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(UnmanagedArray<T> array, int arrayIndex)
         {
-            var length = Count - arrayIndex;
-            Buffer.MemoryCopy(Address + arrayIndex, array.Address, InfoOf<T>.Size * array.Count, InfoOf<T>.Size * length);
+            Buffer.MemoryCopy(Address + arrayIndex, array.Address, InfoOf<T>.Size * array.Count, InfoOf<T>.Size * (Count - arrayIndex));
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -370,48 +375,32 @@ namespace NumSharp.Backends.Unmanaged
 
         #region Explicit Implementations
 
-        /// <summary>Gets a value indicating whether access to the <see cref="T:System.Collections.ICollection" /> is synchronized (thread safe).</summary>
-        /// <returns>
-        /// <see langword="true" /> if access to the <see cref="T:System.Collections.ICollection" /> is synchronized (thread safe); otherwise, <see langword="false" />.</returns>
-        bool ICollection.IsSynchronized => false;
-
-        bool ICollection<T>.IsReadOnly => false;
-
-        /// <summary>Gets the number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</summary>
-        /// <returns>The number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</returns>
-        int ICollection.Count => Count;
-
-        /// <summary>Gets the number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</summary>
-        /// <returns>The number of elements contained in the <see cref="T:System.Collections.Generic.ICollection`1"></see>.</returns>
-        int ICollection<T>.Count => Count;
-
-        /// <summary>Gets an object that can be used to synchronize access to the <see cref="T:System.Collections.ICollection" />.</summary>
-        /// <returns>An object that can be used to synchronize access to the <see cref="T:System.Collections.ICollection" />.</returns>
-        [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-        public object SyncRoot => throw new NotSupportedException();
+        /// <summary>
+        ///     The size of a single item stored in <see cref="IMemoryBlock.Address"/>.
+        /// </summary>
+        int IMemoryBlock.ItemLength => InfoOf<T>.Size;
 
         /// <summary>
-        /// NotSupported
+        ///     The start address of this memory block.
         /// </summary>
-        /// <param name="item"></param>
-        /// <returns></returns>
-        [MethodImpl((MethodImplOptions)512)]
-        bool ICollection<T>.Remove(T item)
-        {
-            throw new NotSupportedException();
-        }
-
+        unsafe void* IMemoryBlock.Address => Address;
 
         /// <summary>
-        /// NotSupported
+        ///     How many items are stored in <see cref="IMemoryBlock.Address"/>?
         /// </summary>
-        /// <param name="item"></param>
-        [MethodImpl((MethodImplOptions)512)]
-        void ICollection<T>.Add(T item)
-        {
-            throw new NotSupportedException();
-        }
+        /// <remarks></remarks>
+        int IMemoryBlock.Count => Count;
 
+        /// <summary>
+        ///     The items with length of <see cref="IMemoryBlock.TypeCode"/> are present in <see cref="IMemoryBlock.Address"/>.
+        /// </summary>
+        /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
+        int IMemoryBlock.BytesLength => BytesCount;
+
+        /// <summary>
+        ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
+        /// </summary>
+        NPTypeCode IMemoryBlock.TypeCode => InfoOf<T>.NPTypeCode;
 
         [EditorBrowsable(EditorBrowsableState.Never)]
         public ref T GetPinnableReference()
@@ -475,9 +464,5 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         #endregion
-
-        unsafe void* IUnmanagedArray.Address => Address;
-
-        int IUnmanagedArray.ItemLength => InfoOf<T>.Size;
     }
 }

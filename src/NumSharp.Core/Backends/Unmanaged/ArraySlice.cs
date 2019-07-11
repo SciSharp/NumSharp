@@ -121,6 +121,8 @@ namespace NumSharp.Backends.Unmanaged
     /// <typeparam name="T">The type of the internal unmanaged memory</typeparam>
     public readonly unsafe struct ArraySlice<T> : IArraySlice, IEnumerable<T> where T : unmanaged
     {
+        public static NPTypeCode TypeCode { get; } = InfoOf<T>.NPTypeCode;
+
         private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
 
         /// <summary>
@@ -136,7 +138,6 @@ namespace NumSharp.Backends.Unmanaged
         ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
         /// </summary>
         public readonly bool IsSlice;
-
 
         /// A Span representing this slice.
         public Span<T> AsSpan
@@ -251,18 +252,35 @@ namespace NumSharp.Backends.Unmanaged
             return Clone();
         }
 
-        Type IArraySlice.ArrayType => typeof(T);
-
         /// <summary>
         ///     The size of a single item.
         /// </summary>
-        public int ItemSize
+        public int ItemLength
         {
             [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
         }
 
-        void* IArraySlice.Address => Address;
-        int IArraySlice.Count => Count;
+        /// <summary>
+        ///     The start address of this memory block.
+        /// </summary>
+        unsafe void* IMemoryBlock.Address => Address;
+
+        /// <summary>
+        ///     How many items are stored in <see cref="IMemoryBlock.Address"/>?
+        /// </summary>
+        /// <remarks></remarks>
+        int IMemoryBlock.Count => Count;
+
+        /// <summary>
+        ///     The items with length of <see cref="IMemoryBlock.TypeCode"/> are present in <see cref="IMemoryBlock.Address"/>.
+        /// </summary>
+        /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
+        int IMemoryBlock.BytesLength => InfoOf<T>.Size;
+
+        /// <summary>
+        ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
+        /// </summary>
+        NPTypeCode IMemoryBlock.TypeCode => TypeCode;
 
         IUnmanagedArray IArraySlice.MemoryBlock
         {
