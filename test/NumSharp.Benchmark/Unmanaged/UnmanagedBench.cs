@@ -31,18 +31,18 @@ namespace NumSharp.Benchmark.Unmanaged
         private const int length = 100_000;
         private const int iterations = 2_000;
         int[] arr;
-        UnmanagedArray<int> mem;
+        UnmanagedMemoryBlock<int> mem;
         UnmanagedByteStorage<int> vec;
         private unsafe int* arrayAddress;
 
         [GlobalSetup]
         public void Setup()
         {
-            mem = new UnmanagedArray<int>(length);
+            mem = new UnmanagedMemoryBlock<int>(length);
             vec = new UnmanagedByteStorage<int>(mem, new Shape(length));
             arr = new int[length];
 
-            var ret = new UnmanagedArray<int>();
+            var ret = new UnmanagedMemoryBlock<int>();
             var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
             arrayAddress = (int*)handle.AddrOfPinnedObject();
         }

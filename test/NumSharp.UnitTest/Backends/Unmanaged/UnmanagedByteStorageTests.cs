@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Set()
         {
-            var nd = new UnmanagedByteStorage<int>(new UnmanagedArray<int>(25, 0), new Shape(5, 5));
+            var nd = new UnmanagedByteStorage<int>(new UnmanagedMemoryBlock<int>(25, 0), new Shape(5, 5));
 
             //fill
             for (int i = 0; i < nd.Count; i++)
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Set_Basic()
         {
             const int length = 30;
-            var to = new UnmanagedArray<int>(length);
+            var to = new UnmanagedMemoryBlock<int>(length);
             var tovec = new UnmanagedByteStorage<int>(to, new Shape(10, length / 10));
             var setvec = new UnmanagedByteStorage<int>(Enumerable.Range(100, length / 10).ToArray(), new Shape(length / 10));
 
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             //initialize
             (Shape Shape, int Offset) ret;
-            var nd = new UnmanagedByteStorage<int>(new UnmanagedArray<int>(25, 0), new Shape(5, 5));
+            var nd = new UnmanagedByteStorage<int>(new UnmanagedMemoryBlock<int>(25, 0), new Shape(5, 5));
             var arr = new int[5, 5];
             var arr2 = new int[5, 1, 5];
 

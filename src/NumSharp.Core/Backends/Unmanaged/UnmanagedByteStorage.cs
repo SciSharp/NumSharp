@@ -18,7 +18,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <inheritdoc />
             public Unmanaged#1Storage(ArraySlice<#2> arr, Shape shape) : base(arr, shape) { }
             /// <inheritdoc />
-            public Unmanaged#1Storage(UnmanagedArray<#2> array, Shape shape) : base(array, shape) { }
+            public Unmanaged#1Storage(UnmanagedMemoryBlock<#2> array, Shape shape) : base(array, shape) { }
             /// <inheritdoc />
             public unsafe Unmanaged#1Storage(#2* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
         }
@@ -46,7 +46,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedByteStorage(ArraySlice<byte> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedByteStorage(UnmanagedArray<byte> array, Shape shape) : base(array, shape) { }
+        public UnmanagedByteStorage(UnmanagedMemoryBlock<byte> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedByteStorage(byte* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -73,7 +73,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedInt16Storage(ArraySlice<short> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedInt16Storage(UnmanagedArray<short> array, Shape shape) : base(array, shape) { }
+        public UnmanagedInt16Storage(UnmanagedMemoryBlock<short> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedInt16Storage(short* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -100,7 +100,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedUInt16Storage(ArraySlice<ushort> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedUInt16Storage(UnmanagedArray<ushort> array, Shape shape) : base(array, shape) { }
+        public UnmanagedUInt16Storage(UnmanagedMemoryBlock<ushort> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedUInt16Storage(ushort* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -127,7 +127,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedInt32Storage(ArraySlice<int> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedInt32Storage(UnmanagedArray<int> array, Shape shape) : base(array, shape) { }
+        public UnmanagedInt32Storage(UnmanagedMemoryBlock<int> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedInt32Storage(int* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -154,7 +154,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedUInt32Storage(ArraySlice<uint> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedUInt32Storage(UnmanagedArray<uint> array, Shape shape) : base(array, shape) { }
+        public UnmanagedUInt32Storage(UnmanagedMemoryBlock<uint> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedUInt32Storage(uint* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -181,7 +181,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedInt64Storage(ArraySlice<long> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedInt64Storage(UnmanagedArray<long> array, Shape shape) : base(array, shape) { }
+        public UnmanagedInt64Storage(UnmanagedMemoryBlock<long> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedInt64Storage(long* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -208,7 +208,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedUInt64Storage(ArraySlice<ulong> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedUInt64Storage(UnmanagedArray<ulong> array, Shape shape) : base(array, shape) { }
+        public UnmanagedUInt64Storage(UnmanagedMemoryBlock<ulong> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedUInt64Storage(ulong* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -235,7 +235,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedCharStorage(ArraySlice<char> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedCharStorage(UnmanagedArray<char> array, Shape shape) : base(array, shape) { }
+        public UnmanagedCharStorage(UnmanagedMemoryBlock<char> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedCharStorage(char* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -262,7 +262,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedDoubleStorage(ArraySlice<double> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedDoubleStorage(UnmanagedArray<double> array, Shape shape) : base(array, shape) { }
+        public UnmanagedDoubleStorage(UnmanagedMemoryBlock<double> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedDoubleStorage(double* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -289,7 +289,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedSingleStorage(ArraySlice<float> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedSingleStorage(UnmanagedArray<float> array, Shape shape) : base(array, shape) { }
+        public UnmanagedSingleStorage(UnmanagedMemoryBlock<float> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedSingleStorage(float* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }
@@ -316,7 +316,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedDecimalStorage(ArraySlice<decimal> arr, Shape shape) : base(arr, shape) { }
 
         /// <inheritdoc />
-        public UnmanagedDecimalStorage(UnmanagedArray<decimal> array, Shape shape) : base(array, shape) { }
+        public UnmanagedDecimalStorage(UnmanagedMemoryBlock<decimal> memoryBlock, Shape shape) : base(memoryBlock, shape) { }
 
         /// <inheritdoc />
         public unsafe UnmanagedDecimalStorage(decimal* ptr, int lengthInSizeOfT, Shape shape, Action dispose) : base(ptr, lengthInSizeOfT, shape, dispose) { }

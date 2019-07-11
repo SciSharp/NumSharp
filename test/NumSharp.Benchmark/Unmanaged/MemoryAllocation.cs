@@ -44,7 +44,7 @@ namespace NumSharp.Benchmark.Unmanaged
         {
             for (int j = 0; j < iterations_small; j++)
             {
-                var a = new UnmanagedArray<byte>(100);
+                var a = new UnmanagedMemoryBlock<byte>(100);
                 a.Free();
             }
         }
@@ -135,7 +135,7 @@ namespace NumSharp.Benchmark.Unmanaged
         {
             for (int j = 0; j < iterations_large; j++)
             {
-                var a = new UnmanagedArray<byte>(1000000);
+                var a = new UnmanagedMemoryBlock<byte>(1000000);
                 a.Free();
             }
         }

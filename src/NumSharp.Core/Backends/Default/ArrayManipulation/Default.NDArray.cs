@@ -22,7 +22,7 @@ namespace NumSharp.Backends
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase,supported_currently_supported_defaultvals%
 	            case NPTypeCode.#1:
 	            {
-                    slice = new ArraySlice<#2>(buffer == null ? new UnmanagedArray<#2>(shape.size, #3) : UnmanagedArray<#2>.FromArray((#2[])buffer));
+                    slice = new ArraySlice<#2>(buffer == null ? new UnmanagedMemoryBlock<#2>(shape.size, #3) : UnmanagedMemoryBlock<#2>.FromArray((#2[])buffer));
                     break;
 	            }
 
@@ -32,67 +32,67 @@ namespace NumSharp.Backends
 #else
                 case NPTypeCode.Byte:
                 {
-                    slice = new ArraySlice<byte>(buffer == null ? new UnmanagedArray<byte>(shape.size, 0) : UnmanagedArray<byte>.FromArray((byte[])buffer));
+                    slice = new ArraySlice<byte>(buffer == null ? new UnmanagedMemoryBlock<byte>(shape.size, 0) : UnmanagedMemoryBlock<byte>.FromArray((byte[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    slice = new ArraySlice<short>(buffer == null ? new UnmanagedArray<short>(shape.size, 0) : UnmanagedArray<short>.FromArray((short[])buffer));
+                    slice = new ArraySlice<short>(buffer == null ? new UnmanagedMemoryBlock<short>(shape.size, 0) : UnmanagedMemoryBlock<short>.FromArray((short[])buffer));
                     break;
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    slice = new ArraySlice<ushort>(buffer == null ? new UnmanagedArray<ushort>(shape.size, 0) : UnmanagedArray<ushort>.FromArray((ushort[])buffer));
+                    slice = new ArraySlice<ushort>(buffer == null ? new UnmanagedMemoryBlock<ushort>(shape.size, 0) : UnmanagedMemoryBlock<ushort>.FromArray((ushort[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    slice = new ArraySlice<int>(buffer == null ? new UnmanagedArray<int>(shape.size, 0) : UnmanagedArray<int>.FromArray((int[])buffer));
+                    slice = new ArraySlice<int>(buffer == null ? new UnmanagedMemoryBlock<int>(shape.size, 0) : UnmanagedMemoryBlock<int>.FromArray((int[])buffer));
                     break;
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    slice = new ArraySlice<uint>(buffer == null ? new UnmanagedArray<uint>(shape.size, 0u) : UnmanagedArray<uint>.FromArray((uint[])buffer));
+                    slice = new ArraySlice<uint>(buffer == null ? new UnmanagedMemoryBlock<uint>(shape.size, 0u) : UnmanagedMemoryBlock<uint>.FromArray((uint[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    slice = new ArraySlice<long>(buffer == null ? new UnmanagedArray<long>(shape.size, 0L) : UnmanagedArray<long>.FromArray((long[])buffer));
+                    slice = new ArraySlice<long>(buffer == null ? new UnmanagedMemoryBlock<long>(shape.size, 0L) : UnmanagedMemoryBlock<long>.FromArray((long[])buffer));
                     break;
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    slice = new ArraySlice<ulong>(buffer == null ? new UnmanagedArray<ulong>(shape.size, 0UL) : UnmanagedArray<ulong>.FromArray((ulong[])buffer));
+                    slice = new ArraySlice<ulong>(buffer == null ? new UnmanagedMemoryBlock<ulong>(shape.size, 0UL) : UnmanagedMemoryBlock<ulong>.FromArray((ulong[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Char:
                 {
-                    slice = new ArraySlice<char>(buffer == null ? new UnmanagedArray<char>(shape.size, '\0') : UnmanagedArray<char>.FromArray((char[])buffer));
+                    slice = new ArraySlice<char>(buffer == null ? new UnmanagedMemoryBlock<char>(shape.size, '\0') : UnmanagedMemoryBlock<char>.FromArray((char[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Double:
                 {
-                    slice = new ArraySlice<double>(buffer == null ? new UnmanagedArray<double>(shape.size, 0d) : UnmanagedArray<double>.FromArray((double[])buffer));
+                    slice = new ArraySlice<double>(buffer == null ? new UnmanagedMemoryBlock<double>(shape.size, 0d) : UnmanagedMemoryBlock<double>.FromArray((double[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Single:
                 {
-                    slice = new ArraySlice<float>(buffer == null ? new UnmanagedArray<float>(shape.size, 0f) : UnmanagedArray<float>.FromArray((float[])buffer));
+                    slice = new ArraySlice<float>(buffer == null ? new UnmanagedMemoryBlock<float>(shape.size, 0f) : UnmanagedMemoryBlock<float>.FromArray((float[])buffer));
                     break;
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    slice = new ArraySlice<decimal>(buffer == null ? new UnmanagedArray<decimal>(shape.size, 0m) : UnmanagedArray<decimal>.FromArray((decimal[])buffer));
+                    slice = new ArraySlice<decimal>(buffer == null ? new UnmanagedMemoryBlock<decimal>(shape.size, 0m) : UnmanagedMemoryBlock<decimal>.FromArray((decimal[])buffer));
                     break;
                 }
 
@@ -116,7 +116,7 @@ namespace NumSharp.Backends
 	                %foreach supported_currently_supported,supported_currently_supported_lowercase,supported_currently_supported_defaultvals%
 	                case NPTypeCode.#1:
 	                {
-                        buffer = new ArraySlice<#2>(new UnmanagedArray<#2>(shape.size, #3));
+                        buffer = new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(shape.size, #3));
                         break;
 	                }
 
@@ -126,67 +126,67 @@ namespace NumSharp.Backends
 #else
                     case NPTypeCode.Byte:
                     {
-                        buffer = new ArraySlice<byte>(new UnmanagedArray<byte>(shape.size, 0));
+                        buffer = new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(shape.size, 0));
                         break;
                     }
 
                     case NPTypeCode.Int16:
                     {
-                        buffer = new ArraySlice<short>(new UnmanagedArray<short>(shape.size, 0));
+                        buffer = new ArraySlice<short>(new UnmanagedMemoryBlock<short>(shape.size, 0));
                         break;
                     }
 
                     case NPTypeCode.UInt16:
                     {
-                        buffer = new ArraySlice<ushort>(new UnmanagedArray<ushort>(shape.size, 0));
+                        buffer = new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(shape.size, 0));
                         break;
                     }
 
                     case NPTypeCode.Int32:
                     {
-                        buffer = new ArraySlice<int>(new UnmanagedArray<int>(shape.size, 0));
+                        buffer = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(shape.size, 0));
                         break;
                     }
 
                     case NPTypeCode.UInt32:
                     {
-                        buffer = new ArraySlice<uint>(new UnmanagedArray<uint>(shape.size, 0u));
+                        buffer = new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(shape.size, 0u));
                         break;
                     }
 
                     case NPTypeCode.Int64:
                     {
-                        buffer = new ArraySlice<long>(new UnmanagedArray<long>(shape.size, 0L));
+                        buffer = new ArraySlice<long>(new UnmanagedMemoryBlock<long>(shape.size, 0L));
                         break;
                     }
 
                     case NPTypeCode.UInt64:
                     {
-                        buffer = new ArraySlice<ulong>(new UnmanagedArray<ulong>(shape.size, 0UL));
+                        buffer = new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(shape.size, 0UL));
                         break;
                     }
 
                     case NPTypeCode.Char:
                     {
-                        buffer = new ArraySlice<char>(new UnmanagedArray<char>(shape.size, '\0'));
+                        buffer = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(shape.size, '\0'));
                         break;
                     }
 
                     case NPTypeCode.Double:
                     {
-                        buffer = new ArraySlice<double>(new UnmanagedArray<double>(shape.size, 0d));
+                        buffer = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(shape.size, 0d));
                         break;
                     }
 
                     case NPTypeCode.Single:
                     {
-                        buffer = new ArraySlice<float>(new UnmanagedArray<float>(shape.size, 0f));
+                        buffer = new ArraySlice<float>(new UnmanagedMemoryBlock<float>(shape.size, 0f));
                         break;
                     }
 
                     case NPTypeCode.Decimal:
                     {
-                        buffer = new ArraySlice<decimal>(new UnmanagedArray<decimal>(shape.size, 0m));
+                        buffer = new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(shape.size, 0m));
                         break;
                     }
 

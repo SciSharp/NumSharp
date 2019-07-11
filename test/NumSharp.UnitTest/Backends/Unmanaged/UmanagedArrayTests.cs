@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Slice()
         {
-            var mem = new UnmanagedArray<int>(1000);
+            var mem = new UnmanagedMemoryBlock<int>(1000);
             try
             {
                 for (int i = 0; i < 1000; i++)
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Fill()
         {
-            var mem = new UnmanagedArray<int>(1000);
+            var mem = new UnmanagedMemoryBlock<int>(1000);
             try
             {
                 for (int i = 0; i < 1000; i++)
@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void AllocateExpand()
         {
-            var mem = new UnmanagedArray<int>(10);
+            var mem = new UnmanagedMemoryBlock<int>(10);
 
             try
             {
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void AllocateExpandFill()
         {
-            var mem = new UnmanagedArray<int>(10);
+            var mem = new UnmanagedMemoryBlock<int>(10);
             try
             {
                 for (int i = 0; i < 10; i++)
@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void AllocateShrinkFill()
         {
-            var mem = new UnmanagedArray<int>(10);
+            var mem = new UnmanagedMemoryBlock<int>(10);
             try
             {
                 for (int i = 0; i < 10; i++)
@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void AllocateShrink()
         {
-            var mem = new UnmanagedArray<int>(10);
+            var mem = new UnmanagedMemoryBlock<int>(10);
             try
             {
                 for (int i = 0; i < 10; i++)
@@ -152,7 +152,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void FromManaged()
         {
             var arr = Enumerable.Range(0, 10).ToArray();
-            var mem = UnmanagedArray<int>.FromArray(arr);
+            var mem = UnmanagedMemoryBlock<int>.FromArray(arr);
             try
             {
                 for (int i = 0; i < 10; i++)
@@ -173,7 +173,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void FromManaged_Copy()
         {
             var arr = Enumerable.Range(0, 10).ToArray();
-            var mem = UnmanagedArray<int>.FromArray(arr, copy: true);
+            var mem = UnmanagedMemoryBlock<int>.FromArray(arr, copy: true);
             try
             {
                 for (int i = 0; i < 10; i++)
@@ -194,12 +194,12 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Cast()
         {
-            var arr = UnmanagedArray<int>.FromArray(Enumerable.Range(0, 10).ToArray());
+            var arr = UnmanagedMemoryBlock<int>.FromArray(Enumerable.Range(0, 10).ToArray());
 
-            UnmanagedArray<byte> cast = new UnmanagedArray<byte>();
+            UnmanagedMemoryBlock<byte> cast = new UnmanagedMemoryBlock<byte>();
             try
             {
-                cast = UnmanagedArray.Cast<int, byte>(arr);
+                cast = UnmanagedMemoryBlock.Cast<int, byte>(arr);
                 cast.Should().AllBeOfType<byte>().And.BeInAscendingOrder();
             }
             finally

@@ -326,7 +326,7 @@ namespace NumSharp.Backends
             _dtype = typeof(#1);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _array#1 = new ArraySlice<#2>(UnmanagedArray<#2>.FromArray(values));
+            _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_array#1.Start;
@@ -341,7 +341,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Byte);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayByte = new ArraySlice<byte>(UnmanagedArray<byte>.FromArray(values));
+            _arrayByte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayByte.Start;
@@ -355,7 +355,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Int16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt16 = new ArraySlice<short>(UnmanagedArray<short>.FromArray(values));
+            _arrayInt16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayInt16.Start;
@@ -369,7 +369,7 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt16 = new ArraySlice<ushort>(UnmanagedArray<ushort>.FromArray(values));
+            _arrayUInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayUInt16.Start;
@@ -383,7 +383,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Int32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt32 = new ArraySlice<int>(UnmanagedArray<int>.FromArray(values));
+            _arrayInt32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayInt32.Start;
@@ -397,7 +397,7 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt32 = new ArraySlice<uint>(UnmanagedArray<uint>.FromArray(values));
+            _arrayUInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayUInt32.Start;
@@ -411,7 +411,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Int64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt64 = new ArraySlice<long>(UnmanagedArray<long>.FromArray(values));
+            _arrayInt64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayInt64.Start;
@@ -425,7 +425,7 @@ namespace NumSharp.Backends
             _dtype = typeof(UInt64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt64 = new ArraySlice<ulong>(UnmanagedArray<ulong>.FromArray(values));
+            _arrayUInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayUInt64.Start;
@@ -439,7 +439,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Char);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayChar = new ArraySlice<char>(UnmanagedArray<char>.FromArray(values));
+            _arrayChar = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayChar.Start;
@@ -453,7 +453,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Double);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayDouble = new ArraySlice<double>(UnmanagedArray<double>.FromArray(values));
+            _arrayDouble = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayDouble.Start;
@@ -467,7 +467,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Single);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arraySingle = new ArraySlice<float>(UnmanagedArray<float>.FromArray(values));
+            _arraySingle = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arraySingle.Start;
@@ -481,7 +481,7 @@ namespace NumSharp.Backends
             _dtype = typeof(Decimal);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayDecimal = new ArraySlice<decimal>(UnmanagedArray<decimal>.FromArray(values));
+            _arrayDecimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
             unsafe
             {
                 _address = (byte*)_arrayDecimal.Start;
@@ -1092,57 +1092,57 @@ namespace NumSharp.Backends
 #else
                 case NPTypeCode.Byte:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Byte, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Byte, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int16, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Int16, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt16, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<UInt16, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int32, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Int32, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt32, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<UInt32, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Int64, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Int64, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<UInt64, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<UInt64, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Char:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Char, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Char, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Double:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Double, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Double, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Single:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Single, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Single, TOut>(sourceArray.MemoryBlock));
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    return new ArraySlice<TOut>(UnmanagedArray.Cast<Decimal, TOut>(sourceArray.MemoryBlock));
+                    return new ArraySlice<TOut>(UnmanagedMemoryBlock.Cast<Decimal, TOut>(sourceArray.MemoryBlock));
                 }
 
                 default:

@@ -30,13 +30,13 @@ namespace NumSharp.Benchmark.Unmanaged
         private const int length = 100;
         private const int iterations = 800_000;
 
-        private UnmanagedArray<int> from;
+        private UnmanagedMemoryBlock<int> from;
         private UnmanagedByteStorage<int> fromvec;
-        private UnmanagedArray<int> to;
+        private UnmanagedMemoryBlock<int> to;
         private UnmanagedByteStorage<int> setvec;
 
-        private UnmanagedArray<int> fromsimple;
-        private UnmanagedArray<int> tosimple;
+        private UnmanagedMemoryBlock<int> fromsimple;
+        private UnmanagedMemoryBlock<int> tosimple;
 
         IDisposable[] memoryTrash;
         private static InternalBufferManager.PooledBufferManager pool = default;
@@ -46,14 +46,14 @@ namespace NumSharp.Benchmark.Unmanaged
         [IterationSetup]
         public void Setup()
         {
-            @from = new UnmanagedArray<int>(length);
+            @from = new UnmanagedMemoryBlock<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
-            to = new UnmanagedArray<int>(length);
+            to = new UnmanagedMemoryBlock<int>(length);
             setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
             nd = np.arange(length * 10).reshape(10, length);
 
-            fromsimple = new UnmanagedArray<int>(length);
-            tosimple = new UnmanagedArray<int>(length);
+            fromsimple = new UnmanagedMemoryBlock<int>(length);
+            tosimple = new UnmanagedMemoryBlock<int>(length);
             pool = new InternalBufferManager.PooledBufferManager(32_777_216, 1_677_721);
         }
 
@@ -122,10 +122,10 @@ namespace NumSharp.Benchmark.Unmanaged
 
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy3<T>(UnmanagedArray<T> source) where T : unmanaged
+        public static UnmanagedMemoryBlock<T> Copy3<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
         {
             var len = source.Count * sizeof(T);
-            var ret = new UnmanagedArray<T>(source.Count);
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
             MemCopy(ret.Address, source.Address, (UIntPtr)len);
             //Buffer.MemoryCopy(source._itemBuffer, ret._itemBuffer, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
@@ -133,20 +133,20 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy2<T>(UnmanagedArray<T> source) where T : unmanaged
+        public static UnmanagedMemoryBlock<T> Copy2<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
         {
             var len = source.Count * sizeof(T);
             var buffer = pool.TakeBuffer(len);
-            var ret = new UnmanagedArray<T>((T*)Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
+            var ret = new UnmanagedMemoryBlock<T>((T*)Marshal.UnsafeAddrOfPinnedArrayElement(buffer, 0), source.Count, () => pool.ReturnBuffer(buffer));
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy1<T>(UnmanagedArray<T> source) where T : unmanaged
+        public static UnmanagedMemoryBlock<T> Copy1<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
         {
-            var ret = new UnmanagedArray<T>(source.Count);
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
             var len = ret.Count * sizeof(T);
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan());
@@ -154,9 +154,9 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy<T>(UnmanagedArray<T> source) where T : unmanaged
+        public static UnmanagedMemoryBlock<T> Copy<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
         {
-            var ret = new UnmanagedArray<T>(source.Count);
+            var ret = new UnmanagedMemoryBlock<T>(source.Count);
             source.AsSpan().CopyTo(ret.AsSpan());
             return ret;
         }

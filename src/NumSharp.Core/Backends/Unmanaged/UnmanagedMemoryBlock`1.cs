@@ -11,7 +11,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Backends.Unmanaged
 {
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct UnmanagedArray<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedArray<T>>,  IUnmanagedArray where T : unmanaged
+    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>,  IUnmanagedArray where T : unmanaged
     {
         private Action _dispose;
         private GCHandle? _gcHandle;
@@ -23,7 +23,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         [MethodImpl((MethodImplOptions)512)]
-        public UnmanagedArray(int length)
+        public UnmanagedMemoryBlock(int length)
         {
             //var bytes = length * SizeOf<T>.Size;
             //if (false)
@@ -51,7 +51,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="dispose"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedArray(T* start, int length, Action dispose)
+        public UnmanagedMemoryBlock(T* start, int length, Action dispose)
         {
             Count = length;
             BytesCount = InfoOf<T>.Size * Count;
@@ -66,7 +66,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="handle"></param>
         /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedArray(GCHandle handle, int length)
+        internal UnmanagedMemoryBlock(GCHandle handle, int length)
         {
             Count = length;
             BytesCount = InfoOf<T>.Size * Count;
@@ -82,7 +82,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="dipose"></param>
         [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedArray(GCHandle handle, int length, Action dipose)
+        internal UnmanagedMemoryBlock(GCHandle handle, int length, Action dipose)
         {
             Count = length;
             BytesCount = InfoOf<T>.Size * Count;
@@ -97,39 +97,39 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="fill"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedArray(int length, T fill) : this(length)
+        public UnmanagedMemoryBlock(int length, T fill) : this(length)
         {
             new Span<T>(Address, length).Fill(fill);
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromArray(T[] arr)
+        public static UnmanagedMemoryBlock<T> FromArray(T[] arr)
         {
-            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromArray(T[] arr, bool copy)
+        public static UnmanagedMemoryBlock<T> FromArray(T[] arr, bool copy)
         {
             if (!copy)
-                return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
 
-            var ret = new UnmanagedArray<T>(arr.Length);
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
             new Span<T>(arr).CopyTo(ret.AsSpan());
 
             return ret;
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromBuffer(byte[] arr)
+        public static UnmanagedMemoryBlock<T> FromBuffer(byte[] arr)
         {
-            return new UnmanagedArray<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromBuffer(byte[] arr, bool copy)
+        public static UnmanagedMemoryBlock<T> FromBuffer(byte[] arr, bool copy)
         {
-            return new UnmanagedArray<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
         /// <summary>
@@ -139,19 +139,19 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="manager"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> FromPool(int length, InternalBufferManager manager)
+        public static UnmanagedMemoryBlock<T> FromPool(int length, InternalBufferManager manager)
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             var buffer = manager.TakeBuffer(length * InfoOf<T>.Size);
-            return new UnmanagedArray<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy(UnmanagedArray<T> source)
+        public static UnmanagedMemoryBlock<T> Copy(UnmanagedMemoryBlock<T> source)
         {
             var itemCount = source.Count;
             var len = itemCount * InfoOf<T>.Size;
-            var ret = new UnmanagedArray<T>(itemCount);
+            var ret = new UnmanagedMemoryBlock<T>(itemCount);
             Buffer.MemoryCopy(source.Address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
@@ -164,10 +164,10 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy(void* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(void* address, int count)
         {
             var len = count * InfoOf<T>.Size;
-            var ret = new UnmanagedArray<T>(count);
+            var ret = new UnmanagedMemoryBlock<T>(count);
             Buffer.MemoryCopy(address, ret.Address, len, len);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
@@ -180,7 +180,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy(IntPtr address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(IntPtr address, int count)
         {
             return Copy((void*)address, count);
         }
@@ -192,7 +192,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedArray<T> Copy(T* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(T* address, int count)
         {
             return Copy((void*)address, count);
         }
@@ -208,7 +208,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             if (copyOldValues)
             {
-                var @new = new UnmanagedArray<T>(length);
+                var @new = new UnmanagedMemoryBlock<T>(length);
                 var bytes = Math.Min(Count, length) * InfoOf<T>.Size;
                 Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
                 Free();
@@ -218,7 +218,7 @@ namespace NumSharp.Backends.Unmanaged
             {
                 //we do not have to allocate first in we do not copy values.
                 Free();
-                this = new UnmanagedArray<T>(length);
+                this = new UnmanagedMemoryBlock<T>(length);
             }
         }
 
@@ -227,7 +227,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             if (copyOldValues)
             {
-                var @new = new UnmanagedArray<T>(length);
+                var @new = new UnmanagedMemoryBlock<T>(length);
                 var bytes = Math.Min(Count, length) * InfoOf<T>.Size;
                 Buffer.MemoryCopy(Address, @new.Address, bytes, bytes);
 
@@ -243,7 +243,7 @@ namespace NumSharp.Backends.Unmanaged
             {
                 //we do not have to allocate first in we do not copy values.
                 Free();
-                this = new UnmanagedArray<T>(length, fill);
+                this = new UnmanagedMemoryBlock<T>(length, fill);
             }
         }
 
@@ -341,9 +341,9 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        public void CopyTo(UnmanagedArray<T> array, int arrayIndex)
+        public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, int arrayIndex)
         {
-            Buffer.MemoryCopy(Address + arrayIndex, array.Address, InfoOf<T>.Size * array.Count, InfoOf<T>.Size * (Count - arrayIndex));
+            Buffer.MemoryCopy(Address + arrayIndex, memoryBlock.Address, InfoOf<T>.Size * memoryBlock.Count, InfoOf<T>.Size * (Count - arrayIndex));
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -417,7 +417,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns>
         /// <see langword="true" /> if the current object is equal to the <paramref name="other" /> parameter; otherwise, <see langword="false" />.</returns>
         [MethodImpl((MethodImplOptions)768)]
-        public bool Equals(UnmanagedArray<T> other)
+        public bool Equals(UnmanagedMemoryBlock<T> other)
         {
             return Count == other.Count && Address == other.Address;
         }
@@ -429,7 +429,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public override bool Equals(object obj)
         {
-            return obj is UnmanagedArray<T> other && Equals(other);
+            return obj is UnmanagedMemoryBlock<T> other && Equals(other);
         }
 
         /// <summary>Returns the hash code for this instance.</summary>
@@ -448,7 +448,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="right">The second value to compare.</param>
         /// <returns>true if the <paramref name="left" /> and <paramref name="right" /> parameters have the same value; otherwise, false.</returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static bool operator ==(UnmanagedArray<T> left, UnmanagedArray<T> right)
+        public static bool operator ==(UnmanagedMemoryBlock<T> left, UnmanagedMemoryBlock<T> right)
         {
             return left.Equals(right);
         }
@@ -458,7 +458,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="right">The second value to compare.</param>
         /// <returns>true if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, false.</returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static bool operator !=(UnmanagedArray<T> left, UnmanagedArray<T> right)
+        public static bool operator !=(UnmanagedMemoryBlock<T> left, UnmanagedMemoryBlock<T> right)
         {
             return !left.Equals(right);
         }

@@ -32,27 +32,27 @@ namespace NumSharp.Benchmark.Unmanaged
         private const int length = 100;
         private const int iterations = 20_000;
 
-        private UnmanagedArray<int> from;
+        private UnmanagedMemoryBlock<int> from;
         private UnmanagedByteStorage<int> fromvec;
-        private UnmanagedArray<int> to;
+        private UnmanagedMemoryBlock<int> to;
         private UnmanagedByteStorage<int> setvec;
 
-        private UnmanagedArray<int> fromsimple;
-        private UnmanagedArray<int> tosimple;
+        private UnmanagedMemoryBlock<int> fromsimple;
+        private UnmanagedMemoryBlock<int> tosimple;
 
         NDArray nd;
 
         [GlobalSetup]
         public void Setup()
         {
-            @from = new UnmanagedArray<int>(length);
+            @from = new UnmanagedMemoryBlock<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
-            to = new UnmanagedArray<int>(length);
+            to = new UnmanagedMemoryBlock<int>(length);
             setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
             nd = np.arange(length * 10).reshape(10, length);
 
-            fromsimple = new UnmanagedArray<int>(length);
-            tosimple = new UnmanagedArray<int>(length);
+            fromsimple = new UnmanagedMemoryBlock<int>(length);
+            tosimple = new UnmanagedMemoryBlock<int>(length);
         }
 
         [BenchmarkDotNet.Attributes.IterationCleanup()]

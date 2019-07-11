@@ -15,13 +15,13 @@ namespace NumSharp.Backends.Unmanaged
 
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.FromArray(array, copy));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public static ArraySlice<T> FromBuffer<T>(byte[] arr, bool copy = false) where T : unmanaged
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.FromBuffer(arr, copy));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromBuffer(arr, copy));
         }
 
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
@@ -29,7 +29,7 @@ namespace NumSharp.Backends.Unmanaged
         public static ArraySlice<T> FromPool<T>(int count, InternalBufferManager pool) where T : unmanaged
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            return new ArraySlice<T>(UnmanagedArray<T>.FromPool(count, pool));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(count, pool));
         }
 
 
@@ -46,7 +46,7 @@ namespace NumSharp.Backends.Unmanaged
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
 	            case NPTypeCode.#1:
 	            {
-                    return new ArraySlice<#1>(UnmanagedArray<#1>.FromPool(1, _scalarPool));
+                    return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(1, _scalarPool));
 	            }
 	            %
 	            default:
@@ -55,57 +55,57 @@ namespace NumSharp.Backends.Unmanaged
 
                 case NPTypeCode.Byte:
                 {
-                    return new ArraySlice<Byte>(UnmanagedArray<Byte>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    return new ArraySlice<Int16>(UnmanagedArray<Int16>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    return new ArraySlice<UInt16>(UnmanagedArray<UInt16>.FromPool(1, _scalarPool));
+                    return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    return new ArraySlice<Int32>(UnmanagedArray<Int32>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    return new ArraySlice<UInt32>(UnmanagedArray<UInt32>.FromPool(1, _scalarPool));
+                    return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    return new ArraySlice<Int64>(UnmanagedArray<Int64>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    return new ArraySlice<UInt64>(UnmanagedArray<UInt64>.FromPool(1, _scalarPool));
+                    return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Char:
                 {
-                    return new ArraySlice<Char>(UnmanagedArray<Char>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Double:
                 {
-                    return new ArraySlice<Double>(UnmanagedArray<Double>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Single:
                 {
-                    return new ArraySlice<Single>(UnmanagedArray<Single>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(1, _scalarPool));
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    return new ArraySlice<Decimal>(UnmanagedArray<Decimal>.FromPool(1, _scalarPool));
+                    return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(1, _scalarPool));
                 }
 
                 default:
@@ -129,7 +129,7 @@ namespace NumSharp.Backends.Unmanaged
         ///     The memory block this <see cref="ArraySlice{T}"/> is stored in.
         /// </summary>
         /// <remarks>If <see cref="IsSlice"/> is false then this slice represents the entire MemoryBlock.</remarks>
-        public readonly UnmanagedArray<T> MemoryBlock;
+        public readonly UnmanagedMemoryBlock<T> MemoryBlock;
 
         public readonly T* Address;
         public readonly int Count;
@@ -145,7 +145,7 @@ namespace NumSharp.Backends.Unmanaged
             [MethodImpl((MethodImplOptions)768)] get => new Span<T>(Address, Count);
         }
 
-        public ArraySlice(UnmanagedArray<T> memoryBlock)
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock)
         {
             MemoryBlock = memoryBlock;
             IsSlice = false;
@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Unmanaged
             Count = MemoryBlock.Count;
         }
 
-        public ArraySlice(UnmanagedArray<T> memoryBlock, Span<T> slice)
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
         {
             MemoryBlock = memoryBlock;
             IsSlice = true;
@@ -230,7 +230,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns></returns>
         public static ArraySlice<T> Scalar(T val) //TODO! use it, why is it not used.
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.FromPool(1, _buffer));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(1, _buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -242,7 +242,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public ArraySlice<T> Clone()
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.Copy(Address, Count));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
         }
 
         #region Explicit Interfaces
@@ -328,14 +328,14 @@ namespace NumSharp.Backends.Unmanaged
 
         public static ArraySlice<T> FromArray(T[] array, bool copy = false)
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.FromArray(array, copy));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
 
         [MethodImpl((MethodImplOptions)768)]
         public static ArraySlice<T> FromBuffer(byte[] arr, bool copy = false)
         {
-            return new ArraySlice<T>(UnmanagedArray<T>.FromBuffer(arr, copy));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromBuffer(arr, copy));
         }
 
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
@@ -343,71 +343,71 @@ namespace NumSharp.Backends.Unmanaged
         public static ArraySlice<T> FromPool(int count, InternalBufferManager pool)
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            return new ArraySlice<T>(UnmanagedArray<T>.FromPool(count, pool));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(count, pool));
         }
 
 #if _REGEN
         %foreach supported_currently_supported,supported_currently_supported_lowercase%
         public static ArraySlice<#2> FromArray(#2[] #2s, bool copy = false)
         {
-            return new ArraySlice<#2>(UnmanagedArray<#2>.FromArray(#2s, copy));
+            return new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(#2s, copy));
         }
 
         %
 #else
         public static ArraySlice<byte> FromArray(byte[] bytes, bool copy = false)
         {
-            return new ArraySlice<byte>(UnmanagedArray<byte>.FromArray(bytes, copy));
+            return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(bytes, copy));
         }
 
         public static ArraySlice<short> FromArray(short[] shorts, bool copy = false)
         {
-            return new ArraySlice<short>(UnmanagedArray<short>.FromArray(shorts, copy));
+            return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(shorts, copy));
         }
 
         public static ArraySlice<ushort> FromArray(ushort[] ushorts, bool copy = false)
         {
-            return new ArraySlice<ushort>(UnmanagedArray<ushort>.FromArray(ushorts, copy));
+            return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(ushorts, copy));
         }
 
         public static ArraySlice<int> FromArray(int[] ints, bool copy = false)
         {
-            return new ArraySlice<int>(UnmanagedArray<int>.FromArray(ints, copy));
+            return new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(ints, copy));
         }
 
         public static ArraySlice<uint> FromArray(uint[] uints, bool copy = false)
         {
-            return new ArraySlice<uint>(UnmanagedArray<uint>.FromArray(uints, copy));
+            return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(uints, copy));
         }
 
         public static ArraySlice<long> FromArray(long[] longs, bool copy = false)
         {
-            return new ArraySlice<long>(UnmanagedArray<long>.FromArray(longs, copy));
+            return new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(longs, copy));
         }
 
         public static ArraySlice<ulong> FromArray(ulong[] ulongs, bool copy = false)
         {
-            return new ArraySlice<ulong>(UnmanagedArray<ulong>.FromArray(ulongs, copy));
+            return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(ulongs, copy));
         }
 
         public static ArraySlice<char> FromArray(char[] chars, bool copy = false)
         {
-            return new ArraySlice<char>(UnmanagedArray<char>.FromArray(chars, copy));
+            return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(chars, copy));
         }
 
         public static ArraySlice<double> FromArray(double[] doubles, bool copy = false)
         {
-            return new ArraySlice<double>(UnmanagedArray<double>.FromArray(doubles, copy));
+            return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(doubles, copy));
         }
 
         public static ArraySlice<float> FromArray(float[] floats, bool copy = false)
         {
-            return new ArraySlice<float>(UnmanagedArray<float>.FromArray(floats, copy));
+            return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(floats, copy));
         }
 
         public static ArraySlice<decimal> FromArray(decimal[] decimals, bool copy = false)
         {
-            return new ArraySlice<decimal>(UnmanagedArray<decimal>.FromArray(decimals, copy));
+            return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(decimals, copy));
         }
 #endif
 

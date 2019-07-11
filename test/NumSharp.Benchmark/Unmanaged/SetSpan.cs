@@ -24,25 +24,25 @@ namespace NumSharp.Benchmark.Unmanaged
         private const int length = 100_000;
         private const int iterations = 20_000;
 
-        UnmanagedArray<int> from;
+        UnmanagedMemoryBlock<int> from;
         UnmanagedByteStorage<int> fromvec;
-        UnmanagedArray<int> to;
+        UnmanagedMemoryBlock<int> to;
         UnmanagedByteStorage<int> setvec;
 
-        private UnmanagedArray<int> fromsimple;
-        private UnmanagedArray<int> tosimple;
+        private UnmanagedMemoryBlock<int> fromsimple;
+        private UnmanagedMemoryBlock<int> tosimple;
 
         [GlobalSetup]
         public void Setup()
         {
-            @from = new UnmanagedArray<int>(length);
+            @from = new UnmanagedMemoryBlock<int>(length);
             fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
-            to = new UnmanagedArray<int>(length);
+            to = new UnmanagedMemoryBlock<int>(length);
             setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
 
 
-            fromsimple = new UnmanagedArray<int>(length);
-            tosimple = new UnmanagedArray<int>(length);
+            fromsimple = new UnmanagedMemoryBlock<int>(length);
+            tosimple = new UnmanagedMemoryBlock<int>(length);
         }
 
         [Benchmark]
