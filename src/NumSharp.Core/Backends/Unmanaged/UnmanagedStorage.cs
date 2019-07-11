@@ -41,24 +41,20 @@ namespace NumSharp.Backends
         protected ArraySlice<float> _arraySingle;
         protected ArraySlice<decimal> _arrayDecimal;
 #endif
-        protected unsafe byte* _address;
-        protected unsafe int _count;
+        public IArraySlice InternalArray;
+        public unsafe byte* Address;
+        public int Count;
 
         protected Type _dtype;
         protected NPTypeCode _typecode;
-        protected Shape _shape;
-        protected Slice _slice; //todo! Unused? theres a similar property below with get and set
 
-        /// <summary>
-        /// Flag current storage order
-        /// This flag will be different from Shape.Order when order is changed 
-        /// </summary>
-        private string order = "C";
+        protected Shape _shape;
+        //protected Slice _slice; //todo! Unused? theres a similar property below with get and set
 
         /// <summary>
         ///     Does this instance support spanning?
         /// </summary>
-        public bool SupportsSpan => true;
+        public bool SupportsSpan => true; //TODO! now that we always support spanning, I think we should remove it.
 
         /// <summary>
         ///     The data type of internal storage array.
@@ -99,7 +95,7 @@ namespace NumSharp.Backends
         {
             unsafe
             {
-                return new Span<T>(_address, _count);
+                return new Span<T>(Address, Count);
             }
         }
 
@@ -116,13 +112,26 @@ namespace NumSharp.Backends
 
         public static UnmanagedStorage Scalar<T>(T value) where T : unmanaged
         {
-            return new UnmanagedStorage(typeof(T));
+            return new UnmanagedStorage(ArraySlice.Scalar(value));
+        }
+
+        /// <summary>
+        ///     Scalar constructor
+        /// </summary>
+        private unsafe UnmanagedStorage(IArraySlice values)
+        {
+            _shape = Shape.Scalar;
+            _dtype = (_typecode = values.TypeCode).AsType();
+            Address = (byte*)values.Address;
+            Count = 1;
+            SetInternalArray(values);
         }
 
         /// <summary>
         ///     Creates an empty storage of type <paramref name="dtype"/>.
         /// </summary>
         /// <param name="dtype">The type of this storage</param>
+        /// <remarks>Usually <see cref="Allocate(NumSharp.Shape,System.Type)"/> is called after this constructor.</remarks>
         public UnmanagedStorage(Type dtype)
         {
             _dtype = dtype ?? throw new ArgumentNullException(nameof(dtype));
@@ -136,14 +145,7 @@ namespace NumSharp.Backends
         /// <param name="dtype">The type of this storage</param>
         public UnmanagedStorage(object value)
         {
-            _dtype = value.GetType();
-            _typecode = _dtype.GetTypeCode();
-            _shape = Shape.Scalar;
-            SetInternalArray(ArraySlice.Scalar(value));
-            unsafe
-            {
-                _address = (byte*)_arrayByte.Start;
-            }
+            _Allocate(Shape.Scalar, ArraySlice.Scalar(value));
         }
 
         /// <summary>
@@ -152,22 +154,12 @@ namespace NumSharp.Backends
         /// <param name="arraySlice">The slice to wrap </param>
         public UnmanagedStorage(IArraySlice arraySlice, Shape shape)
         {
-            _Allocate(shape, arraySlice.TypeCode, arraySlice);
-            _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(0);
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            _Allocate(shape, arraySlice);
         }
 
-        /// <summary>
-        ///     Creates an empty storage of type <paramref name="typeCode"/>.
-        /// </summary>
-        /// <param name="typeCode">The type of this storage</param>
-        public UnmanagedStorage(NPTypeCode typeCode)
-        {
-            if (typeCode == NPTypeCode.Empty) throw new ArgumentNullException(nameof(typeCode));
-            _dtype = typeCode.AsType();
-            _typecode = typeCode;
-            _shape = new Shape(0);
-        }
 
         //todo! create scalar constuctors?
 #if _REGEN
@@ -177,143 +169,156 @@ namespace NumSharp.Backends
             _dtype = typeof(#1);
             _typecode = InfoOf<#2>.NPTypeCode;
             _shape = Shape.Scalar;
-            _array#1 = ArraySlice<#2>.Scalar(scalar);
+            InternalArray = _array#1 = ArraySlice.Scalar<#2>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_array#1.Address;
+                Count = _array#1.Count;
             }
         }
+
         %
 #else
         public UnmanagedStorage(byte scalar)
-        {
+        {            
             _dtype = typeof(Byte);
             _typecode = InfoOf<byte>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayByte = ArraySlice<byte>.Scalar(scalar);
+            InternalArray = _arrayByte = ArraySlice.Scalar<byte>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayByte.Address;
+                Count = _arrayByte.Count;
             }
         }
 
         public UnmanagedStorage(short scalar)
-        {
+        {            
             _dtype = typeof(Int16);
             _typecode = InfoOf<short>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayInt16 = ArraySlice<short>.Scalar(scalar);
+            InternalArray = _arrayInt16 = ArraySlice.Scalar<short>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayInt16.Address;
+                Count = _arrayInt16.Count;
             }
         }
 
         public UnmanagedStorage(ushort scalar)
-        {
+        {            
             _dtype = typeof(UInt16);
             _typecode = InfoOf<ushort>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayUInt16 = ArraySlice<ushort>.Scalar(scalar);
+            InternalArray = _arrayUInt16 = ArraySlice.Scalar<ushort>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayUInt16.Address;
+                Count = _arrayUInt16.Count;
             }
         }
 
         public UnmanagedStorage(int scalar)
-        {
+        {            
             _dtype = typeof(Int32);
             _typecode = InfoOf<int>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayInt32 = ArraySlice<int>.Scalar(scalar);
+            InternalArray = _arrayInt32 = ArraySlice.Scalar<int>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayInt32.Address;
+                Count = _arrayInt32.Count;
             }
         }
 
         public UnmanagedStorage(uint scalar)
-        {
+        {            
             _dtype = typeof(UInt32);
             _typecode = InfoOf<uint>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayUInt32 = ArraySlice<uint>.Scalar(scalar);
+            InternalArray = _arrayUInt32 = ArraySlice.Scalar<uint>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayUInt32.Address;
+                Count = _arrayUInt32.Count;
             }
         }
 
         public UnmanagedStorage(long scalar)
-        {
+        {            
             _dtype = typeof(Int64);
             _typecode = InfoOf<long>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayInt64 = ArraySlice<long>.Scalar(scalar);
+            InternalArray = _arrayInt64 = ArraySlice.Scalar<long>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayInt64.Address;
+                Count = _arrayInt64.Count;
             }
         }
 
         public UnmanagedStorage(ulong scalar)
-        {
+        {            
             _dtype = typeof(UInt64);
             _typecode = InfoOf<ulong>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayUInt64 = ArraySlice<ulong>.Scalar(scalar);
+            InternalArray = _arrayUInt64 = ArraySlice.Scalar<ulong>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayUInt64.Address;
+                Count = _arrayUInt64.Count;
             }
         }
 
         public UnmanagedStorage(char scalar)
-        {
+        {            
             _dtype = typeof(Char);
             _typecode = InfoOf<char>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayChar = ArraySlice<char>.Scalar(scalar);
+            InternalArray = _arrayChar = ArraySlice.Scalar<char>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayChar.Address;
+                Count = _arrayChar.Count;
             }
         }
 
         public UnmanagedStorage(double scalar)
-        {
+        {            
             _dtype = typeof(Double);
             _typecode = InfoOf<double>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayDouble = ArraySlice<double>.Scalar(scalar);
+            InternalArray = _arrayDouble = ArraySlice.Scalar<double>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayDouble.Address;
+                Count = _arrayDouble.Count;
             }
         }
 
         public UnmanagedStorage(float scalar)
-        {
+        {            
             _dtype = typeof(Single);
             _typecode = InfoOf<float>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arraySingle = ArraySlice<float>.Scalar(scalar);
+            InternalArray = _arraySingle = ArraySlice.Scalar<float>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arraySingle.Address;
+                Count = _arraySingle.Count;
             }
         }
 
         public UnmanagedStorage(decimal scalar)
-        {
+        {            
             _dtype = typeof(Decimal);
             _typecode = InfoOf<decimal>.NPTypeCode;
             _shape = Shape.Scalar;
-            _arrayDecimal = ArraySlice<decimal>.Scalar(scalar);
+            InternalArray = _arrayDecimal = ArraySlice.Scalar<decimal>(scalar);
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayDecimal.Address;
+                Count = _arrayDecimal.Count;
             }
         }
 #endif
@@ -326,165 +331,167 @@ namespace NumSharp.Backends
             _dtype = typeof(#1);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
+            InternalArray = _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_array#1.Start;
+                Address = (byte*)_array#1.Address;
+                Count = values.Length;
             }
         }
         %
 #else
         public UnmanagedStorage(Byte[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Byte);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayByte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
+            InternalArray = _arrayByte = new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayByte.Start;
+                Address = (byte*)_arrayByte.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Int16[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
+            InternalArray = _arrayInt16 = new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayInt16.Start;
+                Address = (byte*)_arrayInt16.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(UInt16[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt16);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
+            InternalArray = _arrayUInt16 = new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayUInt16.Start;
+                Address = (byte*)_arrayUInt16.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Int32[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
+            InternalArray = _arrayInt32 = new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayInt32.Start;
+                Address = (byte*)_arrayInt32.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(UInt32[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt32);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
+            InternalArray = _arrayUInt32 = new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayUInt32.Start;
+                Address = (byte*)_arrayUInt32.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Int64[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayInt64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
+            InternalArray = _arrayInt64 = new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayInt64.Start;
+                Address = (byte*)_arrayInt64.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(UInt64[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(UInt64);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayUInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
+            InternalArray = _arrayUInt64 = new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayUInt64.Start;
+                Address = (byte*)_arrayUInt64.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Char[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Char);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayChar = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
+            InternalArray = _arrayChar = new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayChar.Start;
+                Address = (byte*)_arrayChar.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Double[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Double);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayDouble = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
+            InternalArray = _arrayDouble = new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayDouble.Start;
+                Address = (byte*)_arrayDouble.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Single[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Single);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arraySingle = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
+            InternalArray = _arraySingle = new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arraySingle.Start;
+                Address = (byte*)_arraySingle.Address;
+                Count = values.Length;
             }
         }
-
         public UnmanagedStorage(Decimal[] values)
-        {
+        {            
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Decimal);
             _typecode = _dtype.GetTypeCode();
             _shape = new Shape(values.Length);
-            _arrayDecimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
+            InternalArray = _arrayDecimal = new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(values));
             unsafe
             {
-                _address = (byte*)_arrayDecimal.Start;
+                Address = (byte*)_arrayDecimal.Address;
+                Count = values.Length;
             }
         }
 #endif
@@ -505,7 +512,7 @@ namespace NumSharp.Backends
                 %foreach supported_currently_supported,supported_currently_supported_lowercase%
                 case NPTypeCode.#1:
                 {
-                    _array#1 = ArraySlice<#2>.FromArray((#2[])array);
+                    InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
                     break;
                 }
                 %
@@ -515,70 +522,59 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Byte:
                 {
-                    _arrayByte = ArraySlice<byte>.FromArray((byte[])array);
+                    InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
                     break;
                 }
-
                 case NPTypeCode.Int16:
                 {
-                    _arrayInt16 = ArraySlice<short>.FromArray((short[])array);
+                    InternalArray = _arrayInt16 = ArraySlice.FromArray<short>((short[])array);
                     break;
                 }
-
                 case NPTypeCode.UInt16:
                 {
-                    _arrayUInt16 = ArraySlice<ushort>.FromArray((ushort[])array);
+                    InternalArray = _arrayUInt16 = ArraySlice.FromArray<ushort>((ushort[])array);
                     break;
                 }
-
                 case NPTypeCode.Int32:
                 {
-                    _arrayInt32 = ArraySlice<int>.FromArray((int[])array);
+                    InternalArray = _arrayInt32 = ArraySlice.FromArray<int>((int[])array);
                     break;
                 }
-
                 case NPTypeCode.UInt32:
                 {
-                    _arrayUInt32 = ArraySlice<uint>.FromArray((uint[])array);
+                    InternalArray = _arrayUInt32 = ArraySlice.FromArray<uint>((uint[])array);
                     break;
                 }
-
                 case NPTypeCode.Int64:
                 {
-                    _arrayInt64 = ArraySlice<long>.FromArray((long[])array);
+                    InternalArray = _arrayInt64 = ArraySlice.FromArray<long>((long[])array);
                     break;
                 }
-
                 case NPTypeCode.UInt64:
                 {
-                    _arrayUInt64 = ArraySlice<ulong>.FromArray((ulong[])array);
+                    InternalArray = _arrayUInt64 = ArraySlice.FromArray<ulong>((ulong[])array);
                     break;
                 }
-
                 case NPTypeCode.Char:
                 {
-                    _arrayChar = ArraySlice<char>.FromArray((char[])array);
+                    InternalArray = _arrayChar = ArraySlice.FromArray<char>((char[])array);
                     break;
                 }
-
                 case NPTypeCode.Double:
                 {
-                    _arrayDouble = ArraySlice<double>.FromArray((double[])array);
+                    InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
                     break;
                 }
-
                 case NPTypeCode.Single:
                 {
-                    _arraySingle = ArraySlice<float>.FromArray((float[])array);
+                    InternalArray = _arraySingle = ArraySlice.FromArray<float>((float[])array);
                     break;
                 }
-
                 case NPTypeCode.Decimal:
                 {
-                    _arrayDecimal = ArraySlice<decimal>.FromArray((decimal[])array);
+                    InternalArray = _arrayDecimal = ArraySlice.FromArray<decimal>((decimal[])array);
                     break;
                 }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -599,7 +595,7 @@ namespace NumSharp.Backends
                 %foreach supported_currently_supported,supported_currently_supported_lowercase%
                 case NPTypeCode.#1:
                 {
-                    _array#1 = (ArraySlice<#2>)array;
+                    InternalArray = _array#1 = (ArraySlice<#2>)array;
                     break;
                 }
                 %
@@ -609,70 +605,59 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Byte:
                 {
-                    _arrayByte = (ArraySlice<byte>)array;
+                    InternalArray = _arrayByte = (ArraySlice<byte>)array;
                     break;
                 }
-
                 case NPTypeCode.Int16:
                 {
-                    _arrayInt16 = (ArraySlice<short>)array;
+                    InternalArray = _arrayInt16 = (ArraySlice<short>)array;
                     break;
                 }
-
                 case NPTypeCode.UInt16:
                 {
-                    _arrayUInt16 = (ArraySlice<ushort>)array;
+                    InternalArray = _arrayUInt16 = (ArraySlice<ushort>)array;
                     break;
                 }
-
                 case NPTypeCode.Int32:
                 {
-                    _arrayInt32 = (ArraySlice<int>)array;
+                    InternalArray = _arrayInt32 = (ArraySlice<int>)array;
                     break;
                 }
-
                 case NPTypeCode.UInt32:
                 {
-                    _arrayUInt32 = (ArraySlice<uint>)array;
+                    InternalArray = _arrayUInt32 = (ArraySlice<uint>)array;
                     break;
                 }
-
                 case NPTypeCode.Int64:
                 {
-                    _arrayInt64 = (ArraySlice<long>)array;
+                    InternalArray = _arrayInt64 = (ArraySlice<long>)array;
                     break;
                 }
-
                 case NPTypeCode.UInt64:
                 {
-                    _arrayUInt64 = (ArraySlice<ulong>)array;
+                    InternalArray = _arrayUInt64 = (ArraySlice<ulong>)array;
                     break;
                 }
-
                 case NPTypeCode.Char:
                 {
-                    _arrayChar = (ArraySlice<char>)array;
+                    InternalArray = _arrayChar = (ArraySlice<char>)array;
                     break;
                 }
-
                 case NPTypeCode.Double:
                 {
-                    _arrayDouble = (ArraySlice<double>)array;
+                    InternalArray = _arrayDouble = (ArraySlice<double>)array;
                     break;
                 }
-
                 case NPTypeCode.Single:
                 {
-                    _arraySingle = (ArraySlice<float>)array;
+                    InternalArray = _arraySingle = (ArraySlice<float>)array;
                     break;
                 }
-
                 case NPTypeCode.Decimal:
                 {
-                    _arrayDecimal = (ArraySlice<decimal>)array;
+                    InternalArray = _arrayDecimal = (ArraySlice<decimal>)array;
                     break;
                 }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -860,7 +845,7 @@ namespace NumSharp.Backends
         /// <param name="index">The index to set <paramref name="value"/> at</param>
         /// <param name="value">The value to set</param>
         /// <exception cref="InvalidCastException">When <see cref="value"/>'s type does not equal to <see cref="DType"/>.</exception>
-        protected void SetInternalValueUnsafe(object value, int index)
+        protected unsafe void SetInternalValueUnsafe(object value, int index)
         {
             switch (_typecode)
             {
@@ -869,7 +854,7 @@ namespace NumSharp.Backends
                 %foreach supported_currently_supported,supported_currently_supported_lowercase%
                 case NPTypeCode.#1:
                 {
-                    _array#1[index] = (#1) value;
+                    *((#2*)Address + index) = (#2) value;
                     break;
                     
                 }
@@ -881,169 +866,70 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Byte:
                 {
-                    _arrayByte[index] = (Byte)value;
+                    *((byte*)Address + index) = (byte) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Int16:
                 {
-                    _arrayInt16[index] = (Int16)value;
+                    *((short*)Address + index) = (short) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.UInt16:
                 {
-                    _arrayUInt16[index] = (UInt16)value;
+                    *((ushort*)Address + index) = (ushort) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Int32:
                 {
-                    _arrayInt32[index] = (Int32)value;
+                    *((int*)Address + index) = (int) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.UInt32:
                 {
-                    _arrayUInt32[index] = (UInt32)value;
+                    *((uint*)Address + index) = (uint) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Int64:
                 {
-                    _arrayInt64[index] = (Int64)value;
+                    *((long*)Address + index) = (long) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.UInt64:
                 {
-                    _arrayUInt64[index] = (UInt64)value;
+                    *((ulong*)Address + index) = (ulong) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Char:
                 {
-                    _arrayChar[index] = (Char)value;
+                    *((char*)Address + index) = (char) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Double:
                 {
-                    _arrayDouble[index] = (Double)value;
+                    *((double*)Address + index) = (double) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Single:
                 {
-                    _arraySingle[index] = (Single)value;
+                    *((float*)Address + index) = (float) value;
                     break;
+                    
                 }
-
                 case NPTypeCode.Decimal:
                 {
-                    _arrayDecimal[index] = (Decimal)value;
+                    *((decimal*)Address + index) = (decimal) value;
                     break;
+                    
                 }
-
-                default:
-                    throw new NotSupportedException();
-#endif
-            }
-        }
-
-        /// <summary>
-        ///     Gets the internal array based on <see cref="type"/>.
-        /// </summary>
-        /// <returns>Will return null if <see cref="type"/> != <see cref="DType"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected IArraySlice GetInternalArray(Type type)
-        {
-            return GetInternalArray(type.GetTypeCode());
-        }
-
-        /// <summary>
-        ///     Gets the internal array based on <see cref="DType"/>.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected IArraySlice GetInternalArray()
-        {
-            return GetInternalArray(_typecode);
-        }
-
-        /// <summary>
-        ///     Gets the internal array based on <see cref="type"/>.
-        /// </summary>
-        /// <returns>Will return null if <see cref="typeCode"/> != <see cref="DType"/></returns>
-        protected IArraySlice GetInternalArray(NPTypeCode typeCode)
-        {
-            switch (typeCode)
-            {
-#if _REGEN
-                %foreach supported_currently_supported,supported_currently_supported_lowercase%
-                case NPTypeCode.#1:
-                {
-                    return _array#1;
-                }
-                %
-                default:
-                    throw new NotSupportedException();
-#else
-
-                case NPTypeCode.Byte:
-                {
-                    return _arrayByte;
-                }
-
-                case NPTypeCode.Int16:
-                {
-                    return _arrayInt16;
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    return _arrayUInt16;
-                }
-
-                case NPTypeCode.Int32:
-                {
-                    return _arrayInt32;
-                }
-
-                case NPTypeCode.UInt32:
-                {
-                    return _arrayUInt32;
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    return _arrayInt64;
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    return _arrayUInt64;
-                }
-
-                case NPTypeCode.Char:
-                {
-                    return _arrayChar;
-                }
-
-                case NPTypeCode.Double:
-                {
-                    return _arrayDouble;
-                }
-
-                case NPTypeCode.Single:
-                {
-                    return _arraySingle;
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    return _arrayDecimal;
-                }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -1153,36 +1039,20 @@ namespace NumSharp.Backends
 
         #region Allocation
 
-        protected void _Allocate(Shape shape, Type dtype, Array values)
+        protected void _Allocate(Shape shape, IArraySlice values)
         {
-            if (shape.IsEmpty)
-                throw new ArgumentNullException(nameof(shape));
-
             _shape = shape;
-
-            if (dtype != null)
-            {
-                _dtype = dtype;
-                _typecode = _dtype.GetTypeCode();
-                if (_typecode == NPTypeCode.Empty)
-                    throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
-            }
-
-            SetInternalArray(values);
-        }
-
-        protected void _Allocate(Shape shape, NPTypeCode typeCode, IArraySlice values)
-        {
-            if (shape.IsEmpty)
-                throw new ArgumentNullException(nameof(shape));
-
-            _shape = shape;
+            _typecode = values.TypeCode;
 
             if (_typecode == NPTypeCode.Empty)
-                throw new NotSupportedException($"{typeCode} as a dtype is not supported.");
+                throw new NotSupportedException($"{values.TypeCode} as a dtype is not supported.");
 
-            _typecode = typeCode;
-            _dtype = typeCode.AsType();
+            _dtype = _typecode.AsType();
+            Count = values.Count;
+            unsafe
+            {
+                Address = (byte*)values.Address;
+            }
 
             SetInternalArray(values);
         }
@@ -1197,8 +1067,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            dtype = dtype ?? DType;
-            _Allocate(shape, dtype, Arrays.Create(dtype, new int[] {shape.Size}));
+            _Allocate(shape, ArraySlice.FromArray(Arrays.Create(dtype ?? DType, new int[] {shape.Size})));
         }
 
         /// <summary>
@@ -1209,9 +1078,10 @@ namespace NumSharp.Backends
         public void Allocate(Array values)
         {
             if (values == null)
-            {
                 throw new ArgumentNullException(nameof(values));
-            }
+
+            if (values.Length == 0)
+                throw new ArgumentException("values can't be an empty array", nameof(values));
 
             Shape shape;
             //get lengths incase it is multi-dimensional
@@ -1231,8 +1101,8 @@ namespace NumSharp.Backends
             // ReSharper disable once PossibleNullReferenceException
             while (elementType.IsArray)
                 elementType = elementType.GetElementType();
-
-            _Allocate(shape, elementType, values);
+            var slice = ArraySlice.FromArray(values);
+            _Allocate(shape, slice);
         }
 
         /// <summary>
@@ -1244,7 +1114,13 @@ namespace NumSharp.Backends
         /// <remarks>Does not copy <paramref name="values"/></remarks>
         public void Allocate<T>(ArraySlice<T> values, Shape shape, bool copy = false) where T : unmanaged
         {
-            _Allocate(shape, InfoOf<T>.NPTypeCode, copy ? values.Clone() : values);
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            if (values.Count != shape.Size)
+                throw new ArgumentException($"values.Length does not match shape.Size", nameof(values));
+
+            _Allocate(shape, copy ? values.Clone() : values);
         }
 
         /// <summary>
@@ -1256,7 +1132,13 @@ namespace NumSharp.Backends
         /// <remarks>Does not copy <paramref name="values"/></remarks>
         public void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {
-            _Allocate(shape, values.TypeCode, (IArraySlice)(copy ? values.Clone() : values));
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            if (values.Count != shape.Size)
+                throw new ArgumentException($"values.Length does not match shape.Size", nameof(values));
+
+            _Allocate(shape, (IArraySlice)(copy ? values.Clone() : values));
         }
 
         /// <summary>
@@ -1273,12 +1155,15 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
+            if (values.Length != shape.Size)
+                throw new ArgumentException($"values.Length does not match shape.Size", nameof(values));
+
             Type elementType = values.GetType();
             // ReSharper disable once PossibleNullReferenceException
             while (elementType.IsArray)
                 elementType = elementType.GetElementType();
 
-            _Allocate(shape, elementType, values);
+            _Allocate(shape, ArraySlice.FromArray(values));
         }
 
         /// <summary>
@@ -1289,9 +1174,10 @@ namespace NumSharp.Backends
         public void Allocate<T>(T[] values) where T : unmanaged
         {
             if (values == null)
-            {
                 throw new ArgumentNullException(nameof(values));
-            }
+
+            if (values.Length == 0)
+                throw new ArgumentException("values can't be an empty array", nameof(values));
 
             Shape shape;
             if (values.Rank > 1)
@@ -1311,7 +1197,7 @@ namespace NumSharp.Backends
             while (elementType.IsArray)
                 elementType = elementType.GetElementType();
 
-            _Allocate(shape, elementType, values);
+            _Allocate(shape, ArraySlice.FromArray(values));
         }
 
         #endregion
@@ -1323,7 +1209,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IArraySlice GetData()
         {
-            return GetInternalArray(DType);
+            return InternalArray;
         }
 
         /// <summary>
@@ -1332,7 +1218,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public IArraySlice CloneData()
         {
-            return (IArraySlice)GetInternalArray().Clone();
+            return InternalArray.Clone();
         }
 
 
@@ -1344,17 +1230,17 @@ namespace NumSharp.Backends
         {
             //if (!typeof(T).IsValidNPType())
             //    throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
-            return (ArraySlice<T>)GetInternalArray();
+            return (ArraySlice<T>)InternalArray;
         }
 
         /// <summary>
         ///     Get all elements from cloned storage as T[] and cast dtype
         /// </summary>
         /// <typeparam name="T">cloned storgae dtype</typeparam>
-        /// <returns>reference to cloned storage as T[]</returns>
+        /// <returns>reference to cloned storage as <see cref="ArraySlice{T}"/></returns>
         public ArraySlice<T> CloneData<T>() where T : unmanaged
         {
-            return (ArraySlice<T>)GetInternalArray().Clone();
+            return (ArraySlice<T>)InternalArray.Clone();
         }
 
         /// <summary>
@@ -1374,7 +1260,7 @@ namespace NumSharp.Backends
             //    Console.WriteLine($"Warning: GetData {typeof(T).Name} is not {_DType.Name} of storage.");
             //}
 
-            var internalArray = GetInternalArray();
+            var internalArray = InternalArray;
             if (internalArray is ArraySlice<T> ret)
                 return ret;
 
@@ -1392,7 +1278,7 @@ namespace NumSharp.Backends
         {
             unsafe
             {
-                return *((T*)_address + Shape.GetIndexInShape(Slice, indices));
+                return *((T*)Address + _shape.GetIndexInShape(Slice, indices));
             }
         }
 
@@ -1407,7 +1293,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
         {
-            *((T*)this._address + _shape.GetIndexInShape(indices)) = value;
+            *((T*)this.Address + _shape.GetIndexInShape(indices)) = value;
         }
 
         /// <summary>
@@ -1430,8 +1316,8 @@ namespace NumSharp.Backends
                 if (subShape != value.Storage.Shape)
                     throw new IncorrectShapeException();
                 var step = value.dtypesize;
-                var len = step * value.Storage._count;
-                Buffer.MemoryCopy(value.Storage._address, _address + offset * step, len, len);
+                var len = step * value.Storage.Count;
+                Buffer.MemoryCopy(value.Storage.Address, Address + offset * step, len, len);
                 //TODO! TEST!
             }
         }
@@ -1458,7 +1344,7 @@ namespace NumSharp.Backends
 
                 var step = value.ItemLength;
                 var len = step * value.Count;
-                Buffer.MemoryCopy(value.Address, _address + offset * step, len, len);
+                Buffer.MemoryCopy(value.Address, Address + offset * step, len, len);
                 //TODO! TEST!
             }
         }
@@ -1566,11 +1452,14 @@ namespace NumSharp.Backends
 
         public void Reshape(params int[] dimensions)
         {
-            //todo! Shouldnt there be some verification regarding if shape is valid for this type or now?
-            _shape = new Shape(dimensions);
+            var newShape = new Shape(dimensions);
+            if (newShape.size != _shape.size)
+                throw new IncorrectShapeException();
+
+            _shape = newShape;
         }
 
-        public ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged
+        public ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged //TODO! this should return UnmanagedStorage
         {
             if (slice is null)
                 slice = Slice;
@@ -1581,7 +1470,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                var shape = Shape.GetShape(Shape.Dimensions, axis: 0);
+                var shape = Shape.GetShape(_shape.Dimensions, axis: 0);
                 var offset = Shape.GetSize(shape);
                 return GetData<T>().Slice(slice.Start.Value * offset, slice.Length.Value * offset);
             }
@@ -1589,19 +1478,18 @@ namespace NumSharp.Backends
 
         public ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged
         {
-            int stride = Shape.NDim == 0 ? 1 : Shape.Strides[indice.Length - 1];
-            int idx = Shape.GetIndexInShape(Slice, indice);
-            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * Shape.Strides[0];
+            int stride = _shape.NDim == 0 ? 1 : _shape.Strides[indice.Length - 1];
+            int idx = _shape.GetIndexInShape(Slice, indice);
+            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * _shape.Strides[0];
 
             return GetData<T>().Slice(offset, stride);
         }
 
         public UnmanagedStorage Clone()
         {
-            var puffer = (UnmanagedStorage)Engine.GetStorage(_dtype);
-            puffer.Allocate(_shape.Clone()); //allocate is necessary if non-C# memory storage is used.
-            puffer.ReplaceData((Array)GetData().Clone()); //todo! check if theres a faster way to clone.
-
+            var puffer = Engine.GetStorage(_dtype);
+            puffer.Allocate(InternalArray.Clone(), _shape);
+            //TODO there should be a Clone function in Engine
             return puffer;
         }
 
@@ -1621,7 +1509,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
         public #2 Get#1(params int[] indices)
-            => _array#1[Shape.GetIndexInShape(Slice, indices)];
+            => _array#1[_shape.GetIndexInShape(Slice, indices)];
 
         %
 #else
@@ -1633,7 +1521,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         public byte GetByte(params int[] indices)
-            => _arrayByte[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayByte[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/> from internal storage.
@@ -1642,7 +1530,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         public short GetInt16(params int[] indices)
-            => _arrayInt16[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt16[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/> from internal storage.
@@ -1651,7 +1539,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         public ushort GetUInt16(params int[] indices)
-            => _arrayUInt16[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt16[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/> from internal storage.
@@ -1660,7 +1548,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         public int GetInt32(params int[] indices)
-            => _arrayInt32[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt32[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/> from internal storage.
@@ -1669,7 +1557,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         public uint GetUInt32(params int[] indices)
-            => _arrayUInt32[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt32[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/> from internal storage.
@@ -1678,7 +1566,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         public long GetInt64(params int[] indices)
-            => _arrayInt64[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt64[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/> from internal storage.
@@ -1687,7 +1575,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         public ulong GetUInt64(params int[] indices)
-            => _arrayUInt64[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt64[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/> from internal storage.
@@ -1696,7 +1584,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         public char GetChar(params int[] indices)
-            => _arrayChar[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayChar[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
@@ -1705,7 +1593,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         public double GetDouble(params int[] indices)
-            => _arrayDouble[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayDouble[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/> from internal storage.
@@ -1714,7 +1602,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         public float GetSingle(params int[] indices)
-            => _arraySingle[Shape.GetIndexInShape(Slice, indices)];
+            => _arraySingle[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/> from internal storage.
@@ -1723,7 +1611,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(params int[] indices)
-            => _arrayDecimal[Shape.GetIndexInShape(Slice, indices)];
+            => _arrayDecimal[_shape.GetIndexInShape(Slice, indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="string"/> from internal storage..
@@ -1735,37 +1623,176 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
+#endif
+
+        #endregion
+
+
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
-        public object GetValue(params int[] indices)
+        public unsafe object GetValue(params int[] indices)
         {
-            throw new NotImplementedException();
-        }
-#endif
+            switch (TypeCode)
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1:
+	            {
+		            return *((#2*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
 
-        #endregion
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+	            case NPTypeCode.Byte:
+	            {
+		            return *((byte*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Int16:
+	            {
+		            return *((short*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.UInt16:
+	            {
+		            return *((ushort*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Int32:
+	            {
+		            return *((int*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.UInt32:
+	            {
+		            return *((uint*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Int64:
+	            {
+		            return *((long*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.UInt64:
+	            {
+		            return *((ulong*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Char:
+	            {
+		            return *((char*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Double:
+	            {
+		            return *((double*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Single:
+	            {
+		            return *((float*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            case NPTypeCode.Decimal:
+	            {
+		            return *((decimal*)Address + _shape.GetIndexInShape(Slice, indices));
+	            }
+
+	            default:
+		            throw new NotSupportedException();
+#endif
+            }
+        }
 
         //TODO! THESE:
-        public object GetIndex(int index)
+        public unsafe object GetIndex(int index)
         {
-            return null;
+            switch (TypeCode)
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1:
+	            {
+		            return *((#2*)Address + index);
+	            }
+
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+	            case NPTypeCode.Byte:
+	            {
+		            return *((byte*)Address + index);
+	            }
+
+	            case NPTypeCode.Int16:
+	            {
+		            return *((short*)Address + index);
+	            }
+
+	            case NPTypeCode.UInt16:
+	            {
+		            return *((ushort*)Address + index);
+	            }
+
+	            case NPTypeCode.Int32:
+	            {
+		            return *((int*)Address + index);
+	            }
+
+	            case NPTypeCode.UInt32:
+	            {
+		            return *((uint*)Address + index);
+	            }
+
+	            case NPTypeCode.Int64:
+	            {
+		            return *((long*)Address + index);
+	            }
+
+	            case NPTypeCode.UInt64:
+	            {
+		            return *((ulong*)Address + index);
+	            }
+
+	            case NPTypeCode.Char:
+	            {
+		            return *((char*)Address + index);
+	            }
+
+	            case NPTypeCode.Double:
+	            {
+		            return *((double*)Address + index);
+	            }
+
+	            case NPTypeCode.Single:
+	            {
+		            return *((float*)Address + index);
+	            }
+
+	            case NPTypeCode.Decimal:
+	            {
+		            return *((decimal*)Address + index);
+	            }
+
+	            default:
+		            throw new NotSupportedException();
+#endif
+            }
         }
 
-        public object this[params int[] indicies]
+        public object this[params int[] indices]
         {
-            get
-            {
-                //todo!
-                return null;
-            }
-            set
-            {
-                //todo!
-            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => GetValue(indices);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set => SetInternalValueUnsafe(value, _shape.GetIndexInShape(Slice, indices));
         }
     }
 }

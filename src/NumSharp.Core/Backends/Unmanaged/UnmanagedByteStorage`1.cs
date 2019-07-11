@@ -24,11 +24,7 @@ namespace NumSharp.Backends.Unmanaged
         private Shape _shape;
 
 
-        /// <summary>
-        ///     The size in bytes of a single value of <see cref="IStorage.DType"/>
-        /// </summary>
-        /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
-        public int DTypeSize => InfoOf<T>.Size;
+
 
         public Shape Shape
         {
@@ -67,7 +63,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(assignZeros ? new UnmanagedMemoryBlock<T>(shape.Size, default) : new UnmanagedMemoryBlock<T>(shape.Size));
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         /// <summary>
@@ -80,7 +76,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(shape.Size));
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         /// <summary>
@@ -94,7 +90,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(shape.Size, fill));
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object" /> class.</summary>
@@ -103,28 +99,28 @@ namespace NumSharp.Backends.Unmanaged
             _shape = Shape.Scalar;
             var mem = UnmanagedMemoryBlock<T>.FromPool(1, _scalarPool);
             _array = new ArraySlice<T>(mem);
-            *(Address = _array.Start) = scalar;
+            *(Address = _array.Address) = scalar;
         }
 
         public unsafe UnmanagedByteStorage(T[] arr, Shape shape)
         {
             _shape = shape;
             _array = new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(arr));
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         public unsafe UnmanagedByteStorage(ArraySlice<T> arr, Shape shape)
         {
             _shape = shape;
             _array = arr;
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         public unsafe UnmanagedByteStorage(UnmanagedMemoryBlock<T> memoryBlock, Shape shape)
         {
             _shape = shape;
             _array = new ArraySlice<T>(memoryBlock);
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         /// <summary>
@@ -138,7 +134,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             _shape = shape;
             _array = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(ptr, lengthInSizeOfT, dispose));
-            Address = _array.Start;
+            Address = _array.Address;
         }
 
         #endregion
@@ -151,7 +147,7 @@ namespace NumSharp.Backends.Unmanaged
 
         public int Count
         {
-            [MethodImpl((MethodImplOptions)768)] get { return _array.Length; }
+            [MethodImpl((MethodImplOptions)768)] get { return _array.Count; }
         }
 
         [MethodImpl((MethodImplOptions)768)]

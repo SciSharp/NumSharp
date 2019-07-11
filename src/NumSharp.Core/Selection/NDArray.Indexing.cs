@@ -4,6 +4,8 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -228,96 +230,8 @@ namespace NumSharp
         /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indices)
         {
-            return null;
-            //if (indices.Length == 0)
-            //    return this;
-            //if (Storage.SupportsSpan)
-            //{
-            //    Shape s1 = shape.Skip(indices.Length).ToArray();
-            //    var nd = new NDArray(dtype, s1);
-            //    //nd.Storage.Slice = new Slice($"{}");
-            //    switch (Type.GetTypeCode(dtype))
-            //    {
-            //        case TypeCode.Boolean:
-            //            nd.Array = Storage.GetSpanData<bool>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Byte:
-            //            nd.Array = Storage.GetSpanData<byte>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Int16:
-            //            nd.Array = Storage.GetSpanData<short>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Int32:
-            //            nd.Array = Storage.GetSpanData<int>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Int64:
-            //            nd.Array = Storage.GetSpanData<long>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Single:
-            //            nd.Array = Storage.GetSpanData<float>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Double:
-            //            nd.Array = Storage.GetSpanData<double>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.Decimal:
-            //            nd.Array = Storage.GetSpanData<decimal>(slice, indices).ToArray();
-            //            break;
-            //        case TypeCode.String:
-            //            nd.Array = Storage.GetSpanData<string>(slice, indices).ToArray();
-            //            break;
-            //        default:
-            //            return Storage.GetSpanData<NDArray>(slice, indices).ToArray()[0];
-            //    }
-            //    return nd;
-            //}
-
-            //if (indices.Length < Storage.Shape.NDim)
-            //{
-            //    // a slice was requested
-            //    return this[indices.Select(i => Slice.Index(i)).ToArray()];
-            //}
-            //else if (indices.Length == Storage.Shape.NDim)
-            //{
-            //    // a scalar was indexed
-            //    var nd = new NDArray(this.dtype, new Shape());
-            //    switch (Type.GetTypeCode(dtype))
-            //    {
-            //        case TypeCode.Boolean:
-            //            nd.Array = new []{ Storage.GetData<bool>( indices)};
-            //            break;
-            //        case TypeCode.Byte:
-            //            nd.Array = new[] { Storage.GetData<byte>(indices) };
-            //            break;
-            //        case TypeCode.Int16:
-            //            nd.Array = new[] { Storage.GetData<short>(indices) };
-            //            break;
-            //        case TypeCode.Int32:
-            //            nd.Array = new[] { Storage.GetData<int>(indices) };
-            //            break;
-            //        case TypeCode.Int64:
-            //            nd.Array = new[] { Storage.GetData<long>(indices) };
-            //            break;
-            //        case TypeCode.Single:
-            //            nd.Array = new[] { Storage.GetData<float>(indices) };
-            //            break;
-            //        case TypeCode.Double:
-            //            nd.Array = new[] { Storage.GetData<double>(indices) };
-            //            break;
-            //        case TypeCode.Decimal:
-            //            nd.Array = new[] { Storage.GetData<decimal>(indices) };
-            //            break;
-            //        case TypeCode.String:
-            //            nd.Array = new[] { Storage.GetData<string>(indices) };
-            //            break;
-            //        default:
-            //            return Storage.GetData<NDArray>(indices);
-            //    }
-            //    return nd;
-            //}
-            //else
-            //{
-            //    throw new ArgumentException("Too many index dimensions for shape " + Storage.Shape);
-            //}
+            var (shape, offset) = Storage.Shape.GetSubshape(indices);
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));
         }
     }
 }

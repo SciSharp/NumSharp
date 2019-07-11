@@ -45,7 +45,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void DirectAddition1D()
         {
-            for (int idx = 0; idx < np3Double.Length; idx++)
+            for (int idx = 0; idx < np3Double.Count; idx++)
                 np3Double[idx] = np1Double[idx] + np2Double[idx];
         }
 
@@ -58,7 +58,7 @@ namespace NumSharp.Benchmark
         [Benchmark]
         public void DirectSubstration1D()
         {
-            for (int idx = 0; idx < np3Double.Length; idx++)
+            for (int idx = 0; idx < np3Double.Count; idx++)
                 np3Double[idx] = np1Double[idx] - np2Double[idx];
         }
 

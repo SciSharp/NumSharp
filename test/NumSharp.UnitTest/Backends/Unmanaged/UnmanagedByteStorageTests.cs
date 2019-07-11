@@ -157,7 +157,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
             ret = ret.Shape.GetSubshape(2);
             ret.Shape.Size.Should().Be(1);
-            ret.Shape.NDim.Should().Be(1);
+            ret.Shape.NDim.Should().Be(0);
+            ret.Shape.IsScalar.Should().BeTrue();
 
 
             //test case 4

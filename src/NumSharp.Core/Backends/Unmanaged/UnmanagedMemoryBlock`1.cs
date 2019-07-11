@@ -11,13 +11,14 @@ using NumSharp.Utilities;
 namespace NumSharp.Backends.Unmanaged
 {
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>,  IUnmanagedArray where T : unmanaged
+    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>> where T : unmanaged
     {
         private Action _dispose;
         private GCHandle? _gcHandle;
         public int Count;
         public T* Address;
         public int BytesCount;
+
         /// <summary>
         /// 
         /// </summary>

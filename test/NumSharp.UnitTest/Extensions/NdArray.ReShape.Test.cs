@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest.Extensions
         {
             var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531,2081));
 
-            Assert.IsTrue(npRealWorldBitmap.Data<byte>().Length == (2531 * 2081));
+            Assert.IsTrue(npRealWorldBitmap.Data<byte>().Count == (2531 * 2081));
         }
 
         /// <summary>

@@ -20,7 +20,7 @@ namespace NumSharp
                 {
                     var npArr = Data<int>();
                     int max = npArr[0];
-                    for (int i = 0; i < npArr.Length; i++)
+                    for (int i = 0; i < npArr.Count; i++)
                         max = Math.Max(max, npArr[i]);
                     return (T)(object)max;
                 }
@@ -29,7 +29,7 @@ namespace NumSharp
                 {
                     var npArr = Data<double>();
                     double max = npArr[0];
-                    for (int i = 0; i < npArr.Length; i++)
+                    for (int i = 0; i < npArr.Count; i++)
                         max = Math.Max(max, npArr[i]);
                     return (T)(object)max;
                 }

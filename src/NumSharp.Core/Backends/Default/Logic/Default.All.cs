@@ -15,7 +15,7 @@ namespace NumSharp.Backends
         public override bool All(NDArray nd)
         {
             var data = nd.Data<bool>();
-            for (int i = 0; i < data.Length; i++)
+            for (int i = 0; i < data.Count; i++)
             {
                 if (!data[i])
                     return false;

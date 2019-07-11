@@ -106,14 +106,11 @@ namespace NumSharp
                     _hashCode = 0;
 
                 if (dims.Length != 0)
-                    if (layout == 0)
-                    {
+                    if (layout == 'C') {
                         strides[strides.Length - 1] = 1;
                         for (int idx = strides.Length - 1; idx >= 1; idx--)
                             strides[idx - 1] = strides[idx] * dims[idx];
-                    }
-                    else
-                    {
+                    } else {
                         strides[0] = 1;
                         for (int idx = 1; idx < strides.Length; idx++)
                             strides[idx] = strides[idx - 1] * dims[idx - 1];
@@ -132,7 +129,7 @@ namespace NumSharp
 
             unchecked
             {
-                if (layout == 0)
+                if (layout == 'C')
                 {
                     strides[strides.Length - 1] = 1;
                     for (int idx = strides.Length - 1; idx >= 1; idx--)
@@ -167,17 +164,19 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public int GetIndexInShape(params int[] select)
         {
+            int offset;
+
             if (dimensions.Length == 0 && select.Length == 1)
                 return select[0];
 
-            int idx = 0;
+            offset = 0;
             unchecked
             {
-                for (int i = 0; i < select.Length; i++)
-                    idx += strides[i] * select[i];
+                for (int i = 0; i < @select.Length; i++)
+                    offset += strides[i] * @select[i];
             }
 
-            return idx;
+            return offset;
         }
 
         /// <summary>
@@ -204,6 +203,7 @@ namespace NumSharp
             if (indicies.Length == 0)
                 throw new ArgumentException("Selection indexes cannot be an empty collection.", nameof(indicies));
 
+            //compute offset
             int offset = 0;
             if (dimensions.Length == 0 && indicies.Length == 1)
                 offset = indicies[0];
@@ -215,6 +215,9 @@ namespace NumSharp
                         offset += strides[i] * indicies[i];
                 }
             }
+
+            if (offset >= size)
+                throw new IndexOutOfRangeException($"Shape({string.Join(", ",indicies)})");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -244,7 +247,7 @@ namespace NumSharp
             if (strides.Length == 1)
                 dimIndexes = new int[] {select};
 
-            else if (layout == 0)
+            else if (layout == 'C')
             {
                 int counter = select;
                 dimIndexes = new int[strides.Length];
@@ -270,6 +273,7 @@ namespace NumSharp
             return dimIndexes;
         }
 
+        [MethodImpl((MethodImplOptions)768)]
         public void ChangeTensorLayout(char order = 'C')
         {
             layout = order;

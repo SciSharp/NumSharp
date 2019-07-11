@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             ArraySlice<double> errorElements = error.Data<double>();
 
-            for(int idx = 0; idx < errorElements.Length;idx++)
+            for(int idx = 0; idx < errorElements.Count;idx++)
                 Assert.IsTrue(Math.Abs(errorElements[idx]) < 0.01 );
         }
     }

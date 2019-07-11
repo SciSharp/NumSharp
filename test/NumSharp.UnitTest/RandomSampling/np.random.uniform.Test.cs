@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(uniformed.len == 1);
             Assert.IsTrue(uniformed.size == 1);
 
-            Assert.IsTrue(data.Length == 1);
+            Assert.IsTrue(data.Count == 1);
             Assert.IsTrue(data[0] >= 1 && data[0] < 2);
         }
 
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(uniformed.ndim == 2);
             Assert.IsTrue(uniformed.len == 3);
             Assert.IsTrue(uniformed.size == 9);
-            Assert.IsTrue(data.Length == 9);
+            Assert.IsTrue(data.Count == 9);
             Assert.IsTrue(data.All(v => v >= 1) && data.All(v => v < 2));
         }
     }

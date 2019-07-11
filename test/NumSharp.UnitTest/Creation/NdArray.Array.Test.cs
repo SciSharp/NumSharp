@@ -30,8 +30,9 @@ namespace NumSharp.UnitTest.Creation
             };
 
             var n = np.array(list);
-
-            Assert.IsTrue(n.Data<int>(1, 0) == 3);
+            n.ToString();
+            var val = n.Data<int>(1, 0);
+            Assert.IsTrue( val== 3);
 
             var list1 = new int[,]
             {
@@ -42,6 +43,27 @@ namespace NumSharp.UnitTest.Creation
             var n1 = np.array(list1);
             Assert.IsTrue(Enumerable.SequenceEqual(n1.shape, new int[] { 2, 3 }));
             Assert.IsTrue(Enumerable.SequenceEqual(n1.Data<int>(), new int[] { 1, 2, 3, 2, 3, 1 }));
+        }
+
+
+        [TestMethod]
+        public void Array2Dim_Accessing()
+        {
+            var list = new int[][]
+            {
+                new int[] { 1, 2 },
+                new int[] { 3, 4 }
+            };
+            Shape n = np.array(list).shape;
+
+
+            for (int i = 0; i < 2; i++)
+            {
+                for (int j = 0; j < 2; j++)
+                {
+                    Console.WriteLine(n.GetIndexInShape(i,j));
+                }
+            }
         }
 
         [TestMethod]
@@ -116,6 +138,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void StringCheck()
         {
+            throw new NotSupportedException();
             var nd = np.arange(9.0).reshape(3, 3).MakeGeneric<double>();
 
             var random = new Randomizer();

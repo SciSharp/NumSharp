@@ -27,7 +27,7 @@ namespace NumSharp.Backends
 
         private static class EngineCache<T> where T : TensorEngine, new()
         {
-            public static T Value { get; } = new T();
+            public static readonly T Value = new T();
         }
     }
 }

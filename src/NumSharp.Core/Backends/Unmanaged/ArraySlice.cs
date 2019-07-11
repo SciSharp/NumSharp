@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Memory.Pooling;
@@ -11,12 +12,104 @@ namespace NumSharp.Backends.Unmanaged
 {
     public static class ArraySlice
     {
-        private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
+        private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
+
+        /// <summary>
+        ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
+        /// </summary>
+        /// <param name="val"></param>
+        /// <returns></returns>
+        public static IArraySlice Scalar(object val)
+        {
+            switch (val.GetType().GetTypeCode())
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1:
+	            {
+                    return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(1, _buffer));
+	            }
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+
+                case NPTypeCode.Byte:
+                {
+                    return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Int16:
+                {
+                    return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.UInt16:
+                {
+                    return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Int32:
+                {
+                    return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.UInt32:
+                {
+                    return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Int64:
+                {
+                    return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.UInt64:
+                {
+                    return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Char:
+                {
+                    return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Double:
+                {
+                    return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Single:
+                {
+                    return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(1, _buffer));
+                }
+
+                case NPTypeCode.Decimal:
+                {
+                    return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(1, _buffer));
+                }
+
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
+        /// </summary>
+        /// <param name="val"></param>
+        /// <returns></returns>
+        public static ArraySlice<T> Scalar<T>(T val) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(1, _buffer));
+        }
 
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
+
 
         [MethodImpl((MethodImplOptions)768)]
         public static ArraySlice<T> FromBuffer<T>(byte[] arr, bool copy = false) where T : unmanaged
@@ -32,80 +125,80 @@ namespace NumSharp.Backends.Unmanaged
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(count, pool));
         }
 
-
-        /// <summary>
-        ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
-        /// </summary>
-        /// <param name="val"></param>
-        /// <returns></returns>
-        public static IArraySlice Scalar(object val)
+        public static IArraySlice FromArray(Array arr, bool copy = false)
         {
-            switch (val.GetType().GetTypeCode())
+            var elementType = arr.GetType().GetElementType();
+
+            // ReSharper disable once PossibleNullReferenceException
+            while (elementType.IsArray)
+                elementType = elementType.GetElementType();
+
+            switch (elementType.GetTypeCode())
             {
 #if _REGEN
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
 	            case NPTypeCode.#1:
 	            {
-                    return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(1, _scalarPool));
+                    return new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray((#2[])arr));
 	            }
+
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
-
                 case NPTypeCode.Byte:
                 {
-                    return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(1, _scalarPool));
+                    return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray((byte[])arr));
                 }
 
                 case NPTypeCode.Int16:
                 {
-                    return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(1, _scalarPool));
+                    return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray((short[])arr));
                 }
 
                 case NPTypeCode.UInt16:
                 {
-                    return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(1, _scalarPool));
+                    return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray((ushort[])arr));
                 }
 
                 case NPTypeCode.Int32:
                 {
-                    return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(1, _scalarPool));
+                    return new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromArray((int[])arr));
                 }
 
                 case NPTypeCode.UInt32:
                 {
-                    return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(1, _scalarPool));
+                    return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromArray((uint[])arr));
                 }
 
                 case NPTypeCode.Int64:
                 {
-                    return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(1, _scalarPool));
+                    return new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromArray((long[])arr));
                 }
 
                 case NPTypeCode.UInt64:
                 {
-                    return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(1, _scalarPool));
+                    return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromArray((ulong[])arr));
                 }
 
                 case NPTypeCode.Char:
                 {
-                    return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(1, _scalarPool));
+                    return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromArray((char[])arr));
                 }
 
                 case NPTypeCode.Double:
                 {
-                    return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(1, _scalarPool));
+                    return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromArray((double[])arr));
                 }
 
                 case NPTypeCode.Single:
                 {
-                    return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(1, _scalarPool));
+                    return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray((float[])arr));
                 }
 
                 case NPTypeCode.Decimal:
                 {
-                    return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(1, _scalarPool));
+                    return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray((decimal[])arr));
                 }
 
                 default:
@@ -113,237 +206,86 @@ namespace NumSharp.Backends.Unmanaged
 #endif
             }
         }
-    }
 
-    /// <summary>
-    ///     <see cref="ArraySlice{T}"/> is similar to <see cref="Span{T}"/> but it can be moved around without having to follow `ref struct` rules.
-    /// </summary>
-    /// <typeparam name="T">The type of the internal unmanaged memory</typeparam>
-    public readonly unsafe struct ArraySlice<T> : IArraySlice, IEnumerable<T> where T : unmanaged
-    {
-        public static NPTypeCode TypeCode { get; } = InfoOf<T>.NPTypeCode;
-
-        private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
-
-        /// <summary>
-        ///     The memory block this <see cref="ArraySlice{T}"/> is stored in.
-        /// </summary>
-        /// <remarks>If <see cref="IsSlice"/> is false then this slice represents the entire MemoryBlock.</remarks>
-        public readonly UnmanagedMemoryBlock<T> MemoryBlock;
-
-        public readonly T* Address;
-        public readonly int Count;
-
-        /// <summary>
-        ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
-        /// </summary>
-        public readonly bool IsSlice;
-
-        /// A Span representing this slice.
-        public Span<T> AsSpan
+        public static IArraySlice FromMemoryBlock(IMemoryBlock block, bool copy = false)
         {
-            [MethodImpl((MethodImplOptions)768)] get => new Span<T>(Address, Count);
-        }
+            var type = block.GetType();
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(UnmanagedMemoryBlock<>))
+                switch (type.GetGenericArguments()[0].GetTypeCode())
+                {
+#if _REGEN
+	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                case NPTypeCode.#1:
+	                {
+                        return new ArraySlice<#2>((UnmanagedMemoryBlock<#2>)block);
+	                }
 
-        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock)
-        {
-            MemoryBlock = memoryBlock;
-            IsSlice = false;
-            Address = (T*)MemoryBlock.Address;
-            Count = MemoryBlock.Count;
-        }
+	                %
+	                default:
+		                throw new NotSupportedException();
+#else
 
-        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
-        {
-            MemoryBlock = memoryBlock;
-            IsSlice = true;
-            Count = slice.Length;
-            Address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
-        }
+                    case NPTypeCode.Byte:
+                    {
+                        return new ArraySlice<byte>((UnmanagedMemoryBlock<byte>)block);
+                    }
 
-        /// <returns></returns>
-        public bool IsEmpty
-        {
-            [MethodImpl((MethodImplOptions)768)] get => Count == 0;
-        }
+                    case NPTypeCode.Int16:
+                    {
+                        return new ArraySlice<short>((UnmanagedMemoryBlock<short>)block);
+                    }
 
-        /// <param name="index"></param>
-        /// <returns></returns>
-        public T this[int index]
-        {
-            [MethodImpl((MethodImplOptions)768)] get => *(Address + index);
-            [MethodImpl((MethodImplOptions)768)] set => *(Address + index) = value;
-        }
+                    case NPTypeCode.UInt16:
+                    {
+                        return new ArraySlice<ushort>((UnmanagedMemoryBlock<ushort>)block);
+                    }
 
-        public int Length
-        {
-            [MethodImpl((MethodImplOptions)768)] get => Count;
-        }
+                    case NPTypeCode.Int32:
+                    {
+                        return new ArraySlice<int>((UnmanagedMemoryBlock<int>)block);
+                    }
 
-        public T* Start
-        {
-            [MethodImpl((MethodImplOptions)768)] get => Address;
-        }
+                    case NPTypeCode.UInt32:
+                    {
+                        return new ArraySlice<uint>((UnmanagedMemoryBlock<uint>)block);
+                    }
 
-        /// <param name="value"></param>
-        [MethodImpl((MethodImplOptions)768)]
-        public void Fill(T value)
-        {
-            AsSpan.Fill(value);
-        }
+                    case NPTypeCode.Int64:
+                    {
+                        return new ArraySlice<long>((UnmanagedMemoryBlock<long>)block);
+                    }
 
-        /// <param name="start"></param>
-        /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Slice(int start)
-        {
-            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start));
-        }
+                    case NPTypeCode.UInt64:
+                    {
+                        return new ArraySlice<ulong>((UnmanagedMemoryBlock<ulong>)block);
+                    }
 
-        /// <param name="start"></param>
-        /// <param name="length"></param>
-        /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Slice(int start, int length)
-        {
-            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start, length));
-        }
+                    case NPTypeCode.Char:
+                    {
+                        return new ArraySlice<char>((UnmanagedMemoryBlock<char>)block);
+                    }
 
-        /// <param name="destination"></param>
-        [MethodImpl((MethodImplOptions)768)]
-        public void CopyTo(Span<T> destination)
-        {
-            AsSpan.CopyTo(destination);
-        }
+                    case NPTypeCode.Double:
+                    {
+                        return new ArraySlice<double>((UnmanagedMemoryBlock<double>)block);
+                    }
 
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref T GetPinnableReference()
-        {
-            return ref Unsafe.AsRef<T>(Address);
-        }
+                    case NPTypeCode.Single:
+                    {
+                        return new ArraySlice<float>((UnmanagedMemoryBlock<float>)block);
+                    }
 
-        /// <summary>
-        ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
-        /// </summary>
-        /// <param name="val"></param>
-        /// <returns></returns>
-        public static ArraySlice<T> Scalar(T val) //TODO! use it, why is it not used.
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(1, _buffer));
-        }
+                    case NPTypeCode.Decimal:
+                    {
+                        return new ArraySlice<decimal>((UnmanagedMemoryBlock<decimal>)block);
+                    }
 
-        [MethodImpl((MethodImplOptions)768)]
-        public T[] ToArray()
-        {
-            return AsSpan.ToArray();
-        }
+                    default:
+                        throw new NotSupportedException();
+#endif
+                }
 
-        [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Clone()
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
-        }
-
-        #region Explicit Interfaces
-
-        object ICloneable.Clone()
-        {
-            return Clone();
-        }
-
-        /// <summary>
-        ///     The size of a single item.
-        /// </summary>
-        public int ItemLength
-        {
-            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
-        }
-
-        /// <summary>
-        ///     The start address of this memory block.
-        /// </summary>
-        unsafe void* IMemoryBlock.Address => Address;
-
-        /// <summary>
-        ///     How many items are stored in <see cref="IMemoryBlock.Address"/>?
-        /// </summary>
-        /// <remarks></remarks>
-        int IMemoryBlock.Count => Count;
-
-        /// <summary>
-        ///     The items with length of <see cref="IMemoryBlock.TypeCode"/> are present in <see cref="IMemoryBlock.Address"/>.
-        /// </summary>
-        /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
-        int IMemoryBlock.BytesLength => InfoOf<T>.Size;
-
-        /// <summary>
-        ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
-        /// </summary>
-        NPTypeCode IMemoryBlock.TypeCode => TypeCode;
-
-        IUnmanagedArray IArraySlice.MemoryBlock
-        {
-            [MethodImpl((MethodImplOptions)768)] get => MemoryBlock;
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        T1 IArraySlice.GetIndex<T1>(int index)
-        {
-            return *(T1*)(void*)Address;
-        }
-
-        public object GetIndex(int index)
-        {
-            return *(Address + index);
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        void IArraySlice.SetIndex<T1>(int index, T1 value)
-        {
-            *(T1*)(void*)Address = value;
-        }
-
-        public void SetIndex(int index, object value)
-        {
-            throw new NotImplementedException();
-        }
-
-        #endregion
-
-        /// <summary>
-        ///     Performs dispose on the internal unmanaged memory block.<br></br>
-        /// </summary>
-        /// <remarks>
-        ///     Dangerous because this array might be a slice and there might be other slices who are a slice from current internal unmanaged array.<br></br>
-        ///     So releasing the unmanaged memory might cause memory corruption elsewhere.
-        /// </remarks>
-        public void DangerousFree()
-        {
-            // ReSharper disable once ImpureMethodCallOnReadonlyValueField
-            MemoryBlock.Free();
-        }
-
-        #region Casts
-
-        public static ArraySlice<T> FromArray(T[] array, bool copy = false)
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
-        }
-
-
-        [MethodImpl((MethodImplOptions)768)]
-        public static ArraySlice<T> FromBuffer(byte[] arr, bool copy = false)
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromBuffer(arr, copy));
-        }
-
-        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        [MethodImpl((MethodImplOptions)768)]
-        public static ArraySlice<T> FromPool(int count, InternalBufferManager pool)
-        {
-            //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(count, pool));
+            throw new NotSupportedException($"IMemoryBlock of type {block.GetType().Name} is not supported for ArraySlice.FromMemoryBlock(...)");
         }
 
 #if _REGEN
@@ -409,9 +351,328 @@ namespace NumSharp.Backends.Unmanaged
         {
             return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(decimals, copy));
         }
+
 #endif
+    }
+
+    /// <summary>
+    ///     <see cref="ArraySlice{T}"/> is similar to <see cref="Span{T}"/> but it can be moved around without having to follow `ref struct` rules.
+    /// </summary>
+    /// <typeparam name="T">The type that the <see cref="MemoryBlock"/> implements.</typeparam>
+    public readonly unsafe struct ArraySlice<T> : IArraySlice, IEnumerable<T> where T : unmanaged
+    {
+        public static NPTypeCode TypeCode { get; } = InfoOf<T>.NPTypeCode;
+        private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
+
+        /// <summary>
+        ///     The memory block this <see cref="ArraySlice{T}"/> is stored in.
+        /// </summary>
+        /// <remarks>If <see cref="IsSlice"/> is false then this slice represents the entire MemoryBlock.</remarks>
+        public readonly UnmanagedMemoryBlock<T> MemoryBlock;
+
+        public readonly T* Address;
+        public readonly void* VoidAddress;
+
+        public readonly int Count;
+
+        /// <summary>
+        ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
+        /// </summary>
+        public readonly bool IsSlice;
+
+        /// A Span representing this slice.
+        public Span<T> AsSpan
+        {
+            [MethodImpl((MethodImplOptions)768)] get => new Span<T>(Address, Count);
+        }
+
+        public int ItemLength
+        {
+            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
+        }
+
+        #region Construction
+
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock)
+        {
+            MemoryBlock = memoryBlock;
+            IsSlice = false;
+            VoidAddress = Address = MemoryBlock.Address;
+            Count = MemoryBlock.Count;
+        }
+
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
+        {
+            MemoryBlock = memoryBlock;
+            IsSlice = true;
+            Count = slice.Length;
+            VoidAddress = Address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
+        }
+
+        /// <summary>
+        ///     Creates a sliced <see cref="ArraySlice{T}"/>.
+        /// </summary>
+        /// <param name="memoryBlock"></param>
+        /// <param name="offset">The offset in <typeparamref name="T"/> and not bytes - relative to the <paramref name="memoryBlock"/>.</param>
+        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain - relative to the <paramref name="memoryBlock"/></param>
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, int offset, int count)
+        {
+            MemoryBlock = memoryBlock;
+            IsSlice = true;
+            Count = count;
+            VoidAddress = Address = (memoryBlock.Address + offset);
+            //TODO! we should check that is does not exceed bounds.
+        }
 
         #endregion
+
+        #region Accessing
+
+        /// A Span representing this slice.
+        /// <remarks>Does not perform copy.</remarks>
+        Span<T1> IArraySlice.AsSpan<T1>()
+        {
+            return new Span<T1>(VoidAddress, Count);
+        }
+
+        /// <param name="index"></param>
+        /// <returns></returns>
+        object IArraySlice.this[int index]
+        {
+            get => *(Address + index);
+            set => *(Address + index) = (T)value;
+        }
+
+        /// <param name="index"></param>
+        /// <returns></returns>
+        public T this[int index]
+        {
+            [MethodImpl((MethodImplOptions)768)] get => *(Address + index);
+            [MethodImpl((MethodImplOptions)768)] set => *(Address + index) = value;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public T GetIndex(int index)
+        {
+            return *(Address + index);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public void SetIndex(int index, object value)
+        {
+            *(Address + index) = (T)value;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public void SetIndex(int index, T value)
+        {
+            *(Address + index) = value;
+        }
+
+        #region Implicit Interface
+
+        [MethodImpl((MethodImplOptions)768)]
+        TRet IArraySlice.GetIndex<TRet>(int index)
+        {
+            Debug.Assert(InfoOf<TRet>.Size == InfoOf<T>.Size);
+            return *((TRet*)VoidAddress + index);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        void IArraySlice.SetIndex<TVal>(int index, TVal value)
+        {
+            Debug.Assert(InfoOf<TVal>.Size == InfoOf<T>.Size);
+            *((TVal*)VoidAddress + index) = value;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        object IArraySlice.GetIndex(int index)
+        {
+            return *(Address + index);
+        }
+
+        #endregion
+
+        #endregion
+
+
+        /// <param name="value"></param>
+        [MethodImpl((MethodImplOptions)768)]
+        public void Fill(T value)
+        {
+            AsSpan.Fill(value);
+        }
+
+        /// <summary>
+        ///     Fills all indexes with <paramref name="value"/>.
+        /// </summary>
+        /// <param name="value"></param>
+        void IArraySlice.Fill(object value)
+        {
+            Fill((T)value);
+        }
+
+        /// <summary>
+        ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
+        /// </summary>
+        /// <param name="start">The index to start from</param>
+        /// <remarks>Creates a slice without copying.</remarks>
+        IArraySlice IArraySlice.Slice(int start)
+        {
+            return Slice(start);
+        }
+
+        /// <summary>
+        ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
+        /// </summary>
+        /// <param name="start">The index to start from</param>
+        /// <param name="count">The number of items to slice (not bytes)</param>
+        /// <remarks>Creates a slice without copying.</remarks>
+        IArraySlice IArraySlice.Slice(int start, int count)
+        {
+            return Slice(start, count);
+        }
+
+        /// <param name="destination"></param>
+        void IArraySlice.CopyTo<T1>(Span<T1> destination)
+        {
+            new Span<T1>(Address, Count).CopyTo(destination);
+        }
+
+        /// <summary>
+        ///     Gets pinnable reference of the first item in the memory block storage.
+        /// </summary>
+        ref T1 IArraySlice.GetPinnableReference<T1>()
+        {
+            return ref (*(T1*)VoidAddress);
+        }
+
+
+        /// <param name="start"></param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public ArraySlice<T> Slice(int start)
+        {
+            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start));
+        }
+
+        /// <param name="start"></param>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public ArraySlice<T> Slice(int start, int length)
+        {
+            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start, length));
+        }
+
+        /// <param name="destination"></param>
+        [MethodImpl((MethodImplOptions)768)]
+        public void CopyTo(Span<T> destination)
+        {
+            AsSpan.CopyTo(destination);
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T GetPinnableReference()
+        {
+            return ref Unsafe.AsRef<T>(Address);
+        }
+
+
+        ArraySlice<T1> IArraySlice.Clone<T1>()
+        {
+            return new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(Address, Count));
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public ArraySlice<T> Clone()
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        IArraySlice IArraySlice.Clone()
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
+        }
+
+        #region Explicit Interfaces
+
+        object ICloneable.Clone()
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
+        }
+
+        /// <summary>
+        ///     The start address of this memory block.
+        /// </summary>
+        unsafe void* IMemoryBlock.Address
+        {
+            [MethodImpl((MethodImplOptions)768)] get => Address;
+        }
+
+        /// <summary>
+        ///     How many items are stored in <see cref="IMemoryBlock.Address"/>?
+        /// </summary>
+        /// <remarks></remarks>
+        int IMemoryBlock.Count
+        {
+            [MethodImpl((MethodImplOptions)768)] get => Count;
+        }
+
+        /// <summary>
+        ///     The items with length of <see cref="IMemoryBlock.TypeCode"/> are present in <see cref="IMemoryBlock.Address"/>.
+        /// </summary>
+        /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
+        int IMemoryBlock.BytesLength
+        {
+            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
+        }
+
+        /// <summary>
+        ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
+        /// </summary>
+        NPTypeCode IMemoryBlock.TypeCode
+        {
+            [MethodImpl((MethodImplOptions)768)] get => TypeCode;
+        }
+
+        IMemoryBlock IArraySlice.MemoryBlock
+        {
+            [MethodImpl((MethodImplOptions)768)] get => MemoryBlock;
+        }
+
+        #endregion
+
+        /// <summary>
+        ///     Performs dispose on the internal unmanaged memory block.<br></br>
+        /// </summary>
+        /// <remarks>
+        ///     Dangerous because this <see cref="ArraySlice"/> might be a <see cref="IsSlice"/> therefore there might be other slices that point to current <see cref="MemoryBlock"/>.<br></br>
+        ///     So releasing the <see cref="MemoryBlock"/> might cause memory corruption elsewhere.<br></br>
+        ///     It is best to leave MemoryBlock to GC.
+        /// </remarks>
+        public void DangerousFree()
+        {
+            // ReSharper disable once ImpureMethodCallOnReadonlyValueField
+            MemoryBlock.Free();
+        }
+
+        /// <summary>
+        ///     Copies this <see cref="IArraySlice"/> contents into a new array.
+        /// </summary>
+        /// <returns></returns>
+        Array IArraySlice.ToArray()
+        {
+            return ToArray();
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public T[] ToArray()
+        {
+            return AsSpan.ToArray();
+        }
 
         /// <summary>Returns an enumerator that iterates through the collection.</summary>
         /// <returns>An enumerator that can be used to iterate through the collection.</returns>
@@ -422,7 +683,7 @@ namespace NumSharp.Backends.Unmanaged
 
         private IEnumerable<T> _enumerate()
         {
-            var len = this.Length;
+            var len = this.Count;
             for (int i = 0; i < len; i++)
             {
                 yield return this[i];

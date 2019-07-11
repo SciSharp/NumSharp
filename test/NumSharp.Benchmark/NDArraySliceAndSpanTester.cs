@@ -38,7 +38,7 @@ namespace NumSharp.Benchmark
         private Span<double> GetPartialA1Span()
         {
             unsafe {
-                return new Span<double>(A1.Address + 1, A1.Length - 2);
+                return new Span<double>(A1.Address + 1, A1.Count - 2);
             }
         }
 
@@ -52,7 +52,7 @@ namespace NumSharp.Benchmark
             ASliceStep2 = ArraySlice.FromArray(new double[((arraySize - 2) + 1) / 2].Select((x, idx) => x + idx).ToArray());
 
             M1 = new Memory<double>(A1.ToArray());
-            M2 = new Memory<double>(A1.ToArray(), 2, A1.Length - 2);
+            M2 = new Memory<double>(A1.ToArray(), 2, A1.Count - 2);
             ND1 = new NDArray(new double[arraySize].Select((x, idx) => x + idx).ToArray());
             NDSlice1 = ND1["1:" + (ND1.size - 2)];
             NDSliceStep2 = ND1["1:" + (ND1.size - 2) + ":2"];
@@ -67,7 +67,7 @@ namespace NumSharp.Benchmark
         {
             //unchecked
             {
-                var aLength = A1.Length;
+                var aLength = A1.Count;
                 for (int idx = 0; idx < aLength; idx++)
                     A1[idx] = 1.0;
             }
@@ -78,7 +78,7 @@ namespace NumSharp.Benchmark
         {
             fixed (double* pA1 = A1)
             {
-                var aLength = A1.Length;
+                var aLength = A1.Count;
                 for (int idx = 0; idx < aLength; idx++)
                     pA1[idx] = 1.0;
             }

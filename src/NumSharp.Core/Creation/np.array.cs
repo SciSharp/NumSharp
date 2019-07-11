@@ -75,7 +75,7 @@ namespace NumSharp
         public static NDArray array<T>(params T[] data) where T : unmanaged
         {
             var nd = new NDArray(typeof(T), data.Length);
-            nd.Array = ArraySlice<T>.FromArray(data);
+            nd.Array = ArraySlice.FromArray<T>(data);
             return nd;
         }
     }

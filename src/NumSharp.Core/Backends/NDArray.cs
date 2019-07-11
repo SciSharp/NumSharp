@@ -105,8 +105,7 @@ namespace NumSharp
                 shape = new Shape(values.Length);
 
             shape.ChangeTensorLayout(order);
-            Storage.Allocate(shape);
-            Storage.ReplaceData(values);
+            Storage.Allocate(values, shape);
         }
 
         /// <summary>
@@ -124,8 +123,7 @@ namespace NumSharp
                 shape = new Shape(values.Count);
 
             shape.ChangeTensorLayout(order);
-            Storage.Allocate(shape);
-            Storage.ReplaceData(values);
+            Storage.Allocate(values, shape);
         }
 
         /// <summary>
@@ -188,13 +186,7 @@ namespace NumSharp
         /// The internal storage that stores data for this <see cref="NDArray"/>.
         /// </summary>
 
-        internal UnmanagedStorage Storage
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set;
-        }
+        internal UnmanagedStorage Storage;
 
         public TensorEngine TensorEngine { get; set; }
 
@@ -358,40 +350,7 @@ namespace NumSharp
 
         public IEnumerator GetEnumerator()
         {
-            switch (GetTypeCode)
-            {
-#if _REGEN
-#else
-#endif
-            }
-
-
-            switch (dtype.Name)
-            {
-                case "Int32": //todo! handle cases up to 16 dimensions and then generate using regen.
-                {
-                    switch (ndim)
-                    {
-                        case 0:
-                            yield return Storage.GetInt32(0);
-                            break;
-                        case 1:
-                            var arr = Data<int>();
-                            for (int i = 0; i < size; i++)
-                                yield return arr[i];
-                            break;
-                        case 2:
-                            var l = shape[0];
-                            for (int i = 0; i < l; i++)
-                                yield return this[i];
-                            break;
-                        default:
-                            throw new NotImplementedException();
-                    }
-
-                    break;
-                }
-            }
+            return Array.GetEnumerator();
         }
 
         /// <summary>
