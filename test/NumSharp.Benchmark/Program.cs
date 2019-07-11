@@ -2,6 +2,7 @@
 using System.Reflection;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
+using NumSharp.Benchmark.Unmanaged;
 
 namespace NumSharp.Benchmark
 {
@@ -14,6 +15,12 @@ namespace NumSharp.Benchmark
         /// <param name="args"></param>
         static void Main(string[] args)
         {
+
+            if (true)
+            {
+                new MemoryAllocation().NDArray();
+            }
+
             if (args?.Length > 0)
             {
                 for (int i = 0; i < args.Length; i++)

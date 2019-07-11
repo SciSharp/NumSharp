@@ -12,17 +12,17 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class NDStorageTest
     {
-        //TODO! [TestMethod]
+        [TestMethod]
         public void Index()
         {
             var shape0 = new Shape(4, 3);
 
             int idx0 = shape0.GetIndexInShape(2, 1);
 
-            Assert.IsTrue(idx0 == 4 * 2 + 1);
+            Assert.IsTrue(idx0 == 3 * 2 + 1 * 1);
         }
 
-        //TODO! [TestMethod]
+        [TestMethod]
         public void CheckIndexing()
         {
             var shape0 = new Shape(4, 3, 2);
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(shape2.GetDimIndexOutShape(index), randomIndex));
         }
 
-        //TODO! [TestMethod]
+        [TestMethod]
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);
@@ -105,6 +105,52 @@ namespace NumSharp.UnitTest
             (a == b).Should().BeTrue();
             b = new Shape(1, 2, 3, 4);
             (a != b).Should().BeTrue();
+        }
+
+
+        [TestMethod, Timeout(10000)]
+        public void ExtractShape_FromArray()
+        {
+            // @formatter:off — disable formatter after this line
+            var v = Shape.ExtractShape((Array)new int[][][]
+            {
+                new int[][]
+                {
+                    new int[] {1, 2}, new int[] {3, 4}
+                }, new int[][]
+                {
+                    new int[] {5, 6}, new int[] {7, 8}
+                }
+            });
+            // @formatter:on — disable formatter after this line
+
+            v.Should().ContainInOrder(2, 2, 2);
+            v.Sum().Should().Be(6);
+
+            v = Shape.ExtractShape(new int[][] {new int[] {1, 2, 3, 4}, new int[] {5, 6, 7, 8}});
+
+            v.Should().ContainInOrder(2, 4);
+            v.Sum().Should().Be(6);
+
+            // @formatter:off — disable formatter after this line
+            v = Shape.ExtractShape(new int[][][]
+            {
+                new int[][]
+                {
+                    new int[] {1, 2}, new int[] {3, 4}
+                }, new int[][]
+                {
+                    new int[] {5, 6}, new int[] {7, 8}
+                }
+            });
+            // @formatter:on — disable formatter after this line
+
+            v.Should().ContainInOrder(2, 2, 2);
+            v.Sum().Should().Be(6);
+
+            var jagged = new int[5, 3, 2];
+            Shape.ExtractShape(jagged).Should().ContainInOrder(5, 3, 2);
+            Shape.ExtractShape(new int[5]).Should().ContainInOrder(5);
         }
     }
 }

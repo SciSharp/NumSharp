@@ -91,7 +91,6 @@ namespace NumSharp.UnitTest
             NDArray nd = "[1,2,3;4,5,6]";
 
             var doubleMatr = new double[,] {{1, 2, 3}, {4, 5, 6}};
-
             for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
             for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
             {

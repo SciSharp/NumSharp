@@ -26,23 +26,12 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public UnmanagedMemoryBlock(int length)
         {
-            //var bytes = length * SizeOf<T>.Size;
-            //if (false)
-            //{
-            //    //bytes > AllocHGlobalAfter
-            //    Address = (T*)Marshal.AllocHGlobal(bytes).ToPointer();
-            //    _gcHandle = null;
-            //}
-            //else
-            //{
-            var handle = GCHandle.Alloc(new T[length], GCHandleType.Pinned);
-            _gcHandle = handle;
-            Address = (T*)handle.AddrOfPinnedObject();
-            //}
-
+            var bytes = length * InfoOf<T>.Size;
+            Address = (T*)Marshal.AllocHGlobal(bytes);
+            _gcHandle = null;
             _dispose = null;
             Count = length;
-            BytesCount = InfoOf<T>.Size * Count;
+            BytesCount = InfoOf<T>.Size * length;
         }
 
         /// <summary>
@@ -55,7 +44,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedMemoryBlock(T* start, int length, Action dispose)
         {
             Count = length;
-            BytesCount = InfoOf<T>.Size * Count;
+            BytesCount = InfoOf<T>.Size * length;
             _dispose = dispose;
             Address = start;
             _gcHandle = null;
@@ -70,7 +59,7 @@ namespace NumSharp.Backends.Unmanaged
         internal UnmanagedMemoryBlock(GCHandle handle, int length)
         {
             Count = length;
-            BytesCount = InfoOf<T>.Size * Count;
+            BytesCount = InfoOf<T>.Size * length;
             _dispose = null;
             Address = (T*)handle.AddrOfPinnedObject();
             _gcHandle = handle;
@@ -86,7 +75,7 @@ namespace NumSharp.Backends.Unmanaged
         internal UnmanagedMemoryBlock(GCHandle handle, int length, Action dipose)
         {
             Count = length;
-            BytesCount = InfoOf<T>.Size * Count;
+            BytesCount = InfoOf<T>.Size * length;
             _dispose = dipose;
             Address = (T*)handle.AddrOfPinnedObject();
             _gcHandle = handle;
@@ -282,7 +271,7 @@ namespace NumSharp.Backends.Unmanaged
                 return;
             }
 
-            if (_gcHandle.HasValue)
+            if (_gcHandle != null)
             {
                 _gcHandle.Value.Free();
                 _gcHandle = null;

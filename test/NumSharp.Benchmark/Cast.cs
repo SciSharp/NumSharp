@@ -122,6 +122,35 @@ namespace NumSharp.Benchmark
             return 0;
         }
 
+        [Benchmark]
+        public int DirectCastTryCatch()
+        {
+            for (int i = 0; i < 100_00; i++)
+            {
+                try
+                {
+                    var txt = ((string)input).Length;
+                }
+                catch { }
+            }
+
+            return 0;
+        }
+        [Benchmark]
+        public int DirectCastTryCatch_Throws()
+        {
+            for (int i = 0; i < 100_00; i++)
+            {
+                try
+                {
+                    var txt = ((float)input);
+                }
+                catch { }
+            }
+
+            return 0;
+        }
+
         [Benchmark(Baseline = true)]
         public int Baseline()
         {

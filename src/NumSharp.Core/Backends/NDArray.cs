@@ -101,10 +101,8 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
         {
-            if (shape.IsEmpty)
-                shape = new Shape(values.Length);
-
-            shape.ChangeTensorLayout(order);
+            if (order != 'C')
+                shape.ChangeTensorLayout(order);
             Storage.Allocate(values, shape);
         }
 
@@ -119,10 +117,8 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.TypeCode)
         {
-            if (shape.IsEmpty)
-                shape = new Shape(values.Count);
-
-            shape.ChangeTensorLayout(order);
+            if (order != 'C')
+                shape.ChangeTensorLayout(order);
             Storage.Allocate(values, shape);
         }
 
@@ -191,7 +187,6 @@ namespace NumSharp
         /// <summary>
         /// The internal storage that stores data for this <see cref="NDArray"/>.
         /// </summary>
-
         internal UnmanagedStorage Storage;
 
         public TensorEngine TensorEngine { get; set; }
@@ -310,13 +305,7 @@ namespace NumSharp
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                return Storage.GetData();
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set
-            {
-                Storage.ReplaceData(value);
+                return Storage.InternalArray;
             }
         }
 

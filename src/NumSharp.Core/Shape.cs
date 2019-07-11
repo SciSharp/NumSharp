@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -106,11 +107,14 @@ namespace NumSharp
                     _hashCode = 0;
 
                 if (dims.Length != 0)
-                    if (layout == 'C') {
+                    if (layout == 'C')
+                    {
                         strides[strides.Length - 1] = 1;
                         for (int idx = strides.Length - 1; idx >= 1; idx--)
                             strides[idx - 1] = strides[idx] * dims[idx];
-                    } else {
+                    }
+                    else
+                    {
                         strides[0] = 1;
                         for (int idx = 1; idx < strides.Length; idx++)
                             strides[idx] = strides[idx - 1] * dims[idx - 1];
@@ -217,7 +221,7 @@ namespace NumSharp
             }
 
             if (offset >= size)
-                throw new IndexOutOfRangeException($"Shape({string.Join(", ",indicies)})");
+                throw new IndexOutOfRangeException($"Shape({string.Join(", ", indicies)})");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -263,7 +267,7 @@ namespace NumSharp
                 int counter = select;
                 dimIndexes = new int[strides.Length];
 
-                for (int idx = strides.Length - 1; idx > -1; idx--)
+                for (int idx = strides.Length - 1; idx >= 0; idx--)
                 {
                     dimIndexes[idx] = counter / strides[idx];
                     counter -= dimIndexes[idx] * strides[idx];
@@ -277,7 +281,6 @@ namespace NumSharp
         public void ChangeTensorLayout(char order = 'C')
         {
             layout = order;
-            strides = new int[dimensions.Length];
             _SetDimOffset();
         }
 
@@ -316,6 +319,45 @@ namespace NumSharp
                 default:
                     throw new NotImplementedException($"GetCoordinates shape: {string.Join(", ", dims)} axis: {axis}");
             }
+        }
+
+        /// <summary>
+        ///     Extracts the shape of given <paramref name="array"/>.
+        /// </summary>
+        /// <remarks>Supports both jagged and multi-dim.</remarks>
+        public static int[] ExtractShape(Array array)
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+
+            bool isMultiDim = false;
+
+            {
+                var type = array.GetType();
+                isMultiDim = array.Rank == 1 && type.IsArray && type.GetElementType().IsArray;
+            }
+
+            var l = new List<int>(16);
+            if (isMultiDim)
+            {
+                // ReSharper disable once PossibleNullReferenceException
+                Array arr = array;
+                do
+                {
+                    l.Add(arr.Length);
+                    arr = arr.GetValue(0) as Array;
+                } while (arr != null && arr.GetType().IsArray);
+            }
+            else
+            {
+                //jagged or regular
+                for (int dim = 0; dim < array.Rank; dim++)
+                {
+                    l.Add(array.GetLength(dim));
+                }
+            }
+
+            return l.ToArray();
         }
 
         #region Slicing support
