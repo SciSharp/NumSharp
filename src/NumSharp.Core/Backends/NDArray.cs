@@ -129,9 +129,21 @@ namespace NumSharp
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, Shape shape) : this(dtype)
+        public NDArray(Type dtype, Shape shape) : this(dtype, shape, true)
         {
-            Storage.Allocate(shape);
+        }
+
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and shape are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
+        {
+            Storage.Allocate(shape, dtype, fillZeros);
         }
 
         private NDArray(IArraySlice array, Shape shape)

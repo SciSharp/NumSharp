@@ -11,7 +11,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Backends.Unmanaged
 {
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>> where T : unmanaged
+    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
         private Action _dispose;
         private GCHandle? _gcHandle;
@@ -333,12 +333,14 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, int arrayIndex)
         {
+            //TODO! at netcore 3, AsSpan.CopyTo might be faster.
             Buffer.MemoryCopy(Address + arrayIndex, memoryBlock.Address, InfoOf<T>.Size * memoryBlock.Count, InfoOf<T>.Size * (Count - arrayIndex));
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T* array, int arrayIndex, int lengthToCopy)
         {
+            //TODO! at netcore 3, AsSpan.CopyTo might be faster.
             Buffer.MemoryCopy(Address + arrayIndex, array, InfoOf<T>.Size * lengthToCopy, InfoOf<T>.Size * lengthToCopy);
         }
 
@@ -362,6 +364,17 @@ namespace NumSharp.Backends.Unmanaged
 
         [MethodImpl((MethodImplOptions)768)]
         public Span<T> AsSpan() => new Span<T>(Address, Count);
+
+        /// <summary>
+        ///     Performs a copy to this memory block.
+        /// </summary>
+        /// <returns></returns>
+        public UnmanagedMemoryBlock<T> Clone()
+        {
+            var ret = new UnmanagedMemoryBlock<T>(Count);
+            AsSpan().CopyTo(ret.AsSpan());
+            return ret;
+        }
 
         #region Explicit Implementations
 
@@ -396,6 +409,13 @@ namespace NumSharp.Backends.Unmanaged
         public ref T GetPinnableReference()
         {
             return ref *Address;
+        }
+
+        /// <summary>Creates a new object that is a copy of the current instance.</summary>
+        /// <returns>A new object that is a copy of this instance.</returns>
+        object ICloneable.Clone()
+        {
+            return Clone();
         }
 
         #endregion

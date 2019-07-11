@@ -1002,7 +1002,20 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.FromArray(Arrays.Create(dtype ?? DType, new int[] {shape.Size})));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, true));
+        }
+
+        /// <summary>
+        ///     Allocates a new <see cref="Array"/> into memory.
+        /// </summary>
+        /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
+        /// <param name="shape">The shape of the array.</param>
+        public void Allocate(Shape shape, Type dtype, bool fillZeros)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
         }
 
         /// <summary>

@@ -38,8 +38,7 @@ namespace NumSharp
         public static NDArray zeros(Shape shape, Type dtype = null)
         {
             dtype = dtype ?? np.float64;
-            var nd = new NDArray(dtype, shape); //already allocates inside.
-            return nd;
+            return new NDArray(dtype, shape, true); //already allocates inside.
         }
     }
 }
