@@ -9,7 +9,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Maths
 {
     [TestClass]
-    public class MatrixOperationTest 
+    public class MatrixOperationTest
     {
         [TestMethod]
         public void CheckToString()
@@ -26,11 +26,11 @@ namespace NumSharp.UnitTest.Maths
         [TestMethod]
         public void FloatSubtraction()
         {
-            var np1 = np.array(new float[] { 3, 5, 7 });
+            var np1 = np.array(new float[] {3, 5, 7});
 
             var np2 = 0f - np1;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new float[] { -3, -5, -7 }, np2.Data<float>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new float[] {-3, -5, -7}, np2.Data<float>()));
         }
 
         [TestMethod]
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 + np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, np3.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {2, 4, 6, 8, 10, 12, 14, 16, 18}, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 - np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, np3.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, np3.Data<double>()));
         }
 
         [TestMethod]
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.Maths
 
             var nd3 = nd1 + nd2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 3, 5, 7 }, nd3.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {3, 5, 7}, nd3.Data<int>()));
         }
 
         /*[TestMethod]
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 + 2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 2, 3, 4, 5 }, np3.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {2, 3, 4, 5}, np3.Data<int>()));
         }
 
         /*[TestMethod]
@@ -129,15 +129,15 @@ namespace NumSharp.UnitTest.Maths
         public void Double2DArray_NDArrayAddition()
         {
             var np1 = new NDArray(typeof(double), new Shape(2, 3));
-            np1.ReplaceData(new double[] { 1, 2, 3, 4, 5, 6 });
+            np1.ReplaceData(new double[] {1, 2, 3, 4, 5, 6});
 
             var np2 = new NDArray(typeof(double), new Shape(2, 3));
-            np2.ReplaceData(new double[] { 9, 8, 7, 6, 5, 4 });
+            np2.ReplaceData(new double[] {9, 8, 7, 6, 5, 4});
 
             var np3 = np1 + np2;
 
             // expected
-            var np4 = new double[] { 10, 10, 10, 10, 10, 10 };
+            var np4 = new double[] {10, 10, 10, 10, 10, 10};
 
             Assert.IsTrue(Enumerable.SequenceEqual(np3.Data<double>(), np4));
         }
@@ -145,22 +145,22 @@ namespace NumSharp.UnitTest.Maths
         [TestMethod]
         public void DoubleTwo1D_NDArraySubtraction()
         {
-            var np1 = np.array(new double[] { 3, 5, 7 });
-            var np2 = np.array(new double[] { 1, 3, 4 });
+            var np1 = np.array(new double[] {3, 5, 7});
+            var np2 = np.array(new double[] {1, 3, 4});
 
             var np3 = np1 - np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 2, 3 }, np3.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {2, 2, 3}, np3.Data<double>()));
         }
 
         [TestMethod]
         public void Double1DPlusOffset_NDArraySubtraction()
         {
-            var np1 = np.array(new double[] { 3, 5, 7 });
+            var np1 = np.array(new double[] {3, 5, 7});
 
             var np2 = np1 - 3d;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 0, 2, 4 }, np2.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {0, 2, 4}, np2.Data<double>()));
         }
 
         [TestMethod]
@@ -171,16 +171,16 @@ namespace NumSharp.UnitTest.Maths
 
             var np3 = np1 * np2;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 6, 12 }, np3.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {2, 6, 12}, np3.Data<double>()));
         }
 
         [TestMethod]
         public void Double1DPlusOffset_NDArrayMultiplication()
         {
-            var np1 = new NDArray(new double[] { 1, 2, 3 });
+            var np1 = new NDArray(new double[] {1, 2, 3});
             var np3 = np1 * 2d;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(new double[] { 2, 4, 6 }, np3.Data<double>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new double[] {2, 4, 6}, np3.Data<double>()));
         }
     }
 }

@@ -25,9 +25,9 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.IsTrue(lowdata[i - 1] <= data[i - 1] && lowdata[i - 1] + 1 > data[i - 1]);
             }
 
-            Assert.IsTrue(uniformed.ndim==1);
-            Assert.IsTrue(uniformed.len==5);
-            Assert.IsTrue(uniformed.size==5);
+            Assert.IsTrue(uniformed.ndim == 1);
+            Assert.IsTrue(uniformed.len == 5);
+            Assert.IsTrue(uniformed.size == 5);
         }
 
         [TestMethod]

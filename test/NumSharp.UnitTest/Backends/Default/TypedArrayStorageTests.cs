@@ -13,8 +13,8 @@ namespace NumSharp.UnitTest.Backends.Default
             var newarr = np.zeros(new Shape(3, 3, 3), np.float32);
             arr.ReplaceData(newarr);
             arr.dtype.Should().Be(np.float32);
-        }        
-        
+        }
+
         [TestMethod]
         public void ReplaceData_NDArray()
         {

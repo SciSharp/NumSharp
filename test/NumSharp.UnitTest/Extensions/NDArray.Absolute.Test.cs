@@ -13,13 +13,13 @@ namespace NumSharp.UnitTest.Extensions
         public void absolute()
         {
             //2D
-            var n = np.arange(-2,2).reshape(2, 2);
+            var n = np.arange(-2, 2).reshape(2, 2);
             var n1 = n.absolute().MakeGeneric<int>();
 
-            Assert.IsTrue(n1[0,0] == 2);
-            Assert.IsTrue(n1[0,1] == 1);
-            Assert.IsTrue(n1[1,0] == 0);
-            Assert.IsTrue(n1[1,1] == 1);
+            Assert.IsTrue(n1[0, 0] == 2);
+            Assert.IsTrue(n1[0, 1] == 1);
+            Assert.IsTrue(n1[1, 0] == 0);
+            Assert.IsTrue(n1[1, 1] == 1);
 
             //3D
             n = np.arange(-4, 4).reshape(2, 2, 2);
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n1[1, 1, 1] == 3);
 
             //4D
-            n = np.arange(-12,12).reshape(2, 3, 2, 2);
+            n = np.arange(-12, 12).reshape(2, 3, 2, 2);
             n1 = n.absolute().MakeGeneric<int>();
             Assert.IsTrue(n1[0, 0, 0, 0] == 12);
             Assert.IsTrue(n1[0, 1, 0, 0] == 8);

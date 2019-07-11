@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToInt32()
         {
-            int[] ints = { 100, 200, 300, 400, 500};
+            int[] ints = {100, 200, 300, 400, 500};
             byte[] bytes = new byte[ints.Length * sizeof(int)];
             Buffer.BlockCopy(ints, 0, bytes, 0, bytes.Length);
 

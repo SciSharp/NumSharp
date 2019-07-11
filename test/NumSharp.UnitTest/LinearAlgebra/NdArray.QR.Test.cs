@@ -14,20 +14,19 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
     [TestClass]
-    public class NdArrayQRTest 
+    public class NdArrayQRTest
     {
         //[TestMethod]
         public void FullMatrix()
         {
-            var nd1 = np.array(new double[]{1,1,0,1,0,1,0,1,1}).reshape(3,3);
+            var nd1 = np.array(new double[] {1, 1, 0, 1, 0, 1, 0, 1, 1}).reshape(3, 3);
 
-            var (Q,R) = nd1.qr();
+            var (Q, R) = nd1.qr();
 
             var nd2 = np.dot(Q.transpose(), R);
 
             // make sure the highest difference is lower than 0.0000000001
-            Assert.IsTrue( ((double)(nd1 - nd2).absolute().max<double>() )  < 0.00000000001); 
+            Assert.IsTrue(((double)(nd1 - nd2).absolute().max<double>()) < 0.00000000001);
         }
-        
     }
 }

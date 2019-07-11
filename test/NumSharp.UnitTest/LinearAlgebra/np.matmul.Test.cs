@@ -12,10 +12,10 @@ namespace NumSharp.UnitTest.LinearAlgebra
         //[TestMethod]
         public void NoAxis()
         {
-            int p = np.prod(new int[] { 1, 2, 3 });
+            int p = np.prod(new int[] {1, 2, 3});
             Assert.AreEqual(p, 6);
 
-            p = np.prod(new int[][] { new int[] { 1, 2 }, new int[] { 3, 4 } });
+            p = np.prod(new int[][] {new int[] {1, 2}, new int[] {3, 4}});
             Assert.AreEqual(p, 24);
         }
     }

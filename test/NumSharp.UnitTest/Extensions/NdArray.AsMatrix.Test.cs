@@ -9,16 +9,16 @@ using NumSharp;
 namespace NumSharp.UnitTest.Extensions
 {
     [TestClass]
-    public class NdArrayAsMatrixTest 
+    public class NdArrayAsMatrixTest
     {
         [TestMethod]
         public void ConvertNDArrayNDArrayDouble()
         {
-            var nd = np.arange(9).reshape(3,3).MakeGeneric<int>();
+            var nd = np.arange(9).reshape(3, 3).MakeGeneric<int>();
 
             var npAsMatrix = nd.AsMatrix().MakeGeneric<int>();
 
-            for (int idx = 0; idx < 3;idx++)
+            for (int idx = 0; idx < 3; idx++)
             {
                 for (int jdx = 0; jdx < 3; jdx++)
                 {

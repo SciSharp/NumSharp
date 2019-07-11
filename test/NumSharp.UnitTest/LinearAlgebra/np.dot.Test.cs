@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
     [TestClass]
-    public class NdArrayDotTest 
+    public class NdArrayDotTest
     {
         [TestMethod]
         public void Dot0X0()
@@ -37,15 +37,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void Dot2x1()
         {
-            var x = np.array(new int[,]
-            {
-                { 1, 1 },
-                { 1, 2 },
-                { 2, 2 },
-                { 2, 3 }
-            });
+            var x = np.array(new int[,] {{1, 1}, {1, 2}, {2, 2}, {2, 3}});
 
-            var y = np.array(new int[] { 2, 3 });
+            var y = np.array(new int[] {2, 3});
 
             var z = np.dot(x, y);
 
@@ -58,42 +52,25 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [TestMethod]
         public void Dot2x2()
         {
-            var x = np.array(new float[,]
-            {
-                { 3, 1 },
-                { 1, 2 }
-            });
+            var x = np.array(new float[,] {{3, 1}, {1, 2}});
 
-            var y = np.array(new float[,]
-            {
-                { 2, 3 },
-                { 1, 2 }
-            });
+            var y = np.array(new float[,] {{2, 3}, {1, 2}});
 
             var z = np.dot(x, y);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] { 7, 11, 4, 7 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] {7, 11, 4, 7}));
         }
 
         [TestMethod]
         public void Dot2x3And3x2()
         {
-            var x = np.array(new float[,]
-            {
-                { 0, 1, 2 },
-                { 3, 4, 5 }
-            });
+            var x = np.array(new float[,] {{0, 1, 2}, {3, 4, 5}});
 
-            var y = np.array(new float[,]
-            {
-                { 0, 3 },
-                { 1, 4 },
-                { 2, 5 }
-            });
+            var y = np.array(new float[,] {{0, 3}, {1, 4}, {2, 5}});
 
             var z = np.dot(x, y);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] { 5, 14, 14, 50 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<float>(), new float[] {5, 14, 14, 50}));
         }
 
         [TestMethod]

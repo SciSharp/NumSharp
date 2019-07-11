@@ -18,8 +18,8 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.ndim == 1);
             Assert.IsTrue(rand.len == 5);
             Assert.IsTrue(rand.size == 5);
-        }        
-        
+        }
+
         [TestMethod]
         public void Rand1DByShape()
         {

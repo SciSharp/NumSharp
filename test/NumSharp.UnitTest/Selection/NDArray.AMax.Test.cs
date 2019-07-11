@@ -23,10 +23,10 @@ namespace NumSharp.UnitTest.Selection
             NDArray x = DataSample.Int32D4x3;
 
             var y0 = np.argmax(x, 0);
-            Assert.IsTrue(Enumerable.SequenceEqual(y0.Data<int>(), new int[] { 0, 3, 2 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y0.Data<int>(), new int[] {0, 3, 2}));
 
             var y1 = np.argmax(x, 1);
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] { 0, 1, 2, 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<int>(), new int[] {0, 1, 2, 1}));
         }
 
         [TestMethod]
@@ -73,6 +73,5 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(n1[1, 1, 1] == 19);
             Assert.IsTrue(n1[1, 2, 1] == 23);*/
         }
-        
     }
 }

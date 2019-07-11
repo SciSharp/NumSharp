@@ -13,14 +13,13 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void FromNumpyDocs()
         {
-            var np1 = np.linspace(2.0, 3.0,5);
+            var np1 = np.linspace(2.0, 3.0, 5);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1.Data<double>(),new double[]{2.0,2.25,2.5,2.75,3.0}));
+            Assert.IsTrue(Enumerable.SequenceEqual(np1.Data<double>(), new double[] {2.0, 2.25, 2.5, 2.75, 3.0}));
 
-            var np2 = np.linspace(2.0, 3.0,5,false);
+            var np2 = np.linspace(2.0, 3.0, 5, false);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np2.Data<double>(),new double[]{2.0,2.20,2.4,2.6,2.8}));
-
+            Assert.IsTrue(Enumerable.SequenceEqual(np2.Data<double>(), new double[] {2.0, 2.20, 2.4, 2.6, 2.8}));
         }
     }
 }

@@ -70,7 +70,7 @@
 //            NDArray deta_dt = null;
 //            NDArray du_dt = null;
 //            NDArray dv_dt = null;
-            
+
 //            while(true)
 //            {
 //                (deta_dt, du_dt, dv_dt) = d_dt(eta, u, v, g,0);           
@@ -98,7 +98,4 @@
 //}
 
 
-        
-
-            
 

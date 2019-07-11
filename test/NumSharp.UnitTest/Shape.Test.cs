@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest
 
             int idx0 = shape0.GetIndexInShape(2, 1);
 
-            Assert.IsTrue(idx0 == 4*2+1);
+            Assert.IsTrue(idx0 == 4 * 2 + 1);
         }
 
         //TODO! [TestMethod]

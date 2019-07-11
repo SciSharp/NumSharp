@@ -13,15 +13,14 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var np1 = np.array(new double[] {1, Math.E, Math.E*Math.E, 0});// .MakeGeneric<double>();
-            
+            var np1 = np.array(new double[] {1, Math.E, Math.E * Math.E, 0}); // .MakeGeneric<double>();
+
             var np2 = np1.log().MakeGeneric<double>();
-            
+
             Assert.IsTrue(np2[0] == 0);
             Assert.IsTrue(np2[1] == 1);
             Assert.IsTrue(np2[2] == 2);
             Assert.IsTrue(np2[3] == double.NegativeInfinity);
-            
         }
     }
 }

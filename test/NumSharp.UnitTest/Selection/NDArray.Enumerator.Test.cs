@@ -37,7 +37,6 @@ namespace NumSharp.UnitTest.Selection
 
                 i++;
             }
-            
         }
     }
 }

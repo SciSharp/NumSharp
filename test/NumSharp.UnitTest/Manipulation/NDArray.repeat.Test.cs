@@ -22,14 +22,10 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple2DArray()
         {
-            var x = np.array(new int[][] 
-            {
-                new int[] { 1, 2 },
-                new int[] { 3, 4 }
-            });
+            var x = np.array(new int[][] {new int[] {1, 2}, new int[] {3, 4}});
 
             var nd = np.repeat(x, 2);
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 1, 1, 2, 2, 3, 3, 4, 4 }, nd.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {1, 1, 2, 2, 3, 3, 4, 4}, nd.Data<int>()));
         }
     }
 }

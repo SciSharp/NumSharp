@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest
 {
     public class TestClass
     {
-        public void AssertAreEqual(object expected, object given, string msg=null)
+        public void AssertAreEqual(object expected, object given, string msg = null)
         {
             if (expected is string)
                 Assert.AreEqual(expected, given, msg ?? $"Expected '{expected}', given '{given}'");
@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest
             else if (expected is ICollection && given is ICollection)
                 AssertSequenceEqual(expected as ICollection, given as ICollection);
             else
-                Assert.AreEqual(expected, given, msg ?? $"Expected '{expected}', given '{given}'"  );
+                Assert.AreEqual(expected, given, msg ?? $"Expected '{expected}', given '{given}'");
         }
 
         private void AssertSequenceEqual(ICollection a, ICollection b)
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest
         private void AssertSequenceEqual(Array a, Array b)
         {
             Assert.AreEqual(a.Length, b.Length, $"Arrays are not of same length. Expected'{a.Length}', given '{b.Length}'");
-            for(int i=0; i<a.Length; i++)
+            for (int i = 0; i < a.Length; i++)
                 AssertAreEqual(a.GetValue(i), b.GetValue(i), $"Elements at index {i} differ. Expected'{a.GetValue(i)}', given '{b.GetValue(i)}'");
         }
     }

@@ -18,10 +18,6 @@ namespace NumSharp.UnitTest.Creation
 
             NDArray x = X.Item1;
             NDArray y = X.Item2;
-
-            
         }
-
     }
-
 }

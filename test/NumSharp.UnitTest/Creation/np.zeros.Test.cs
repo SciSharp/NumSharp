@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest.Creation
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 0).ToArray().Length == 125);
         }
-        
+
         [TestMethod, Description("When creating an array using zeros with type of NDArray, each value should be unique.")]
         public void DtypeNDArray()
         {

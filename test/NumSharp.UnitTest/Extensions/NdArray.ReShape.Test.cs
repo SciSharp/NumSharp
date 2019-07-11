@@ -35,14 +35,14 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n[2, 0] == 8);
 
             n = np.reshape(n, 2, 6).MakeGeneric<int>();
-            
+
             Assert.IsTrue(n[1, 0] == 6);
         }
 
         [TestMethod]
         public void PerformaceBitmapSimulation()
         {
-            var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531,2081));
+            var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531, 2081));
 
             Assert.IsTrue(npRealWorldBitmap.Data<byte>().Count == (2531 * 2081));
         }
@@ -61,24 +61,28 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(nd.shape[0] == 6);
             Assert.IsTrue(nd.shape[1] == 2);
 
-            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd = np.arange(12).MakeGeneric<int>();
+            ;
             nd.reshape(2, -1);
             Assert.IsTrue(nd.shape[0] == 2);
             Assert.IsTrue(nd.shape[1] == 6);
 
-            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd = np.arange(12).MakeGeneric<int>();
+            ;
             nd.reshape(1, 3, 4);
             nd.reshape(-1, 3);
             Assert.IsTrue(nd.shape[0] == 4);
             Assert.IsTrue(nd.shape[1] == 3);
 
-            nd = np.arange(12).MakeGeneric<int>(); ;
+            nd = np.arange(12).MakeGeneric<int>();
+            ;
             nd.reshape(1, 3, 4);
             nd.reshape(3, -1);
             Assert.IsTrue(nd.shape[0] == 3);
             Assert.IsTrue(nd.shape[1] == 4);
 
-            nd = np.arange(100 * 100 * 3).MakeGeneric<int>(); ;
+            nd = np.arange(100 * 100 * 3).MakeGeneric<int>();
+            ;
             nd.reshape(100, 100, 3);
             nd.reshape(-1, 3);
             Assert.IsTrue(nd.shape[0] == 10000);

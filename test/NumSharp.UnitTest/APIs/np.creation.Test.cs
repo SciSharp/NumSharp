@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.APIs
         public void arange()
         {
             var nd = np.arange(3);
-            AssertAreEqual(nd.Data<int>(), new int[] { 0, 1, 2 });
+            AssertAreEqual(nd.Data<int>(), new int[] {0, 1, 2});
         }
 
         [TestMethod]

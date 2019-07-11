@@ -29,6 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.IsTrue(actual[i] < high, "Element was greater than expected");
             }
         }
+
         [TestMethod]
         public void UniformMultipleSample()
         {
@@ -85,7 +86,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Ignore("Choice without replacement not implemented yet")]
         public void NonUniformSampleWithoutReplace()
         {
-            double[] probabilities = new double[] { 0.1, 0, 0.3, 0.6, 0 };
+            double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
             NDArray actual = np.random.choice(5, 3, replace: false, probabilities: probabilities);
             Assert.Fail("Not implemented");
         }
@@ -115,8 +116,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             int nrSamples = 5;
 
-            NDArray int_arr = new int[] { 42, 96, 3, 101 };
-            double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
+            NDArray int_arr = new int[] {42, 96, 3, 101};
+            double[] probabilities = new double[] {0.5, 0.1, 0.0, 0.3};
 
             NDArray actual = np.random.choice(int_arr, nrSamples, probabilities: probabilities);
 
