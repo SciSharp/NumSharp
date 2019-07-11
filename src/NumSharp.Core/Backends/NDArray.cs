@@ -117,7 +117,7 @@ namespace NumSharp
         /// <param name="order"></param>
         /// <returns>Array with values</returns>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.GetType().GetElementType())
+        public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : this(values.TypeCode)
         {
             if (shape.IsEmpty)
                 shape = new Shape(values.Count);
@@ -181,6 +181,12 @@ namespace NumSharp
         public Slice slice => Storage.Slice;
 
         public int[] strides => Storage.Shape.Strides;
+
+        internal Shape Shape
+        {
+            get => Storage.Shape;
+            set => Storage.Reshape(value);
+        }
 
         /// <summary>
         /// The internal storage that stores data for this <see cref="NDArray"/>.

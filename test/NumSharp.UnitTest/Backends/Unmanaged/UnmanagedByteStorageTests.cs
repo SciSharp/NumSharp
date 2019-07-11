@@ -61,13 +61,13 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             //initialize
             (Shape Shape, int Offset) ret;
-            var nd = new UnmanagedByteStorage<int>(new UnmanagedMemoryBlock<int>(25, 0), new Shape(5, 5));
+            var nd = new NDArray(new ArraySlice<int>(new UnmanagedMemoryBlock<int>(25, 0)), new Shape(5, 5));
             var arr = new int[5, 5];
             var arr2 = new int[5, 1, 5];
 
-            for (int i = 0; i < nd.Count; i++)
+            for (int i = 0; i < nd.size; i++)
             {
-                nd.SetIndex(i, i);
+                nd.Storage.SetIndex(i, i);
             }
 
             for (int i = 0; i < 5; i++)
