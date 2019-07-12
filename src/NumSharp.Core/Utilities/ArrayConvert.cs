@@ -17,7 +17,7 @@ namespace NumSharp.Utilities
         #region Cloning
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Span{T}.CopyTo"/>.
+        ///     Creates a clone of given <see cref="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         /// <remarks>If possible, for performance reasons use generic version of this method.</remarks>
@@ -54,7 +54,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Span{T}.CopyTo"/>.
+        ///     Creates a clone of given <see cref="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[] Clone<T>(T[] sourceArray)

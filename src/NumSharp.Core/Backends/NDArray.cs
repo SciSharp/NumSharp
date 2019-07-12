@@ -40,7 +40,11 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html</remarks>
     public partial class NDArray : ICloneable, IEnumerable
     {
-        protected NDArray(UnmanagedStorage storage)
+        /// <summary>
+        ///     Creates a new <see cref="NDArray"/> with this storage.
+        /// </summary>
+        /// <param name="storage"></param>
+        internal NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
             TensorEngine = storage.Engine;

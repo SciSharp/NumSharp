@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Memory.Pooling;
@@ -10,87 +11,102 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
-    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
-        private Action _dispose;
-        private GCHandle? _gcHandle;
-        public int Count;
-        public T* Address;
-        public int BytesCount;
+        private readonly IDisposable _disposer;
+        public readonly int Count;
+        public readonly T* Address;
+        public readonly int BytesCount;
 
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <remarks>Does claim ownership since allocation is internally.</remarks>
         [MethodImpl((MethodImplOptions)512)]
-        public UnmanagedMemoryBlock(int length)
+        public UnmanagedMemoryBlock(int count)
         {
-            var bytes = length * InfoOf<T>.Size;
-            Address = (T*)Marshal.AllocHGlobal(bytes);
-            _gcHandle = null;
-            _dispose = null;
-            Count = length;
-            BytesCount = InfoOf<T>.Size * length;
+            var bytes = BytesCount = count * InfoOf<T>.Size;
+            var ptr = Marshal.AllocHGlobal(bytes);
+            _disposer = new Disposer(ptr);
+            Address = (T*)ptr;
+            Count = count;
+        }
+
+        /// <summary>
+        ///     Construct as a wrapper around pointer and given length without claiming ownership.
+        /// </summary>
+        /// <param name="ptr"></param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <remarks>Does claim ownership.</remarks>
+        [MethodImpl((MethodImplOptions)512)]
+        public UnmanagedMemoryBlock(T* ptr, int count)
+        {
+            _disposer = new Disposer();
+            Address = ptr;
+            Count = count;
+            BytesCount = count * InfoOf<T>.Size;
         }
 
         /// <summary>
         ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
         /// </summary>
         /// <param name="start"></param>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="dispose"></param>
+        /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(T* start, int length, Action dispose)
+        public UnmanagedMemoryBlock(T* start, int count, Action dispose)
         {
-            Count = length;
-            BytesCount = InfoOf<T>.Size * length;
-            _dispose = dispose;
+            Count = count;
+            BytesCount = InfoOf<T>.Size * count;
+            _disposer = new Disposer(dispose);
             Address = start;
-            _gcHandle = null;
+        }
+
+        /// <summary>
+        ///     Construct with externally allocated memory settings this memory block as owner.
+        /// </summary>
+        /// <param name="handle"></param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <remarks>Does claim ownership.</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        internal UnmanagedMemoryBlock(GCHandle handle, int count)
+        {
+            Count = count;
+            BytesCount = InfoOf<T>.Size * count;
+            Address = (T*)handle.AddrOfPinnedObject();
+            _disposer = new Disposer(handle);
         }
 
         /// <summary>
         ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
         /// </summary>
         /// <param name="handle"></param>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="dispose"></param>
+        /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedMemoryBlock(GCHandle handle, int length)
+        internal UnmanagedMemoryBlock(GCHandle handle, int count, Action dispose)
         {
-            Count = length;
-            BytesCount = InfoOf<T>.Size * length;
-            _dispose = null;
+            Count = count;
+            BytesCount = InfoOf<T>.Size * count;
             Address = (T*)handle.AddrOfPinnedObject();
-            _gcHandle = handle;
-        }
-
-        /// <summary>
-        ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
-        /// </summary>
-        /// <param name="handle"></param>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <param name="dipose"></param>
-        [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedMemoryBlock(GCHandle handle, int length, Action dipose)
-        {
-            Count = length;
-            BytesCount = InfoOf<T>.Size * length;
-            _dispose = dipose;
-            Address = (T*)handle.AddrOfPinnedObject();
-            _gcHandle = handle;
+            _disposer = new Disposer(dispose);
         }
 
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
+        /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="fill"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(int length, T fill) : this(length)
+        public UnmanagedMemoryBlock(int count, T fill) : this(count)
         {
-            new Span<T>(Address, length).Fill(fill);
+            new Span<T>(Address, count).Fill(fill);
         }
+
+        #region Static
 
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedMemoryBlock<T> FromArray(T[] arr)
@@ -187,6 +203,8 @@ namespace NumSharp.Backends.Unmanaged
             return Copy((void*)address, count);
         }
 
+        #endregion
+
         public T this[int index]
         {
             [MethodImpl((MethodImplOptions)768)] get => *(Address + index);
@@ -264,27 +282,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void Free()
         {
-            if (_dispose != null)
-            {
-                _dispose();
-                _dispose = null;
-                return;
-            }
-
-            if (_gcHandle != null)
-            {
-                _gcHandle.Value.Free();
-                _gcHandle = null;
-                Address = null;
-                return;
-            }
-
-            if (Address != null)
-            {
-                Marshal.FreeHGlobal((IntPtr)Address);
-                Address = null;
-                return;
-            }
+            _disposer.Dispose();
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -297,15 +295,6 @@ namespace NumSharp.Backends.Unmanaged
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
-        }
-
-        /// <summary>
-        /// NotSupported
-        /// </summary>
-        [MethodImpl((MethodImplOptions)512)]
-        public void Clear()
-        {
-            throw new NotSupportedException();
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -341,7 +330,8 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(T* array, int arrayIndex, int lengthToCopy)
         {
             //TODO! at netcore 3, AsSpan.CopyTo might be faster.
-            Buffer.MemoryCopy(Address + arrayIndex, array, InfoOf<T>.Size * lengthToCopy, InfoOf<T>.Size * lengthToCopy);
+            var len = InfoOf<T>.Size * lengthToCopy;
+            Buffer.MemoryCopy(Address + arrayIndex, array, len, len);
         }
 
         /// <summary>Copies the elements of the <see cref="T:System.Collections.ICollection" /> to an <see cref="T:System.Array" />, starting at a particular <see cref="T:System.Array" /> index.</summary>
@@ -474,5 +464,105 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         #endregion
+
+        private class Disposer : IDisposable
+        {
+            private enum AllocationType
+            {
+                AllocHGlobal,
+                GCHandle,
+                External,
+                Wrap
+            }
+
+            private bool Disposed;
+            private readonly AllocationType _type;
+
+            private readonly IntPtr Address;
+            private readonly GCHandle _gcHandle;
+            private readonly Action _dispose;
+
+
+            /// <summary>
+            ///     Construct a AllocationType.AllocHGlobal
+            /// </summary>
+            /// <param name="address"></param>
+            /// <param name="count"></param>
+            public Disposer(IntPtr address)
+            {
+                Address = address;
+                _type = AllocationType.AllocHGlobal;
+            }
+
+            /// <summary>
+            ///     Construct a AllocationType.GCHandle
+            /// </summary>
+            /// <param name="gcHandle"></param>
+            /// <param name="address"></param>
+            public Disposer(GCHandle gcHandle)
+            {
+                _gcHandle = gcHandle;
+                _type = AllocationType.GCHandle;
+            }
+
+            /// <summary>
+            ///     Construct a AllocationType.External
+            /// </summary>
+            /// <param name="address"></param>
+            /// <param name="dispose"></param>
+            public Disposer(Action dispose)
+            {
+                _dispose = dispose;
+                _type = AllocationType.External;
+            }
+
+            /// <summary>
+            ///     Construct a AllocationType.Wrap
+            /// </summary>
+            /// <param name="address"></param>
+            public Disposer()
+            {
+                _type = AllocationType.Wrap;
+            }
+
+            [MethodImpl((MethodImplOptions)768), SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
+            private void ReleaseUnmanagedResources()
+            {
+                if (Disposed)
+                    return;
+
+                Disposed = true;
+
+                switch (_type)
+                {
+                    case AllocationType.AllocHGlobal:
+                        Marshal.FreeHGlobal(Address);
+                        return;
+                    case AllocationType.Wrap:
+                        return;
+                    case AllocationType.External:
+                        _dispose();
+                        return;
+                    case AllocationType.GCHandle:
+                        _gcHandle.Free();
+                        return;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+            }
+
+            /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</summary>
+            public void Dispose()
+            {
+                ReleaseUnmanagedResources();
+                GC.SuppressFinalize(this);
+            }
+
+            /// <summary>Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage collection.</summary>
+            ~Disposer()
+            {
+                ReleaseUnmanagedResources();
+            }
+        }
     }
 }

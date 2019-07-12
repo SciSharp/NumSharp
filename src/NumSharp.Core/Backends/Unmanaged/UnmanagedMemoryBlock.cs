@@ -1,61 +1,12 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
-    public static class UnmanagedMemoryBlock
+    public static partial class UnmanagedMemoryBlock
     {
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="source"></param>
-        /// <returns></returns>
-        /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedMemoryBlock<TOut> Cast<TIn, TOut>(this UnmanagedMemoryBlock<TIn> source) where TIn : unmanaged where TOut : unmanaged
-        {
-            unsafe
-            {
-                var ret = new UnmanagedMemoryBlock<TOut>(source.Count);
-                var src = source.Address;
-                var dst = ret.Address;
-                var len = source.Count;
-                var tc = Type.GetTypeCode(typeof(TOut));
-                for (int i = 0; i < len; i++)
-                {
-                    *(dst + i) = (TOut)Convert.ChangeType((object)*(src + i), tc);
-                } //TODO! seperate class for NP!
-
-                return ret;
-            }
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="source"></param>
-        /// <returns></returns>
-        /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedMemoryBlock<TOut> Cast<TIn, TOut>(this IMemoryBlock source) where TIn : unmanaged where TOut : unmanaged
-        {
-            unsafe
-            {
-                var len = source.Count;
-                var ret = new UnmanagedMemoryBlock<TOut>(len);
-                var src = (TIn*)source.Address;
-                var dst = ret.Address;
-                var tc = Type.GetTypeCode(typeof(TOut));
-                for (int i = 0; i < len; i++)
-                {
-                    *(dst + i) = (TOut)Convert.ChangeType(*(src + i), tc);
-                } //TODO! seperate class for NP!
-
-                return ret;
-            }
-        }
-
         public static IMemoryBlock FromArray(Array arr, bool copy, Type elementType = null)
         {
             if (elementType == null || elementType.IsArray)
@@ -77,30 +28,30 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Byte:
+                case NPTypeCode.Byte:
                     return UnmanagedMemoryBlock<byte>.FromArray((byte[])arr);
-	            case NPTypeCode.Int16:
+                case NPTypeCode.Int16:
                     return UnmanagedMemoryBlock<short>.FromArray((short[])arr);
-	            case NPTypeCode.UInt16:
+                case NPTypeCode.UInt16:
                     return UnmanagedMemoryBlock<ushort>.FromArray((ushort[])arr);
-	            case NPTypeCode.Int32:
+                case NPTypeCode.Int32:
                     return UnmanagedMemoryBlock<int>.FromArray((int[])arr);
-	            case NPTypeCode.UInt32:
+                case NPTypeCode.UInt32:
                     return UnmanagedMemoryBlock<uint>.FromArray((uint[])arr);
-	            case NPTypeCode.Int64:
+                case NPTypeCode.Int64:
                     return UnmanagedMemoryBlock<long>.FromArray((long[])arr);
-	            case NPTypeCode.UInt64:
+                case NPTypeCode.UInt64:
                     return UnmanagedMemoryBlock<ulong>.FromArray((ulong[])arr);
-	            case NPTypeCode.Char:
+                case NPTypeCode.Char:
                     return UnmanagedMemoryBlock<char>.FromArray((char[])arr);
-	            case NPTypeCode.Double:
+                case NPTypeCode.Double:
                     return UnmanagedMemoryBlock<double>.FromArray((double[])arr);
-	            case NPTypeCode.Single:
+                case NPTypeCode.Single:
                     return UnmanagedMemoryBlock<float>.FromArray((float[])arr);
-	            case NPTypeCode.Decimal:
+                case NPTypeCode.Decimal:
                     return UnmanagedMemoryBlock<decimal>.FromArray((decimal[])arr);
-	            default:
-		            throw new NotSupportedException();
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -117,30 +68,30 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Byte:
+                case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count);
-	            case NPTypeCode.Int16:
+                case NPTypeCode.Int16:
                     return new UnmanagedMemoryBlock<short>(count);
-	            case NPTypeCode.UInt16:
+                case NPTypeCode.UInt16:
                     return new UnmanagedMemoryBlock<ushort>(count);
-	            case NPTypeCode.Int32:
+                case NPTypeCode.Int32:
                     return new UnmanagedMemoryBlock<int>(count);
-	            case NPTypeCode.UInt32:
+                case NPTypeCode.UInt32:
                     return new UnmanagedMemoryBlock<uint>(count);
-	            case NPTypeCode.Int64:
+                case NPTypeCode.Int64:
                     return new UnmanagedMemoryBlock<long>(count);
-	            case NPTypeCode.UInt64:
+                case NPTypeCode.UInt64:
                     return new UnmanagedMemoryBlock<ulong>(count);
-	            case NPTypeCode.Char:
+                case NPTypeCode.Char:
                     return new UnmanagedMemoryBlock<char>(count);
-	            case NPTypeCode.Double:
+                case NPTypeCode.Double:
                     return new UnmanagedMemoryBlock<double>(count);
-	            case NPTypeCode.Single:
+                case NPTypeCode.Single:
                     return new UnmanagedMemoryBlock<float>(count);
-	            case NPTypeCode.Decimal:
+                case NPTypeCode.Decimal:
                     return new UnmanagedMemoryBlock<decimal>(count);
-	            default:
-		            throw new NotSupportedException();
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -157,30 +108,30 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Byte:
+                case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count, (byte)fill);
-	            case NPTypeCode.Int16:
+                case NPTypeCode.Int16:
                     return new UnmanagedMemoryBlock<short>(count, (short)fill);
-	            case NPTypeCode.UInt16:
+                case NPTypeCode.UInt16:
                     return new UnmanagedMemoryBlock<ushort>(count, (ushort)fill);
-	            case NPTypeCode.Int32:
+                case NPTypeCode.Int32:
                     return new UnmanagedMemoryBlock<int>(count, (int)fill);
-	            case NPTypeCode.UInt32:
+                case NPTypeCode.UInt32:
                     return new UnmanagedMemoryBlock<uint>(count, (uint)fill);
-	            case NPTypeCode.Int64:
+                case NPTypeCode.Int64:
                     return new UnmanagedMemoryBlock<long>(count, (long)fill);
-	            case NPTypeCode.UInt64:
+                case NPTypeCode.UInt64:
                     return new UnmanagedMemoryBlock<ulong>(count, (ulong)fill);
-	            case NPTypeCode.Char:
+                case NPTypeCode.Char:
                     return new UnmanagedMemoryBlock<char>(count, (char)fill);
-	            case NPTypeCode.Double:
+                case NPTypeCode.Double:
                     return new UnmanagedMemoryBlock<double>(count, (double)fill);
-	            case NPTypeCode.Single:
+                case NPTypeCode.Single:
                     return new UnmanagedMemoryBlock<float>(count, (float)fill);
-	            case NPTypeCode.Decimal:
+                case NPTypeCode.Decimal:
                     return new UnmanagedMemoryBlock<decimal>(count, (decimal)fill);
-	            default:
-		            throw new NotSupportedException();
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }

@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void UpcastingCharsToLong()
         {
-            var nd = np.ones(np.chars, 3, 3);
+            var nd = np.ones(np.@char, 3, 3);
             var int64_copied = nd.astype(np.int64, true);
             var int64 = nd.astype(np.int64, false);
 

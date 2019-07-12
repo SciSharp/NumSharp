@@ -1548,7 +1548,6 @@ namespace NumSharp.Backends
         {
             var puffer = Engine.GetStorage(_dtype);
             puffer.Allocate(InternalArray.Clone(), _shape);
-            //TODO there should be a Clone function in Engine
             return puffer;
         }
 
