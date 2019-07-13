@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using NumSharp.Backends;
@@ -14,25 +15,20 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Get and set element wise data
-        /// Low performance
-        /// Use generic Data<T> and SetData<T>(value, shape) method for better performance
+        ///     Get and set element wise data
+        ///     Low performance
+        ///     Use generic Data{T} and SetData{T}(value, shape) method for better performance
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
         public NDArray this[params int[] select]
         {
-            get
-            {
-                return GetData(select);
-            }
-
-            set
-            {
-                Storage.SetData(value, select);
-            }
-        }
-
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => GetData(select);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set => Storage.SetData(value, select);
+        }        
+        
         /// <summary>
         ///     Used to perform filtering by whats true and whats false.
         /// </summary>
