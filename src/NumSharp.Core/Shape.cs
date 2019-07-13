@@ -291,6 +291,12 @@ namespace NumSharp
         }
 
         [MethodImpl((MethodImplOptions)768)]
+        public void Reshape(ref Shape shape)
+        {
+            this = shape;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
         public static int GetSize(int[] dims)
         {
             int size = 1;
@@ -395,7 +401,23 @@ namespace NumSharp
 
         public static bool operator ==(Shape a, Shape b)
         {
-            return Equals(a, b);
+            if (a.IsEmpty && b.IsEmpty)
+                return true;
+
+            if (a.IsEmpty || b.IsEmpty)
+                return false;
+
+            if (a.size != b.size || a.NDim != b.NDim)
+                return false;
+
+            var dim = a.NDim;
+            for (int i = 0; i < dim; i++)
+            {
+                if (a[i] != b[i])
+                    return false;
+            }
+
+            return true;
         }
 
         public static bool operator !=(Shape a, Shape b)
@@ -526,7 +548,7 @@ namespace NumSharp
         /// </summary>
         public Shape Clone()
         {
-            return new Shape(this);
+            return this; //its a struct...
         }
     }
 }
