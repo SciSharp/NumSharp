@@ -20,10 +20,7 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value, Type dtype)
         {
-            var ndArray = new NDArray(dtype, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), Convert.ChangeType(value, dtype)));
-
-            return ndArray;
+            return new NDArray(UnmanagedStorage.Scalar(Convert.ChangeType(value, dtype)));
         }
 
         /// <summary>
@@ -34,11 +31,7 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value)
         {
-            var dtype = value.GetType();
-            var ndArray = new NDArray(dtype, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
-
-            return ndArray;
+            return new NDArray(UnmanagedStorage.Scalar(value));
         }
 
         /// <summary>
@@ -49,13 +42,7 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar<T>(T value) where T : unmanaged
         {
-            var nd = new NDArray(typeof(T));
-            nd.Storage = new UnmanagedStorage(value);
-            var dtype = value.GetType();
-            var ndArray = new NDArray(dtype, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
-
-            return ndArray;
+            return new NDArray(UnmanagedStorage.Scalar(value));
         }
 
         /// <summary>
@@ -67,11 +54,7 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value, NPTypeCode typeCode)
         {
-            var type = typeCode.AsType();
-            var ndArray = new NDArray(type, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(typeCode, Convert.ChangeType(value, type))); //todo! create a NPConvert to support NPTypeCode
-
-            return ndArray;
+            return new NDArray(UnmanagedStorage.Scalar(Convert.ChangeType(value, typeCode.AsType())));
         }
     }
 }
