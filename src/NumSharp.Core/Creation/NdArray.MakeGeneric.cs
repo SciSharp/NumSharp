@@ -12,18 +12,7 @@ namespace NumSharp
     {
         public NDArray<T> MakeGeneric<T>() where T : unmanaged
         {
-            if (typeof(T) == dtype)
-            {
-                return AsGeneric<T>();
-            }
-            else
-            {
-                // ReSharper disable once UseObjectOrCollectionInitializer
-                var genericArray = new NDArray<T>(Storage.Shape);
-                genericArray.TensorEngine = TensorEngine;
-                genericArray.Array = Storage.GetData<T>();
-                return genericArray;
-            }
+            return new NDArray<T>(Storage);
         }
 
         /// <summary>
@@ -36,12 +25,10 @@ namespace NumSharp
         {
             if (typeof(T) != dtype)
                 throw new InvalidOperationException($"Given constraint type {typeof(T).Name} does not match dtype {dtype.Name}. If you intended to cast if necessary then use MakeGeneric.");
+            if (this is NDArray<T> ret)
+                return ret;
 
-            // ReSharper disable once UseObjectOrCollectionInitializer
-            var ret = new NDArray<T>();
-            ret.TensorEngine = TensorEngine;
-            ret.Storage = Storage;
-            return ret;
+            return MakeGeneric<T>();
         }
     }
 }
