@@ -42,6 +42,11 @@ namespace NumSharp
             return new NDArray(Array, shape);
         }
 
+        public NDArray reshape(ref Shape shape)
+        {
+            return new NDArray(Array, shape);
+        }
+
         protected static int FindNegativeIndex(params int[] shape)
         {
             var count = shape.Length;
