@@ -13,6 +13,12 @@ namespace NumSharp
 {
     public static partial class np
     {
+        [MethodImpl((MethodImplOptions)768)]
+        public static NDArray array(NDArray nd, bool copy = false)
+        {
+            return copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
+        }
+
         public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
         {
             var arrType = array.ResolveElementType();
