@@ -40,6 +40,8 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html</remarks>
     public partial class NDArray : ICloneable, IEnumerable
     {
+        #region Constructors
+
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
@@ -134,8 +136,7 @@ namespace NumSharp
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Type dtype, Shape shape) : this(dtype, shape, true)
-        {
-        }
+        { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -150,10 +151,12 @@ namespace NumSharp
             Storage.Allocate(shape, dtype, fillZeros);
         }
 
-        private NDArray(IArraySlice array, Shape shape)
+        private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
         {
             Storage.Allocate(array, shape);
         }
+
+        #endregion
 
         /// <summary>
         /// Data type of NDArray
@@ -167,6 +170,15 @@ namespace NumSharp
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.TypeCode;
+        }
+
+        /// <summary>
+        ///     Gets the address that this NDArray starts from.
+        /// </summary>
+        internal unsafe void* Address
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Storage.Address;
         }
 
         /// <summary>
@@ -205,6 +217,9 @@ namespace NumSharp
         /// </summary>
         internal UnmanagedStorage Storage;
 
+        /// <summary>
+        ///     The tensor engine that handles this <see cref="NDArray"/>.
+        /// </summary>
         public TensorEngine TensorEngine { get; set; }
 
         /// <summary>
@@ -308,8 +323,6 @@ namespace NumSharp
         {
             return Storage.GetData();
         }
-
-        public int GetIndexInShape(params int[] select) => Storage.Shape.GetIndexInShape(slice, select);
 
         /// <summary>
         ///     Get: Gets internal storage array by calling <see cref="IStorage.GetData"/><br></br>
@@ -477,18 +490,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Retrieves value of type <see cref="string"/>.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="string"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public string GetString(params int[] indices)
-        {
-            return Storage.GetString(indices);
-        }
-
-        /// <summary>
         ///     Retrieves value of type <see cref="ushort"/>.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -536,17 +537,57 @@ namespace NumSharp
             return Storage.GetValue(indices);
         }
 
-        #endregion
-
-        public override int GetHashCode() //todo! This cant be computed just using ndim and size.. NDArrays with different content will return true.
+        /// <summary>
+        ///     Retrieves value of 
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public object GetAtIndex(int index)
         {
-            unchecked
+            return Storage.GetIndex(index);
+        }
+
+        /// <summary>
+        ///     Retrieves value of 
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public T GetAtIndex<T>(int index) where T : unmanaged
+        {
+            unsafe
             {
-                var result = 1337;
-                result = (result * 397) ^ this.ndim;
-                result = (result * 397) ^ this.size;
-                return result;
+                return *((T*)Address + index);
             }
         }
+
+        /// <summary>
+        ///     Retrieves value of 
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetAtIndex(object obj, int index)
+        {
+            Storage.SetIndex(obj, index);
+        }
+
+        /// <summary>
+        ///     Retrieves value of 
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetAtIndex<T>(T value, int index) where T : unmanaged
+        {
+            //TODO! it might be not wise to provide a method that can corrupt memory. should we lower performance but perform checks?
+            unsafe
+            {
+                *((T*)Address + index) = value;
+            }
+        }
+
+        #endregion
     }
 }
