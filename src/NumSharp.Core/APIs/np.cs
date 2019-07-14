@@ -13,7 +13,7 @@ namespace NumSharp
     {
         public static BackendType BackendEngine { get; set; }
 
-        // https://docs.scipy.org/doc/numpy-1.15.0/user/basics.types.html
+        // https://docs.scipy.org/doc/numpy-1.16.0/user/basics.types.html
         public static readonly Type bool_ = typeof(bool);
         public static readonly Type bool8 = bool_;
 
@@ -34,7 +34,7 @@ namespace NumSharp
 
         public static readonly Type int_ = typeof(long);
         public static readonly Type int64 = int_;
-        public static readonly Type intp = int_;
+        public static readonly Type intp = int_; //TODO! IntPtr?
         public static readonly Type int0 = int_;
 
         public static readonly Type uint64 = typeof(ulong);
@@ -50,6 +50,7 @@ namespace NumSharp
         public static readonly Type complex_ = typeof(Complex);
         public static readonly Type complex128 = complex_;
         public static readonly Type complex64 = complex_;
+        public static readonly Type @decimal = typeof(decimal);
 
         public static Type chars => throw new NotSupportedException("Please use char with extra dimension.");
 
