@@ -32,4 +32,12 @@ namespace NumSharp.Backends.Unmanaged
         NPTypeCode TypeCode { get; }
 
     }
+    
+    public interface IMemoryBlock<T> : IMemoryBlock where T : unmanaged
+    {
+        /// <summary>
+        ///     The start address of this memory block.
+        /// </summary>
+        new unsafe T* Address { get; }
+    }
 }

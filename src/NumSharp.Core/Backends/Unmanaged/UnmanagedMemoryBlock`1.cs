@@ -11,7 +11,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
-    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
+    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock<T>, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
         private readonly IDisposable _disposer;
         public readonly int Count;
@@ -372,6 +372,11 @@ namespace NumSharp.Backends.Unmanaged
         ///     The size of a single item stored in <see cref="IMemoryBlock.Address"/>.
         /// </summary>
         int IMemoryBlock.ItemLength => InfoOf<T>.Size;
+
+        /// <summary>
+        ///     The start address of this memory block.
+        /// </summary>
+        unsafe T* IMemoryBlock<T>.Address => Address;
 
         /// <summary>
         ///     The start address of this memory block.
