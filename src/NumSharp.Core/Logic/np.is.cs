@@ -10,44 +10,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        /// Test whether all array elements evaluate to True.
-        /// </summary>
-        /// <param name="nd"></param>
-        /// <returns></returns>
-        public static bool all(NDArray nd)
-            => BackendFactory.GetEngine().All(nd);
-
-        /// <summary>
-        /// Test whether all array elements along a given axis evaluate to True.
-        /// </summary>
-        /// <param name="nd"></param>
-        /// <param name="axis"></param>
-        /// <returns>Returns an array of bools</returns>
-        public static NDArray<bool> all(NDArray nd, int axis)
-            => BackendFactory.GetEngine().All(nd, axis);
-
-        /// <summary>
-        /// Returns True if two arrays are element-wise equal within a tolerance.
-        /// The tolerance values are positive, typically very small numbers.The
-        /// 
-        /// relative difference (`rtol` * abs(`b`)) and the absolute difference
-        /// `atol` are added together to compare against the absolute difference
-        /// between `a` and `b`.
-        /// If either array contains one or more NaNs, False is returned.
-        /// Infs are treated as equal if they are in the same place and of the same
-        /// sign in both arrays.
-        /// </summary>
-        /// <param name="a">Input array to compare with b</param>
-        /// <param name="b">Input array to compare with a.</param>
-        /// <param name="rtol">The relative tolerance parameter(see Notes)</param>
-        /// <param name="atol">The absolute tolerance parameter(see Notes)</param>
-        /// <param name="equal_nan">Whether to compare NaN's as equal.  If True, NaN's in `a` will be
-        ///considered equal to NaN's in `b` in the output array.</param>
-        public static bool allclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
-            bool equal_nan = false)
-            => BackendFactory.GetEngine().AllClose(a, b, rtol, atol, equal_nan);
-
-        /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
         /// tolerance.
         /// The tolerance values are positive, typically very small numbers.The    
@@ -103,18 +65,6 @@ namespace NumSharp
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isnan(NDArray a)
             => BackendFactory.GetEngine().IsNan(a);
-
-        /// <summary>
-        ///     True if two arrays have the same shape and elements, False otherwise.
-        /// </summary>
-        /// <param name="a">Input array.</param>
-        /// <param name="b">Input array.</param>
-        /// <returns>Returns True if the arrays are equal.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.array_equal.html</remarks>
-        public static bool array_equal(NDArray a, NDArray b)
-        {
-            return a.array_equal(b);
-        }
 
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
