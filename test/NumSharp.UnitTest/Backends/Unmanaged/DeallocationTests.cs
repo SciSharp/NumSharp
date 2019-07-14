@@ -11,7 +11,7 @@ using NumSharp.Backends.Unmanaged;
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     [TestClass]
-    public class Deallocation
+    public class DeallocationTests
     {
         [TestMethod]
         public unsafe void DisposerCopiedAcrossStructCopy()
