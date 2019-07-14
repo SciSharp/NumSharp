@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.APIs
         {
             var data = np.arange(12).reshape(2, 3, 2);
 
-            int s = np.sum(data);
+            int s = (int) np.sum(data);
             Assert.AreEqual(s, 66);
 
             var s0 = np.sum(data, axis: 0);

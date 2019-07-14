@@ -24,7 +24,7 @@ namespace NumSharp
                     double der = max.Storage.GetData<double>(col) - min.Storage.GetData<double>(col);
                     for (int row = 0; row < shape[0]; row++)
                     {
-                        this[row, col] = (Storage.GetData<double>(row, col) - min.Storage.GetData<double>(col)) / der;
+                        this[row, col] = (NDArray) (Storage.GetData<double>(row, col) - min.Storage.GetData<double>(col)) / der;
                     }
                 }
             }

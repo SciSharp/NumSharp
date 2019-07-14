@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         public override NDArray ArgMax(NDArray nd, int axis = -1)
         {
             if (axis == -1)
-                return nd.argmax();
+                return (NDArray) nd.argmax();
             else
                 return ArgMaxByAxis(nd, axis: axis);
         }

@@ -1,11 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
 using System.Linq;
-using NumSharp;
-using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Operations
 {

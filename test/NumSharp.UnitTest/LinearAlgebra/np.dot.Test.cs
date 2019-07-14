@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         {
             int x = 2;
             int y = 3;
-            int z = np.dot(x, y);
+            int z = (int) np.dot((NDArray) x, (NDArray) y);
 
             Assert.AreEqual(z, 6);
         }
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var x = np.arange(3);
             var y = np.arange(3, 6);
 
-            int nd3 = np.dot(x, y);
+            int nd3 = (int) np.dot(x, y);
             Assert.IsTrue(nd3 == 14);
         }
 

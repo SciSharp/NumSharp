@@ -38,151 +38,145 @@ namespace NumSharp
         //    return nd.Data<string>(0);
         //}
 
-        public static implicit operator NDArray(bool d)
-        {
-            var ndArray = new NDArray(typeof(bool), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new bool[] {d});
 
-            return ndArray;
-        }
+#if __REGEN //DO NOT REGENERATE
+        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+
+            //#2 operators
+            public static implicit operator NDArray(#2 d) => NDArray.Scalar<#2>(d);
+
+            public static implicit operator #2(NDArray nd)
+            {
+                if (nd.ndim != 0)
+                    throw new IncorrectShapeException();
+
+                return nd.GetAtIndex<#2>(0);
+            }
+        %
+#else
+
+        //bool operators
+        public static implicit operator NDArray(bool d) => NDArray.Scalar<bool>(d);
 
         public static implicit operator bool(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<bool>(0);
+            return nd.GetAtIndex<bool>(0);
         }
 
-        public static implicit operator NDArray(float d)
-        {
-            var ndArray = new NDArray(typeof(float), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new float[] {d});
-
-            return ndArray;
-        }
-
-        public static implicit operator float(NDArray nd)
-        {
-            if (nd.ndim > 0)
-                throw new IncorrectShapeException();
-
-            if (nd.dtype.Name == "NDArray")
-                return nd.Array.GetIndex<float>(0);
-            else
-                return nd.GetSingle(0);
-        }
-
-        public static implicit operator NDArray(double d)
-        {
-            var ndArray = new NDArray(typeof(double), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new double[] {d});
-
-            return ndArray;
-        }
-
-        public static implicit operator double(NDArray nd)
-        {
-            if (nd.ndim > 0)
-                throw new IncorrectShapeException();
-
-            return nd.Data<double>(0);
-        }
-
-        public static implicit operator NDArray(short d)
-        {
-            var ndArray = new NDArray(typeof(short), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new short[] {d});
-
-            return ndArray;
-        }
+        //short operators
+        public static implicit operator NDArray(short d) => NDArray.Scalar<short>(d);
 
         public static implicit operator short(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<short>(0);
+            return nd.GetAtIndex<short>(0);
         }
 
-        public static implicit operator NDArray(int d)
+        //ushort operators
+        public static explicit operator NDArray(ushort d) => NDArray.Scalar<ushort>(d);
+
+        public static explicit operator ushort(NDArray nd)
         {
-            var ndArray = new NDArray(typeof(int), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new int[] {d});
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
 
-            return ndArray;
+            return nd.GetAtIndex<ushort>(0);
         }
+
+        //int operators
+        public static implicit operator NDArray(int d) => NDArray.Scalar<int>(d);
 
         public static implicit operator int(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<int>(0);
+            return nd.GetAtIndex<int>(0);
         }
 
-        public static implicit operator NDArray(long d)
+        //uint operators
+        public static implicit operator NDArray(uint d) => NDArray.Scalar<uint>(d);
+
+        public static implicit operator uint(NDArray nd)
         {
-            var ndArray = new NDArray(typeof(Int64), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new Int64[] {d});
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
 
-            return ndArray;
+            return nd.GetAtIndex<uint>(0);
         }
+
+        //long operators
+        public static implicit operator NDArray(long d) => NDArray.Scalar<long>(d);
 
         public static implicit operator long(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<long>(0);
+            return nd.GetAtIndex<long>(0);
         }
 
-        public static implicit operator NDArray(ulong d)
-        {
-            var ndArray = new NDArray(typeof(UInt64), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new UInt64[] {d});
-
-            return ndArray;
-        }
+        //ulong operators
+        public static implicit operator NDArray(ulong d) => NDArray.Scalar<ulong>(d);
 
         public static implicit operator ulong(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<ulong>(0);
+            return nd.GetAtIndex<ulong>(0);
         }
 
-        public static implicit operator NDArray(decimal d)
+        //char operators
+        public static implicit operator NDArray(char d) => NDArray.Scalar<char>(d);
+
+        public static implicit operator char(NDArray nd)
         {
-            var ndArray = new NDArray(typeof(decimal), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new decimal[] {d});
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
 
-            return ndArray;
+            return nd.GetAtIndex<char>(0);
         }
+
+        //double operators
+        public static implicit operator NDArray(double d) => NDArray.Scalar<double>(d);
+
+        public static implicit operator double(NDArray nd)
+        {
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
+
+            return nd.GetAtIndex<double>(0);
+        }
+
+        //float operators
+        public static implicit operator NDArray(float d) => NDArray.Scalar<float>(d);
+
+        public static implicit operator float(NDArray nd)
+        {
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
+
+            return nd.GetAtIndex<float>(0);
+        }
+
+        //decimal operators
+        public static implicit operator NDArray(decimal d) => NDArray.Scalar<decimal>(d);
 
         public static implicit operator decimal(NDArray nd)
         {
-            if (nd.ndim > 0)
+            if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.Data<decimal>(0);
+            return nd.GetAtIndex<decimal>(0);
         }
+#endif
 
-        public static implicit operator NDArray(Complex d)
-        {
-            var ndArray = new NDArray(typeof(Complex), new int[0]);
-            ndArray.Storage.ReplaceData((Array)new Complex[] {d});
-
-            return ndArray;
-        }
-
-        /*public static implicit operator NDArray(Quaternion d)
-        {
-            var ndArray = new NDArray(typeof(Quaternion),new int[0]);
-            ndArray.Storage.ReplaceData(new Quaternion[]{d});
-
-            return ndArray;
-        }*/
+        public static implicit operator NDArray(Complex d) => NDArray.Scalar<Complex>(d);
     }
 }

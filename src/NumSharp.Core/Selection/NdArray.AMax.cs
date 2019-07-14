@@ -43,7 +43,7 @@ namespace NumSharp
                         var max = npArr[0];
                         for (int i = 0; i < npArr.Count; i++)
                             max = Math.Max(max, npArr[i]);
-                        return max;
+                        return (NDArray) max;
                     }
 
                     case "Double":
@@ -52,7 +52,7 @@ namespace NumSharp
                         var max = npArr[0];
                         for (int i = 0; i < npArr.Count; i++)
                             max = Math.Max(max, npArr[i]);
-                        return max;
+                        return (NDArray) max;
                     }
                 }
             }

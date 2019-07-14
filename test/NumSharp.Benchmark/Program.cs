@@ -32,12 +32,26 @@ namespace NumSharp.Benchmark
             }
             else
             {
-#if DEBUG
-                IConfig config = new DebugInProcessConfig();
-#else
-                IConfig config = null;
-#endif
-                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
+//#if DEBUG
+//                IConfig config = new DebugInProcessConfig();
+//#else
+//                IConfig config = null;
+//#endif
+//                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
+                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, ManualConfig.Create(DefaultConfig.Instance).With(ConfigOptions.DisableOptimizationsValidator));
+            }
+
+            if (args?.Length > 0)
+            {
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string method = $"OMath.Benchmarks.{args[i]}";
+                    var type = Type.GetType(method);
+                    BenchmarkRunner.Run(type);
+                }
+            }
+            else
+            {
             }
 
             Console.ReadLine();

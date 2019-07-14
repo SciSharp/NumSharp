@@ -325,47 +325,241 @@ namespace NumSharp.Backends
 #endif
             }
         }
+
+        /// <summary>
+        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        /// </summary>
+        [DebuggerNonUserCode]
+        internal static int GetGroup(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if __REGEN //true was done manually.
+	            %foreach supported_dtypes%
+	            case NPTypeCode.#1: return false;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.Boolean: return 0;
+                case NPTypeCode.String: return 0;
+                case NPTypeCode.Byte: return 0;
+                case NPTypeCode.Char: return 0;
+
+                case NPTypeCode.Int16: return 1;
+                case NPTypeCode.Int32: return 1;
+                case NPTypeCode.Int64: return 1;
+
+                case NPTypeCode.UInt16: return 2;
+                case NPTypeCode.UInt32: return 2;
+                case NPTypeCode.UInt64: return 2;
+
+                case NPTypeCode.Single: return 3;
+                case NPTypeCode.Double: return 3;
+                case NPTypeCode.Decimal: return 3;
+
+                case NPTypeCode.Complex: return 10;
+                case NPTypeCode.NDArray: return 100;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        /// </summary>
+        [DebuggerNonUserCode]
+        internal static int GetPriority(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if __REGEN //true was done manually.
+	            %foreach supported_dtypes%
+	            case NPTypeCode.#1: return false;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.Boolean: return 0;
+                case NPTypeCode.String: return 0;
+                case NPTypeCode.Byte: return 0;
+                case NPTypeCode.Char: return 0;
+
+                case NPTypeCode.Int16: return 1 * 10 * 2;
+                case NPTypeCode.Int32: return 1 * 10 * 4;
+                case NPTypeCode.Int64: return 1 * 10 * 8;
+
+                case NPTypeCode.UInt16: return 2 * 10 * 2;
+                case NPTypeCode.UInt32: return 2 * 10 * 4;
+                case NPTypeCode.UInt64: return 2 * 10 * 8;
+
+                case NPTypeCode.Single: return 5 * 10 * 4;
+                case NPTypeCode.Double: return 5 * 10 * 8;
+                case NPTypeCode.Decimal: return 5 * 10 * 32;
+
+                case NPTypeCode.Complex: return 1000;
+                case NPTypeCode.NDArray: return 10000;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
+        /// </summary>
+        [DebuggerNonUserCode]
+        internal static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
+        {
+            switch (typeCode)
+            {
+                case NPY_TYPECHAR.NPY_BOOLLTR:
+                    return NPTypeCode.Boolean;
+
+                case NPY_TYPECHAR.NPY_BYTELTR:
+                    return NPTypeCode.Byte;
+
+                case NPY_TYPECHAR.NPY_UBYTELTR:
+                    //case NPY_TYPECHAR.NPY_CHARLTR: //char has been deprecated in favor of string.
+                    return NPTypeCode.Char;
+
+                case NPY_TYPECHAR.NPY_SHORTLTR:
+                    return NPTypeCode.Int16;
+
+                case NPY_TYPECHAR.NPY_USHORTLTR:
+                    return NPTypeCode.UInt16;
+
+                case NPY_TYPECHAR.NPY_INTLTR:
+                    return NPTypeCode.Int32;
+
+                case NPY_TYPECHAR.NPY_UINTLTR:
+                    return NPTypeCode.UInt32;
+
+                case NPY_TYPECHAR.NPY_LONGLTR:
+                case NPY_TYPECHAR.NPY_INTPLTR:
+                case NPY_TYPECHAR.NPY_LONGLONGLTR:
+                    return NPTypeCode.Int64;
+
+                case NPY_TYPECHAR.NPY_UINTPLTR:
+                case NPY_TYPECHAR.NPY_ULONGLTR:
+                case NPY_TYPECHAR.NPY_UNSIGNEDLTR:
+                case NPY_TYPECHAR.NPY_ULONGLONGLTR:
+                    return NPTypeCode.UInt64;
+
+                case NPY_TYPECHAR.NPY_HALFLTR:
+                case NPY_TYPECHAR.NPY_FLOATLTR:
+                case NPY_TYPECHAR.NPY_CFLOATLTR:
+                    return NPTypeCode.Single;
+
+                case NPY_TYPECHAR.NPY_DOUBLELTR:
+                case NPY_TYPECHAR.NPY_CDOUBLELTR:
+                case NPY_TYPECHAR.NPY_LONGDOUBLELTR:
+                    return NPTypeCode.Double;
+
+                case NPY_TYPECHAR.NPY_STRINGLTR:
+                case NPY_TYPECHAR.NPY_STRINGLTR2:
+                case NPY_TYPECHAR.NPY_UNICODELTR:
+                    return NPTypeCode.Char;
+
+                case NPY_TYPECHAR.NPY_VOIDLTR:
+                    return NPTypeCode.Empty;
+
+                case NPY_TYPECHAR.NPY_COMPLEXLTR:
+                    return NPTypeCode.Complex;
+
+                    return NPTypeCode.Decimal;
+
+                default:
+                    throw new NotSupportedException($"NPY_TYPECHAR of type {typeCode} is not supported.");
+            }
+        }
+
+        /// <summary>
+        ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
+        /// </summary>
+        [DebuggerNonUserCode]
+        internal static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {
                 case NPTypeCode.Empty:
-                    return null;
+                    return NPY_TYPECHAR.NPY_VOIDLTR;
                 case NPTypeCode.Boolean:
-                    return typeof(Boolean);
+                    return NPY_TYPECHAR.NPY_BOOLLTR;
                 case NPTypeCode.Char:
-                    return typeof(Char);
+                    return NPY_TYPECHAR.NPY_CHARLTR;
                 case NPTypeCode.Byte:
-                    return typeof(Byte);
+                    return NPY_TYPECHAR.NPY_BYTELTR;
                 case NPTypeCode.Int16:
-                    return typeof(Int16);
+                    return NPY_TYPECHAR.NPY_SHORTLTR;
                 case NPTypeCode.UInt16:
-                    return typeof(UInt16);
+                    return NPY_TYPECHAR.NPY_USHORTLTR;
                 case NPTypeCode.Int32:
-                    return typeof(Int32);
+                    return NPY_TYPECHAR.NPY_INTLTR;
                 case NPTypeCode.UInt32:
-                    return typeof(UInt32);
+                    return NPY_TYPECHAR.NPY_UINTLTR;
                 case NPTypeCode.Int64:
-                    return typeof(Int64);
+                    return NPY_TYPECHAR.NPY_LONGLTR;
                 case NPTypeCode.UInt64:
-                    return typeof(UInt64);
+                    return NPY_TYPECHAR.NPY_ULONGLTR; //todo! is that longlong or long?
                 case NPTypeCode.Single:
-                    return typeof(Single);
+                    return NPY_TYPECHAR.NPY_FLOATLTR;
                 case NPTypeCode.Double:
-                    return typeof(Double);
+                    return NPY_TYPECHAR.NPY_DOUBLELTR;
                 case NPTypeCode.Decimal:
-                    return typeof(Decimal);
+                    return NPY_TYPECHAR.NPY_LONGLONGLTR;
                 case NPTypeCode.String:
-                    return typeof(String);
-                case NPTypeCode.NDArray:
-                    return typeof(NDArray);
+                    return NPY_TYPECHAR.NPY_STRINGLTR;
                 case NPTypeCode.Complex:
-                    return typeof(Complex);
+                    return NPY_TYPECHAR.NPY_COMPLEXLTR;
+                case NPTypeCode.NDArray:
+                    return NPY_TYPECHAR.NPY_OBJECTLTR;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
             }
         }
 
+
+        public static int CompareTo(this NPTypeCode left, NPTypeCode right)
         {
+            if (left == right)
+                return 0;
+
+            var sizeLeft = left.SizeOf();
+            var sizeRight = right.SizeOf();
+            var groupLeft = left.GetGroup();
+            var groupRight = right.GetGroup();
+
+            if (groupLeft == groupRight)
+            {
+                return sizeLeft.CompareTo(sizeRight);
+            }
+
+            if (groupLeft > groupRight)
+            {
+                return 1;
+            }
+
+            return -1;
+
+            //if (sizeLeft == sizeRight)
+            //{
+            //    var lun = left.IsUnsigned();
+            //    var run = right.IsUnsigned();
+            //    if (lun && run)
+            //        return groupLeft.CompareTo(groupRight);
+
+            //    if (lun)
+            //        return 1;
+
+            //    if (run)
+            //        return -1;
+
+            //    return 0;
+            //}
+
+            //return sizeLeft.CompareTo(sizeRight);
         }
     }
 }

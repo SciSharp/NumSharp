@@ -60,7 +60,7 @@ namespace NumSharp
             {
                 for (int jdx = 0; jdx < matrix[0].Length; jdx++)
                 {
-                    this[idx, jdx] = Double.Parse(matrix[idx][jdx]);
+                    this[idx, jdx] = (NDArray) Double.Parse(matrix[idx][jdx]);
                 }
             }
         }

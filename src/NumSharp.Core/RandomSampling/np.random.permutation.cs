@@ -16,8 +16,8 @@ namespace NumSharp
             {
                 var pos = randomizer.Next(0, max);
                 var zero = nd.Data<int>(0);
-                nd[0] = nd.Data<int>(pos);
-                nd[pos] = zero;
+                nd[0] = (NDArray)nd.Data<int>(pos);
+                nd[pos] = (NDArray) zero;
             }
 
             return nd;

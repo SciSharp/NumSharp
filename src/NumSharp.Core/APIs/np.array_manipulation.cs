@@ -16,7 +16,7 @@ namespace NumSharp
         /// Elements that roll beyond the last position are re-introduced at the first.
         /// </summary>
         public static int roll(NDArray nd, int shift, int axis = -1)
-            => nd.roll(shift, axis);
+            => (int) nd.roll(shift, axis);
 
         /// <summary>
         /// Return a contiguous flattened array.
