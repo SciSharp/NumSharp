@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Creation
         //TODO! [DataRow(typeof(Complex))]
         //TODO! [DataRow(typeof(string))]
         //TODO! [DataRow(typeof(NDArray))]
-        //TODO! [DataRow(typeof(bool))]
+        [DataRow(typeof(bool))]
         public void One_AllTypes(Type dtype)
         {
             var np1 = np.ones(new Shape(3, 3, 3), dtype);

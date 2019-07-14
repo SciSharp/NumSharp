@@ -28,6 +28,10 @@ namespace NumSharp
 	                default:
 		                throw new NotSupportedException();
 #else
+	                case NPTypeCode.Boolean:
+	                {
+                        return new NDArray(new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(bytes, false)));
+	                }
 	                case NPTypeCode.Byte:
 	                {
                         return new NDArray(new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(bytes, false)));

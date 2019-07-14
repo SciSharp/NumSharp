@@ -7,7 +7,7 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        public static NumSharp.Generic.NDArray<bool> operator |(NDArray np_, NDArray obj_)
+        public static NDArray operator |(NDArray np_, NDArray obj_)
         {
             return null;
             //var boolTensor = new NDArray(typeof(bool),np_.shape);

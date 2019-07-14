@@ -28,30 +28,32 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Byte:
+	            case NPTypeCode.Boolean:
+                    return UnmanagedMemoryBlock<bool>.FromArray((bool[])arr);
+	            case NPTypeCode.Byte:
                     return UnmanagedMemoryBlock<byte>.FromArray((byte[])arr);
-                case NPTypeCode.Int16:
+	            case NPTypeCode.Int16:
                     return UnmanagedMemoryBlock<short>.FromArray((short[])arr);
-                case NPTypeCode.UInt16:
+	            case NPTypeCode.UInt16:
                     return UnmanagedMemoryBlock<ushort>.FromArray((ushort[])arr);
-                case NPTypeCode.Int32:
+	            case NPTypeCode.Int32:
                     return UnmanagedMemoryBlock<int>.FromArray((int[])arr);
-                case NPTypeCode.UInt32:
+	            case NPTypeCode.UInt32:
                     return UnmanagedMemoryBlock<uint>.FromArray((uint[])arr);
-                case NPTypeCode.Int64:
+	            case NPTypeCode.Int64:
                     return UnmanagedMemoryBlock<long>.FromArray((long[])arr);
-                case NPTypeCode.UInt64:
+	            case NPTypeCode.UInt64:
                     return UnmanagedMemoryBlock<ulong>.FromArray((ulong[])arr);
-                case NPTypeCode.Char:
+	            case NPTypeCode.Char:
                     return UnmanagedMemoryBlock<char>.FromArray((char[])arr);
-                case NPTypeCode.Double:
+	            case NPTypeCode.Double:
                     return UnmanagedMemoryBlock<double>.FromArray((double[])arr);
-                case NPTypeCode.Single:
+	            case NPTypeCode.Single:
                     return UnmanagedMemoryBlock<float>.FromArray((float[])arr);
-                case NPTypeCode.Decimal:
+	            case NPTypeCode.Decimal:
                     return UnmanagedMemoryBlock<decimal>.FromArray((decimal[])arr);
-                default:
-                    throw new NotSupportedException();
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }

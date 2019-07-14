@@ -4,6 +4,7 @@ using NumSharp;
 using NumSharp.Generic;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using FluentAssertions;
 
 namespace NumSharp.UnitTest.Selection

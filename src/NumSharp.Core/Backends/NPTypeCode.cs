@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -66,9 +68,9 @@ namespace NumSharp.Backends
         /// <returns></returns>
         String = 18, // 0x00000012
 
-        NDArray = 128, //0x00000080
+        Complex = 128, //0x00000080
 
-        Complex = 129, //0x00000081
+        NDArray = 129, //0x00000081
     }
 
     public static class NPTypeCodeExtensions
@@ -76,6 +78,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Returns true if typecode is a number (incl. <see cref="bool"/>, <see cref="char"/> and <see cref="Complex"/>).
         /// </summary>
+        [DebuggerNonUserCode]
         public static bool IsNumerical(this NPTypeCode typeCode)
         {
             var val = (int)typeCode;
@@ -86,6 +89,7 @@ namespace NumSharp.Backends
         ///     Extracts <see cref="NPTypeCode"/> from given <see cref="Type"/>.
         /// </summary>
         /// <remarks>In case there was no successful cast to <see cref="NPTypeCode"/>, return will be <see cref="NPTypeCode.Empty"/></remarks>
+        [DebuggerNonUserCode]
         public static NPTypeCode GetTypeCode(this Type type)
         {
             // ReSharper disable once PossibleNullReferenceException
@@ -122,6 +126,7 @@ namespace NumSharp.Backends
         ///     Extracts <see cref="NPTypeCode"/> from given <typeparamref name="T"/>.
         /// </summary>
         /// <remarks>In case there was no successful cast to <see cref="NPTypeCode"/>, return will be <see cref="NPTypeCode.Empty"/></remarks>
+        [DebuggerNonUserCode]
         public static NPTypeCode GetTypeCode<T>()
         {
             return InfoOf<T>.NPTypeCode;
@@ -132,7 +137,194 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="typeCode"></param>
         /// <returns></returns>
+        [DebuggerNonUserCode]
         public static Type AsType(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if _REGEN
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
+	            case NPTypeCode.#1: return typeof(#2);
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.NDArray: return typeof(NDArray);
+                case NPTypeCode.Complex: return typeof(Complex);
+                case NPTypeCode.Boolean: return typeof(bool);
+                case NPTypeCode.Byte: return typeof(byte);
+                case NPTypeCode.Int16: return typeof(short);
+                case NPTypeCode.UInt16: return typeof(ushort);
+                case NPTypeCode.Int32: return typeof(int);
+                case NPTypeCode.UInt32: return typeof(uint);
+                case NPTypeCode.Int64: return typeof(long);
+                case NPTypeCode.UInt64: return typeof(ulong);
+                case NPTypeCode.Char: return typeof(char);
+                case NPTypeCode.Double: return typeof(double);
+                case NPTypeCode.Single: return typeof(float);
+                case NPTypeCode.Decimal: return typeof(decimal);
+                case NPTypeCode.String: return typeof(string);
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Checks if given <see cref="Type"/> has a match in <see cref="NPTypeCode"/>.
+        /// </summary>
+        [DebuggerNonUserCode]
+        public static bool IsValidNPType(this Type type)
+        {
+            return type.GetTypeCode() != NPTypeCode.Empty;
+        }
+
+        /// <summary>
+        ///     Gets the size of given <paramref name="typeCode"/>
+        /// </summary>
+        /// <param name="typeCode"></param>
+        /// <returns></returns>
+        /// <remarks>The size is computed by <see cref="Marshal.SizeOf{T}()"/></remarks>
+        [DebuggerNonUserCode]
+        public static int SizeOf(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if _REGEN
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
+	            case NPTypeCode.#1: return InfoOf<#2>.Size;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.NDArray: return IntPtr.Size;
+                case NPTypeCode.Complex: return InfoOf<Complex>.Size;
+                case NPTypeCode.Boolean: return 1;
+                case NPTypeCode.Byte: return 1;
+                case NPTypeCode.Int16: return 2;
+                case NPTypeCode.UInt16: return 2;
+                case NPTypeCode.Int32: return 4;
+                case NPTypeCode.UInt32: return 4;
+                case NPTypeCode.Int64: return 8;
+                case NPTypeCode.UInt64: return 8;
+                case NPTypeCode.Char: return 1;
+                case NPTypeCode.Double: return 8;
+                case NPTypeCode.Single: return 4;
+                case NPTypeCode.Decimal: return 32;
+                case NPTypeCode.String: return 1; //because it is a char basically.
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        /// </summary>
+        [DebuggerNonUserCode]
+        public static bool IsRealNumber(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if __REGEN //true was done manually.
+	            %foreach supported_dtypes%
+	            case NPTypeCode.#1: return false;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.NDArray: return false;
+                case NPTypeCode.Complex: return true;
+                case NPTypeCode.Boolean: return false;
+                case NPTypeCode.Byte: return false;
+                case NPTypeCode.Int16: return false;
+                case NPTypeCode.UInt16: return false;
+                case NPTypeCode.Int32: return false;
+                case NPTypeCode.UInt32: return false;
+                case NPTypeCode.Int64: return false;
+                case NPTypeCode.UInt64: return false;
+                case NPTypeCode.Char: return false;
+                case NPTypeCode.Double: return true;
+                case NPTypeCode.Single: return true;
+                case NPTypeCode.Decimal: return true;
+                case NPTypeCode.String: return false;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        /// </summary>
+        [DebuggerNonUserCode]
+        public static bool IsUnsigned(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if __REGEN //true was done manually.
+	            %foreach supported_dtypes%
+	            case NPTypeCode.#1: return false;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.NDArray: return false;
+                case NPTypeCode.Complex: return false;
+                case NPTypeCode.Boolean: return false;
+                case NPTypeCode.Byte: return true;
+                case NPTypeCode.Int16: return false;
+                case NPTypeCode.UInt16: return true;
+                case NPTypeCode.Int32: return false;
+                case NPTypeCode.UInt32: return true;
+                case NPTypeCode.Int64: return false;
+                case NPTypeCode.UInt64: return true;
+                case NPTypeCode.Char: return true;
+                case NPTypeCode.Double: return false;
+                case NPTypeCode.Single: return false;
+                case NPTypeCode.Decimal: return false;
+                case NPTypeCode.String: return false;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
+
+        /// <summary>
+        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        /// </summary>
+        [DebuggerNonUserCode]
+        public static bool IsSigned(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+#if __REGEN //true was done manually.
+	            %foreach supported_dtypes%
+	            case NPTypeCode.#1: return false;
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+                case NPTypeCode.NDArray: return false;
+                case NPTypeCode.Complex: return false;
+                case NPTypeCode.Boolean: return false;
+                case NPTypeCode.Byte: return false;
+                case NPTypeCode.Int16: return true;
+                case NPTypeCode.UInt16: return false;
+                case NPTypeCode.Int32: return true;
+                case NPTypeCode.UInt32: return false;
+                case NPTypeCode.Int64: return true;
+                case NPTypeCode.UInt64: return false;
+                case NPTypeCode.Char: return false;
+                case NPTypeCode.Double: return true;
+                case NPTypeCode.Single: return true;
+                case NPTypeCode.Decimal: return true;
+                case NPTypeCode.String: return false;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
         {
             switch (typeCode)
             {
@@ -173,12 +365,7 @@ namespace NumSharp.Backends
             }
         }
 
-        /// <summary>
-        ///     Checks if given <see cref="Type"/> has a match in <see cref="NPTypeCode"/>.
-        /// </summary>
-        public static bool IsValidNPType(this Type type)
         {
-            return type.GetTypeCode() != NPTypeCode.Empty;
         }
     }
 }

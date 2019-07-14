@@ -80,4 +80,9 @@
   <ItemGroup>
     <None Include="DataSample.cs" />
   </ItemGroup>
+
+
+  <ItemGroup>
+    <Folder Include="Backends\Unmanaged\Iterators\" />
+  </ItemGroup>
 </Project>

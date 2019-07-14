@@ -32,71 +32,25 @@ namespace NumSharp
             {
 #if _REGEN
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
-	            case NPTypeCode.#1:
-	            {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-	            }
+	            case NPTypeCode.#1: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Byte:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Int16:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Int32:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.UInt32:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Char:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Double:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Single:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
-                }
-
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Byte: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int16: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt16: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int32: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt32: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int64: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt64: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Char: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Double: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Single: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Decimal: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
