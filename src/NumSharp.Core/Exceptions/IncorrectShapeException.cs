@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace NumSharp
 {
@@ -6,7 +6,12 @@ namespace NumSharp
     {
         public IncorrectShapeException() : base("This method does not work with this shape or was not already implemented.")
         {
-            
+
         }
-    }    
+
+        public IncorrectShapeException(string msg) : base(msg)
+        {
+
+        }
+    }
 }
