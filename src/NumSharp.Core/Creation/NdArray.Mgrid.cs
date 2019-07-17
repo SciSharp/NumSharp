@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NumSharp;
 
 namespace NumSharp
@@ -8,7 +8,7 @@ namespace NumSharp
         public (NDArray,NDArray) mgrid(NDArray nd2)
         {
             if( !(this.ndim == 1 || nd2.ndim == 1))
-                throw new IncorrectShapeException();
+                throw new IncorrectShapeException("mgrid is implemented only for two single dimension arrays");
 
             Array nd1Data = this.Storage.GetData();
             Array nd2Data = nd2.Storage.GetData();
@@ -22,21 +22,17 @@ namespace NumSharp
             Array res2Arr = res2.Storage.GetData();
 
             int counter = 0;
-
-            for (int idx = 0; idx < nd2Data.Length; idx++)
+            for (int row = 0; row < nd1Data.Length; row++)
             {
-                for (int jdx = 0; jdx < nd1Data.Length; jdx++)
+                for (int col = 0; col < nd2Data.Length; col++)
                 {
-                    res1Arr.SetValue(nd1Data.GetValue(idx),counter);
-                    res2Arr.SetValue(nd2Data.GetValue(idx),counter);
+                    res1Arr.SetValue(nd1Data.GetValue(row), counter);
+                    res2Arr.SetValue(nd2Data.GetValue(col),counter);
                     counter++;
                 }
             }
-            
 
             return (res1,res2);
         }
-
     }
-
 }

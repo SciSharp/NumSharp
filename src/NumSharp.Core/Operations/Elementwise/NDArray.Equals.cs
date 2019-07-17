@@ -20,14 +20,55 @@ namespace NumSharp
             {
                 case NDArray safeCastObj:
                     {
+                        // We aren't using array_equal here because it assumes that both arrays have
+                        // non-null Storage data and shapes.
                         var thatData = safeCastObj.Storage?.GetData();
-                        if (thatData == null)
+                        var thisData = this.Storage?.GetData();
+                        if ((thatData == null && thisData != null) ||(thatData != null && thisData == null))
                         {
                             return false;
                         }
+                        if (thisData != null)
+                        {
+                            if (thatData != null)
+                            {
+                                // Compare array contents, which is clumsy since we don't know the element type
+                                if (thisData.Length == thatData.Length)
+                                {
+                                    for(int i = 0; i < thisData.Length; i++)
+                                    {
+                                        if (!thisData.GetValue(i).Equals(thatData.GetValue(i)))
+                                        {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    return false;
+                                }
+                            }
+                            else
+                            {
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            if (thatData != null)
+                            {
+                                return false;
+                            }
+                        }
 
-                        var thisData = this.Storage?.GetData();
-                        return thisData == thatData && safeCastObj.shape == this.shape;
+                        if (this.shape != null && safeCastObj.shape != null)
+                        {
+                            return this.shape.SequenceEqual(safeCastObj.shape);
+                        }
+                        else
+                        {
+                            return this.shape == safeCastObj.shape;
+                        }
                     }
                 case int val:
                     return Data<int>(0) == val;
