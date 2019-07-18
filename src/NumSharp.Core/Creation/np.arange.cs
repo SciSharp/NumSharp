@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -103,25 +104,20 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(float start, float stop, float step = 1)
         {
-            return null;
-            //if (start > stop)
-            //{
-            //    throw new Exception("parameters invalid, start is greater than stop.");
-            //}
+            if (start > stop)
+                throw new Exception("parameters invalid, start is greater than stop.");
 
-            //int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
 
-            //var nd = new NDArray(typeof(float), new Shape(length));
+            unsafe
+            {
+                var addr = (float*)nd.Array.Address;
+                for (int i = 0; i < length; i++)
+                    *(addr + i) = start + i * step;
+            }
 
-            //float[] puffer = (float[])nd.Array;
-
-            //for (int index = 0; index < length; index++)
-            //{
-            //    float value = start + index * step;
-            //    puffer[index] = value;
-            //}
-
-            //return nd;
+            return nd;
         }
 
         /// <summary>
@@ -160,25 +156,20 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(double start, double stop, double step = 1)
         {
-            return null;
-            //if (start > stop)
-            //{
-            //    throw new Exception("parameters invalid, start is greater than stop.");
-            //}
+            if (start > stop)
+                throw new Exception("parameters invalid, start is greater than stop.");
 
-            //int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(double), Shape.Vector(length), false); //do not fill, we are about to
 
-            //var nd = new NDArray(typeof(double), new Shape(length));
+            unsafe
+            {
+                var addr = (double*)nd.Array.Address;
+                for (int i = 0; i < length; i++)
+                    *(addr + i) = start + i * step;
+            }
 
-            //double[] puffer = (double[])nd.Array;
-
-            //for (int index = 0; index < length; index++)
-            //{
-            //    double value = start + index * step;
-            //    puffer[index] = value;
-            //}
-
-            //return nd;
+            return nd;
         }
 
         /// <summary>
@@ -247,20 +238,17 @@ namespace NumSharp
         public static NDArray arange(int start, int stop, int step = 1)
         {
             if (start > stop)
-            {
                 throw new Exception("parameters invalid, start is greater than stop.");
+
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(int), Shape.Vector(length), false); //do not fill, we are about to
+
+            unsafe
+            {
+                var addr = (int*)nd.Array.Address;
+                for (int i = 0; i < length; i++)
+                    *(addr + i) = start + i * step;
             }
-
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
-            int index = 0;
-
-            var nd = new NDArray(np.int32, new Shape(length));
-
-            var a = new int[length];
-            for (int i = start; i < stop; i += step)
-                a[index++] = i;
-
-            nd.ReplaceData(a);
 
             return nd;
         }
