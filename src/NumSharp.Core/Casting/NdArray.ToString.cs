@@ -23,9 +23,11 @@ namespace NumSharp
             }
             else
             {
-                s.Append("array(");
+                if (flat)
+                    s.Append("array(");
                 PrettyPrint(s, flat);
-                s.Append(")");
+                if (flat)
+                    s.Append(")");
             }
 
             return s.ToString();
@@ -38,6 +40,7 @@ namespace NumSharp
                 s.Append($"{Storage.GetIndex(0)}");
                 return;
             }
+
             if (shape.Length == 1)
             {
                 s.Append("[");
@@ -45,6 +48,7 @@ namespace NumSharp
                 s.Append("]");
                 return;
             }
+
             var size = shape[0];
             s.Append("[");
             for (int i = 0; i < size; i++)
@@ -58,6 +62,7 @@ namespace NumSharp
                         s.AppendLine();
                 }
             }
+
             s.Append("]");
         }
     }
