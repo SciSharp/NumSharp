@@ -155,7 +155,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToDotNetArray1D()
         {
-            var np1 = np.arange(9).MakeGeneric<double>();
+            var np1 = np.arange(9d).MakeGeneric<double>();
 
             double[] np1_ = (double[])np1.ToMuliDimArray<double>();
 

@@ -23,7 +23,6 @@ namespace NumSharp
         {
             var arrType = array.ResolveElementType();
 
-
             //handle dim expansion and extract shape
             Shape shape;
             var dims = array.ResolveRank();
@@ -90,17 +89,7 @@ namespace NumSharp
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            unsafe
-            {
-                var len = data.Length;
-                var alloc = new UnmanagedMemoryBlock<T>(len);
-                var from = (T*)Unsafe.AsPointer(ref data);
-                var to = alloc.Address;
-                var bytesLen = len * InfoOf<T>.Size;
-                Buffer.MemoryCopy(from, to, bytesLen, bytesLen);
-
-                return new NDArray(new ArraySlice<T>(alloc), new Shape(data.Length, data.Length));
-            }
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1)));
         }
 
         public static NDArray array<T>(T[,,] data) where T : unmanaged
@@ -108,35 +97,14 @@ namespace NumSharp
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            unsafe
-            {
-                var len = data.Length;
-                var alloc = new UnmanagedMemoryBlock<T>(len);
-                var from = (T*)Unsafe.AsPointer(ref data);
-                var to = alloc.Address;
-                var bytesLen = len * InfoOf<T>.Size;
-                Buffer.MemoryCopy(from, to, bytesLen, bytesLen);
-
-                return new NDArray(new ArraySlice<T>(alloc), new Shape(data.Length, data.Length));
-            }
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
         }
 
         public static NDArray array<T>(T[,,,] data) where T : unmanaged
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
-
-            unsafe
-            {
-                var len = data.Length;
-                var alloc = new UnmanagedMemoryBlock<T>(len);
-                var from = (T*)Unsafe.AsPointer(ref data);
-                var to = alloc.Address;
-                var bytesLen = len * InfoOf<T>.Size;
-                Buffer.MemoryCopy(from, to, bytesLen, bytesLen);
-
-                return new NDArray(new ArraySlice<T>(alloc), new Shape(data.Length, data.Length));
-            }
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3)));
         }
     }
 }

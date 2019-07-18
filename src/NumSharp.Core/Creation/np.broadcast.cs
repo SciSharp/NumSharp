@@ -1,36 +1,39 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
     public static partial class np
     {
         /// <summary>
-        /// 
+        ///     Produce an object that mimics broadcasting.
         /// </summary>
-        /// <param name="nd1">  1-D arrays representing the coordinates of a grid </param>
-        /// <param name="nd2">  1-D arrays representing the coordinates of a grid</param>
-        /// <returns></returns>
-        public static NDArray broadcast(NDArray nd1, NDArray nd2)
+        /// <returns>Broadcast the input parameters against one another, and return an object that encapsulates the result. Amongst others, it has shape and nd properties, and may be used as an iterator.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast.html</remarks>
+        public static Broadcast broadcast(NDArray nd1, NDArray nd2)
         {
-            return null;
-            //TODO!
-            //Shape shape = null;
-            //int nd1maxAxis = nd1.shape[0] > nd1.shape[1] ? nd1.shape[0] : nd1.shape[1];
-            //int nd2maxAxis = nd2.shape[0] > nd2.shape[1] ? nd2.shape[0] : nd2.shape[1];
-            //if (nd1.shape[0] == 1 && nd2.shape[1] == 1)
-            //{
-            //    shape = new Shape(nd2maxAxis, nd1maxAxis);
-            //} else if (nd1.shape[1] == 1 && nd2.shape[0] == 1)
-            //{
-            //    shape = new Shape(nd1maxAxis, nd2maxAxis);
-            //}
-            //int nd = 2;
-            //int ndim = 2;
-            //int size = nd1maxAxis * nd2maxAxis;
+            return new Broadcast {shape = DefaultEngine.ResolveReturnShape(nd1.Shape, nd2.Shape)};
+        }
 
-            //return new Broadcast(nd, ndim, shape, size);
+        public class Broadcast
+        {
+            //It shouldn't be used unless it is a very advanced code...
+            public int index => throw new NotSupportedException("NumSharp does not implement iterators like numpy does.");
+            public NDIterator<int> iters => throw new NotSupportedException("NumSharp does not implement iterators like numpy does.");
+
+            public int nd
+            {
+                get => ndim;
+            }
+
+            public int ndim => shape.NDim;
+            public Shape shape;
+            public int size => shape.size;
+
+            void reset() { }
         }
     }
 }

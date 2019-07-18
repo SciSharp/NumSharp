@@ -1,70 +1,47 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray[] broadcast_arrays(NDArray nd1, NDArray nd2, bool subok = false)
+        /// <summary>
+        ///     Broadcast any number of arrays against each other.
+        /// </summary>
+        /// <param name="ndArrays">The arrays to broadcast.</param>
+        /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        public static NDArray[] broadcast_arrays(params NDArray[] ndArrays)
         {
-            var shape = _broadcast_shape(nd1, nd2);
+            int len = ndArrays.Length;
+            int i;
+            var inputShapes = new Shape[len];
+            for (i = 0; i < len; i++) 
+                inputShapes[i] = ndArrays[i].Shape;
+            var outputShapes = DefaultEngine.Broadcast(inputShapes);
 
-            if (nd1.shape == shape && nd2.shape == shape)
-            {
-                return new NDArray[] {nd1, nd2};
-            }
-            else if (nd1.dtype == typeof(int))
-            {
-                return new NDArray[] {_broadcast_to<int>(nd1, shape, subok, false), _broadcast_to<int>(nd2, shape, subok, false)};
-            }
-            else if (nd1.dtype == typeof(float))
-            {
-                return new NDArray[] {_broadcast_to<float>(nd1, shape, subok, false), _broadcast_to<float>(nd2, shape, subok, false)};
-            }
-            else if (nd1.dtype == typeof(double))
-            {
-                return new NDArray[] {_broadcast_to<double>(nd1, shape, subok, false), _broadcast_to<double>(nd2, shape, subok, false)};
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            var list = new NDArray[len];
+            for (i = 0; i < len; i++) 
+                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i]));
+
+            return list;
         }
 
-        private static Shape _broadcast_shape(NDArray nd1, NDArray nd2)
+        /// <summary>
+        ///     Broadcast two arrays against each other.
+        /// </summary>
+        /// <param name="lhs">An array to broadcast.</param>
+        /// <param name="rhs">An array to broadcast.</param>
+        /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        public static (NDArray, NDArray) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
-            //TODO!
-            var b = np.broadcast(nd1, nd2);
-            return b.shape;
-        }
-
-        private static NDArray _broadcast_to<T>(NDArray nd, Shape shape, bool subok, bool rdonly)
-        {
-            //TODO!
-            return null;
-            //T[,] table = new T[shape.Dimensions[0], shape.Dimensions[1]];
-            //if (nd.shape[0] == 1) 
-            //{// (1,2,3)
-            //    for (int i = 0; i < shape.Dimensions[0]; i++)
-            //    {
-            //        for (int j = 0; j < shape.Dimensions[1]; j++)
-            //        {
-            //            table[i, j] = nd.Data<T>(0, j); 
-            //        }
-            //    }
-            //}
-            //else if (nd.shape[1] == 1)
-            //{
-            //    for (int i = 0; i < shape.Dimensions[0]; i++)
-            //    {
-            //        for (int j = 0; j < shape.Dimensions[1]; j++)
-            //        {
-            //            table[i, j] = nd.Data<T>(i, 0);
-            //        }
-            //    }
-            //}
-            //return np.array<T>(table);
+            var (leftShape, rightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+            return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),
+                new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape)));
         }
     }
 }
