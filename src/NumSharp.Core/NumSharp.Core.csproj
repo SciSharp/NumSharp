@@ -21,9 +21,10 @@
 7: Fix np.meshgrid.
 8: Add np.expand_dims.
 9: Add nd.negative/ nd.positive.
-10: Add nd.negate.</PackageReleaseNotes>
-    <AssemblyVersion>0.10.3.0</AssemblyVersion>
-    <FileVersion>0.10.3.0</FileVersion>
+10: Add nd.negate.
+11: Fix mgrid.</PackageReleaseNotes>
+    <AssemblyVersion>0.10.4.0</AssemblyVersion>
+    <FileVersion>0.10.4.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -33,8 +34,10 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.10.3</Version>
+    <Version>0.10.4</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+    <SignAssembly>false</SignAssembly>
+    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
