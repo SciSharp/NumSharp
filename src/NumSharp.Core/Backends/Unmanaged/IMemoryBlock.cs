@@ -15,9 +15,9 @@ namespace NumSharp.Backends.Unmanaged
         unsafe void* Address { get; }
 
         /// <summary>
-        ///     How many items are stored in <see cref="Address"/>?
+        ///     How many items are stored in <see cref="Address"/>.
         /// </summary>
-        /// <remarks></remarks>
+        /// <remarks>Not to confuse with <see cref="BytesLength"/></remarks>
         int Count { get; }
 
         /// <summary>
