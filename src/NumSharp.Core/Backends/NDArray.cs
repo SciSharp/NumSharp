@@ -139,6 +139,15 @@ namespace NumSharp
         { }
 
         /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="dtype">Internal data type</param>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, int size) : this(dtype, new Shape(size), true)
+        { }
+
+        /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
