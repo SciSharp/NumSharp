@@ -9,6 +9,8 @@ namespace NumSharp
 {
     public struct Shape : ICloneable, IEquatable<Shape>, IComparable<Shape>, IComparable
     {
+        private static readonly int[] _vectorStrides = {1};
+
         /// <summary>
         ///     Dense data are stored contiguously in memory, addressed by a single index (the memory address). <br></br>
         ///     Array memory ordering schemes translate that single index into multiple indices corresponding to the array coordinates.<br></br>
@@ -31,16 +33,44 @@ namespace NumSharp
         /// </summary>
         public static readonly Shape Scalar = new Shape(Array.Empty<int>()) {size = 1};
 
-        [MethodImpl((MethodImplOptions)768)]
-        public static Shape Empty(int ndim)
+        /// <summary>
+        ///     Create a shape that represents a vector.
+        /// </summary>
+        /// <remarks>Faster than calling Shape's constructor</remarks>
+        public static Shape Vector(int length)
         {
-            return new Shape {dimensions = new int[ndim], strides = new int[ndim]};
-            //default vals already sets: ret.layout = 0;
-            //default vals already sets: ret.size = 0;
-            //default vals already sets: ret._hashCode = 0;
-            //default vals already sets: ret.IsScalar = false;
+            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length};
+
+            unchecked
+            {
+                int hash = 26599; //('C' * 397)
+                hash ^= length * 397;
+                shape._hashCode = hash;
+            }
+
+            shape.IsScalar = false;
+            return shape;
         }
 
+        /// <summary>
+        ///     Create a shape that represents a matrix.
+        /// </summary>
+        /// <remarks>Faster than calling Shape's constructor</remarks>
+        public static Shape Matrix(int rows, int cols)
+        {
+            var shape = new Shape {dimensions = new[] {rows, cols}, strides = new int[] {cols, 1}, layout = 'C', size = rows * cols};
+
+            unchecked
+            {
+                int hash = 26599; //('C' * 397)
+                hash ^= rows * 397;
+                hash ^= cols * 397;
+                shape._hashCode = hash;
+            }
+
+            shape.IsScalar = false;
+            return shape;
+        }
 
         public int NDim
         {
@@ -74,8 +104,8 @@ namespace NumSharp
             this.layout = other.layout;
             this._hashCode = other._hashCode;
             this.size = other.size;
-            this.dimensions = other.dimensions;
-            this.strides = other.strides;
+            this.dimensions = (int[])other.dimensions.Clone();
+            this.strides = (int[])other.strides.Clone();
             this.IsScalar = other.IsScalar;
         }
 
@@ -122,6 +152,16 @@ namespace NumSharp
             }
 
             IsScalar = size == 1 && dims.Length == 0;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static Shape Empty(int ndim)
+        {
+            return new Shape {dimensions = new int[ndim], strides = new int[ndim]};
+            //default vals already sets: ret.layout = 0;
+            //default vals already sets: ret.size = 0;
+            //default vals already sets: ret._hashCode = 0;
+            //default vals already sets: ret.IsScalar = false;
         }
 
 
@@ -282,6 +322,7 @@ namespace NumSharp
         {
             layout = order;
             _SetDimOffset();
+            ComputeHashcode();
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -366,6 +407,23 @@ namespace NumSharp
             return l.ToArray();
         }
 
+        /// <summary>
+        ///     Recalculate hashcode from current dimension and layout.
+        /// </summary>
+        internal void ComputeHashcode()
+        {
+            if (dimensions.Length > 0)
+            {
+                unchecked
+                {
+                    int hash = (layout * 397);
+                    foreach (var v in dimensions)
+                        hash ^= (size *= v) * 397;
+                    _hashCode = hash;
+                }
+            }
+        }
+
         #region Slicing support
 
         public Shape Slice(Slice[] slices, bool reduce = false)
@@ -380,20 +438,75 @@ namespace NumSharp
 
         #region Implicit Operators
 
-        public static implicit operator int[](Shape shape) => shape.dimensions;
+        public static explicit operator int[](Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
-        public static implicit operator int(Shape shape) => shape.Size;
+        public static explicit operator int(Shape shape) => shape.Size;
         public static implicit operator Shape(int dim) => new Shape(dim);
 
-        public static implicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
+        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => new Shape(dims.Item1, dims.Item2);
 
-        public static implicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
+        public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);
 
-        public static implicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
+        public static explicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4);
+
+        public static explicit operator (int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
+        public static implicit operator Shape((int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5);
+
+        public static explicit operator (int, int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
+        public static implicit operator Shape((int, int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
+
+        #endregion
+
+        #region Deconstructor
+
+        public void Deconstruct(out int dim1, out int dim2)
+        {
+            var dims = this.dimensions;
+            dim1 = dims[0];
+            dim2 = dims[1];
+        }
+
+        public void Deconstruct(out int dim1, out int dim2, out int dim3)
+        {
+            var dims = this.dimensions;
+            dim1 = dims[0];
+            dim2 = dims[1];
+            dim3 = dims[2];
+        }
+
+        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4)
+        {
+            var dims = this.dimensions;
+            dim1 = dims[0];
+            dim2 = dims[1];
+            dim3 = dims[2];
+            dim4 = dims[3];
+        }
+
+        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5)
+        {
+            var dims = this.dimensions;
+            dim1 = dims[0];
+            dim2 = dims[1];
+            dim3 = dims[2];
+            dim4 = dims[3];
+            dim5 = dims[4];
+        }
+
+        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5, out int dim6)
+        {
+            var dims = this.dimensions;
+            dim1 = dims[0];
+            dim2 = dims[1];
+            dim3 = dims[2];
+            dim4 = dims[3];
+            dim5 = dims[4];
+            dim6 = dims[5];
+        }
 
         #endregion
 
@@ -540,15 +653,16 @@ namespace NumSharp
         /// <returns>A new object that is a copy of this instance.</returns>
         object ICloneable.Clone()
         {
-            return Clone();
+            return Clone(false);
         }
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
-        public Shape Clone()
+        /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
+        public Shape Clone(bool deep = false)
         {
-            return this; //its a struct...
+            return deep ? new Shape(this) : this;
         }
     }
 }

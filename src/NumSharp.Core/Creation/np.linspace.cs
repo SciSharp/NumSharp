@@ -30,7 +30,7 @@ namespace NumSharp
             for (int idx = 0; idx < doubleArray.Length; idx++)
                 doubleArray[idx] = start + idx * steps;
 
-            var nd = new NDArray(typeof(T), doubleArray.Length);
+            var nd = new NDArray(typeof(T), new Shape(doubleArray.Length));
             nd.SetData(doubleArray);
 
             return nd;

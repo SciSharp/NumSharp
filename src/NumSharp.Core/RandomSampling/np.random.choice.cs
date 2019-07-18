@@ -34,7 +34,7 @@ namespace NumSharp
         {
             if (shape.IsEmpty)
             {
-                shape = 1;
+                shape = new Shape(1);
             }
 
             NDArray arr = np.arange(a);
@@ -48,7 +48,7 @@ namespace NumSharp
             {
                 NDArray cdf = np.cumsum(probabilities);
                 cdf /= cdf[cdf.len - 1];
-                NDArray uniformSamples = np.random.uniform(0, 1, shape);
+                NDArray uniformSamples = np.random.uniform(0, 1, (int[]) shape);
                 idx = np.searchsorted(cdf, uniformSamples);
             }
 

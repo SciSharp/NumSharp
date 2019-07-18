@@ -152,5 +152,37 @@ namespace NumSharp.UnitTest
             Shape.ExtractShape(jagged).Should().ContainInOrder(5, 3, 2);
             Shape.ExtractShape(new int[5]).Should().ContainInOrder(5);
         }
+
+        [TestMethod]
+        public void Create_Vector()
+        {
+            Shape.Vector(10).Should().Be(new Shape(10));
+            Shape.Vector(10).strides.Should().ContainInOrder(new Shape(10).strides);
+
+            Shape.Vector(1).Should().Be(new Shape(1));
+            Shape.Vector(1).strides.Should().ContainInOrder(new Shape(1).strides);
+
+            Shape.Vector(0).Should().Be(new Shape(0));
+            Shape.Vector(0).strides.Should().ContainInOrder(new Shape(0).strides);
+        }
+
+        [TestMethod]
+        public void Create_Matrix()
+        {
+            Shape.Matrix(5, 5).Should().Be(new Shape(5, 5));
+            Shape.Matrix(5, 5).strides.Should().ContainInOrder(new Shape(5, 5).strides);
+
+            Shape.Matrix(1, 5).Should().Be(new Shape(1, 5));
+            Shape.Matrix(1, 5).strides.Should().ContainInOrder(new Shape(1, 5).strides);
+
+            Shape.Matrix(5, 1).Should().Be(new Shape(5, 1));
+            Shape.Matrix(5, 1).strides.Should().ContainInOrder(new Shape(5, 1).strides);
+
+            Shape.Matrix(5, 0).Should().Be(new Shape(5, 0));
+            Shape.Matrix(5, 0).strides.Should().ContainInOrder(new Shape(5,0).strides);
+
+            Shape.Matrix(0, 0).Should().Be(new Shape(0, 0));
+            Shape.Matrix(0, 0).strides.Should().ContainInOrder(new Shape(0, 0).strides);
+        }
     }
 }
