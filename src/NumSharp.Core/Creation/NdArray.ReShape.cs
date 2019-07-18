@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
 using System.Linq;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -19,6 +20,9 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray reshape(Shape shape, char order = 'C')
         {
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
+
+
             // have to update Array storage
             if (ndim > 1 && order != this.order && shape != this.shape)
             {
@@ -39,12 +43,12 @@ namespace NumSharp
 
         public NDArray reshape(params int[] shape)
         {
-            return new NDArray(Array, shape);
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
         }
 
         public NDArray reshape(ref Shape shape)
         {
-            return new NDArray(Array, shape);
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
         }
 
         protected static int FindNegativeIndex(params int[] shape)
