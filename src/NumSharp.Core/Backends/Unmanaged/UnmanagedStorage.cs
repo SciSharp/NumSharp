@@ -121,6 +121,8 @@ namespace NumSharp.Backends
             return new UnmanagedStorage(ArraySlice.Scalar(value));
         }
 
+        private UnmanagedStorage() { }
+
         /// <summary>
         ///     Scalar constructor
         /// </summary>
@@ -146,10 +148,21 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Creates an empty storage of type <paramref name="dtype"/>.
+        ///     Creates an empty storage of type <paramref name="typeCode"/>.
         /// </summary>
-        /// <param name="dtype">The type of this storage</param>
-        public UnmanagedStorage(object value)
+        /// <param name="typeCode">The type of this storage</param>
+        /// <remarks>Usually <see cref="Allocate(NumSharp.Shape,System.Type)"/> is called after this constructor.</remarks>
+        public UnmanagedStorage(NPTypeCode typeCode)
+        {
+            if (typeCode == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(typeCode));
+
+            _dtype = typeCode.AsType();
+            _typecode = typeCode;
+            _shape = new Shape(0);
+        }
+
+        private UnmanagedStorage(object value)
         {
             _Allocate(Shape.Scalar, ArraySlice.Scalar(value));
         }
@@ -163,9 +176,37 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
+            if (shape.size != arraySlice.Count)
+                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({Count})");
+
             _Allocate(shape, arraySlice);
         }
 
+        /// <summary>
+        ///     Wraps given <paramref name="arraySlice"/> in <see cref="UnmanagedStorage"/> with a broadcasted shape.
+        /// </summary>
+        /// <param name="arraySlice">The slice to wrap </param>
+        /// <param name="shape">The shape to represent this storage, can be a broadcast.</param>
+        /// <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
+        public static UnmanagedStorage CreateBroadcastedUnsafe(IArraySlice arraySlice, Shape shape)
+        {
+            var ret = new UnmanagedStorage();
+            ret._Allocate(shape, arraySlice);
+            return ret;
+        }
+
+        /// <summary>
+        ///     Wraps given <paramref name="storage"/> in <see cref="UnmanagedStorage"/> with a broadcasted shape.
+        /// </summary>
+        /// <param name="storage">The storage to take <see cref="InternalArray"/> from.</param>
+        /// <param name="shape">The shape to represent this storage, can be a broadcast.</param>
+        /// <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
+        public static UnmanagedStorage CreateBroadcastedUnsafe(UnmanagedStorage storage, Shape shape)
+        {
+            var ret = new UnmanagedStorage();
+            ret._Allocate(shape, storage.InternalArray);
+            return ret;
+        }
 
         //todo! create scalar constuctors?
 #if _REGEN
@@ -1432,9 +1473,13 @@ namespace NumSharp.Backends
             {
                 var (subShape, offset) = _shape.GetSubshape(indices);
                 if (subShape != value.Storage.Shape)
-                    throw new IncorrectShapeException();
+                    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}");
+
                 var step = value.dtypesize;
                 var len = step * value.Storage.Count;
+
+                //TODO! what if dtype are different! handle casting!
+
                 Buffer.MemoryCopy(value.Storage.Address, Address + offset * step, len, len);
                 //TODO! TEST!
             }
@@ -1572,7 +1617,7 @@ namespace NumSharp.Backends
         {
             var newShape = new Shape(dimensions);
             if (newShape.size != _shape.size)
-                throw new IncorrectShapeException();
+                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({Count})");
 
             _shape = newShape;
         }
@@ -1580,8 +1625,18 @@ namespace NumSharp.Backends
         public void Reshape(Shape shape)
         {
             if (shape.size != _shape.size)
-                throw new IncorrectShapeException();
+                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the existing storage size ({Count})");
 
+            _shape = shape;
+        }
+
+
+        /// <summary>
+        ///     Set the shape of this storage without checking if sizes match.
+        /// </summary>
+        /// <remarks>Used during broadcasting</remarks>
+        internal void SetShapeUnsafe(Shape shape)
+        {
             _shape = shape;
         }
 

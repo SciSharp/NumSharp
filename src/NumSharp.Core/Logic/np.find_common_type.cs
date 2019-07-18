@@ -169,24 +169,34 @@ namespace NumSharp
 
         #endregion
 
-        internal static NPTypeCode ResolveCommonArrayType(Type dtype_left, Type dtype_right)
+        internal static NPTypeCode _FindCommonArrayType(Type dtype_left, Type dtype_right)
         {
             return _FindCommonType(new NPTypeCode[] {dtype_left.GetTypeCode(), dtype_right.GetTypeCode()}, Array.Empty<NPTypeCode>());
         }
 
-        internal static NPTypeCode ResolveCommonScalarType(Type dtype_left, Type dtype_right)
-        {
-            return _FindCommonType(Array.Empty<NPTypeCode>(), new NPTypeCode[] {dtype_left.GetTypeCode(), dtype_right.GetTypeCode()});
-        }
-
-        internal static NPTypeCode ResolveCommonArrayType(NPTypeCode dtype_left, NPTypeCode dtype_right)
+        internal static NPTypeCode _FindCommonArrayType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
             return _FindCommonType(new NPTypeCode[] {dtype_left, dtype_right}, Array.Empty<NPTypeCode>());
         }
 
-        internal static NPTypeCode ResolveCommonScalarType(NPTypeCode dtype_left, NPTypeCode dtype_right)
+        internal static NPTypeCode _FindCommonScalarType(Type dtype_left, Type dtype_right)
+        {
+            return _FindCommonType(Array.Empty<NPTypeCode>(), new NPTypeCode[] {dtype_left.GetTypeCode(), dtype_right.GetTypeCode()});
+        }
+
+        internal static NPTypeCode _FindCommonScalarType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
             return _FindCommonType(Array.Empty<NPTypeCode>(), new NPTypeCode[] {dtype_left, dtype_right});
+        }
+
+        internal static NPTypeCode _FindCommonArrayScalarType(NPTypeCode dtypeArray, NPTypeCode dtypeScalar)
+        {
+            return _FindCommonType(new NPTypeCode[] {dtypeArray}, new NPTypeCode[] {dtypeScalar});
+        }
+
+        internal static NPTypeCode _FindCommonArrayScalarType(Type dtypeArray, Type dtypeScalar)
+        {
+            return _FindCommonType(new NPTypeCode[] {dtypeArray.GetTypeCode()}, new NPTypeCode[] {dtypeScalar.GetTypeCode()});
         }
 
         /// <summary>
