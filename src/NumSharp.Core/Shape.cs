@@ -16,7 +16,6 @@ namespace NumSharp
         /// </summary>
         private int layout;
 
-        private int size;
         private int[] dimensions;
         private int[] strides;
 
@@ -31,7 +30,7 @@ namespace NumSharp
         /// <summary>
         ///     The linear size of this shape.
         /// </summary>
-        public int Size => size;
+        public int Size => GetSize(dimensions);
 
         public Shape(params int[] dims)
         {
@@ -151,15 +150,18 @@ namespace NumSharp
             dimensions = dims;
             strides = new int[dimensions.Length];
 
-            size = 1;
-
-            for (int idx = 0; idx < dims.Length; idx++)
-                size *= dims[idx];
             _SetDimOffset();
         }
 
+        /// <summary>
+        /// Defined by the numpy spec as the product of the array's dimensions
+        /// https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.size.html
+        /// </summary>
+        /// <param name="dims"></param>
+        /// <returns></returns>
         public static int GetSize(int[] dims)
         {
+            // Having dims of length 0 implies a scalar, which has size == 1 by definition
             int size = 1;
 
             for (int idx = 0; idx < dims.Length; idx++)

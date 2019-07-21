@@ -45,6 +45,7 @@ namespace NumSharp.UnitTest.Selection
 
             //2D with axis
             var n1 = np.amax(n, 0).MakeGeneric<int>();
+            Assert.IsTrue(n1.size == 2);
             Assert.IsTrue(n1[0] == 2);
             Assert.IsTrue(n1[1] == 3);
             n1 = np.amax(n, 1).MakeGeneric<int>();
