@@ -9,24 +9,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Cast(NDArray nd, Type dtype, bool copy)
-        {
-            if (dtype == null)
-                throw new ArgumentNullException(nameof(dtype));
-
-            NDArray clone() => new NDArray(nd.Storage.Clone());
-
-            if (nd.dtype == dtype)
-            {
-                //casting not needed
-                return copy ? clone() : nd;
-            }
-            else
-            {
-                //casting needed
-                return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype.GetTypeCode()), false), nd.Shape));
-            }
-        }
+        public override NDArray Cast(NDArray nd, Type dtype, bool copy) => Cast(nd, dtype.GetTypeCode(), copy);
 
         public override NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
         {
@@ -43,7 +26,15 @@ namespace NumSharp.Backends
             else
             {
                 //casting needed
-                return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype), false), nd.Shape));
+                if (copy)
+                {
+                    return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype), false), nd.Shape));
+                }
+                else
+                {
+                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype), false), nd.Shape);
+                    return nd;
+                }
             }
         }
     }
