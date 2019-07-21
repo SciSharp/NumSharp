@@ -20,35 +20,19 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray reshape(Shape shape, char order = 'C')
         {
-            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
-
-
-            // have to update Array storage
-            if (ndim > 1 && order != this.order && shape != this.shape)
-            {
-                shape.ChangeTensorLayout(order);
-                if (ndim == 2)
-                {
-                    var nd = flatten(order);
-                    switch (dtype.Name)
-                    {
-                        case "Int32":
-                            return new NDArray(nd.Data<int>(), shape: shape, order: order);
-                    }
-                }
-            }
-
-            return new NDArray(Array, shape: shape, order: order);
+            //TODO! support for order 'F'
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape)) {TensorEngine = TensorEngine};
         }
 
         public NDArray reshape(params int[] shape)
         {
-            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
+            //TODO support negative index.
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape)) {TensorEngine = TensorEngine};
         }
 
         public NDArray reshape(ref Shape shape)
         {
-            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape));
+            return new NDArray(new UnmanagedStorage(Storage.InternalArray, shape)) {TensorEngine = TensorEngine};
         }
 
         protected static int FindNegativeIndex(params int[] shape)
