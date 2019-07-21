@@ -137,6 +137,7 @@ namespace NumSharp.Backends
                 ref Shape it = ref ret[i];
                 nd = ogiter.NDim;
                 it.size = tmp;
+                it.layout = 'C';
                 //if (nd != 0)
                 //{
                 //    it->factors[mit.nd - 1] = 1;
@@ -152,7 +153,6 @@ namespace NumSharp.Backends
                     if ((k < 0) ||
                         ogiter.dimensions[k] != mit.dimensions[j])
                     {
-                        it.layout = 'C';
                         it.strides[j] = 0;
                     }
                     else
@@ -169,10 +169,12 @@ namespace NumSharp.Backends
             return ret;
         }
 
+        private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
+
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
-            if (leftShape == rightShape)
+            if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
             Shape left, right, mit, it;
@@ -182,15 +184,15 @@ namespace NumSharp.Backends
             if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
             {
                 left = rightShape; //copy right
-                left.strides = new int[left.strides.Length]; //zero strides
-                return (left, rightShape); //TODO! cache up to 16 dims zeros[ndim] returning an array filled with zeros.
+                left.strides = _zeros[left.strides.Length]; //zero strides
+                return (left, rightShape);
             }
             //is right a scalar
             else if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
             {
                 right = leftShape; //copy left
-                right.strides = new int[right.strides.Length]; //zero strides
-                return (leftShape, right); //TODO! cache up to 16 dims zeros[ndim] returning an array filled with zeros.
+                right.strides = _zeros[right.strides.Length]; //zero strides
+                return (leftShape, right);
             }
             else
             {
@@ -228,7 +230,7 @@ namespace NumSharp.Backends
                     }
 
                     _continue:
-/* This prepends 1 to shapes not already equal to nd */
+                    /* This prepends 1 to shapes not already equal to nd */
                     k = i + rightShape.NDim - nd;
                     if (k >= 0)
                     {
@@ -257,6 +259,7 @@ namespace NumSharp.Backends
             i = 1;
             Shape ogiter = leftShape;
             it = left;
+            it.layout = 'C';
             nd = ogiter.NDim;
             it.size = tmp;
             //if (nd != 0)
@@ -274,7 +277,6 @@ namespace NumSharp.Backends
                 if ((k < 0) ||
                     ogiter.dimensions[k] != mit.dimensions[j])
                 {
-                    it.layout = 'C';
                     it.strides[j] = 0;
                 }
                 else
@@ -291,6 +293,7 @@ namespace NumSharp.Backends
             it = right;
             nd = ogiter.NDim;
             it.size = tmp;
+            it.layout = 'C';
             //if (nd != 0)
             //{
             //    it->factors[mit.nd - 1] = 1;
@@ -306,7 +309,6 @@ namespace NumSharp.Backends
                 if ((k < 0) ||
                     ogiter.dimensions[k] != mit.dimensions[j])
                 {
-                    it.layout = 'C';
                     it.strides[j] = 0;
                 }
                 else
