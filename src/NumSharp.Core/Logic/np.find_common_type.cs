@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
@@ -8,6 +9,7 @@ using NumSharp.Utilities.Linq;
 
 namespace NumSharp
 {
+    [SuppressMessage("ReSharper", "StaticMemberInitializerReferesToMemberBelow")]
     public static partial class np
     {
         #region Privates
@@ -39,8 +41,200 @@ namespace NumSharp
 
         #endregion
 
+        internal static readonly Dictionary<(Type, Type), Type> _typemap;
+        internal static readonly Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode> _nptypemap;
+
+        static np()
+        {
+            _typemap = new Dictionary<(Type, Type), Type>(180);
+            _typemap.Add((np.@bool, np.@bool), np.@bool);
+            _typemap.Add((np.@bool, np.uint8), np.uint8);
+            _typemap.Add((np.@bool, np.int16), np.int16);
+            _typemap.Add((np.@bool, np.uint16), np.uint16);
+            _typemap.Add((np.@bool, np.int32), np.int32);
+            _typemap.Add((np.@bool, np.uint32), np.uint32);
+            _typemap.Add((np.@bool, np.int64), np.int64);
+            _typemap.Add((np.@bool, np.uint64), np.uint64);
+            _typemap.Add((np.@bool, np.float32), np.float32);
+            _typemap.Add((np.@bool, np.float64), np.float64);
+            _typemap.Add((np.@bool, np.complex64), np.complex64);
+            _typemap.Add((np.@bool, np.@decimal), np.@decimal);
+            _typemap.Add((np.@bool, np.@char), np.@char);
+
+            _typemap.Add((np.uint8, np.@bool), np.uint8);
+            _typemap.Add((np.uint8, np.uint8), np.uint8);
+            _typemap.Add((np.uint8, np.int16), np.int16);
+            _typemap.Add((np.uint8, np.uint16), np.uint16);
+            _typemap.Add((np.uint8, np.int32), np.int32);
+            _typemap.Add((np.uint8, np.uint32), np.uint32);
+            _typemap.Add((np.uint8, np.int64), np.int64);
+            _typemap.Add((np.uint8, np.uint64), np.uint64);
+            _typemap.Add((np.uint8, np.float32), np.float32);
+            _typemap.Add((np.uint8, np.float64), np.float64);
+            _typemap.Add((np.uint8, np.complex64), np.complex64);
+            _typemap.Add((np.uint8, np.@decimal), np.@decimal);
+            _typemap.Add((np.uint8, np.@char), np.uint8);
+
+            _typemap.Add((np.@char, np.@char), np.@char);
+            _typemap.Add((np.@char, np.@bool), np.@char);
+            _typemap.Add((np.@char, np.uint8), np.uint8);
+            _typemap.Add((np.@char, np.int16), np.int16);
+            _typemap.Add((np.@char, np.uint16), np.uint16);
+            _typemap.Add((np.@char, np.int32), np.int32);
+            _typemap.Add((np.@char, np.uint32), np.uint32);
+            _typemap.Add((np.@char, np.int64), np.int64);
+            _typemap.Add((np.@char, np.uint64), np.uint64);
+            _typemap.Add((np.@char, np.float32), np.float32);
+            _typemap.Add((np.@char, np.float64), np.float64);
+            _typemap.Add((np.@char, np.complex64), np.complex64);
+            _typemap.Add((np.@char, np.@decimal), np.@decimal);
+
+            _typemap.Add((np.int16, np.@bool), np.int16);
+            _typemap.Add((np.int16, np.uint8), np.int16);
+            _typemap.Add((np.int16, np.int16), np.int16);
+            _typemap.Add((np.int16, np.uint16), np.int32);
+            _typemap.Add((np.int16, np.int32), np.int32);
+            _typemap.Add((np.int16, np.uint32), np.int64);
+            _typemap.Add((np.int16, np.int64), np.int64);
+            _typemap.Add((np.int16, np.uint64), np.float64);
+            _typemap.Add((np.int16, np.float32), np.float32);
+            _typemap.Add((np.int16, np.float64), np.float64);
+            _typemap.Add((np.int16, np.complex64), np.complex64);
+            _typemap.Add((np.int16, np.@decimal), np.@decimal);
+            _typemap.Add((np.int16, np.@char), np.int16);
+
+            _typemap.Add((np.uint16, np.@bool), np.uint16);
+            _typemap.Add((np.uint16, np.uint8), np.uint16);
+            _typemap.Add((np.uint16, np.int16), np.int32);
+            _typemap.Add((np.uint16, np.uint16), np.uint16);
+            _typemap.Add((np.uint16, np.int32), np.int32);
+            _typemap.Add((np.uint16, np.uint32), np.uint32);
+            _typemap.Add((np.uint16, np.int64), np.int64);
+            _typemap.Add((np.uint16, np.uint64), np.uint64);
+            _typemap.Add((np.uint16, np.float32), np.float32);
+            _typemap.Add((np.uint16, np.float64), np.float64);
+            _typemap.Add((np.uint16, np.complex64), np.complex64);
+            _typemap.Add((np.uint16, np.@decimal), np.@decimal);
+            _typemap.Add((np.uint16, np.@char), np.uint16);
+
+            _typemap.Add((np.int32, np.@bool), np.int32);
+            _typemap.Add((np.int32, np.uint8), np.int32);
+            _typemap.Add((np.int32, np.int16), np.int32);
+            _typemap.Add((np.int32, np.uint16), np.int32);
+            _typemap.Add((np.int32, np.int32), np.int32);
+            _typemap.Add((np.int32, np.uint32), np.int64);
+            _typemap.Add((np.int32, np.int64), np.int64);
+            _typemap.Add((np.int32, np.uint64), np.float64);
+            _typemap.Add((np.int32, np.float32), np.float64);
+            _typemap.Add((np.int32, np.float64), np.float64);
+            _typemap.Add((np.int32, np.complex64), np.complex128);
+            _typemap.Add((np.int32, np.@decimal), np.@decimal);
+            _typemap.Add((np.int32, np.@char), np.int32);
+
+            _typemap.Add((np.uint32, np.@bool), np.uint32);
+            _typemap.Add((np.uint32, np.uint8), np.uint32);
+            _typemap.Add((np.uint32, np.int16), np.int64);
+            _typemap.Add((np.uint32, np.uint16), np.uint32);
+            _typemap.Add((np.uint32, np.int32), np.int64);
+            _typemap.Add((np.uint32, np.uint32), np.uint32);
+            _typemap.Add((np.uint32, np.int64), np.int64);
+            _typemap.Add((np.uint32, np.uint64), np.uint64);
+            _typemap.Add((np.uint32, np.float32), np.float64);
+            _typemap.Add((np.uint32, np.float64), np.float64);
+            _typemap.Add((np.uint32, np.complex64), np.complex128);
+            _typemap.Add((np.uint32, np.@decimal), np.@decimal);
+            _typemap.Add((np.uint32, np.@char), np.uint32);
+
+            _typemap.Add((np.int64, np.@bool), np.int64);
+            _typemap.Add((np.int64, np.uint8), np.int64);
+            _typemap.Add((np.int64, np.int16), np.int64);
+            _typemap.Add((np.int64, np.uint16), np.int64);
+            _typemap.Add((np.int64, np.int32), np.int64);
+            _typemap.Add((np.int64, np.uint32), np.int64);
+            _typemap.Add((np.int64, np.int64), np.int64);
+            _typemap.Add((np.int64, np.uint64), np.float64);
+            _typemap.Add((np.int64, np.float32), np.float64);
+            _typemap.Add((np.int64, np.float64), np.float64);
+            _typemap.Add((np.int64, np.complex64), np.complex128);
+            _typemap.Add((np.int64, np.@decimal), np.@decimal);
+            _typemap.Add((np.int64, np.@char), np.int64);
+
+            _typemap.Add((np.uint64, np.@bool), np.uint64);
+            _typemap.Add((np.uint64, np.uint8), np.uint64);
+            _typemap.Add((np.uint64, np.int16), np.float64);
+            _typemap.Add((np.uint64, np.uint16), np.uint64);
+            _typemap.Add((np.uint64, np.int32), np.float64);
+            _typemap.Add((np.uint64, np.uint32), np.uint64);
+            _typemap.Add((np.uint64, np.int64), np.float64);
+            _typemap.Add((np.uint64, np.uint64), np.uint64);
+            _typemap.Add((np.uint64, np.float32), np.float64);
+            _typemap.Add((np.uint64, np.float64), np.float64);
+            _typemap.Add((np.uint64, np.complex64), np.complex128);
+            _typemap.Add((np.uint64, np.@decimal), np.@decimal);
+            _typemap.Add((np.uint64, np.@char), np.uint64);
+
+            _typemap.Add((np.float32, np.@bool), np.float32);
+            _typemap.Add((np.float32, np.uint8), np.float32);
+            _typemap.Add((np.float32, np.int16), np.float32);
+            _typemap.Add((np.float32, np.uint16), np.float32);
+            _typemap.Add((np.float32, np.int32), np.float64);
+            _typemap.Add((np.float32, np.uint32), np.float64);
+            _typemap.Add((np.float32, np.int64), np.float64);
+            _typemap.Add((np.float32, np.uint64), np.float64);
+            _typemap.Add((np.float32, np.float32), np.float32);
+            _typemap.Add((np.float32, np.float64), np.float64);
+            _typemap.Add((np.float32, np.complex64), np.complex64);
+            _typemap.Add((np.float32, np.@decimal), np.@decimal);
+            _typemap.Add((np.float32, np.@char), np.float32);
+
+            _typemap.Add((np.float64, np.@bool), np.float64);
+            _typemap.Add((np.float64, np.uint8), np.float64);
+            _typemap.Add((np.float64, np.int16), np.float64);
+            _typemap.Add((np.float64, np.uint16), np.float64);
+            _typemap.Add((np.float64, np.int32), np.float64);
+            _typemap.Add((np.float64, np.uint32), np.float64);
+            _typemap.Add((np.float64, np.int64), np.float64);
+            _typemap.Add((np.float64, np.uint64), np.float64);
+            _typemap.Add((np.float64, np.float32), np.float64);
+            _typemap.Add((np.float64, np.float64), np.float64);
+            _typemap.Add((np.float64, np.complex64), np.complex128);
+            _typemap.Add((np.float64, np.@decimal), np.@decimal);
+            _typemap.Add((np.float64, np.@char), np.float64);
+
+            _typemap.Add((np.complex64, np.@bool), np.complex64);
+            _typemap.Add((np.complex64, np.uint8), np.complex64);
+            _typemap.Add((np.complex64, np.int16), np.complex64);
+            _typemap.Add((np.complex64, np.uint16), np.complex64);
+            _typemap.Add((np.complex64, np.int32), np.complex128);
+            _typemap.Add((np.complex64, np.uint32), np.complex128);
+            _typemap.Add((np.complex64, np.int64), np.complex128);
+            _typemap.Add((np.complex64, np.uint64), np.complex128);
+            _typemap.Add((np.complex64, np.float32), np.complex64);
+            _typemap.Add((np.complex64, np.float64), np.complex128);
+            _typemap.Add((np.complex64, np.complex64), np.complex64);
+            _typemap.Add((np.complex64, np.@decimal), np.complex64);
+            _typemap.Add((np.complex64, np.@char), np.complex64);
+
+            _typemap.Add((np.@decimal, np.@bool), np.@decimal);
+            _typemap.Add((np.@decimal, np.uint8), np.@decimal);
+            _typemap.Add((np.@decimal, np.int16), np.@decimal);
+            _typemap.Add((np.@decimal, np.uint16), np.@decimal);
+            _typemap.Add((np.@decimal, np.int32), np.@decimal);
+            _typemap.Add((np.@decimal, np.uint32), np.@decimal);
+            _typemap.Add((np.@decimal, np.int64), np.@decimal);
+            _typemap.Add((np.@decimal, np.uint64), np.@decimal);
+            _typemap.Add((np.@decimal, np.float32), np.@decimal);
+            _typemap.Add((np.@decimal, np.float64), np.@decimal);
+            _typemap.Add((np.@decimal, np.complex64), np.complex128);
+            _typemap.Add((np.@decimal, np.@decimal), np.@decimal);
+            _typemap.Add((np.@decimal, np.@char), np.@decimal);
+
+            _nptypemap = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(_typemap.Count);
+            foreach (var tc in _typemap) _nptypemap[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
+        }
+
         // @formatter:off — disable formatter after this line
-        private static NPTypeCode[] powerOrder =
+        internal static NPTypeCode[] powerOrder =
         {
             NPTypeCode.Boolean, 
             NPTypeCode.Byte, //Int8
@@ -57,6 +251,7 @@ namespace NumSharp
             NPTypeCode.Single, //Float32
             NPTypeCode.Double, //Float64
             NPTypeCode.Double,
+            NPTypeCode.Double,
             NPTypeCode.Decimal,
             NPTypeCode.Decimal,
             NPTypeCode.Complex, //Complex64
@@ -66,7 +261,8 @@ namespace NumSharp
             NPTypeCode.Single,
         };
         // @formatter:off — disable formatter after this line
-        private static (NPTypeCode Type, int Priority)[] powerPriorities =
+
+        private static readonly (NPTypeCode Type, int Priority)[] powerPriorities =
         {
             (NPTypeCode.Boolean, NPTypeCode.Boolean.GetPriority()),
             (NPTypeCode.Byte, NPTypeCode.Byte.GetPriority()), //Int8
@@ -83,6 +279,7 @@ namespace NumSharp
             (NPTypeCode.Single, NPTypeCode.Single.GetPriority()), //Float32
             (NPTypeCode.Double, NPTypeCode.Double.GetPriority()), //Float64
             (NPTypeCode.Double, NPTypeCode.Double.GetPriority()),
+            (NPTypeCode.Double, NPTypeCode.Double.GetPriority() + 1),
             (NPTypeCode.Decimal, NPTypeCode.Decimal.GetPriority()),
             (NPTypeCode.Decimal, NPTypeCode.Decimal.GetPriority()),
             (NPTypeCode.Complex, NPTypeCode.Complex.GetPriority()), //Complex64
@@ -91,6 +288,7 @@ namespace NumSharp
             (NPTypeCode.NDArray, NPTypeCode.NDArray.GetPriority()),
             (NPTypeCode.Single, NPTypeCode.Single.GetPriority()),
         };
+
         // @formatter:on — enable formatter after this line
 
         /// <summary>
@@ -238,11 +436,44 @@ namespace NumSharp
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
         [MethodImpl((MethodImplOptions)512)]
+        internal static NPTypeCode _FindCommonType(List<NPTypeCode> array_types, List<NPTypeCode> scalar_types)
+        {
+            NPTypeCode maxa = _can_coerce_all(array_types);
+            NPTypeCode maxsc = _can_coerce_all(scalar_types);
+
+            if (maxa == NPTypeCode.Empty)
+                return maxsc;
+
+            if (maxsc == NPTypeCode.Empty)
+                return maxa;
+
+            int index_a;
+            int index_sc;
+            try
+            {
+                index_a = maxa != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxa]) : -1;
+                index_sc = maxsc != NPTypeCode.Empty ? Array.IndexOf(_kind_list, DType._kind_list_map[maxsc]) : -1;
+            }
+            catch (Exception)
+            {
+                return NPTypeCode.Empty;
+            }
+
+            if (index_sc > index_a)
+                return _find_common_coerce(maxsc, maxa);
+            else
+                return maxa;
+        }
+
+        /// <summary>
+        ///     Resolves to which type should the output be.
+        /// </summary>
+        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        [MethodImpl((MethodImplOptions)512)]
         internal static NPTypeCode _FindCommonType_Scalar(params NPTypeCode[] scalar_types)
         {
             return _can_coerce_all(scalar_types);
         }
-
 
         /// <summary>
         ///     Resolves to which type should the output be.
@@ -254,82 +485,114 @@ namespace NumSharp
             return _can_coerce_all(array_types);
         }
 
+        /// <summary>
+        ///     Resolves to which type should the output be.
+        /// </summary>
+        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        [MethodImpl((MethodImplOptions)512)]
+        internal static NPTypeCode _FindCommonType(params NDArray[] involvedArrays)
+        {
+            List<NPTypeCode> scalar = new List<NPTypeCode>(involvedArrays.Length);
+            List<NPTypeCode> list = new List<NPTypeCode>(involvedArrays.Length);
+            foreach (var nd in involvedArrays)
+            {
+                if (nd.Shape.IsScalar)
+                    scalar.Add(nd.GetTypeCode);
+                else
+                    list.Add(nd.GetTypeCode);
+            }
+
+            return _FindCommonType(list, scalar);
+        }
+
+        /// <summary>
+        ///     Resolves to which type should the output be.
+        /// </summary>
+        /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
+        [MethodImpl((MethodImplOptions)512)]
+        internal static NPTypeCode _FindCommonType(NDArray firstNDArray, NDArray secondNDArray)
+        {
+            var lscalar = firstNDArray.Shape.IsScalar;
+            var rscalar = secondNDArray.Shape.IsScalar;
+            if (!lscalar && !rscalar)
+                return _FindCommonArrayType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+
+            if (lscalar && rscalar)
+                return _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
+
+            if (lscalar)
+                return _FindCommonType(new NPTypeCode[] {secondNDArray.GetTypeCode}, new NPTypeCode[] {firstNDArray.GetTypeCode});
+
+            //rscalar is true
+            return _FindCommonType(new NPTypeCode[] {firstNDArray.GetTypeCode}, new NPTypeCode[] {secondNDArray.GetTypeCode});
+        }
+
         #region Private of find_common_type
 
+        [MethodImpl((MethodImplOptions)512)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start = 0)
         {
             int N = dtypelist.Length;
+            if (start > 0)
+            {
+                var len = N - start;
+                var sub = new NPTypeCode[len];
+                Array.Copy(dtypelist, start, sub, len, len);
+                dtypelist = sub;
+                N = sub.Length;
+            }
+
             if (N == 0)
                 return NPTypeCode.Empty;
             if (N == 1)
                 return dtypelist[0];
-
-            //incase they are all equal
-            for (int i = 0; i < N; i++)
+            NPTypeCode ret = default;
+            while (N >= 2)
             {
-                for (int k = 0; k < N; k++)
-                {
-                    if (i != k && dtypelist[i] != dtypelist[k])
-                        goto _false;
-                }
+                ret = _nptypemap[(dtypelist[N - 1], dtypelist[N - 2])];
+                N -= 2;
             }
 
-            return dtypelist[0];
-
-            _false:
-            int[] sizes = dtypelist.Select(d => d.SizeOf()).ToArray();
-            int first_size = sizes[0];
-
-            //incase we have same sizes, find out by priority
-            if (sizes.All(s => s == first_size))
+            if (N == 1)
             {
-                //find get largest priority out of dtypelist
-                NPTypeCode maxType = NPTypeCode.Empty;
-                int maxpriority = 0;
-                for (int i = 0; i < N; i++)
-                {
-                    int priority = dtypelist[i].GetPriority();
-                    if (priority > maxpriority)
-                    {
-                        maxpriority = priority;
-                        maxType = dtypelist[i];
-                    }
-                }
-
-                //then we gotta get the next size of that group.
-                for (int i = 0; i < powerPriorities.Length; i++)
-                {
-                    var curr = powerPriorities[i];
-                    if (curr.Priority > maxpriority)
-                    {
-                        return curr.Type;
-                    }
-                }
-
-                //there aren't bigger, return largest
-                return maxType;
+                ret = _nptypemap[(ret, dtypelist[0])];
             }
 
-            //incase any of dtypelist is the largest group type
-            foreach (NPTypeCode curr in dtypelist)
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)512)]
+        private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start = 0)
+        {
+            int N = dtypelist.Count;
+            if (start > 0)
             {
-                int currgrp = curr.GetGroup();
-                if (dtypelist.Except(curr.Yield()).All(c => currgrp > c.GetGroup()))
-                    return curr;
+                var len = N - start;
+                var sub = new List<NPTypeCode>(len);
+                for (int i = start; i < N; i++)
+                    sub[i - start] = dtypelist[i];
+                dtypelist = sub;
+                N = sub.Count;
             }
 
-            //go vanilla (taken from numpy's source)
-            int n = start;
-            while (n < powerOrder.Length)
+            if (N == 0)
+                return NPTypeCode.Empty;
+            if (N == 1)
+                return dtypelist[0];
+            NPTypeCode ret = default;
+
+            while (N >= 2)
             {
-                NPTypeCode newdtype = powerOrder[n];
-                int numcoerce = dtypelist.Count(x => NPTypeCodeExtensions.CompareTo(newdtype, x) > 0);
-                if (numcoerce == N)
-                    return newdtype;
-                n += 1;
+                ret = _nptypemap[(dtypelist[N - 1], dtypelist[N - 2])];
+                N -= 2;
             }
 
-            return NPTypeCode.Empty;
+            if (N == 1)
+            {
+                ret = _nptypemap[(ret, dtypelist[0])];
+            }
+
+            return ret;
         }
 
         // Keep incrementing until a common type both can be coerced to

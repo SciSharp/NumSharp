@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Utilities;
 
@@ -138,6 +139,7 @@ namespace NumSharp.Backends
         /// <param name="typeCode"></param>
         /// <returns></returns>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static Type AsType(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -174,6 +176,7 @@ namespace NumSharp.Backends
         ///     Checks if given <see cref="Type"/> has a match in <see cref="NPTypeCode"/>.
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static bool IsValidNPType(this Type type)
         {
             return type.GetTypeCode() != NPTypeCode.Empty;
@@ -186,11 +189,12 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <remarks>The size is computed by <see cref="Marshal.SizeOf{T}()"/></remarks>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static int SizeOf(this NPTypeCode typeCode)
         {
             switch (typeCode)
             {
-#if _REGEN
+#if __REGEN
 	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return InfoOf<#2>.Size;
 	            %
@@ -222,6 +226,7 @@ namespace NumSharp.Backends
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static bool IsRealNumber(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -258,6 +263,7 @@ namespace NumSharp.Backends
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static bool IsUnsigned(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -294,6 +300,7 @@ namespace NumSharp.Backends
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         public static bool IsSigned(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -330,6 +337,7 @@ namespace NumSharp.Backends
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         internal static int GetGroup(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -341,7 +349,8 @@ namespace NumSharp.Backends
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return 0;
+                case NPTypeCode.Boolean: return -1;
+                
                 case NPTypeCode.String: return 0;
                 case NPTypeCode.Byte: return 0;
                 case NPTypeCode.Char: return 0;
@@ -356,7 +365,8 @@ namespace NumSharp.Backends
 
                 case NPTypeCode.Single: return 3;
                 case NPTypeCode.Double: return 3;
-                case NPTypeCode.Decimal: return 3;
+
+                case NPTypeCode.Decimal: return 4;
 
                 case NPTypeCode.Complex: return 10;
                 case NPTypeCode.NDArray: return 100;
@@ -370,6 +380,7 @@ namespace NumSharp.Backends
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         internal static int GetPriority(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -398,7 +409,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Double: return 5 * 10 * 8;
                 case NPTypeCode.Decimal: return 5 * 10 * 32;
 
-                case NPTypeCode.Complex: return 1000;
+                case NPTypeCode.Complex: return 5000;
                 case NPTypeCode.NDArray: return 10000;
                 default:
                     throw new NotSupportedException();
@@ -410,6 +421,7 @@ namespace NumSharp.Backends
         ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         internal static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
         {
             switch (typeCode)
@@ -479,6 +491,7 @@ namespace NumSharp.Backends
         ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
         /// </summary>
         [DebuggerNonUserCode]
+        [MethodImpl((MethodImplOptions)768)]
         internal static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -525,7 +538,7 @@ namespace NumSharp.Backends
         {
             if (left == right)
                 return 0;
-
+            
             var sizeLeft = left.SizeOf();
             var sizeRight = right.SizeOf();
             var groupLeft = left.GetGroup();
@@ -542,24 +555,6 @@ namespace NumSharp.Backends
             }
 
             return -1;
-
-            //if (sizeLeft == sizeRight)
-            //{
-            //    var lun = left.IsUnsigned();
-            //    var run = right.IsUnsigned();
-            //    if (lun && run)
-            //        return groupLeft.CompareTo(groupRight);
-
-            //    if (lun)
-            //        return 1;
-
-            //    if (run)
-            //        return -1;
-
-            //    return 0;
-            //}
-
-            //return sizeLeft.CompareTo(sizeRight);
         }
     }
 }

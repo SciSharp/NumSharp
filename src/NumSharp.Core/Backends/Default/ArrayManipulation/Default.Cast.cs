@@ -12,14 +12,9 @@ namespace NumSharp.Backends
         public override NDArray Cast(NDArray nd, Type dtype, bool copy)
         {
             if (dtype == null)
-            {
                 throw new ArgumentNullException(nameof(dtype));
-            }
 
-            NDArray clone()
-            {
-                return new NDArray(nd.Storage.Clone());
-            }
+            NDArray clone() => new NDArray(nd.Storage.Clone());
 
             if (nd.dtype == dtype)
             {
@@ -33,17 +28,12 @@ namespace NumSharp.Backends
             }
         }
 
-        public NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
+        public override NDArray Cast(NDArray nd, NPTypeCode dtype, bool copy)
         {
-            if (dtype == null)
-            {
+            if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
-            }
 
-            NDArray clone()
-            {
-                return new NDArray(nd.Storage.Clone());
-            }
+            NDArray clone() => new NDArray(nd.Storage.Clone());
 
             if (nd.GetTypeCode == dtype)
             {

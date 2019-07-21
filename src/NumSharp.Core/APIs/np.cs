@@ -16,6 +16,7 @@ namespace NumSharp
         // https://docs.scipy.org/doc/numpy-1.16.0/user/basics.types.html
         public static readonly Type bool_ = typeof(bool);
         public static readonly Type bool8 = bool_;
+        public static readonly Type @bool = bool_;
 
         public static readonly Type @char = typeof(char);
 
