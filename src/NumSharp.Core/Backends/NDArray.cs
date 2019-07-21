@@ -341,19 +341,35 @@ namespace NumSharp
         internal IArraySlice Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get
-            {
-                return Storage.InternalArray;
-            }
+            get => Storage.InternalArray;
         }
 
         public ArraySlice<T> CloneData<T>() where T : unmanaged => Storage.CloneData<T>();
         public IArraySlice CloneData() => Storage.CloneData();
 
-        // NumPy Signature: ndarray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)
-        public NDArray astype(Type dtype, bool copy = false)
+        /// <summary>
+        ///     Copy of the array, cast to a specified type.
+        /// </summary>
+        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray astype(Type dtype, bool copy = true)
         {
-            return TensorEngine.Cast(this, dtype, copy);
+            return (TensorEngine ?? Storage.Engine).Cast(this, dtype, copy);
+        }
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type.
+        /// </summary>
+        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
+        public NDArray astype(NPTypeCode typeCode, bool copy = true)
+        {
+            return (TensorEngine ?? Storage.Engine).Cast(this, typeCode, copy);
         }
 
         /// <summary>

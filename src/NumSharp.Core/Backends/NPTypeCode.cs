@@ -533,7 +533,6 @@ namespace NumSharp.Backends
             }
         }
 
-
         public static int CompareTo(this NPTypeCode left, NPTypeCode right)
         {
             if (left == right)

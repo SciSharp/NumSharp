@@ -7,6 +7,7 @@ using NumSharp.Extensions;
 using System.Linq;
 using FluentAssertions;
 using NumSharp;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest
 {
@@ -23,8 +24,8 @@ namespace NumSharp.UnitTest
             //test copying
             Assert.IsTrue(int64_copied.Array != nd.Array);
             Assert.IsTrue(int64.Array == nd.Array);
-            Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
-            Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
+            int64_copied.GetTypeCode.Should().Be(NPTypeCode.Int64);
+            int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
         [TestMethod]
@@ -37,8 +38,8 @@ namespace NumSharp.UnitTest
             //test copying
             Assert.IsTrue(int64_copied.Array != nd.Array);
             Assert.IsTrue(int64.Array == nd.Array);
-            Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
-            Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
+            int64_copied.GetTypeCode.Should().Be(NPTypeCode.Int64);
+            int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
         [TestMethod]
@@ -51,8 +52,8 @@ namespace NumSharp.UnitTest
             //test copying
             Assert.IsTrue(int64_copied.Array != nd.Array);
             Assert.IsTrue(int64.Array == nd.Array);
-            Assert.IsTrue(int64_copied.Array.GetType().GetElementType() == typeof(Int64));
-            Assert.IsTrue(int64.Array.GetType().GetElementType() == typeof(Int64));
+            int64_copied.GetTypeCode.Should().Be(NPTypeCode.Int64);
+            int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
         [TestMethod]
@@ -65,8 +66,32 @@ namespace NumSharp.UnitTest
             //test copying
             Assert.IsTrue(int16_copied.Array != nd.Array);
             Assert.IsTrue(int16.Array == nd.Array);
-            Assert.IsTrue(int16_copied.Array.GetType().GetElementType() == typeof(Int16));
-            Assert.IsTrue(int16.Array.GetType().GetElementType() == typeof(Int16));
+            int16_copied.GetTypeCode.Should().Be(NPTypeCode.Int16);
+            int16.GetTypeCode.Should().Be(NPTypeCode.Int16);
+        }
+
+        [TestMethod]
+        public void DowncastingDoubleToInt()
+        {
+            var nd = np.ones(np.float64, 3, 3);
+            for (int i = 0; i < nd.size; i++)
+            {
+                nd.SetAtIndex(1.3d, i);
+            }
+
+            var int32_copied = nd.astype(np.int32, true);
+            var int32 = nd.astype(np.int32, false);
+
+            //test copying
+            Assert.IsTrue(int32_copied.Array != nd.Array);
+            Assert.IsTrue(int32.Array == nd.Array);
+            int32_copied.GetTypeCode.Should().Be(NPTypeCode.Int32);
+            int32.GetTypeCode.Should().Be(NPTypeCode.Int32);
+
+            for (int i = 0; i < nd.size; i++)
+            {
+                nd.GetAtIndex<int>(i).Should().Be(1);
+            }
         }
 
         [TestMethod]
@@ -80,11 +105,11 @@ namespace NumSharp.UnitTest
             //test copying
             int16_copied.Array.Should().Equal(nd.Array);
             int16.Array.Should().Equal(nd.Array);
-            int16_copied.Array.GetType().GetElementType().Should().Be<UInt16>();
-            int16.Array.GetType().GetElementType().Should().Be<UInt16>();
+            int16_copied.GetTypeCode.Should().Be(NPTypeCode.UInt16);
+            int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
         }
 
-        [TestMethod]
+        [TestMethod, Ignore("String dtype is not supported")]
         public void CastingStringToByte()
         {
             throw new NotSupportedException();
@@ -100,7 +125,7 @@ namespace NumSharp.UnitTest
             //output.Array.GetType().GetElementType().Should().Be<byte>();
         }
 
-        [TestMethod]
+        [TestMethod, Ignore("String dtype is not supported")]
         public void CastingByteToString()
         {
             throw new NotSupportedException();
@@ -119,7 +144,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [TestMethod]
+        [TestMethod, Ignore("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
             var nd = np.ones(np.int32, 3, 3);
