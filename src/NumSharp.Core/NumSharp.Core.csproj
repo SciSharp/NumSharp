@@ -71,6 +71,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.template.cs" />
     <Compile Remove="Operations\NdArray.ElementsWise.cs" />
   </ItemGroup>
 
@@ -81,6 +85,14 @@
   <Target Name="LogDebugInfo">
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
+
+  <ItemGroup>
+    <None Include="Backends\Default\Math\Templates\Default.Op.Boolean.template.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Backends\Default\Math\Templates\Default.Op.template.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ArrayFire" Version="0.0.2" />

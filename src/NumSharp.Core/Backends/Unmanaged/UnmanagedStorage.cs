@@ -121,6 +121,65 @@ namespace NumSharp.Backends
             return new UnmanagedStorage(ArraySlice.Scalar(value));
         }
 
+        /// <summary>
+        ///     Creates an alias to this UnmanagedStorage.
+        /// </summary>
+        public UnmanagedStorage Alias()
+        {
+            var r = new UnmanagedStorage();
+            r._shape = _shape;
+            r._typecode = _typecode;
+            r._dtype = _dtype;
+            r.Count = Count;
+            unsafe
+            {
+                r.Address = Address;
+            }
+
+            SetInternalArray(r.InternalArray);
+            return r;
+        }
+
+        /// <summary>
+        ///     Creates an alias to this UnmanagedStorage with a specific shape.
+        /// </summary>
+        /// <remarks>Doesn't check if Shape matches the internal storage.</remarks>
+        public UnmanagedStorage Alias(Shape shape)
+        {
+            var r = new UnmanagedStorage();
+            r._shape = shape;
+            r._typecode = _typecode;
+            r._dtype = _dtype;
+            r.Count = Count;
+            unsafe
+            {
+                r.Address = Address;
+            }
+
+            r.SetInternalArray(InternalArray);
+            return r;
+        }
+
+        /// <summary>
+        ///     Creates an alias to this UnmanagedStorage with a specific shape.
+        /// </summary>
+        /// <remarks>Doesn't check if Shape matches the internal storage.</remarks>
+        public UnmanagedStorage Alias(ref Shape shape)
+        {
+            var r = new UnmanagedStorage();
+            r._shape = shape;
+            r._typecode = _typecode;
+            r._dtype = _dtype;
+            r.Count = Count;
+            unsafe
+            {
+                r.Address = Address;
+            }
+
+            SetInternalArray(r.InternalArray);
+            return r;
+        }
+
         private UnmanagedStorage() { }
 
         /// <summary>
@@ -1119,6 +1178,22 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
+        }
+
+        /// <summary>
+        ///     Allocates a new <see cref="Array"/> into memory.
+        /// </summary>
+        /// <param name="dtype">The type of the Array, if null <see cref="DType"/> is used.</param>
+        /// <param name="shape">The shape of the array.</param>
+        public void Allocate(Shape shape, NPTypeCode dtype, bool fillZeros)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+
+            if (dtype == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(dtype));
+
+            _Allocate(shape, ArraySlice.Allocate(dtype, shape.size, fillZeros));
         }
 
         /// <summary>

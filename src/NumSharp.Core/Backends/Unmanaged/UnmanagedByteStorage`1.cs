@@ -23,18 +23,13 @@ namespace NumSharp.Backends.Unmanaged
         private ArraySlice<T> _array;
         private Shape _shape;
 
-
-
-
         public Shape Shape
         {
             get => _shape;
             set
             {
-#if DEBUG
                 if (_shape.Size != value.Size)
                     throw new Exception("Shape is incorrent for this DArray."); //TODO! missmatch exception
-#endif
                 _shape = value;
             }
         }
@@ -293,7 +288,7 @@ namespace NumSharp.Backends.Unmanaged
             {
                 _array.DangerousFree();
             }
-            catch (Exception e) { }
+            catch (Exception) { }
         }
 
 

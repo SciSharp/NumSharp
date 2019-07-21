@@ -25,7 +25,7 @@ namespace NumSharp
 
         #region Math
 
-        public abstract NDArray Add(NDArray x, NDArray y);
+        public abstract NDArray Add(in NDArray x, in NDArray y);
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Divide(NDArray x, NDArray y);
         public abstract NDArray Log(NDArray nd);
@@ -56,6 +56,7 @@ namespace NumSharp
         public abstract NDArray CreateNDArray(Shape shape, Type dtype = null, IArraySlice buffer = null, char order = 'C');
         public abstract NDArray Transpose(NDArray nd, int[] axes = null);
         public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
+        public abstract NDArray Cast(NDArray x, NPTypeCode dtype, bool copy);
 
         #endregion
 

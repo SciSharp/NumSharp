@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -8,7 +10,7 @@ namespace NumSharp.Backends.Unmanaged
 {
     public partial class UnmanagedByteStorage<T>
     {
-        public static (UnmanagedByteStorage<T> arrOne, UnmanagedByteStorage<T> arrTwo) Broadcast(UnmanagedByteStorage<T> arrOne, UnmanagedByteStorage<T> arrTwo)
+        public static (Shape arrOne, Shape arrTwo) Broadcast(Shape arrOne, Shape arrTwo)
         {
             //PyArrayMultiIterObject *mit
             int i, nd, k, j;
@@ -21,7 +23,7 @@ namespace NumSharp.Backends.Unmanaged
             //Gets the largest ndim of all iterators
             for (i = 0, nd = 0; i < itersLength; i++)
             {
-                nd = Math.Max(nd, iters[i]._shape.NDim);
+                nd = Math.Max(nd, iters[i].NDim);
             }
 
             //this is the shared shape aka the target broadcast
@@ -33,7 +35,7 @@ namespace NumSharp.Backends.Unmanaged
                 mit.Dimensions[i] = 1;
                 for (j = 0; j < itersLength; j++)
                 {
-                    it = iters[j]._shape;
+                    it = iters[j];
                     /* This prepends 1 to shapes not already equal to nd */
                     k = i + it.NDim - nd;
                     if (k >= 0)
@@ -70,15 +72,15 @@ namespace NumSharp.Backends.Unmanaged
             }
 
             mit.size = tmp;
-            var retiters = new[] {arrOne.CreateAlias(mit), arrTwo.CreateAlias(mit)};
+            var retiters = new[] {arrOne, arrTwo};
 
 
             for (i = 0; i < itersLength; i++)
             {
                 var ogiter = iters[i];
                 var iter = retiters[i];
-                it = iter._shape;
-                nd = ogiter._shape.NDim;
+                it = iter;
+                nd = ogiter.NDim;
                 it.size = tmp;
                 //todo if (nd != 0)
                 //todo {
@@ -93,14 +95,14 @@ namespace NumSharp.Backends.Unmanaged
                      * underlying array was 1
                      */
                     if ((k < 0) ||
-                        ogiter._shape.dimensions[k] != mit.dimensions[j])
+                        ogiter.dimensions[k] != mit.dimensions[j])
                     {
                         it.layout = 'C';
                         it.strides[j] = 0;
                     }
                     else
                     {
-                        it.strides[j] = ogiter._shape.strides[k];
+                        it.strides[j] = ogiter.strides[k];
                     }
 
                     //todo it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
@@ -144,9 +146,9 @@ namespace NumSharp.Backends.Unmanaged
 	                %foreach supported_numericals,supported_numericals_lowercase%
                         case NPTypeCode.#1: 
                         {
-                            var resultStart = (#2*) results._arrayAddress;
-                            var leftStart = (#2*) left._arrayAddress;
-                            var rightScalar = *(#2*)right._arrayAddress;
+                            var resultStart = (#2*) results.Address;
+                            var leftStart = (#2*) left.Address;
+                            var rightScalar = *(#2*)right.Address;
                             if (lhsCount > ParallelLimit) {
                                 Parallel.For(0, lhsCount, i => { *(resultStart + i) = (#2) (*(leftStart + i) * rightScalar); });
                             } else {
@@ -403,9 +405,9 @@ namespace NumSharp.Backends.Unmanaged
 #if _REGEN
                 %foreach supported_numericals,supported_numericals_lowercase%
                     case NPTypeCode.#1: {
-                        var resultStart = (#2*) results._arrayAddress;
-                        var rightStart = (#2*) right._arrayAddress;
-                        var leftScalar = *(#2*) left._arrayAddress;
+                        var resultStart = (#2*) results.Address;
+                        var rightStart = (#2*) right.Address;
+                        var leftScalar = *(#2*) left.Address;
                         if (lhsCount > ParallelAbove) {
                             Parallel.For(0, lhsCount, i => { *(resultStart + i) = (#2)(leftScalar * *(rightStart + i)); });
                         } else {
@@ -976,9 +978,9 @@ namespace NumSharp.Backends.Unmanaged
 #if _REGEN
 	            %foreach supported_numericals,supported_numericals_lowercase%
                 case NPTypeCode.#1: {
-                    var resAddr = (#2*) results._arrayAddress;
-                    var leftAddr = (#2*) left._arrayAddress;
-                    var rightAddr = (#2*) right._arrayAddress;
+                    var resAddr = (#2*) results.Address;
+                    var leftAddr = (#2*) left.Address;
+                    var rightAddr = (#2*) right.Address;
                     if (size > ParallelAbove) {
                         Parallel.For(0, size, i => { *(resAddr + i) = (#2) (*(leftAddr + i) * *(rightAddr + i)); });
                     } else {
@@ -1235,9 +1237,9 @@ namespace NumSharp.Backends.Unmanaged
 #if _REGEN
 	            %foreach supported_numericals,supported_numericals_lowercase%
                 case NPTypeCode.#1: {
-                    var resAddr = (#2*) results._arrayAddress;
-                    var leftAddr = (#2*) left._arrayAddress;
-                    var rightAddr = (#2*) right._arrayAddress;
+                    var resAddr = (#2*) results.Address;
+                    var leftAddr = (#2*) left.Address;
+                    var rightAddr = (#2*) right.Address;
                     if (size > ParallelAbove) {
                         Parallel.For(0, size, i => { *(resAddr + i) = (#2) (*(leftAddr + i) * *(rightAddr + i)); });
                     } else {
@@ -1486,7 +1488,7 @@ namespace NumSharp.Backends.Unmanaged
 #if _REGEN
 	                %foreach supported_numericals,supported_numericals_lowercase%
                         case NPTypeCode.#1: {
-                            return Scalar((T) (ValueType) (#2) (*(#2*) left._arrayAddress * *(#2*) right._arrayAddress));
+                            return Scalar((T) (ValueType) (#2) (*(#2*) left.Address * *(#2*) right.Address));
                         }
                     %
                                       

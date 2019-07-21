@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
     public static partial class np
     {
         /// <summary>
-        ///     Return a new float array of given shape, filled with zeros.
+        ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
         /// <param name="shapes">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, dtype.</returns>
@@ -18,7 +20,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Return a new float array of given shape, filled with zeros.
+        ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
         /// <param name="shapes">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
@@ -29,16 +31,42 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Return a new float array of given shape, filled with zeros.
+        ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
         /// <param name="shape">Shape of the new array,</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <returns>Array of zeros with the given shape, dtype.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(Shape shape, Type dtype = null)
+        public static NDArray zeros(Shape shape, Type dtype)
         {
-            dtype = dtype ?? np.float64;
+            return zeros(shape, (dtype ?? typeof(double)).GetTypeCode());
+        }
+
+        /// <summary>
+        ///     Return a new double array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shape">Shape of the new array,</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(Shape shape, NPTypeCode dtype)
+        {
+            if (dtype == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(dtype));
+
             return new NDArray(dtype, shape, true); //already allocates inside.
+        }
+
+        /// <summary>
+        ///     Return a new double array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shape">Shape of the new array,</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(Shape shape)
+        {
+            return new NDArray(NPTypeCode.Double, shape, true); //already allocates inside.
         }
     }
 }

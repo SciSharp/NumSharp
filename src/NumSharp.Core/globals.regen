@@ -10,3 +10,4 @@
 %supported_currently_supported = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal"]
 %supported_currently_supported_lowercase = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal"]
 %supported_currently_supported_defaultvals = [false,"0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
+%supported_currently_supported_onevales = [true,"1","1","1","1","1u","1L","1UL","'\1'","1d","1f","1m"]

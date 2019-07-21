@@ -51,12 +51,33 @@ namespace NumSharp
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, Type dtype = null)
+        public static NDArray ones(Shape shape, Type dtype)
         {
-            dtype = dtype ?? typeof(double);
+            return ones(shape, (dtype ?? typeof(double)).GetTypeCode());
+        }
 
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape)
+        {
+            return ones(shape, NPTypeCode.Double);
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape, NPTypeCode dtype)
+        {
             object one = null;
-            switch (dtype.GetTypeCode())
+            switch (dtype)
             {
                 case NPTypeCode.Complex:
                     one = new Complex(1d, 0d);
@@ -68,7 +89,7 @@ namespace NumSharp
                     one = "1";
                     break;
                 default:
-                    one = Convert.ChangeType((byte)1, dtype);
+                    one = Convert.ChangeType((byte)1, dtype.AsType());
                     break;
             }
 

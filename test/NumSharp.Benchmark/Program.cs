@@ -18,7 +18,9 @@ namespace NumSharp.Benchmark
 
             if (true)
             {
-                new MemoryAllocation().NDArray();
+                var v = new Iterators();
+                v.Setup();
+                v.OffsetIncrementor();
             }
 
             if (args?.Length > 0)

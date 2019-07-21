@@ -23,6 +23,8 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
@@ -38,6 +40,7 @@ namespace NumSharp
     ///     how many bytes it occupies in memory, whether it is an integer, a floating point number, or something else, etc.)
     /// </summary>
     /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html</remarks>
+    [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     public partial class NDArray : ICloneable, IEnumerable
     {
         #region Constructors
@@ -49,6 +52,27 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
+            TensorEngine = storage.Engine;
+        }
+
+        /// <summary>
+        ///     Creates a new <see cref="NDArray"/> with this storage.
+        /// </summary>
+        /// <param name="storage"></param>
+        internal NDArray(UnmanagedStorage storage, Shape shape)
+        {
+            Storage = storage;
+            TensorEngine = storage.Engine;
+        }
+
+        /// <summary>
+        ///     Creates a new <see cref="NDArray"/> with this storage.
+        /// </summary>
+        /// <param name="storage"></param>
+        internal NDArray(UnmanagedStorage storage, ref Shape shape)
+        {
+            Storage = new UnmanagedStorage(storage.InternalArray, shape);
+
             TensorEngine = storage.Engine;
         }
 
@@ -153,9 +177,41 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(NPTypeCode dtype, Shape shape) : this(dtype, shape, true)
+        { }
+
+        /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="dtype">Internal data type</param>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(NPTypeCode dtype, int size) : this(dtype, new Shape(size), true)
+        { }
+
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and shape are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
+        {
+            Storage.Allocate(shape, dtype, fillZeros);
+        }
+
+        /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type and shape are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(NPTypeCode dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
         }
@@ -613,6 +669,27 @@ namespace NumSharp
             }
         }
 
+        //TODO! add SetInt32 and such methods!
+
         #endregion
+
+        private class NDArrayDebuggerProxy
+        {
+            private readonly NDArray NDArray;
+
+            /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
+            public NDArrayDebuggerProxy(NDArray ndArray)
+            {
+                NDArray = ndArray;
+            }
+
+            /// <summary>Returns a string that represents the current object.</summary>
+            /// <returns>A string that represents the current object.</returns>
+            public override string ToString()
+            {
+                //TODO! make a truncuted to string.
+                return NDArray.ToString(false);
+            }
+        }
     }
 }
