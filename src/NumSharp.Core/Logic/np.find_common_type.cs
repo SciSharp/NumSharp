@@ -521,10 +521,10 @@ namespace NumSharp
                 return _FindCommonScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
 
             if (lscalar)
-                return _FindCommonType(new NPTypeCode[] {secondNDArray.GetTypeCode}, new NPTypeCode[] {firstNDArray.GetTypeCode});
+                return _FindCommonArrayScalarType(secondNDArray.GetTypeCode, firstNDArray.GetTypeCode);
 
             //rscalar is true
-            return _FindCommonType(new NPTypeCode[] {firstNDArray.GetTypeCode}, new NPTypeCode[] {secondNDArray.GetTypeCode});
+            return _FindCommonArrayScalarType(firstNDArray.GetTypeCode, secondNDArray.GetTypeCode);
         }
 
         #region Private of find_common_type
