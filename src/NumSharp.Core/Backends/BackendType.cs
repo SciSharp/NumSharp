@@ -20,6 +20,6 @@ namespace NumSharp
         /// </summary>
         SIMD = 3,
 
-        ArrayFire = 4
+        // ArrayFire = 4
     }
 }
