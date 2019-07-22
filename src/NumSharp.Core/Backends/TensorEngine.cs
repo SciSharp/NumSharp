@@ -27,7 +27,7 @@ namespace NumSharp
 
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Dot(NDArray x, NDArray y);
-        public abstract NDArray Divide(NDArray x, NDArray y);
+        public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Log(NDArray nd);
         public abstract NDArray MatMul(NDArray x, NDArray y);
         public abstract NDArray Mean(NDArray x, int axis = -1);

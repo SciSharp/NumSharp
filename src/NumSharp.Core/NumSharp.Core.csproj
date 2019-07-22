@@ -75,6 +75,8 @@
     <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
@@ -92,6 +94,8 @@
   </Target>
 
   <ItemGroup>
+    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
