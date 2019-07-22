@@ -130,12 +130,6 @@ namespace NumSharp.Backends
             r._shape = _shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            r.Count = Count;
-            unsafe
-            {
-                r.Address = Address;
-            }
-
             SetInternalArray(r.InternalArray);
             return r;
         }
@@ -150,12 +144,6 @@ namespace NumSharp.Backends
             r._shape = shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            r.Count = Count;
-            unsafe
-            {
-                r.Address = Address;
-            }
-
             r.SetInternalArray(InternalArray);
             return r;
         }
@@ -170,12 +158,6 @@ namespace NumSharp.Backends
             r._shape = shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            r.Count = Count;
-            unsafe
-            {
-                r.Address = Address;
-            }
-
             SetInternalArray(r.InternalArray);
             return r;
         }
@@ -203,7 +185,6 @@ namespace NumSharp.Backends
         {
             _dtype = dtype ?? throw new ArgumentNullException(nameof(dtype));
             _typecode = dtype.GetTypeCode();
-            _shape = new Shape(0);
         }
 
         /// <summary>
@@ -218,7 +199,6 @@ namespace NumSharp.Backends
 
             _dtype = typeCode.AsType();
             _typecode = typeCode;
-            _shape = new Shape(0);
         }
 
         private UnmanagedStorage(object value)
@@ -1645,6 +1625,9 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
 
             SetInternalArray(_ChangeTypeOfArray(values, values.GetType().GetElementType()));
+
+            if (_shape.IsEmpty)
+                _shape = new Shape(values.Length);
         }
 
         /// <summary>
@@ -1655,6 +1638,9 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values)
         {
             SetInternalArray(values);
+
+            if (_shape.IsEmpty)
+                _shape = new Shape(values.Count);
         }
 
         /// <summary>
@@ -1666,6 +1652,9 @@ namespace NumSharp.Backends
         public void ReplaceData(IArraySlice values, Type dtype)
         {
             SetInternalArray(values);
+
+            if (_shape.IsEmpty)
+                _shape = new Shape(values.Count);
         }
 
         /// <summary>
@@ -1728,9 +1717,124 @@ namespace NumSharp.Backends
             //first try to convert to dtype only then we apply changes.
             _shape = nd.shape;
             _dtype = nd.dtype;
-            _typecode = _dtype.GetTypeCode();
+            _typecode = nd.GetTypeCode;
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
+
+            SetInternalArray(nd.Array);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Copies values only if <paramref name="values"/> type does not match <see cref="DType"/> and doesn't change shape. Doesn't check if shape size matches.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReplaceData(Array values, Shape shape)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            _shape = shape;
+            SetInternalArray(_ChangeTypeOfArray(values, values.GetType().GetElementType()));
+
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Does not copy values and doesn't change shape. Doesn't check if shape size matches.</remarks>
+        public void ReplaceData(IArraySlice values, Shape shape)
+        {
+            _shape = shape;
+            SetInternalArray(values);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="dtype"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Does not copy values and doesn't change shape. Doesn't check if shape size matches.</remarks>
+        public void ReplaceData(IArraySlice values, Type dtype, Shape shape)
+        {
+            _shape = shape;
+            SetInternalArray(values);
+        }
+
+        /// <summary>
+        /// Set an Array to internal storage, cast it to new dtype and change dtype  
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="dtype"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Does not copy values unless cast in necessary and doesn't change shape. Doesn't check if shape size matches.</remarks>
+        public void ReplaceData(Array values, Type dtype, Shape shape)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (dtype == null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            var changedArray = _ChangeTypeOfArray(values, dtype);
+            //first try to convert to dtype only then we apply changes.
+            _dtype = dtype;
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            _shape = shape;
+            SetInternalArray(changedArray);
+        }
+
+        /// <summary>
+        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="typeCode"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape. Doesn't check if shape size matches.</remarks>
+        public void ReplaceData(Array values, NPTypeCode typeCode, Shape shape)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (typeCode == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(typeCode));
+
+            var dtype = typeCode.AsType();
+            var changedArray = _ChangeTypeOfArray(values, dtype);
+            //first try to convert to dtype only then we apply changes.
+            _dtype = dtype;
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            _shape = shape;
+            SetInternalArray(changedArray);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        /// </summary>
+        /// <param name="nd"></param>
+        /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
+        /// <remarks>Does not copy values and does change shape and dtype. Doesn't check if shape size matches.</remarks>
+        public void ReplaceData(NDArray nd, Shape shape)
+        {
+            if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+
+            //first try to convert to dtype only then we apply changes.
+            _dtype = nd.dtype;
+            _typecode = nd.GetTypeCode;
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
+
+            _shape = shape;
             SetInternalArray(nd.Array);
         }
 
@@ -1738,7 +1842,7 @@ namespace NumSharp.Backends
         {
             var newShape = new Shape(dimensions);
             if (newShape.size != _shape.size)
-                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({Count})");
+                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({_shape.size})");
 
             _shape = newShape;
         }
@@ -1746,7 +1850,7 @@ namespace NumSharp.Backends
         public void Reshape(Shape shape)
         {
             if (shape.size != _shape.size)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the existing storage size ({Count})");
+                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the existing storage size ({_shape.size})");
 
             _shape = shape;
         }
