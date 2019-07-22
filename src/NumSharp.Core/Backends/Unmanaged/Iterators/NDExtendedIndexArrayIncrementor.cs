@@ -51,8 +51,8 @@ namespace NumSharp.Backends.Unmanaged {
                     if (--subcursor <= -1)
                     {
                         //TODO somehow can we skip all ones entierly?
-                        Reset();
-                        return Next();
+                        subcursor = resetto;
+                        return Index;
                     }
                 } while (dimensions[subcursor] <= 1);
 

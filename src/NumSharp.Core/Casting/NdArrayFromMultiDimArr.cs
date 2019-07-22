@@ -30,7 +30,7 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// low performance due to loop element-wise
+        ///     Creates an NDArray out of given array of type <typeparamref name="T"/>
         /// </summary>
         /// <param name="dotNetArray"></param>
         public NDArray FromMultiDimArray<T>(Array dotNetArray)

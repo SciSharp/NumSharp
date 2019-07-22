@@ -75,17 +75,6 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void StringCast1()
-        {
-            throw new NotSupportedException();
-            //NDArray nd = "hello";
-            //
-            //string str = nd;
-            //
-            //Assert.IsTrue(str == "hello");
-        }
-
-        [TestMethod]
         public void StringCast2()
         {
             NDArray nd = "[1,2,3;4,5,6]";

@@ -25,77 +25,75 @@ using System.Globalization;
 using System.Collections;
 using NumSharp;
 using System.Text.RegularExpressions;
+using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        /// <summary>
-        /// User-defined conversion from double to Digit
-        /// </summary>
-        /// <param name="array"></param>
         public static implicit operator NDArray(Array array)
         {
             // ReSharper disable once PossibleNullReferenceException
             bool isJaggedArray = array.GetType().GetElementType().IsArray;
-
+            var underlying = array.ResolveElementType();
             if (isJaggedArray)
             {
-                var type = array.GetType().GetElementType();
-
-                switch (array.GetType().GetArrayRank())
+                var nd = new NDArray(underlying);
+                switch (nd.GetTypeCode)
                 {
-                    case 1:
-                        type = type.GetElementType();
-                        break;
-                    case 2:
-                        type = type.GetElementType().GetElementType();
-                        break;
-                    case 3:
-                        type = type.GetElementType().GetElementType().GetElementType();
-                        break;
+#if _REGEN
+	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                case NPTypeCode.#1: return nd.FromJaggedArray<#2>(array);
+	                %
+	                default:
+		                throw new NotSupportedException();
+#else
+                    case NPTypeCode.Boolean: return nd.FromJaggedArray<bool>(array);
+                    case NPTypeCode.Byte: return nd.FromJaggedArray<byte>(array);
+                    case NPTypeCode.Int16: return nd.FromJaggedArray<short>(array);
+                    case NPTypeCode.UInt16: return nd.FromJaggedArray<ushort>(array);
+                    case NPTypeCode.Int32: return nd.FromJaggedArray<int>(array);
+                    case NPTypeCode.UInt32: return nd.FromJaggedArray<uint>(array);
+                    case NPTypeCode.Int64: return nd.FromJaggedArray<long>(array);
+                    case NPTypeCode.UInt64: return nd.FromJaggedArray<ulong>(array);
+                    case NPTypeCode.Char: return nd.FromJaggedArray<char>(array);
+                    case NPTypeCode.Double: return nd.FromJaggedArray<double>(array);
+                    case NPTypeCode.Single: return nd.FromJaggedArray<float>(array);
+                    case NPTypeCode.Decimal: return nd.FromJaggedArray<decimal>(array);
                     default:
-                        throw new NotImplementedException("implicit operator NDArray(Array array)");
-                }
-
-                var nd = new NDArray(type);
-                switch (Type.GetTypeCode(nd.dtype))
-                {
-                    case TypeCode.Boolean:
-                        return nd.FromJaggedArray<bool>(array);
-                    case TypeCode.Int16:
-                        return nd.FromJaggedArray<short>(array);
-                    case TypeCode.Int32:
-                        return nd.FromJaggedArray<int>(array);
-                    case TypeCode.Int64:
-                        return nd.FromJaggedArray<long>(array);
-                    case TypeCode.Single:
-                        return nd.FromJaggedArray<float>(array);
-                    case TypeCode.Double:
-                        return nd.FromJaggedArray<double>(array);
-                    case TypeCode.Decimal:
-                        return nd.FromJaggedArray<decimal>(array);
+                        throw new NotSupportedException();
+#endif
                 }
             }
             else
             {
-                var nd = new NDArray(array.GetType().GetElementType());
-                switch (Type.GetTypeCode(nd.dtype))
+
+                var nd = new NDArray(underlying);
+                switch (nd.GetTypeCode)
                 {
-                    case TypeCode.Boolean:
-                        return nd.FromMultiDimArray<bool>(array);
-                    case TypeCode.Int16:
-                        return nd.FromMultiDimArray<short>(array);
-                    case TypeCode.Int32:
-                        return nd.FromMultiDimArray<int>(array);
-                    case TypeCode.Int64:
-                        return nd.FromMultiDimArray<long>(array);
-                    case TypeCode.Single:
-                        return nd.FromMultiDimArray<float>(array);
-                    case TypeCode.Double:
-                        return nd.FromMultiDimArray<double>(array);
-                    case TypeCode.Decimal:
-                        return nd.FromMultiDimArray<decimal>(array);
+#if _REGEN
+	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                case NPTypeCode.#1: return nd.FromMultiDimArray<#2>(array);
+	                %
+	                default:
+		                throw new NotSupportedException();
+#else
+	                case NPTypeCode.Boolean: return nd.FromMultiDimArray<bool>(array);
+	                case NPTypeCode.Byte: return nd.FromMultiDimArray<byte>(array);
+	                case NPTypeCode.Int16: return nd.FromMultiDimArray<short>(array);
+	                case NPTypeCode.UInt16: return nd.FromMultiDimArray<ushort>(array);
+	                case NPTypeCode.Int32: return nd.FromMultiDimArray<int>(array);
+	                case NPTypeCode.UInt32: return nd.FromMultiDimArray<uint>(array);
+	                case NPTypeCode.Int64: return nd.FromMultiDimArray<long>(array);
+	                case NPTypeCode.UInt64: return nd.FromMultiDimArray<ulong>(array);
+	                case NPTypeCode.Char: return nd.FromMultiDimArray<char>(array);
+	                case NPTypeCode.Double: return nd.FromMultiDimArray<double>(array);
+	                case NPTypeCode.Single: return nd.FromMultiDimArray<float>(array);
+	                case NPTypeCode.Decimal: return nd.FromMultiDimArray<decimal>(array);
+	                default:
+		                throw new NotSupportedException();
+#endif
                 }
             }
 
@@ -157,7 +155,7 @@ namespace NumSharp
                 {
                     for (int jdx = 0; jdx < splitted[0].Length; jdx++)
                     {
-                        nd[idx, jdx] = (NDArray) Double.Parse(splitted[idx][jdx]);
+                        nd[idx, jdx] = (NDArray)Double.Parse(splitted[idx][jdx]);
                     }
                 }
 

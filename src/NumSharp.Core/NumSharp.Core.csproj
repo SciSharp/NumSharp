@@ -74,7 +74,10 @@
     <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
     <Compile Remove="Operations\NdArray.ElementsWise.cs" />
   </ItemGroup>
 
@@ -92,6 +95,8 @@
 
   <ItemGroup>
     <None Include="Backends\Default\Math\Templates\Default.Op.template.cs" />
+    <None Include="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
+    <None Include="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -24,33 +24,32 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public Array ToMuliDimArray<T>()
+        public Array ToMuliDimArray<T>() where T : unmanaged
         {
-            return null;
-            //Array dotNetArray = Arrays.Create(typeof(T), this.shape);
+            Array dotNetArray = Arrays.Create(typeof(T), this.shape);
 
-            //var pufferShape = new Shape(shape);
-            //pufferShape.ChangeTensorLayout();
+            var pufferShape = new Shape(shape);
 
-            //int[] indexes = null;
-            //object idxValue = null;
+            int[] indexes = null;
+            object idxValue = null;
 
-            //T[] array = Storage.GetData<T>();
+            ArraySlice<T> array = Storage.GetData<T>();
 
-            //for(int idx = 0; idx < this.size;idx++)
-            //{
-            //    indexes = pufferShape.GetDimIndexOutShape(idx);
-            //    idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
-            //    dotNetArray.SetValue(idxValue,indexes);
-            //}
+            for (int idx = 0; idx < this.size; idx++)
+            {
+                indexes = pufferShape.GetDimIndexOutShape(idx);
+                idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
+                dotNetArray.SetValue(idxValue, indexes);
+            }
 
-            //return dotNetArray;
+            return dotNetArray;
         }
     }
 }

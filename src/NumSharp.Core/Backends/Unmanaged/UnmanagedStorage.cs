@@ -647,7 +647,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="array">The array to set as internal storage</param>
         /// <exception cref="InvalidCastException">When type of <paramref name="array"/> does not match <see cref="DType"/> of this storage</exception>
-        protected void SetInternalArray(Array array)
+        protected unsafe void SetInternalArray(Array array)
         {
             switch (_typecode)
             {
@@ -657,6 +657,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.#1:
                 {
                     InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
+                    Address = (byte*) _array#1.Address;
+                    Count = _array#1.Count;
                     break;
                 }
                 %
@@ -667,72 +669,96 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                 {
                     InternalArray = _arrayBoolean = ArraySlice.FromArray<bool>((bool[])array);
+                    Address = (byte*)_arrayBoolean.Address;
+                    Count = _arrayBoolean.Count;
                     break;
                 }
 
                 case NPTypeCode.Byte:
                 {
                     InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
+                    Address = (byte*)_arrayByte.Address;
+                    Count = _arrayByte.Count;
                     break;
                 }
 
                 case NPTypeCode.Int16:
                 {
                     InternalArray = _arrayInt16 = ArraySlice.FromArray<short>((short[])array);
+                    Address = (byte*)_arrayInt16.Address;
+                    Count = _arrayInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt16:
                 {
                     InternalArray = _arrayUInt16 = ArraySlice.FromArray<ushort>((ushort[])array);
+                    Address = (byte*)_arrayUInt16.Address;
+                    Count = _arrayUInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.Int32:
                 {
                     InternalArray = _arrayInt32 = ArraySlice.FromArray<int>((int[])array);
+                    Address = (byte*)_arrayInt32.Address;
+                    Count = _arrayInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt32:
                 {
                     InternalArray = _arrayUInt32 = ArraySlice.FromArray<uint>((uint[])array);
+                    Address = (byte*)_arrayUInt32.Address;
+                    Count = _arrayUInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.Int64:
                 {
                     InternalArray = _arrayInt64 = ArraySlice.FromArray<long>((long[])array);
+                    Address = (byte*)_arrayInt64.Address;
+                    Count = _arrayInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt64:
                 {
                     InternalArray = _arrayUInt64 = ArraySlice.FromArray<ulong>((ulong[])array);
+                    Address = (byte*)_arrayUInt64.Address;
+                    Count = _arrayUInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.Char:
                 {
                     InternalArray = _arrayChar = ArraySlice.FromArray<char>((char[])array);
+                    Address = (byte*)_arrayChar.Address;
+                    Count = _arrayChar.Count;
                     break;
                 }
 
                 case NPTypeCode.Double:
                 {
                     InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
+                    Address = (byte*)_arrayDouble.Address;
+                    Count = _arrayDouble.Count;
                     break;
                 }
 
                 case NPTypeCode.Single:
                 {
                     InternalArray = _arraySingle = ArraySlice.FromArray<float>((float[])array);
+                    Address = (byte*)_arraySingle.Address;
+                    Count = _arraySingle.Count;
                     break;
                 }
 
                 case NPTypeCode.Decimal:
                 {
                     InternalArray = _arrayDecimal = ArraySlice.FromArray<decimal>((decimal[])array);
+                    Address = (byte*)_arrayDecimal.Address;
+                    Count = _arrayDecimal.Count;
                     break;
                 }
 
@@ -747,7 +773,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="array">The array to set as internal storage</param>
         /// <exception cref="InvalidCastException">When type of <paramref name="array"/> does not match <see cref="DType"/> of this storage</exception>
-        protected void SetInternalArray(IArraySlice array)
+        protected unsafe void SetInternalArray(IArraySlice array)
         {
             switch (_typecode)
             {
@@ -757,6 +783,8 @@ namespace NumSharp.Backends
                 case NPTypeCode.#1:
                 {
                     InternalArray = _array#1 = (ArraySlice<#2>)array;
+                    Address = (byte*) _array#1.Address;
+                    Count = _array#1.Count;
                     break;
                 }
                 %
@@ -767,72 +795,96 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                 {
                     InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
+                    Address = (byte*)_arrayBoolean.Address;
+                    Count = _arrayBoolean.Count;
                     break;
                 }
 
                 case NPTypeCode.Byte:
                 {
                     InternalArray = _arrayByte = (ArraySlice<byte>)array;
+                    Address = (byte*)_arrayByte.Address;
+                    Count = _arrayByte.Count;
                     break;
                 }
 
                 case NPTypeCode.Int16:
                 {
                     InternalArray = _arrayInt16 = (ArraySlice<short>)array;
+                    Address = (byte*)_arrayInt16.Address;
+                    Count = _arrayInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt16:
                 {
                     InternalArray = _arrayUInt16 = (ArraySlice<ushort>)array;
+                    Address = (byte*)_arrayUInt16.Address;
+                    Count = _arrayUInt16.Count;
                     break;
                 }
 
                 case NPTypeCode.Int32:
                 {
                     InternalArray = _arrayInt32 = (ArraySlice<int>)array;
+                    Address = (byte*)_arrayInt32.Address;
+                    Count = _arrayInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt32:
                 {
                     InternalArray = _arrayUInt32 = (ArraySlice<uint>)array;
+                    Address = (byte*)_arrayUInt32.Address;
+                    Count = _arrayUInt32.Count;
                     break;
                 }
 
                 case NPTypeCode.Int64:
                 {
                     InternalArray = _arrayInt64 = (ArraySlice<long>)array;
+                    Address = (byte*)_arrayInt64.Address;
+                    Count = _arrayInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.UInt64:
                 {
                     InternalArray = _arrayUInt64 = (ArraySlice<ulong>)array;
+                    Address = (byte*)_arrayUInt64.Address;
+                    Count = _arrayUInt64.Count;
                     break;
                 }
 
                 case NPTypeCode.Char:
                 {
                     InternalArray = _arrayChar = (ArraySlice<char>)array;
+                    Address = (byte*)_arrayChar.Address;
+                    Count = _arrayChar.Count;
                     break;
                 }
 
                 case NPTypeCode.Double:
                 {
                     InternalArray = _arrayDouble = (ArraySlice<double>)array;
+                    Address = (byte*)_arrayDouble.Address;
+                    Count = _arrayDouble.Count;
                     break;
                 }
 
                 case NPTypeCode.Single:
                 {
                     InternalArray = _arraySingle = (ArraySlice<float>)array;
+                    Address = (byte*)_arraySingle.Address;
+                    Count = _arraySingle.Count;
                     break;
                 }
 
                 case NPTypeCode.Decimal:
                 {
                     InternalArray = _arrayDecimal = (ArraySlice<decimal>)array;
+                    Address = (byte*)_arrayDecimal.Address;
+                    Count = _arrayDecimal.Count;
                     break;
                 }
 
@@ -1145,12 +1197,6 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"{values.TypeCode} as a dtype is not supported.");
 
             _dtype = _typecode.AsType();
-            Count = values.Count;
-            unsafe
-            {
-                Address = (byte*)values.Address;
-            }
-
             SetInternalArray(values);
         }
 

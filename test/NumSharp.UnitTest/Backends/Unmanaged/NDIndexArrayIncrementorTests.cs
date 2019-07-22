@@ -149,7 +149,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(2, 1, 0, 1, 0, 55);
             sh.Next().Should().ContainInOrder(2, 2, 0, 0, 0, 55);
             sh.Next().Should().ContainInOrder(2, 2, 0, 1, 0, 55);
-            sh.Next().Should().BeNull();
+
+            sh.Next().Should().ContainInOrder(0, 0, 0, 0, 0, 55);
         }
 
         [TestMethod]
@@ -157,11 +158,11 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             var shape = new Shape(1, 1, 1, 3);
             var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
-            sh.Index.Should().ContainInOrder(0, 0, 0, 0,0,0);
-            sh.Next().Should().ContainInOrder(0, 0, 0, 1,0,0);
+            sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 0);
+            sh.Next().Should().ContainInOrder(0, 0, 0, 1, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 0, 2, 0, 0);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0, 0, 0, 0);
         }
 
         [TestMethod]
@@ -173,7 +174,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(1, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(2, 0, 0, 0, 0, 0);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0, 0, 0, 0);
         }
 
         [TestMethod]
@@ -185,7 +186,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(0, 0, 1, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 2, 0, 0, 0);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0, 0, 0, 0);
         }
 
         [TestMethod]
@@ -200,28 +201,28 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(1, 0, 1, 0, 0, 0);
             sh.Next().Should().ContainInOrder(1, 0, 2, 0, 0, 0);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0, 0, 0, 0);
         }
 
         [TestMethod]
         public void Case6_Extended()
         {
             var shape = new Shape(1);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape,2);
+            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0);
         }
 
         [TestMethod]
         public void Case7_Extended()
         {
             var shape = new Shape(2);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape,2);
+            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
             sh.Index.Should().ContainInOrder(0);
             sh.Next().Should().ContainInOrder(1);
 
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0);
         }
 
         [TestMethod]
@@ -241,8 +242,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(0);
             var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0);
-
-            sh.Next().Should().BeNull();
+            sh.Next().Should().ContainInOrder(0, 0, 0);
         }
     }
 }

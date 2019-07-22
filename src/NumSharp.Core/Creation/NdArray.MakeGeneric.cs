@@ -25,6 +25,7 @@ namespace NumSharp
         {
             if (typeof(T) != dtype)
                 throw new InvalidOperationException($"Given constraint type {typeof(T).Name} does not match dtype {dtype.Name}. If you intended to cast if necessary then use MakeGeneric.");
+            
             if (this is NDArray<T> ret)
                 return ret;
 

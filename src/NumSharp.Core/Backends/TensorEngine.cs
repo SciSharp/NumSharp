@@ -40,7 +40,7 @@ namespace NumSharp
         #endregion
 
         #region Logic
-
+        public abstract NDArray<bool> Compare(in NDArray lhs, in NDArray rhs);
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
@@ -65,5 +65,6 @@ namespace NumSharp
         public abstract NDArray ArgMax(NDArray nd, int axis = -1);
 
         #endregion
+
     }
 }

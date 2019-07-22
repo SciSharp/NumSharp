@@ -54,97 +54,87 @@ namespace NumSharp
                     var data = (ArraySlice<byte>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToByte(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Int16:
                 {
                     var data = (ArraySlice<short>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToInt16(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.UInt16:
                 {
                     var data = (ArraySlice<ushort>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToUInt16(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Int32:
                 {
                     var data = (ArraySlice<int>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToInt32(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.UInt32:
                 {
                     var data = (ArraySlice<uint>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToUInt32(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Int64:
                 {
                     var data = (ArraySlice<long>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToInt64(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.UInt64:
                 {
                     var data = (ArraySlice<ulong>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToUInt64(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Char:
                 {
                     var data = (ArraySlice<char>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToChar(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Double:
                 {
                     var data = (ArraySlice<double>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToDouble(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Single:
                 {
                     var data = (ArraySlice<float>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToSingle(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
-
                 case NPTypeCode.Decimal:
                 {
                     var data = (ArraySlice<decimal>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
                         data[i] = Convert.ToDecimal(randomizer.NextLong(low, high));
-
+                    
                     break;
                 }
 #endif

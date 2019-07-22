@@ -4,6 +4,7 @@ using System.Text;
 using System.Numerics;
 using NumSharp.Generic;
 using System.Linq;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -16,108 +17,31 @@ namespace NumSharp
         /// <returns>if reference is same</returns>
         public override bool Equals(object obj)
         {
-            switch (obj)
-            {
-                case NDArray safeCastObj:
-                {
-                    var thatData = safeCastObj.Storage?.GetData();
-                    if (thatData == null)
-                    {
-                        return false;
-                    }
-
-                    var thisData = this.Storage?.GetData();
-                    return thisData == thatData && safeCastObj.shape == this.shape;
-                }
-
-                case int val:
-                    return Data<int>(0) == val;
-                // Other object is not of Type NDArray, return false immediately.
-                default:
-                    return false;
-            }
+            return this == obj;
         }
 
-        public static NDArray<bool> operator ==(NDArray np, object obj)
+        public static NDArray<bool> operator ==(NDArray left, object right)
         {
-            //TODO! what the hell is that? write a saner equality function
-            return null;
-            //if (obj is NDArray np2)
-            //{
-            //    return np.equal(np2);
-            //}
-            //var boolTensor = new NDArray(typeof(bool),np.shape);
-            //bool[] bools = boolTensor.Storage.GetData() as bool[];
+            if (right is null)
+                return Scalar<bool>(ReferenceEquals(left, null)).MakeGeneric<bool>();
 
-            //switch (np.Storage.GetData())
-            //{
-            //    case int[] values :
-            //    {
-            //        int value = Convert.ToInt32(obj);                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case Int64[] values :
-            //    {
-            //        Int64 value = Convert.ToInt64(obj);                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case float[] values :
-            //    {
-            //        float value = Convert.ToSingle(obj);                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case double[] values :
-            //    {
-            //        double value = Convert.ToDouble(obj);                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case Complex[] values :
-            //    {
-            //        Complex value = (Complex) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    /*case Quaternion[] values :
-            //    {
-            //        Quaternion value = (Quaternion) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] == value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }*/
-            //    default :
-            //    {
-            //        throw new IncorrectTypeException();
-            //    } 
-            //}
+            if (left is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
 
-            //return boolTensor.MakeGeneric<bool>();
+            //rhs is a number
+            var rhs_type = right.GetType();
+            if (rhs_type.IsPrimitive || rhs_type == typeof(decimal)) //numerical
+            {
+                if (left.Shape.IsEmpty || left.size == 0)
+                    return Scalar<bool>(false).MakeGeneric<bool>();
+
+                return left.TensorEngine.Compare(left, Scalar(right));
+            }
+
+            if (right is NDArray rarr)
+                return left.TensorEngine.Compare(left, rarr);
+
+            throw new NotSupportedException();
         }
 
         /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
@@ -128,52 +52,37 @@ namespace NumSharp
         /// <returns>NDArray with result of each element compare</returns>
         private NDArray<bool> equal(NDArray np2)
         {
-            return null;
-            //if (this.size != np2.size)
-            //{
-            //    throw new ArgumentException("Different sized NDArray's in not yet supported by the equal operation", nameof(np2));
-            //}
-            //var boolTensor = new NDArray(typeof(bool), this.shape);
-            //bool[] bools = boolTensor.Storage.GetData() as bool[];
-
-            //var values1 = this.Storage.GetData();
-            //var values2 = np2.Storage.GetData();
-            //for (int idx = 0; idx < bools.Length; idx++)
-            //{
-            //    var v1 = values1.GetValue(idx);
-            //    var v2 = values2.GetValue(idx);
-            //    if (v1.Equals(v2))
-            //        bools[idx] = true;
-            //}
-
-            //return boolTensor.MakeGeneric<bool>();
+            return this == np2;
         }
 
-        /// NumPy signature: numpy.array_equal(a1, a2)[source]
         /// <summary>
-        /// Compares two NDArrays
+        ///     True if two arrays have the same shape and elements, False otherwise.
         /// </summary>
-        /// <param name="np2"></param>
-        /// <returns>True if two arrays have the same shape and elements, False otherwise.</returns>
-        public bool array_equal(NDArray np2)
+        /// <param name="a">Input array.</param>
+        /// <param name="rhs">Input array.</param>
+        /// <returns>Returns True if the arrays are equal.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.array_equal.html</remarks>
+        public bool array_equal(NDArray rhs)
         {
-            return false;
-            //return null;
-            //if (!Enumerable.SequenceEqual(this.shape, np2.shape))
-            //{
-            //    return false;
-            //}
-            //var values1 = this.Storage.GetData();
-            //var values2 = np2.Storage.GetData();
-            //for (int idx = 0; idx < values1.Length; idx++)
-            //{
-            //    var v1 = values1.GetValue(idx);
-            //    var v2 = values2.GetValue(idx);
-            //    if (!v1.Equals(v2))
-            //        return false;
-            //}
+            unsafe
+            {
+                //this is the same memory block
+                if ((IntPtr)this.Address == (IntPtr)rhs.Address && this.size == rhs.size && GetTypeCode == rhs.GetTypeCode)
+                    return true;
 
-            //return true;
+                //if shape is different
+                if (Shape != rhs.Shape)
+                    return false;
+
+                //compare all values
+                var cmp = (this == rhs);
+                var len = cmp.size;
+                for (int i = 0; i < len; i++)
+                    if (!cmp.GetAtIndex<bool>(i))
+                        return false;
+
+                return true;
+            }
         }
     }
 }

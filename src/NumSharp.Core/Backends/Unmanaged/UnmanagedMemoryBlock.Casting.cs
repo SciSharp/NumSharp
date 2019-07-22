@@ -25,30 +25,32 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Byte:
-                    return Cast<byte>(source);
-                case NPTypeCode.Int16:
-                    return Cast<short>(source);
-                case NPTypeCode.UInt16:
-                    return Cast<ushort>(source);
-                case NPTypeCode.Int32:
-                    return Cast<int>(source);
-                case NPTypeCode.UInt32:
-                    return Cast<uint>(source);
-                case NPTypeCode.Int64:
-                    return Cast<long>(source);
-                case NPTypeCode.UInt64:
-                    return Cast<ulong>(source);
-                case NPTypeCode.Char:
-                    return Cast<char>(source);
-                case NPTypeCode.Double:
-                    return Cast<double>(source);
-                case NPTypeCode.Single:
-                    return Cast<float>(source);
-                case NPTypeCode.Decimal:
-                    return Cast<decimal>(source);
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean:
+	                return Cast<bool>(source);
+	            case NPTypeCode.Byte:
+	                return Cast<byte>(source);
+	            case NPTypeCode.Int16:
+	                return Cast<short>(source);
+	            case NPTypeCode.UInt16:
+	                return Cast<ushort>(source);
+	            case NPTypeCode.Int32:
+	                return Cast<int>(source);
+	            case NPTypeCode.UInt32:
+	                return Cast<uint>(source);
+	            case NPTypeCode.Int64:
+	                return Cast<long>(source);
+	            case NPTypeCode.UInt64:
+	                return Cast<ulong>(source);
+	            case NPTypeCode.Char:
+	                return Cast<char>(source);
+	            case NPTypeCode.Double:
+	                return Cast<double>(source);
+	            case NPTypeCode.Single:
+	                return Cast<float>(source);
+	            case NPTypeCode.Decimal:
+	                return Cast<decimal>(source);
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
@@ -71,19 +73,20 @@ namespace NumSharp.Backends.Unmanaged
 	                default:
 		                throw new NotSupportedException();
 #else
-                case NPTypeCode.Byte: return Cast<byte, TOut>(source);
-                case NPTypeCode.Int16: return Cast<short, TOut>(source);
-                case NPTypeCode.UInt16: return Cast<ushort, TOut>(source);
-                case NPTypeCode.Int32: return Cast<int, TOut>(source);
-                case NPTypeCode.UInt32: return Cast<uint, TOut>(source);
-                case NPTypeCode.Int64: return Cast<long, TOut>(source);
-                case NPTypeCode.UInt64: return Cast<ulong, TOut>(source);
-                case NPTypeCode.Char: return Cast<char, TOut>(source);
-                case NPTypeCode.Double: return Cast<double, TOut>(source);
-                case NPTypeCode.Single: return Cast<float, TOut>(source);
-                case NPTypeCode.Decimal: return Cast<decimal, TOut>(source);
-                default:
-                    throw new NotSupportedException();
+	                case NPTypeCode.Boolean: return Cast<bool, TOut>(source);
+	                case NPTypeCode.Byte: return Cast<byte, TOut>(source);
+	                case NPTypeCode.Int16: return Cast<short, TOut>(source);
+	                case NPTypeCode.UInt16: return Cast<ushort, TOut>(source);
+	                case NPTypeCode.Int32: return Cast<int, TOut>(source);
+	                case NPTypeCode.UInt32: return Cast<uint, TOut>(source);
+	                case NPTypeCode.Int64: return Cast<long, TOut>(source);
+	                case NPTypeCode.UInt64: return Cast<ulong, TOut>(source);
+	                case NPTypeCode.Char: return Cast<char, TOut>(source);
+	                case NPTypeCode.Double: return Cast<double, TOut>(source);
+	                case NPTypeCode.Single: return Cast<float, TOut>(source);
+	                case NPTypeCode.Decimal: return Cast<decimal, TOut>(source);
+	                default:
+		                throw new NotSupportedException();
 #endif
             }
         }

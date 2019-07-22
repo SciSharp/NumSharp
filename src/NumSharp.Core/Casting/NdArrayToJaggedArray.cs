@@ -24,65 +24,171 @@ using System.Text;
 using System.Globalization;
 using System.Collections;
 using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public Array ToJaggedArray<T>()
+        public Array ToJaggedArray<T>() where T : unmanaged
         {
-            return null;
-            //Array dotNetArray = null;
+            ArraySlice<T> data = Storage.GetData<T>();
+            var shape = Shape;
+            switch (ndim)
+            {
+                case 1:
+                {
+                    return data.ToArray();
+                }
 
-            //switch (ndim)
-            //{
-            //    case 1 : 
-            //    {
-            //        dotNetArray = Storage.GetData<T>() ;    
-            //        break;
-            //    }
-            //    case 2 : 
-            //    {
-            //        T[][] dotNetArrayPuffer = new T[shape[0]][]; 
-            //        for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-            //            dotNetArrayPuffer[idx] = new T[shape[1]];
+                case 2:
+                {
+                    T[][] ret = new T[shape[0]][];
+                    for (int i = 0; i < ret.Length; i++)
+                        ret[i] = new T[shape[1]];
 
-            //        for (int idx = 0;idx < dotNetArrayPuffer.Length;idx++ )
-            //            for (int jdx = 0; jdx < dotNetArrayPuffer[0].Length;jdx++)
-            //                dotNetArrayPuffer[idx][jdx] = Data<T>(idx,jdx);
+                    for (int i = 0; i < ret.Length; i++)
+                    for (int j = 0; j < ret[0].Length; j++)
+                        ret[i][j] = GetAtIndex<T>(shape.GetIndexInShape(i, j));
 
-            //        dotNetArray = dotNetArrayPuffer;
+                    return ret;
 
-            //        break;
-            //    }
-            //    case 3 : 
-            //    {
-            //        T[] data = Storage.GetData<T>();
-            //        T[][][] dotNetArrayPuffer = new T[shape[0]][][]; 
-            //        for (int idx = 0; idx < dotNetArrayPuffer.Length;idx++)
-            //        {
-            //            dotNetArrayPuffer[idx] = new T[shape[1]][];
-            //            for (int jdx = 0; jdx < dotNetArrayPuffer[idx].Length;jdx++)
-            //                dotNetArrayPuffer[idx][jdx] = new T[shape[2]];
-            //        }
+                    break;
+                }
 
-            //        for (int idx = 0; idx < shape[0]; idx++)
-            //            for (int jdx = 0; jdx < shape[1]; jdx++)
-            //                for (int kdx = 0; kdx < shape[2]; kdx++)
-            //                    dotNetArrayPuffer[idx][jdx][kdx] = Data<T>(idx, jdx, kdx);
+                case 3:
+                {
+                    T[][][] ret = new T[shape[0]][][];
+                    for (int i = 0; i < ret.Length; i++)
+                    {
+                        ret[i] = new T[shape[1]][];
+                        for (int j = 0; j < ret[i].Length; j++)
+                            ret[i][j] = new T[shape[2]];
+                    }
 
-            //        dotNetArray = dotNetArrayPuffer;
+                    for (int i = 0; i < shape[0]; i++)
+                    {
+                        for (int j = 0; j < shape[1]; j++)
+                        {
+                            for (int k = 0; k < shape[2]; k++)
+                            {
+                                ret[i][j][k] = (T)GetValue(i, j, k);
+                            }
+                        }
+                    }
 
-            //        break;
-            //    }
-            //    default : 
-            //    {
-            //        throw new IncorrectShapeException();
-            //    }
+                    return ret;
+                }
 
-            //}
+                case 4:
+                {
+                    T[][][][] ret = new T[shape[0]][][][];
+                    for (int i = 0; i < ret.Length; i++)
+                    {
+                        ret[i] = new T[shape[1]][][];
+                        for (int j = 0; j < ret[i].Length; j++)
+                        {
+                            ret[i][j] = new T[shape[2]][];
+                            for (int n = 0; n < ret[i].Length; n++)
+                            {
+                                ret[i][j][n] = new T[shape[3]];
+                            }
+                        }
+                    }
 
-            //return dotNetArray;
+                    for (int i = 0; i < shape[0]; i++)
+                    {
+                        for (int j = 0; j < shape[1]; j++)
+                        {
+                            for (int k = 0; k < shape[2]; k++)
+                            {
+                                for (int l = 0; l < shape[3]; l++)
+                                {
+                                    ret[i][j][k][l] = (T)GetValue(i, j, k, l);
+                                }
+                            }
+                        }
+                    }
+
+                    return ret;
+                }
+
+                case 5:
+                {
+                    T[][][][][] ret = new T[shape[0]][][][][];
+                    for (int i = 0; i < ret.Length; i++)
+                    {
+                        ret[i] = new T[shape[1]][][][];
+                        for (int j = 0; j < ret[i].Length; j++)
+                        {
+                            ret[i][j] = new T[shape[2]][][];
+                            for (int n = 0; n < ret[i].Length; n++)
+                            {
+                                ret[i][j][n] = new T[shape[3]][];
+                                for (int k = 0; k < ret[i].Length; k++)
+                                {
+                                    ret[i][j][n][k] = new T[shape[4]];
+                                }
+                            }
+                        }
+                    }
+
+                    for (int i = 0; i < shape[0]; i++)
+                    {
+                        for (int j = 0; j < shape[1]; j++)
+                        {
+                            for (int k = 0; k < shape[2]; k++)
+                            {
+                                for (int l = 0; l < shape[3]; l++)
+                                {
+                                    for (int m = 0; m < shape[4]; m++)
+                                    {
+                                        ret[i][j][k][l][m] = (T)GetValue(i, j, k, l, m);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return ret;
+                }
+
+                case 6:
+                {
+                    T[][][] ret = new T[shape[0]][][];
+                    for (int i = 0; i < ret.Length; i++)
+                    {
+                        ret[i] = new T[shape[1]][];
+                        for (int jdx = 0; jdx < ret[i].Length; jdx++)
+                            ret[i][jdx] = new T[shape[2]];
+                    }
+
+                    for (int i = 0; i < shape[0]; i++)
+                    {
+                        for (int j = 0; j < shape[1]; j++)
+                        {
+                            for (int k = 0; k < shape[2]; k++)
+                            {
+                                for (int l = 0; l < shape[3]; l++)
+                                {
+                                    for (int m = 0; m < shape[4]; m++)
+                                    {
+                                        for (int n = 0; n < shape[5]; n++)
+                                        {
+                                            ret[i][j][k] = (T)GetValue(i, j, k);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return ret;
+                }
+
+                default:
+                    throw new NotSupportedException();
+            }
         }
     }
 }
