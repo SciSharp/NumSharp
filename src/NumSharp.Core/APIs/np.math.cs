@@ -17,7 +17,7 @@ namespace NumSharp
             => BackendFactory.GetEngine().Multiply(x, y);
 
         public static NDArray subtract(NDArray x, NDArray y)
-            => BackendFactory.GetEngine().Sub(x, y);
+            => BackendFactory.GetEngine().Subtract(x, y);
 
         /// <summary>
         /// Sum of array elements over a given axis.

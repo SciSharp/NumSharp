@@ -25,7 +25,7 @@ namespace NumSharp
 
         #region Math
 
-        public abstract NDArray Add(in NDArray x, in NDArray y);
+        public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Divide(NDArray x, NDArray y);
         public abstract NDArray Log(NDArray nd);
@@ -33,7 +33,7 @@ namespace NumSharp
         public abstract NDArray Mean(NDArray x, int axis = -1);
         public abstract NDArray Multiply(NDArray x, NDArray y);
         public abstract NDArray Power(NDArray x, ValueType y);
-        public abstract NDArray Sub(NDArray x, NDArray y);
+        public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(NDArray x, int? axis = null);
         public abstract NDArray Negate(NDArray x);
 

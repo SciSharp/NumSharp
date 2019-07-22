@@ -19,31 +19,31 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Add(in NDArray x, in NDArray y)
+        public override NDArray Add(in NDArray lhs, in NDArray rhs)
         {
-            switch (x.GetTypeCode)
+            switch (lhs.GetTypeCode)
             {
 #if _REGEN
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
-	            case NPTypeCode.#1: return Add#1(x,y);
+	            case NPTypeCode.#1: return Add#1(lhs, rhs);
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return AddBoolean(x, y);
-                case NPTypeCode.Byte: return AddByte(x, y);
-                case NPTypeCode.Int16: return AddInt16(x, y);
-                case NPTypeCode.UInt16: return AddUInt16(x, y);
-                case NPTypeCode.Int32: return AddInt32(x, y);
-                case NPTypeCode.UInt32: return AddUInt32(x, y);
-                case NPTypeCode.Int64: return AddInt64(x, y);
-                case NPTypeCode.UInt64: return AddUInt64(x, y);
-                case NPTypeCode.Char: return AddChar(x, y);
-                case NPTypeCode.Double: return AddDouble(x, y);
-                case NPTypeCode.Single: return AddSingle(x, y);
-                case NPTypeCode.Decimal: return AddDecimal(x, y);
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return AddBoolean(lhs, rhs);
+	            case NPTypeCode.Byte: return AddByte(lhs, rhs);
+	            case NPTypeCode.Int16: return AddInt16(lhs, rhs);
+	            case NPTypeCode.UInt16: return AddUInt16(lhs, rhs);
+	            case NPTypeCode.Int32: return AddInt32(lhs, rhs);
+	            case NPTypeCode.UInt32: return AddUInt32(lhs, rhs);
+	            case NPTypeCode.Int64: return AddInt64(lhs, rhs);
+	            case NPTypeCode.UInt64: return AddUInt64(lhs, rhs);
+	            case NPTypeCode.Char: return AddChar(lhs, rhs);
+	            case NPTypeCode.Double: return AddDouble(lhs, rhs);
+	            case NPTypeCode.Single: return AddSingle(lhs, rhs);
+	            case NPTypeCode.Decimal: return AddDecimal(lhs, rhs);
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }

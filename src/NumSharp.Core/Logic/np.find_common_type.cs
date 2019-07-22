@@ -41,196 +41,392 @@ namespace NumSharp
 
         #endregion
 
-        internal static readonly Dictionary<(Type, Type), Type> _typemap;
-        internal static readonly Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode> _nptypemap;
+        internal static readonly Dictionary<(Type, Type), Type> _typemap_arr_arr;
+        internal static readonly Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode> _nptypemap_arr_arr;
+        internal static readonly Dictionary<(Type, Type), Type> _typemap_arr_scalar;
+        internal static readonly Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode> _nptypemap_arr_scalar;
 
+        [SuppressMessage("ReSharper", "UseObjectOrCollectionInitializer")]
         static np()
         {
-            _typemap = new Dictionary<(Type, Type), Type>(180);
-            _typemap.Add((np.@bool, np.@bool), np.@bool);
-            _typemap.Add((np.@bool, np.uint8), np.uint8);
-            _typemap.Add((np.@bool, np.int16), np.int16);
-            _typemap.Add((np.@bool, np.uint16), np.uint16);
-            _typemap.Add((np.@bool, np.int32), np.int32);
-            _typemap.Add((np.@bool, np.uint32), np.uint32);
-            _typemap.Add((np.@bool, np.int64), np.int64);
-            _typemap.Add((np.@bool, np.uint64), np.uint64);
-            _typemap.Add((np.@bool, np.float32), np.float32);
-            _typemap.Add((np.@bool, np.float64), np.float64);
-            _typemap.Add((np.@bool, np.complex64), np.complex64);
-            _typemap.Add((np.@bool, np.@decimal), np.@decimal);
-            _typemap.Add((np.@bool, np.@char), np.@char);
+            #region arr_arr
 
-            _typemap.Add((np.uint8, np.@bool), np.uint8);
-            _typemap.Add((np.uint8, np.uint8), np.uint8);
-            _typemap.Add((np.uint8, np.int16), np.int16);
-            _typemap.Add((np.uint8, np.uint16), np.uint16);
-            _typemap.Add((np.uint8, np.int32), np.int32);
-            _typemap.Add((np.uint8, np.uint32), np.uint32);
-            _typemap.Add((np.uint8, np.int64), np.int64);
-            _typemap.Add((np.uint8, np.uint64), np.uint64);
-            _typemap.Add((np.uint8, np.float32), np.float32);
-            _typemap.Add((np.uint8, np.float64), np.float64);
-            _typemap.Add((np.uint8, np.complex64), np.complex64);
-            _typemap.Add((np.uint8, np.@decimal), np.@decimal);
-            _typemap.Add((np.uint8, np.@char), np.uint8);
+            _typemap_arr_arr = new Dictionary<(Type, Type), Type>(180);
+            _typemap_arr_arr.Add((np.@bool, np.@bool), np.@bool);
+            _typemap_arr_arr.Add((np.@bool, np.uint8), np.uint8);
+            _typemap_arr_arr.Add((np.@bool, np.int16), np.int16);
+            _typemap_arr_arr.Add((np.@bool, np.uint16), np.uint16);
+            _typemap_arr_arr.Add((np.@bool, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.@bool, np.uint32), np.uint32);
+            _typemap_arr_arr.Add((np.@bool, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.@bool, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.@bool, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.@bool, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.@bool, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.@bool, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.@bool, np.@char), np.@char);
 
-            _typemap.Add((np.@char, np.@char), np.@char);
-            _typemap.Add((np.@char, np.@bool), np.@char);
-            _typemap.Add((np.@char, np.uint8), np.uint8);
-            _typemap.Add((np.@char, np.int16), np.int16);
-            _typemap.Add((np.@char, np.uint16), np.uint16);
-            _typemap.Add((np.@char, np.int32), np.int32);
-            _typemap.Add((np.@char, np.uint32), np.uint32);
-            _typemap.Add((np.@char, np.int64), np.int64);
-            _typemap.Add((np.@char, np.uint64), np.uint64);
-            _typemap.Add((np.@char, np.float32), np.float32);
-            _typemap.Add((np.@char, np.float64), np.float64);
-            _typemap.Add((np.@char, np.complex64), np.complex64);
-            _typemap.Add((np.@char, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.uint8, np.@bool), np.uint8);
+            _typemap_arr_arr.Add((np.uint8, np.uint8), np.uint8);
+            _typemap_arr_arr.Add((np.uint8, np.int16), np.int16);
+            _typemap_arr_arr.Add((np.uint8, np.uint16), np.uint16);
+            _typemap_arr_arr.Add((np.uint8, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.uint8, np.uint32), np.uint32);
+            _typemap_arr_arr.Add((np.uint8, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.uint8, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.uint8, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.uint8, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.uint8, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.uint8, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.uint8, np.@char), np.uint8);
 
-            _typemap.Add((np.int16, np.@bool), np.int16);
-            _typemap.Add((np.int16, np.uint8), np.int16);
-            _typemap.Add((np.int16, np.int16), np.int16);
-            _typemap.Add((np.int16, np.uint16), np.int32);
-            _typemap.Add((np.int16, np.int32), np.int32);
-            _typemap.Add((np.int16, np.uint32), np.int64);
-            _typemap.Add((np.int16, np.int64), np.int64);
-            _typemap.Add((np.int16, np.uint64), np.float64);
-            _typemap.Add((np.int16, np.float32), np.float32);
-            _typemap.Add((np.int16, np.float64), np.float64);
-            _typemap.Add((np.int16, np.complex64), np.complex64);
-            _typemap.Add((np.int16, np.@decimal), np.@decimal);
-            _typemap.Add((np.int16, np.@char), np.int16);
+            _typemap_arr_arr.Add((np.@char, np.@char), np.@char);
+            _typemap_arr_arr.Add((np.@char, np.@bool), np.@char);
+            _typemap_arr_arr.Add((np.@char, np.uint8), np.uint8);
+            _typemap_arr_arr.Add((np.@char, np.int16), np.int16);
+            _typemap_arr_arr.Add((np.@char, np.uint16), np.uint16);
+            _typemap_arr_arr.Add((np.@char, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.@char, np.uint32), np.uint32);
+            _typemap_arr_arr.Add((np.@char, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.@char, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.@char, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.@char, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.@char, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.@char, np.@decimal), np.@decimal);
 
-            _typemap.Add((np.uint16, np.@bool), np.uint16);
-            _typemap.Add((np.uint16, np.uint8), np.uint16);
-            _typemap.Add((np.uint16, np.int16), np.int32);
-            _typemap.Add((np.uint16, np.uint16), np.uint16);
-            _typemap.Add((np.uint16, np.int32), np.int32);
-            _typemap.Add((np.uint16, np.uint32), np.uint32);
-            _typemap.Add((np.uint16, np.int64), np.int64);
-            _typemap.Add((np.uint16, np.uint64), np.uint64);
-            _typemap.Add((np.uint16, np.float32), np.float32);
-            _typemap.Add((np.uint16, np.float64), np.float64);
-            _typemap.Add((np.uint16, np.complex64), np.complex64);
-            _typemap.Add((np.uint16, np.@decimal), np.@decimal);
-            _typemap.Add((np.uint16, np.@char), np.uint16);
+            _typemap_arr_arr.Add((np.int16, np.@bool), np.int16);
+            _typemap_arr_arr.Add((np.int16, np.uint8), np.int16);
+            _typemap_arr_arr.Add((np.int16, np.int16), np.int16);
+            _typemap_arr_arr.Add((np.int16, np.uint16), np.int32);
+            _typemap_arr_arr.Add((np.int16, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.int16, np.uint32), np.int64);
+            _typemap_arr_arr.Add((np.int16, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.int16, np.uint64), np.float64);
+            _typemap_arr_arr.Add((np.int16, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.int16, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.int16, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.int16, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.int16, np.@char), np.int16);
 
-            _typemap.Add((np.int32, np.@bool), np.int32);
-            _typemap.Add((np.int32, np.uint8), np.int32);
-            _typemap.Add((np.int32, np.int16), np.int32);
-            _typemap.Add((np.int32, np.uint16), np.int32);
-            _typemap.Add((np.int32, np.int32), np.int32);
-            _typemap.Add((np.int32, np.uint32), np.int64);
-            _typemap.Add((np.int32, np.int64), np.int64);
-            _typemap.Add((np.int32, np.uint64), np.float64);
-            _typemap.Add((np.int32, np.float32), np.float64);
-            _typemap.Add((np.int32, np.float64), np.float64);
-            _typemap.Add((np.int32, np.complex64), np.complex128);
-            _typemap.Add((np.int32, np.@decimal), np.@decimal);
-            _typemap.Add((np.int32, np.@char), np.int32);
+            _typemap_arr_arr.Add((np.uint16, np.@bool), np.uint16);
+            _typemap_arr_arr.Add((np.uint16, np.uint8), np.uint16);
+            _typemap_arr_arr.Add((np.uint16, np.int16), np.int32);
+            _typemap_arr_arr.Add((np.uint16, np.uint16), np.uint16);
+            _typemap_arr_arr.Add((np.uint16, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.uint16, np.uint32), np.uint32);
+            _typemap_arr_arr.Add((np.uint16, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.uint16, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.uint16, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.uint16, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.uint16, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.uint16, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.uint16, np.@char), np.uint16);
 
-            _typemap.Add((np.uint32, np.@bool), np.uint32);
-            _typemap.Add((np.uint32, np.uint8), np.uint32);
-            _typemap.Add((np.uint32, np.int16), np.int64);
-            _typemap.Add((np.uint32, np.uint16), np.uint32);
-            _typemap.Add((np.uint32, np.int32), np.int64);
-            _typemap.Add((np.uint32, np.uint32), np.uint32);
-            _typemap.Add((np.uint32, np.int64), np.int64);
-            _typemap.Add((np.uint32, np.uint64), np.uint64);
-            _typemap.Add((np.uint32, np.float32), np.float64);
-            _typemap.Add((np.uint32, np.float64), np.float64);
-            _typemap.Add((np.uint32, np.complex64), np.complex128);
-            _typemap.Add((np.uint32, np.@decimal), np.@decimal);
-            _typemap.Add((np.uint32, np.@char), np.uint32);
+            _typemap_arr_arr.Add((np.int32, np.@bool), np.int32);
+            _typemap_arr_arr.Add((np.int32, np.uint8), np.int32);
+            _typemap_arr_arr.Add((np.int32, np.int16), np.int32);
+            _typemap_arr_arr.Add((np.int32, np.uint16), np.int32);
+            _typemap_arr_arr.Add((np.int32, np.int32), np.int32);
+            _typemap_arr_arr.Add((np.int32, np.uint32), np.int64);
+            _typemap_arr_arr.Add((np.int32, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.int32, np.uint64), np.float64);
+            _typemap_arr_arr.Add((np.int32, np.float32), np.float64);
+            _typemap_arr_arr.Add((np.int32, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.int32, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.int32, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.int32, np.@char), np.int32);
 
-            _typemap.Add((np.int64, np.@bool), np.int64);
-            _typemap.Add((np.int64, np.uint8), np.int64);
-            _typemap.Add((np.int64, np.int16), np.int64);
-            _typemap.Add((np.int64, np.uint16), np.int64);
-            _typemap.Add((np.int64, np.int32), np.int64);
-            _typemap.Add((np.int64, np.uint32), np.int64);
-            _typemap.Add((np.int64, np.int64), np.int64);
-            _typemap.Add((np.int64, np.uint64), np.float64);
-            _typemap.Add((np.int64, np.float32), np.float64);
-            _typemap.Add((np.int64, np.float64), np.float64);
-            _typemap.Add((np.int64, np.complex64), np.complex128);
-            _typemap.Add((np.int64, np.@decimal), np.@decimal);
-            _typemap.Add((np.int64, np.@char), np.int64);
+            _typemap_arr_arr.Add((np.uint32, np.@bool), np.uint32);
+            _typemap_arr_arr.Add((np.uint32, np.uint8), np.uint32);
+            _typemap_arr_arr.Add((np.uint32, np.int16), np.int64);
+            _typemap_arr_arr.Add((np.uint32, np.uint16), np.uint32);
+            _typemap_arr_arr.Add((np.uint32, np.int32), np.int64);
+            _typemap_arr_arr.Add((np.uint32, np.uint32), np.uint32);
+            _typemap_arr_arr.Add((np.uint32, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.uint32, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.uint32, np.float32), np.float64);
+            _typemap_arr_arr.Add((np.uint32, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.uint32, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.uint32, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.uint32, np.@char), np.uint32);
 
-            _typemap.Add((np.uint64, np.@bool), np.uint64);
-            _typemap.Add((np.uint64, np.uint8), np.uint64);
-            _typemap.Add((np.uint64, np.int16), np.float64);
-            _typemap.Add((np.uint64, np.uint16), np.uint64);
-            _typemap.Add((np.uint64, np.int32), np.float64);
-            _typemap.Add((np.uint64, np.uint32), np.uint64);
-            _typemap.Add((np.uint64, np.int64), np.float64);
-            _typemap.Add((np.uint64, np.uint64), np.uint64);
-            _typemap.Add((np.uint64, np.float32), np.float64);
-            _typemap.Add((np.uint64, np.float64), np.float64);
-            _typemap.Add((np.uint64, np.complex64), np.complex128);
-            _typemap.Add((np.uint64, np.@decimal), np.@decimal);
-            _typemap.Add((np.uint64, np.@char), np.uint64);
+            _typemap_arr_arr.Add((np.int64, np.@bool), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.uint8), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.int16), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.uint16), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.int32), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.uint32), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.int64), np.int64);
+            _typemap_arr_arr.Add((np.int64, np.uint64), np.float64);
+            _typemap_arr_arr.Add((np.int64, np.float32), np.float64);
+            _typemap_arr_arr.Add((np.int64, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.int64, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.int64, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.int64, np.@char), np.int64);
 
-            _typemap.Add((np.float32, np.@bool), np.float32);
-            _typemap.Add((np.float32, np.uint8), np.float32);
-            _typemap.Add((np.float32, np.int16), np.float32);
-            _typemap.Add((np.float32, np.uint16), np.float32);
-            _typemap.Add((np.float32, np.int32), np.float64);
-            _typemap.Add((np.float32, np.uint32), np.float64);
-            _typemap.Add((np.float32, np.int64), np.float64);
-            _typemap.Add((np.float32, np.uint64), np.float64);
-            _typemap.Add((np.float32, np.float32), np.float32);
-            _typemap.Add((np.float32, np.float64), np.float64);
-            _typemap.Add((np.float32, np.complex64), np.complex64);
-            _typemap.Add((np.float32, np.@decimal), np.@decimal);
-            _typemap.Add((np.float32, np.@char), np.float32);
+            _typemap_arr_arr.Add((np.uint64, np.@bool), np.uint64);
+            _typemap_arr_arr.Add((np.uint64, np.uint8), np.uint64);
+            _typemap_arr_arr.Add((np.uint64, np.int16), np.float64);
+            _typemap_arr_arr.Add((np.uint64, np.uint16), np.uint64);
+            _typemap_arr_arr.Add((np.uint64, np.int32), np.float64);
+            _typemap_arr_arr.Add((np.uint64, np.uint32), np.uint64);
+            _typemap_arr_arr.Add((np.uint64, np.int64), np.float64);
+            _typemap_arr_arr.Add((np.uint64, np.uint64), np.uint64);
+            _typemap_arr_arr.Add((np.uint64, np.float32), np.float64);
+            _typemap_arr_arr.Add((np.uint64, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.uint64, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.uint64, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.uint64, np.@char), np.uint64);
 
-            _typemap.Add((np.float64, np.@bool), np.float64);
-            _typemap.Add((np.float64, np.uint8), np.float64);
-            _typemap.Add((np.float64, np.int16), np.float64);
-            _typemap.Add((np.float64, np.uint16), np.float64);
-            _typemap.Add((np.float64, np.int32), np.float64);
-            _typemap.Add((np.float64, np.uint32), np.float64);
-            _typemap.Add((np.float64, np.int64), np.float64);
-            _typemap.Add((np.float64, np.uint64), np.float64);
-            _typemap.Add((np.float64, np.float32), np.float64);
-            _typemap.Add((np.float64, np.float64), np.float64);
-            _typemap.Add((np.float64, np.complex64), np.complex128);
-            _typemap.Add((np.float64, np.@decimal), np.@decimal);
-            _typemap.Add((np.float64, np.@char), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.@bool), np.float32);
+            _typemap_arr_arr.Add((np.float32, np.uint8), np.float32);
+            _typemap_arr_arr.Add((np.float32, np.int16), np.float32);
+            _typemap_arr_arr.Add((np.float32, np.uint16), np.float32);
+            _typemap_arr_arr.Add((np.float32, np.int32), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.uint32), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.int64), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.uint64), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.float32), np.float32);
+            _typemap_arr_arr.Add((np.float32, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.float32, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.float32, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.float32, np.@char), np.float32);
 
-            _typemap.Add((np.complex64, np.@bool), np.complex64);
-            _typemap.Add((np.complex64, np.uint8), np.complex64);
-            _typemap.Add((np.complex64, np.int16), np.complex64);
-            _typemap.Add((np.complex64, np.uint16), np.complex64);
-            _typemap.Add((np.complex64, np.int32), np.complex128);
-            _typemap.Add((np.complex64, np.uint32), np.complex128);
-            _typemap.Add((np.complex64, np.int64), np.complex128);
-            _typemap.Add((np.complex64, np.uint64), np.complex128);
-            _typemap.Add((np.complex64, np.float32), np.complex64);
-            _typemap.Add((np.complex64, np.float64), np.complex128);
-            _typemap.Add((np.complex64, np.complex64), np.complex64);
-            _typemap.Add((np.complex64, np.@decimal), np.complex64);
-            _typemap.Add((np.complex64, np.@char), np.complex64);
+            _typemap_arr_arr.Add((np.float64, np.@bool), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.uint8), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.int16), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.uint16), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.int32), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.uint32), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.int64), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.uint64), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.float32), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.float64), np.float64);
+            _typemap_arr_arr.Add((np.float64, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.float64, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.float64, np.@char), np.float64);
 
-            _typemap.Add((np.@decimal, np.@bool), np.@decimal);
-            _typemap.Add((np.@decimal, np.uint8), np.@decimal);
-            _typemap.Add((np.@decimal, np.int16), np.@decimal);
-            _typemap.Add((np.@decimal, np.uint16), np.@decimal);
-            _typemap.Add((np.@decimal, np.int32), np.@decimal);
-            _typemap.Add((np.@decimal, np.uint32), np.@decimal);
-            _typemap.Add((np.@decimal, np.int64), np.@decimal);
-            _typemap.Add((np.@decimal, np.uint64), np.@decimal);
-            _typemap.Add((np.@decimal, np.float32), np.@decimal);
-            _typemap.Add((np.@decimal, np.float64), np.@decimal);
-            _typemap.Add((np.@decimal, np.complex64), np.complex128);
-            _typemap.Add((np.@decimal, np.@decimal), np.@decimal);
-            _typemap.Add((np.@decimal, np.@char), np.@decimal);
+            _typemap_arr_arr.Add((np.complex64, np.@bool), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.uint8), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.int16), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.uint16), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.int32), np.complex128);
+            _typemap_arr_arr.Add((np.complex64, np.uint32), np.complex128);
+            _typemap_arr_arr.Add((np.complex64, np.int64), np.complex128);
+            _typemap_arr_arr.Add((np.complex64, np.uint64), np.complex128);
+            _typemap_arr_arr.Add((np.complex64, np.float32), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.float64), np.complex128);
+            _typemap_arr_arr.Add((np.complex64, np.complex64), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.@decimal), np.complex64);
+            _typemap_arr_arr.Add((np.complex64, np.@char), np.complex64);
 
-            _nptypemap = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(_typemap.Count);
-            foreach (var tc in _typemap) _nptypemap[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
+            _typemap_arr_arr.Add((np.@decimal, np.@bool), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.uint8), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.int16), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.uint16), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.int32), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.uint32), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.int64), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.uint64), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.float32), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.float64), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.complex64), np.complex128);
+            _typemap_arr_arr.Add((np.@decimal, np.@decimal), np.@decimal);
+            _typemap_arr_arr.Add((np.@decimal, np.@char), np.@decimal);
+
+            _nptypemap_arr_arr = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(_typemap_arr_arr.Count);
+            foreach (var tc in _typemap_arr_arr) _nptypemap_arr_arr[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
+
+            #endregion
+
+            #region arr_scalar
+
+            _typemap_arr_scalar = new Dictionary<(Type, Type), Type>();
+            _typemap_arr_scalar.Add((np.@bool, np.@bool), np.@bool);
+            _typemap_arr_scalar.Add((np.@bool, np.uint8), np.uint8);
+            _typemap_arr_scalar.Add((np.@bool, np.int16), np.int16);
+            _typemap_arr_scalar.Add((np.@bool, np.uint16), np.uint16);
+            _typemap_arr_scalar.Add((np.@bool, np.int32), np.int32);
+            _typemap_arr_scalar.Add((np.@bool, np.uint32), np.uint32);
+            _typemap_arr_scalar.Add((np.@bool, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.@bool, np.uint64), np.uint64);
+            _typemap_arr_scalar.Add((np.@bool, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.@bool, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.@bool, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.uint8, np.@bool), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.uint8), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.@char), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.int16), np.int16);
+            _typemap_arr_scalar.Add((np.uint8, np.uint16), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.int32), np.int32);
+            _typemap_arr_scalar.Add((np.uint8, np.uint32), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.uint8, np.uint64), np.uint8);
+            _typemap_arr_scalar.Add((np.uint8, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.uint8, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.uint8, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.@char, np.@char), np.@char);
+            _typemap_arr_scalar.Add((np.@char, np.@bool), np.@char);
+            _typemap_arr_scalar.Add((np.@char, np.uint8), np.@char);
+            _typemap_arr_scalar.Add((np.@char, np.int16), np.int16);
+            _typemap_arr_scalar.Add((np.@char, np.uint16), np.uint16);
+            _typemap_arr_scalar.Add((np.@char, np.int32), np.int32);
+            _typemap_arr_scalar.Add((np.@char, np.uint32), np.uint32);
+            _typemap_arr_scalar.Add((np.@char, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.@char, np.uint64), np.uint64);
+            _typemap_arr_scalar.Add((np.@char, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.@char, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.@char, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.int16, np.@bool), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.uint8), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.@char), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.int16), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.uint16), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.int32), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.uint32), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.int64), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.uint64), np.int16);
+            _typemap_arr_scalar.Add((np.int16, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.int16, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.int16, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.uint16, np.@bool), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.uint8), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.@char), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.int16), np.int32);
+            _typemap_arr_scalar.Add((np.uint16, np.uint16), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.int32), np.int32);
+            _typemap_arr_scalar.Add((np.uint16, np.uint32), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.uint16, np.uint64), np.uint16);
+            _typemap_arr_scalar.Add((np.uint16, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.uint16, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.uint16, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.int32, np.@bool), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.uint8), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.@char), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.int16), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.uint16), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.int32), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.uint32), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.int64), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.uint64), np.int32);
+            _typemap_arr_scalar.Add((np.int32, np.float32), np.float64);
+            _typemap_arr_scalar.Add((np.int32, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.int32, np.complex64), np.complex128);
+
+            _typemap_arr_scalar.Add((np.uint32, np.@bool), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.uint8), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.@char), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.int16), np.int64);
+            _typemap_arr_scalar.Add((np.uint32, np.uint16), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.int32), np.int64);
+            _typemap_arr_scalar.Add((np.uint32, np.uint32), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.uint32, np.uint64), np.uint32);
+            _typemap_arr_scalar.Add((np.uint32, np.float32), np.float64);
+            _typemap_arr_scalar.Add((np.uint32, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.uint32, np.complex64), np.complex128);
+
+            _typemap_arr_scalar.Add((np.int64, np.@bool), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.uint8), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.@char), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.int16), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.uint16), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.int32), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.uint32), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.int64), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.uint64), np.int64);
+            _typemap_arr_scalar.Add((np.int64, np.float32), np.float64);
+            _typemap_arr_scalar.Add((np.int64, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.int64, np.complex64), np.complex128);
+
+            _typemap_arr_scalar.Add((np.uint64, np.@bool), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.uint8), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.@char), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.int16), np.float64);
+            _typemap_arr_scalar.Add((np.uint64, np.uint16), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.int32), np.float64);
+            _typemap_arr_scalar.Add((np.uint64, np.uint32), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.int64), np.float64);
+            _typemap_arr_scalar.Add((np.uint64, np.uint64), np.uint64);
+            _typemap_arr_scalar.Add((np.uint64, np.float32), np.float64);
+            _typemap_arr_scalar.Add((np.uint64, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.uint64, np.complex64), np.complex128);
+
+            _typemap_arr_scalar.Add((np.float32, np.@bool), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.uint8), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.@char), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.int16), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.uint16), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.int32), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.uint32), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.int64), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.uint64), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.float32), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.float64), np.float32);
+            _typemap_arr_scalar.Add((np.float32, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.float64, np.@bool), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.uint8), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.@char), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.int16), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.uint16), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.int32), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.uint32), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.int64), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.uint64), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.float32), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.float64), np.float64);
+            _typemap_arr_scalar.Add((np.float64, np.complex64), np.complex128);
+
+            _typemap_arr_scalar.Add((np.complex64, np.@bool), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.uint8), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.@char), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.int16), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.uint16), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.int32), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.uint32), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.int64), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.uint64), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.float32), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.float64), np.complex64);
+            _typemap_arr_scalar.Add((np.complex64, np.complex64), np.complex64);
+
+            _typemap_arr_scalar.Add((np.@decimal, np.@bool), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.uint8), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.@char), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.int16), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.uint16), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.int32), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.uint32), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.int64), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.uint64), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.float32), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.float64), np.@decimal);
+            _typemap_arr_scalar.Add((np.@decimal, np.complex64), np.complex128);
+            _typemap_arr_scalar.Add((np.@decimal, np.@decimal), np.@decimal);
+            _typemap_arr_scalar.Add((np.@bool, np.@decimal), np.@bool);
+            _typemap_arr_scalar.Add((np.uint8, np.@decimal), np.uint8);
+            _typemap_arr_scalar.Add((np.@char, np.@decimal), np.@char);
+            _typemap_arr_scalar.Add((np.int16, np.@decimal), np.int16);
+            _typemap_arr_scalar.Add((np.uint16, np.@decimal), np.uint16);
+            _typemap_arr_scalar.Add((np.int32, np.@decimal), np.int32);
+            _typemap_arr_scalar.Add((np.uint32, np.@decimal), np.uint32);
+            _typemap_arr_scalar.Add((np.int64, np.@decimal), np.int64);
+            _typemap_arr_scalar.Add((np.uint64, np.@decimal), np.uint64);
+            _typemap_arr_scalar.Add((np.float32, np.@decimal), np.float32);
+            _typemap_arr_scalar.Add((np.float64, np.@decimal), np.float64);
+            _typemap_arr_scalar.Add((np.complex64, np.@decimal), np.complex128);
+
+            _nptypemap_arr_scalar = new Dictionary<(NPTypeCode, NPTypeCode), NPTypeCode>(_typemap_arr_scalar.Count);
+            foreach (var tc in _typemap_arr_scalar) _nptypemap_arr_scalar[(tc.Key.Item1.GetTypeCode(), tc.Key.Item2.GetTypeCode())] = tc.Value.GetTypeCode();
+
+            #endregion
         }
 
         // @formatter:off — disable formatter after this line
@@ -369,12 +565,12 @@ namespace NumSharp
 
         internal static NPTypeCode _FindCommonArrayType(Type dtype_left, Type dtype_right)
         {
-            return _FindCommonType(new NPTypeCode[] {dtype_left.GetTypeCode(), dtype_right.GetTypeCode()}, Array.Empty<NPTypeCode>());
+            return _nptypemap_arr_arr[(dtype_left.GetTypeCode(), dtype_right.GetTypeCode())];
         }
 
         internal static NPTypeCode _FindCommonArrayType(NPTypeCode dtype_left, NPTypeCode dtype_right)
         {
-            return _FindCommonType(new NPTypeCode[] {dtype_left, dtype_right}, Array.Empty<NPTypeCode>());
+            return _nptypemap_arr_arr[(dtype_left, dtype_right)];
         }
 
         internal static NPTypeCode _FindCommonScalarType(Type dtype_left, Type dtype_right)
@@ -389,12 +585,12 @@ namespace NumSharp
 
         internal static NPTypeCode _FindCommonArrayScalarType(NPTypeCode dtypeArray, NPTypeCode dtypeScalar)
         {
-            return _FindCommonType(new NPTypeCode[] {dtypeArray}, new NPTypeCode[] {dtypeScalar});
+            return _nptypemap_arr_scalar[(dtypeArray, dtypeScalar)];
         }
 
         internal static NPTypeCode _FindCommonArrayScalarType(Type dtypeArray, Type dtypeScalar)
         {
-            return _FindCommonType(new NPTypeCode[] {dtypeArray.GetTypeCode()}, new NPTypeCode[] {dtypeScalar.GetTypeCode()});
+            return _nptypemap_arr_scalar[(dtypeArray.GetTypeCode(), dtypeScalar.GetTypeCode())];
         }
 
         /// <summary>
@@ -426,7 +622,7 @@ namespace NumSharp
             }
 
             if (index_sc > index_a)
-                return _find_common_coerce(maxsc, maxa);
+                return _nptypemap_arr_scalar[(maxa, maxsc)];
             else
                 return maxa;
         }
@@ -530,7 +726,56 @@ namespace NumSharp
         #region Private of find_common_type
 
         [MethodImpl((MethodImplOptions)512)]
-        private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start = 0)
+        private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist)
+        {
+            int N = dtypelist.Length;
+
+            if (N == 0)
+                return NPTypeCode.Empty;
+            if (N == 1)
+                return dtypelist[0];
+            NPTypeCode ret = default;
+            while (N >= 2)
+            {
+                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                N -= 2;
+            }
+
+            if (N == 1)
+            {
+                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)512)]
+        private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist)
+        {
+            int N = dtypelist.Count;
+
+            if (N == 0)
+                return NPTypeCode.Empty;
+            if (N == 1)
+                return dtypelist[0];
+            NPTypeCode ret = default;
+
+            while (N >= 2)
+            {
+                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
+                N -= 2;
+            }
+
+            if (N == 1)
+            {
+                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)512)]
+        private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start)
         {
             int N = dtypelist.Length;
             if (start > 0)
@@ -549,20 +794,20 @@ namespace NumSharp
             NPTypeCode ret = default;
             while (N >= 2)
             {
-                ret = _nptypemap[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap[(ret, dtypelist[0])];
+                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
             }
 
             return ret;
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start = 0)
+        private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start)
         {
             int N = dtypelist.Count;
             if (start > 0)
@@ -583,13 +828,13 @@ namespace NumSharp
 
             while (N >= 2)
             {
-                ret = _nptypemap[(dtypelist[N - 1], dtypelist[N - 2])];
+                ret = _nptypemap_arr_arr[(dtypelist[N - 1], dtypelist[N - 2])];
                 N -= 2;
             }
 
             if (N == 1)
             {
-                ret = _nptypemap[(ret, dtypelist[0])];
+                ret = _nptypemap_arr_arr[(ret, dtypelist[0])];
             }
 
             return ret;

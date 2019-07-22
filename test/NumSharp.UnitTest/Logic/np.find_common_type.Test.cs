@@ -168,184 +168,144 @@ namespace NumSharp.UnitTest.Logic
         {
             var r = np.find_common_type(new[] {np.float32, np.float64}, new NPTypeCode[0]);
             r.Should().Be(NPTypeCode.Double);
-            //var dict = new Dictionary<(Type, Type), Type>()
-            //{
-            //    {(np.@bool, np.@bool), np.@bool},
-            //    {(np.@bool, np.uint8), np.uint8},
-            //    {(np.@bool, np.int16), np.int16},
-            //    {(np.@bool, np.uint16), np.uint16},
-            //    {(np.@bool, np.int32), np.int32},
-            //    {(np.@bool, np.uint32), np.uint32},
-            //    {(np.@bool, np.int64), np.int64},
-            //    {(np.@bool, np.uint64), np.uint64},
-            //    {(np.@bool, np.float32), np.float32},
-            //    {(np.@bool, np.float64), np.float64},
-            //    {(np.@bool, np.complex64), np.complex64},
-            //    {(np.@bool, np.@decimal), np.@decimal},
+            var dict = new Dictionary<(Type, Type), Type>();
+            dict.Add((np.@bool, np.@bool), np.@bool);
+            dict.Add((np.@bool, np.uint8), np.uint8);
+            dict.Add((np.@bool, np.int16), np.int16);
+            dict.Add((np.@bool, np.uint16), np.uint16);
+            dict.Add((np.@bool, np.int32), np.int32);
+            dict.Add((np.@bool, np.uint32), np.uint32);
+            dict.Add((np.@bool, np.int64), np.int64);
+            dict.Add((np.@bool, np.uint64), np.uint64);
+            dict.Add((np.@bool, np.float32), np.float32);
+            dict.Add((np.@bool, np.float64), np.float64);
+            dict.Add((np.@bool, np.complex64), np.complex64);
 
-            //    {(np.uint8, np.@bool), np.uint8},
-            //    {(np.uint8, np.uint8), np.uint8},
-            //    {(np.uint8, np.int16), np.int16},
-            //    {(np.uint8, np.uint16), np.uint16},
-            //    {(np.uint8, np.int32), np.int32},
-            //    {(np.uint8, np.uint32), np.uint32},
-            //    {(np.uint8, np.int64), np.int64},
-            //    {(np.uint8, np.uint64), np.uint64},
-            //    {(np.uint8, np.float32), np.float32},
-            //    {(np.uint8, np.float64), np.float64},
-            //    {(np.uint8, np.complex64), np.complex64},
-            //    {(np.uint8, np.@decimal), np.@decimal},
+            dict.Add((np.uint8, np.@bool), np.uint8);
+            dict.Add((np.uint8, np.uint8), np.uint8);
+            dict.Add((np.uint8, np.int16), np.int16);
+            dict.Add((np.uint8, np.uint16), np.uint8);
+            dict.Add((np.uint8, np.int32), np.int32);
+            dict.Add((np.uint8, np.uint32), np.uint8);
+            dict.Add((np.uint8, np.int64), np.int64);
+            dict.Add((np.uint8, np.uint64), np.uint8);
+            dict.Add((np.uint8, np.float32), np.float32);
+            dict.Add((np.uint8, np.float64), np.float64);
+            dict.Add((np.uint8, np.complex64), np.complex64);
 
-            //    {(np.@char, np.@bool), np.@char},
-            //    {(np.@char, np.uint8), np.uint8},
-            //    {(np.@char, np.int16), np.int16},
-            //    {(np.@char, np.uint16), np.uint16},
-            //    {(np.@char, np.int32), np.int32},
-            //    {(np.@char, np.uint32), np.uint32},
-            //    {(np.@char, np.int64), np.int64},
-            //    {(np.@char, np.uint64), np.uint64},
-            //    {(np.@char, np.float32), np.float32},
-            //    {(np.@char, np.float64), np.float64},
-            //    {(np.@char, np.complex64), np.complex64},
-            //    {(np.@char, np.@decimal), np.@decimal},
+            dict.Add((np.int16, np.@bool), np.int16);
+            dict.Add((np.int16, np.uint8), np.int16);
+            dict.Add((np.int16, np.int16), np.int16);
+            dict.Add((np.int16, np.uint16), np.int16);
+            dict.Add((np.int16, np.int32), np.int16);
+            dict.Add((np.int16, np.uint32), np.int16);
+            dict.Add((np.int16, np.int64), np.int16);
+            dict.Add((np.int16, np.uint64), np.int16);
+            dict.Add((np.int16, np.float32), np.float32);
+            dict.Add((np.int16, np.float64), np.float64);
+            dict.Add((np.int16, np.complex64), np.complex64);
 
-            //    {(np.int16, np.@bool), np.int16},
-            //    {(np.int16, np.uint8), np.int16},
-            //    {(np.int16, np.int16), np.int16},
-            //    {(np.int16, np.uint16), np.int32},
-            //    {(np.int16, np.int32), np.int32},
-            //    {(np.int16, np.uint32), np.int64},
-            //    {(np.int16, np.int64), np.int64},
-            //    {(np.int16, np.uint64), np.float64},
-            //    {(np.int16, np.float32), np.float32},
-            //    {(np.int16, np.float64), np.float64},
-            //    {(np.int16, np.complex64), np.complex64},
-            //    {(np.int16, np.@decimal), np.@decimal},
+            dict.Add((np.uint16, np.@bool), np.uint16);
+            dict.Add((np.uint16, np.uint8), np.uint16);
+            dict.Add((np.uint16, np.int16), np.int32);
+            dict.Add((np.uint16, np.uint16), np.uint16);
+            dict.Add((np.uint16, np.int32), np.int32);
+            dict.Add((np.uint16, np.uint32), np.uint16);
+            dict.Add((np.uint16, np.int64), np.int64);
+            dict.Add((np.uint16, np.uint64), np.uint16);
+            dict.Add((np.uint16, np.float32), np.float32);
+            dict.Add((np.uint16, np.float64), np.float64);
+            dict.Add((np.uint16, np.complex64), np.complex64);
 
-            //    {(np.uint16, np.@bool), np.uint16},
-            //    {(np.uint16, np.uint8), np.uint16},
-            //    {(np.uint16, np.int16), np.int32},
-            //    {(np.uint16, np.uint16), np.uint16},
-            //    {(np.uint16, np.int32), np.int32},
-            //    {(np.uint16, np.uint32), np.uint32},
-            //    {(np.uint16, np.int64), np.int64},
-            //    {(np.uint16, np.uint64), np.uint64},
-            //    {(np.uint16, np.float32), np.float32},
-            //    {(np.uint16, np.float64), np.float64},
-            //    {(np.uint16, np.complex64), np.complex64},
-            //    {(np.uint16, np.@decimal), np.@decimal},
+            dict.Add((np.int32, np.@bool), np.int32);
+            dict.Add((np.int32, np.uint8), np.int32);
+            dict.Add((np.int32, np.int16), np.int32);
+            dict.Add((np.int32, np.uint16), np.int32);
+            dict.Add((np.int32, np.int32), np.int32);
+            dict.Add((np.int32, np.uint32), np.int32);
+            dict.Add((np.int32, np.int64), np.int32);
+            dict.Add((np.int32, np.uint64), np.int32);
+            dict.Add((np.int32, np.float32), np.float64);
+            dict.Add((np.int32, np.float64), np.float64);
+            dict.Add((np.int32, np.complex64), np.complex128);
 
-            //    {(np.int32, np.@bool), np.int32},
-            //    {(np.int32, np.uint8), np.int32},
-            //    {(np.int32, np.int16), np.int32},
-            //    {(np.int32, np.uint16), np.int32},
-            //    {(np.int32, np.int32), np.int32},
-            //    {(np.int32, np.uint32), np.int64},
-            //    {(np.int32, np.int64), np.int64},
-            //    {(np.int32, np.uint64), np.float64},
-            //    {(np.int32, np.float32), np.float64},
-            //    {(np.int32, np.float64), np.float64},
-            //    {(np.int32, np.complex64), np.complex128},
-            //    {(np.int32, np.@decimal), np.@decimal},
+            dict.Add((np.uint32, np.@bool), np.uint32);
+            dict.Add((np.uint32, np.uint8), np.uint32);
+            dict.Add((np.uint32, np.int16), np.int64);
+            dict.Add((np.uint32, np.uint16), np.uint32);
+            dict.Add((np.uint32, np.int32), np.int64);
+            dict.Add((np.uint32, np.uint32), np.uint32);
+            dict.Add((np.uint32, np.int64), np.int64);
+            dict.Add((np.uint32, np.uint64), np.uint32);
+            dict.Add((np.uint32, np.float32), np.float64);
+            dict.Add((np.uint32, np.float64), np.float64);
+            dict.Add((np.uint32, np.complex64), np.complex128);
 
-            //    {(np.uint32, np.@bool), np.uint32},
-            //    {(np.uint32, np.uint8), np.uint32},
-            //    {(np.uint32, np.int16), np.int64},
-            //    {(np.uint32, np.uint16), np.uint32},
-            //    {(np.uint32, np.int32), np.int64},
-            //    {(np.uint32, np.uint32), np.uint32},
-            //    {(np.uint32, np.int64), np.int64},
-            //    {(np.uint32, np.uint64), np.uint64},
-            //    {(np.uint32, np.float32), np.float64},
-            //    {(np.uint32, np.float64), np.float64},
-            //    {(np.uint32, np.complex64), np.complex128},
-            //    {(np.uint32, np.@decimal), np.@decimal},
+            dict.Add((np.int64, np.@bool), np.int64);
+            dict.Add((np.int64, np.uint8), np.int64);
+            dict.Add((np.int64, np.int16), np.int64);
+            dict.Add((np.int64, np.uint16), np.int64);
+            dict.Add((np.int64, np.int32), np.int64);
+            dict.Add((np.int64, np.uint32), np.int64);
+            dict.Add((np.int64, np.int64), np.int64);
+            dict.Add((np.int64, np.uint64), np.int64);
+            dict.Add((np.int64, np.float32), np.float64);
+            dict.Add((np.int64, np.float64), np.float64);
+            dict.Add((np.int64, np.complex64), np.complex128);
 
-            //    {(np.int64, np.@bool), np.int64},
-            //    {(np.int64, np.uint8), np.int64},
-            //    {(np.int64, np.int16), np.int64},
-            //    {(np.int64, np.uint16), np.int64},
-            //    {(np.int64, np.int32), np.int64},
-            //    {(np.int64, np.uint32), np.int64},
-            //    {(np.int64, np.int64), np.int64},
-            //    {(np.int64, np.uint64), np.float64},
-            //    {(np.int64, np.float32), np.float64},
-            //    {(np.int64, np.float64), np.float64},
-            //    {(np.int64, np.complex64), np.complex128},
-            //    {(np.int64, np.@decimal), np.@decimal},
+            dict.Add((np.uint64, np.@bool), np.uint64);
+            dict.Add((np.uint64, np.uint8), np.uint64);
+            dict.Add((np.uint64, np.int16), np.float64);
+            dict.Add((np.uint64, np.uint16), np.uint64);
+            dict.Add((np.uint64, np.int32), np.float64);
+            dict.Add((np.uint64, np.uint32), np.uint64);
+            dict.Add((np.uint64, np.int64), np.float64);
+            dict.Add((np.uint64, np.uint64), np.uint64);
+            dict.Add((np.uint64, np.float32), np.float64);
+            dict.Add((np.uint64, np.float64), np.float64);
+            dict.Add((np.uint64, np.complex64), np.complex128);
 
-            //    {(np.uint64, np.@bool), np.uint64},
-            //    {(np.uint64, np.uint8), np.uint64},
-            //    {(np.uint64, np.int16), np.float64},
-            //    {(np.uint64, np.uint16), np.uint64},
-            //    {(np.uint64, np.int32), np.float64},
-            //    {(np.uint64, np.uint32), np.uint64},
-            //    {(np.uint64, np.int64), np.float64},
-            //    {(np.uint64, np.uint64), np.uint64},
-            //    {(np.uint64, np.float32), np.float64},
-            //    {(np.uint64, np.float64), np.float64},
-            //    {(np.uint64, np.complex64), np.complex128},
-            //    {(np.uint64, np.@decimal), np.@decimal},
+            dict.Add((np.float32, np.@bool), np.float32);
+            dict.Add((np.float32, np.uint8), np.float32);
+            dict.Add((np.float32, np.int16), np.float32);
+            dict.Add((np.float32, np.uint16), np.float32);
+            dict.Add((np.float32, np.int32), np.float32);
+            dict.Add((np.float32, np.uint32), np.float32);
+            dict.Add((np.float32, np.int64), np.float32);
+            dict.Add((np.float32, np.uint64), np.float32);
+            dict.Add((np.float32, np.float32), np.float32);
+            dict.Add((np.float32, np.float64), np.float32);
+            dict.Add((np.float32, np.complex64), np.complex64);
 
-            //    {(np.float32, np.@bool), np.float32},
-            //    {(np.float32, np.uint8), np.float32},
-            //    {(np.float32, np.int16), np.float32},
-            //    {(np.float32, np.uint16), np.float32},
-            //    {(np.float32, np.int32), np.float64},
-            //    {(np.float32, np.uint32), np.float64},
-            //    {(np.float32, np.int64), np.float64},
-            //    {(np.float32, np.uint64), np.float64},
-            //    {(np.float32, np.float32), np.float32},
-            //    {(np.float32, np.float64), np.float64},
-            //    {(np.float32, np.complex64), np.complex64},
-            //    {(np.float32, np.@decimal), np.@decimal},
+            dict.Add((np.float64, np.@bool), np.float64);
+            dict.Add((np.float64, np.uint8), np.float64);
+            dict.Add((np.float64, np.int16), np.float64);
+            dict.Add((np.float64, np.uint16), np.float64);
+            dict.Add((np.float64, np.int32), np.float64);
+            dict.Add((np.float64, np.uint32), np.float64);
+            dict.Add((np.float64, np.int64), np.float64);
+            dict.Add((np.float64, np.uint64), np.float64);
+            dict.Add((np.float64, np.float32), np.float64);
+            dict.Add((np.float64, np.float64), np.float64);
+            dict.Add((np.float64, np.complex64), np.complex128);
 
-            //    {(np.float64, np.@bool), np.float64},
-            //    {(np.float64, np.uint8), np.float64},
-            //    {(np.float64, np.int16), np.float64},
-            //    {(np.float64, np.uint16), np.float64},
-            //    {(np.float64, np.int32), np.float64},
-            //    {(np.float64, np.uint32), np.float64},
-            //    {(np.float64, np.int64), np.float64},
-            //    {(np.float64, np.uint64), np.float64},
-            //    {(np.float64, np.float32), np.float64},
-            //    {(np.float64, np.float64), np.float64},
-            //    {(np.float64, np.complex64), np.complex128},
-            //    {(np.float64, np.@decimal), np.@decimal},
-
-            //    {(np.complex64, np.@bool), np.complex64},
-            //    {(np.complex64, np.uint8), np.complex64},
-            //    {(np.complex64, np.int16), np.complex64},
-            //    {(np.complex64, np.uint16), np.complex64},
-            //    {(np.complex64, np.int32), np.complex128},
-            //    {(np.complex64, np.uint32), np.complex128},
-            //    {(np.complex64, np.int64), np.complex128},
-            //    {(np.complex64, np.uint64), np.complex128},
-            //    {(np.complex64, np.float32), np.complex64},
-            //    {(np.complex64, np.float64), np.complex128},
-            //    {(np.complex64, np.complex64), np.complex64},
-            //    {(np.complex64, np.@decimal), np.complex64},
-
-            //    //decimal
-            //    {(np.@decimal, np.@bool), np.@decimal},
-            //    {(np.@decimal, np.uint8), np.@decimal},
-            //    {(np.@decimal, np.int16), np.@decimal},
-            //    {(np.@decimal, np.uint16), np.@decimal},
-            //    {(np.@decimal, np.int32), np.@decimal},
-            //    {(np.@decimal, np.uint32), np.@decimal},
-            //    {(np.@decimal, np.int64), np.@decimal},
-            //    {(np.@decimal, np.uint64), np.@decimal},
-            //    {(np.@decimal, np.float32), np.@decimal},
-            //    {(np.@decimal, np.float64), np.@decimal},
-            //    {(np.@decimal, np.complex64), np.complex128},
-            //};
-
+            dict.Add((np.complex64, np.@bool), np.complex64);
+            dict.Add((np.complex64, np.uint8), np.complex64);
+            dict.Add((np.complex64, np.int16), np.complex64);
+            dict.Add((np.complex64, np.uint16), np.complex64);
+            dict.Add((np.complex64, np.int32), np.complex64);
+            dict.Add((np.complex64, np.uint32), np.complex64);
+            dict.Add((np.complex64, np.int64), np.complex64);
+            dict.Add((np.complex64, np.uint64), np.complex64);
+            dict.Add((np.complex64, np.float32), np.complex64);
+            dict.Add((np.complex64, np.float64), np.complex64);
+            dict.Add((np.complex64, np.complex64), np.complex64);
 
 
 #if _REGEN
             %a = ["bool","uint8","int16","uint16","int32","uint32","int64","uint64","float32","float64","complex64"]
             %foreach forevery(a,a,false)%
-                print("{(np."+str(np.#1.__name__) + ", " + "np." + str(np.#2.__name__) + "),  " + "np." + str(np.find_common_type([np.#1, np.#2], []))+"},")
+                print("{(np."+str(np.#1.__name__) + ", " + "np." + str(np.#2.__name__) + "),  " + "np." + str(np.find_common_type([np.#1], [np.#2]))+"},")
             %
 #else
 
