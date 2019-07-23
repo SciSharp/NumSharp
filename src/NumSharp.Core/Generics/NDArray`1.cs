@@ -71,8 +71,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine)
-        { }
+        internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine) { }
 
         /// <summary>
         /// Constructor for init data type
