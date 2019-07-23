@@ -260,7 +260,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
+        ///     Is <paramref name="typeCode"/> a uint, byte, ulong and so on.
         /// </summary>
         [DebuggerNonUserCode]
         [MethodImpl((MethodImplOptions)768)]

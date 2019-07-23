@@ -10,6 +10,8 @@ namespace NumSharp
     {
         public static NDArray frombuffer(byte[] bytes, Type dtype)
         {
+
+            //TODO! all types
             if (dtype.Name == "Int32")
             {
                 var size = bytes.Length / InfoOf<int>.Size;

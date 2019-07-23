@@ -441,11 +441,9 @@ namespace NumSharp
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
         /// <returns>Cloned NDArray</returns>
-        NDArray Clone()
+        public NDArray Clone()
         {
-            var puffer = new NDArray(this.dtype);
-            var shapePuffer = new Shape(this.shape);
-            puffer.Storage.Allocate(shapePuffer);
+            var puffer = new NDArray(this.dtype, Shape.Clone(true), false);
             puffer.Storage.ReplaceData(this.Storage.CloneData());
 
             return puffer;

@@ -7,17 +7,27 @@ namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray add(in NDArray x, in NDArray y)
-            => BackendFactory.GetEngine().Add(x, y);
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.add.html</remarks>
+        public static NDArray add(in NDArray x1, in NDArray x2)
+            => BackendFactory.GetEngine().Add(x1, x2);
 
-        public static NDArray divide(in NDArray x, in NDArray y)
-            => BackendFactory.GetEngine().Divide(x, y);
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.divide.html</remarks>
+        public static NDArray divide(in NDArray x1, in NDArray x2)
+            => BackendFactory.GetEngine().Divide(x1, x2);
 
-        public static NDArray multiply(in NDArray x, in NDArray y)
-            => BackendFactory.GetEngine().Multiply(x, y);
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.true_divide.html</remarks>
+        public static NDArray true_divide(in NDArray x1, in NDArray x2)
+        {
+            return BackendFactory.GetEngine().Divide(x1, x2);
+        }
 
-        public static NDArray subtract(in NDArray x, in NDArray y)
-            => BackendFactory.GetEngine().Subtract(x, y);
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
+        public static NDArray multiply(in NDArray x1, in NDArray x2)
+            => BackendFactory.GetEngine().Multiply(x1, x2);
+
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.subtract.html</remarks>
+        public static NDArray subtract(in NDArray x1, in NDArray x2)
+            => BackendFactory.GetEngine().Subtract(x1, x2);
 
         /// <summary>
         /// Sum of array elements over a given axis.
