@@ -20,6 +20,10 @@ namespace NumSharp.UnitTest
                 AssertSequenceEqual(expected as ICollection, given as ICollection);
             else if (expected is IArraySlice && given is IArraySlice)
                 AssertSequenceEqual((expected as IArraySlice).ToArray(), (given as IArraySlice).ToArray());
+            else if (expected is IArraySlice && given is Array)
+                AssertSequenceEqual((expected as IArraySlice).ToArray(), given as Array);
+            else if (expected is Array && given is IArraySlice)
+                AssertSequenceEqual((expected as Array), (given as IArraySlice).ToArray());
             else
                 Assert.AreEqual(expected, given, msg ?? $"Expected '{expected}', given '{given}'");
         }
@@ -31,9 +35,9 @@ namespace NumSharp.UnitTest
 
         private void AssertSequenceEqual(Array a, Array b)
         {
-            Assert.AreEqual(a.Length, b.Length, $"Arrays are not of same length. Expected'{a.Length}', given '{b.Length}'");
+            Assert.AreEqual(a.Length, b.Length, $"Arrays are not of same length. Expected '{a.Length}', given '{b.Length}'");
             for (int i = 0; i < a.Length; i++)
-                AssertAreEqual(a.GetValue(i), b.GetValue(i), $"Elements at index {i} differ. Expected'{a.GetValue(i)}', given '{b.GetValue(i)}'");
+                AssertAreEqual(a.GetValue(i), b.GetValue(i), $"Elements at index {i} differ. Expected '{a.GetValue(i)}', given '{b.GetValue(i)}'");
         }
 
     }
