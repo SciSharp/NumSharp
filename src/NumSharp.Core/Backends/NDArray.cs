@@ -43,6 +43,8 @@ namespace NumSharp
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     public partial class NDArray : ICloneable, IEnumerable
     {
+        protected TensorEngine tensorEngine;
+
         #region Constructors
 
         /// <summary>
@@ -52,7 +54,7 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
-            TensorEngine = storage.Engine;
+            tensorEngine = storage.Engine;
         }
 
         /// <summary>
@@ -62,7 +64,7 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage;
-            TensorEngine = storage.Engine;
+            tensorEngine = storage.Engine;
         }
 
         /// <summary>
@@ -72,8 +74,7 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
             Storage = new UnmanagedStorage(storage.InternalArray, shape);
-
-            TensorEngine = storage.Engine;
+            tensorEngine = storage.Engine;
         }
 
         /// <summary>
@@ -85,7 +86,7 @@ namespace NumSharp
         /// <remarks>This constructor does not call allocation/></remarks>
         internal NDArray(Type dtype, TensorEngine engine)
         {
-            TensorEngine = engine;
+            tensorEngine = engine;
             Storage = TensorEngine.GetStorage(dtype);
         }
 
@@ -98,7 +99,7 @@ namespace NumSharp
         /// <remarks>This constructor does not call allocation/></remarks>
         internal NDArray(NPTypeCode typeCode, TensorEngine engine)
         {
-            TensorEngine = engine;
+            tensorEngine = engine;
             Storage = TensorEngine.GetStorage(typeCode);
         }
 
@@ -108,8 +109,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(Type dtype) : this(dtype, BackendFactory.GetEngine())
-        { }
+        public NDArray(Type dtype) : this(dtype, BackendFactory.GetEngine()) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -117,8 +117,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="typeCode">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(NPTypeCode typeCode) : this(typeCode, BackendFactory.GetEngine())
-        { }
+        public NDArray(NPTypeCode typeCode) : this(typeCode, BackendFactory.GetEngine()) { }
 
         /// <summary>
         /// Constructor which takes .NET array
@@ -159,8 +158,7 @@ namespace NumSharp
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, Shape shape) : this(dtype, shape, true)
-        { }
+        public NDArray(Type dtype, Shape shape) : this(dtype, shape, true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -168,8 +166,7 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size) : this(dtype, new Shape(size), true)
-        { }
+        public NDArray(Type dtype, int size) : this(dtype, new Shape(size), true) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -178,8 +175,7 @@ namespace NumSharp
         /// <param name="dtype">internal data type</param>
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, Shape shape) : this(dtype, shape, true)
-        { }
+        public NDArray(NPTypeCode dtype, Shape shape) : this(dtype, shape, true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -187,8 +183,7 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, int size) : this(dtype, new Shape(size), true)
-        { }
+        public NDArray(NPTypeCode dtype, int size) : this(dtype, new Shape(size), true) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -280,10 +275,15 @@ namespace NumSharp
         /// </summary>
         internal UnmanagedStorage Storage;
 
+
         /// <summary>
         ///     The tensor engine that handles this <see cref="NDArray"/>.
         /// </summary>
-        public TensorEngine TensorEngine { get; set; }
+        public TensorEngine TensorEngine
+        {
+            get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
+            set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine());
+        }
 
         /// <summary>
         /// Shortcut for access internal elements
@@ -411,7 +411,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray astype(Type dtype, bool copy = true)
         {
-            return (TensorEngine ?? Storage.Engine).Cast(this, dtype, copy);
+            return TensorEngine.Cast(this, dtype, copy);
         }
 
         /// <summary>
@@ -423,7 +423,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
         public NDArray astype(NPTypeCode typeCode, bool copy = true)
         {
-            return (TensorEngine ?? Storage.Engine).Cast(this, typeCode, copy);
+            return TensorEngine.Cast(this, typeCode, copy);
         }
 
         /// <summary>
@@ -443,10 +443,7 @@ namespace NumSharp
         /// <returns>Cloned NDArray</returns>
         public NDArray Clone()
         {
-            var puffer = new NDArray(this.dtype, Shape.Clone(true), false);
-            puffer.Storage.ReplaceData(this.Storage.CloneData());
-
-            return puffer;
+            return new NDArray(this.Storage.Clone(), Shape.Clone(true)) {tensorEngine = TensorEngine};
         }
 
         public IEnumerator GetEnumerator()

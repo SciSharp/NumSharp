@@ -33,7 +33,8 @@ namespace NumSharp
         public abstract NDArray MatMul(NDArray x, NDArray y);
         public abstract NDArray Mean(NDArray x, int axis = -1);
         public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
-        public abstract NDArray Power(NDArray x, ValueType y);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type = null);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(NDArray x, int? axis = null);
         public abstract NDArray Negate(in NDArray x);

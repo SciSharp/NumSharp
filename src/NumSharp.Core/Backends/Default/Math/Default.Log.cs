@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Numerics;
+using DecimalMath;
 
 namespace NumSharp.Backends
 {
@@ -24,7 +25,7 @@ namespace NumSharp.Backends
                 switch (@out.GetTypeCode)
                 {
 #if _REGEN
-                    %foreach supported_numericals,supported_numericals_lowercase%
+                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
 	                case NPTypeCode.#1:
 	                {
                         var out_addr = (#2*)@out.Address;
@@ -34,6 +35,14 @@ namespace NumSharp.Backends
                         return @out;
 	                }
 	                %
+                    case NPTypeCode.Decimal:
+	                {
+                        var out_addr = (decimal*)@out.Address;
+                        for (int i = 0; i < len; i++)
+                            *(out_addr + i) = (DecimalEx.Log(*(out_addr + i)));
+
+                        return @out;
+	                }
 	                default:
 		                throw new NotSupportedException();
 #else
@@ -117,76 +126,17 @@ namespace NumSharp.Backends
 
                         return @out;
 	                }
-	                case NPTypeCode.Decimal:
+                    case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToDecimal(Log(*(out_addr + i)));
+                            *(out_addr + i) = (DecimalEx.Log(*(out_addr + i)));
 
                         return @out;
 	                }
 	                default:
 		                throw new NotSupportedException();
 #endif
-                }
-
-                decimal Log(decimal d)
-                {
-                    const decimal Ln10 = 2.3025850929940456840179914547m;
-                    if (d < 0) throw new ArgumentException("Natural logarithm is a complex number for values less than zero!", "d");
-                    if (d == 0) throw new OverflowException("Natural logarithm is defined as negative infinity at zero which the Decimal data type can't represent!");
-
-                    if (d == 1) return 0;
-
-                    if (d >= 1)
-                    {
-                        var power = 0m;
-
-                        var x = d;
-                        while (x > 1)
-                        {
-                            x /= 10;
-                            power += 1;
-                        }
-
-                        return Log(x) + power * Ln10;
-                    }
-
-                    // See http://en.wikipedia.org/wiki/Natural_logarithm#Numerical_value
-                    // for more information on this faster-converging series.
-
-                    decimal y;
-                    decimal ySquared;
-
-                    var iteration = 0;
-                    var exponent = 0m;
-                    var nextAdd = 0m;
-                    var result = 0m;
-
-                    y = (d - 1) / (d + 1);
-                    ySquared = y * y;
-
-                    while (true)
-                    {
-                        if (iteration == 0)
-                        {
-                            exponent = 2 * y;
-                        }
-                        else
-                        {
-                            exponent = exponent * ySquared;
-                        }
-
-                        nextAdd = exponent / (2 * iteration + 1);
-
-                        if (nextAdd == 0) break;
-
-                        result += nextAdd;
-
-                        iteration += 1;
-                    }
-
-                    return result;
                 }
             }
         }

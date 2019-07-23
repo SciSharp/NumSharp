@@ -14,7 +14,7 @@ namespace NumSharp
         /// </summary>
         public NDArray negate()
         {
-            return (TensorEngine ?? Storage.Engine).Negate(this);
+            return TensorEngine.Negate(this);
         }
     }
 }
