@@ -1,10 +1,9 @@
-using System;
+﻿using System;
 
 namespace NumSharp
 {
-    class IncorrectSizeException : System.Exception
+    public class IncorrectSizeException : System.Exception
     {
-        public IncorrectSizeException(string message) : base(message)
-        { }
+        public IncorrectSizeException(string message) : base(message) { }
     }
 }
