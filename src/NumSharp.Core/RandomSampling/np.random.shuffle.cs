@@ -8,21 +8,21 @@ namespace NumSharp
 {
     public partial class NumPyRandom
     {
-        public void shuffle(NDArray list)
+        /// <summary>
+        ///     Modify a sequence in-place by shuffling its contents.
+        /// </summary>
+        /// <param name="x">The array or list to be shuffled.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.shuffle.html <br></br>Does not copy <paramref name="x"/></remarks>
+        public void shuffle(NDArray x)
         {
-            return;
-            //var count = list.size;
-
-            //Array listArr = list.Array;
-
-            //while (count > 1)
-            //{
-            //    count--;
-            //    var k = randomizer.Next(count + 1);
-            //    var value = listArr.GetValue(k);
-            //    listArr.SetValue(listArr.GetValue(count),k); 
-            //    listArr.SetValue(value,count);
-            //}
+            var count = x.size;
+            while (count-- > 1)
+            {
+                var swapAt = randomizer.Next(x);
+                var tmp = x.GetAtIndex(0);
+                x.SetAtIndex(x.GetAtIndex(swapAt), 0);
+                x.SetAtIndex(tmp, swapAt);
+            }
         }
     }
 }
