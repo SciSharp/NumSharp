@@ -221,7 +221,7 @@ namespace NumSharp
         public int GetAbsStart(int dim)
         {
             var start = Step < 0 ? Stop : Start;
-            var astart = start < 0 ? dim + start : start;
+            var astart = start < 0 ? dim + start + (Step < 0 ? 1 : 0) : start;
             if (astart.HasValue && astart < 0)
                 astart = 0;
             return astart ?? 0;
@@ -231,9 +231,9 @@ namespace NumSharp
         public int GetAbsStop(int dim)
         {
             var stop = Step < 0 ? Start : Stop;
-            var astop = stop < 0 ? dim + stop : stop;
+            var astop = stop < 0 ? dim + stop + (Step < 0 ? 1 : 0) : stop;
             if (astop.HasValue && astop < 0)
-                astop=dim;
+                astop = dim;
             return Math.Min(dim, astop ?? dim);
         }
 
@@ -245,7 +245,7 @@ namespace NumSharp
             var start = GetAbsStart(dim);
             var stop = GetAbsStop(dim);
             if (Step < 0)
-                return new Slice( stop - 1, start - 1, Step);
+                return new Slice(stop - 1, start - 1, Step);
             return new Slice(start, stop, Step);
         }
     }

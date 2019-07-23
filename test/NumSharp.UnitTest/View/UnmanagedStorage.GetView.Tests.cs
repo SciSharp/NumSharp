@@ -16,24 +16,24 @@ namespace NumSharp.UnitTest.View
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
             Assert.AreEqual(new Shape(10), data.Shape);
             // return identical view
-            var view = data.GetView( ":");
+            var view = data.GetView(":");
             Assert.AreEqual(new Shape(10), view.Shape);
             AssertAreEqual(data.Iterate<int>(), view.Iterate<int>());
-            view = data.GetView( "-77:77");
+            view = data.GetView("-77:77");
             Assert.AreEqual(new Shape(10), view.Shape);
             AssertAreEqual(data.Iterate<int>(), view.Iterate<int>());
             // return reduced view
-            view = data.GetView( "7:");
+            view = data.GetView("7:");
             Assert.AreEqual(new Shape(3), view.Shape);
             AssertAreEqual(new int[] { 7, 8, 9 }, view.Iterate<int>());
-            view = data.GetView( ":5");
+            view = data.GetView(":5");
             Assert.AreEqual(new Shape(5), view.Shape);
             AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, view.Iterate<int>());
-            view = data.GetView( "2:3");
+            view = data.GetView("2:3");
             Assert.AreEqual(new Shape(1), view.Shape);
             AssertAreEqual(new int[] { 2 }, view.Iterate<int>());
             // return stepped view
-            view = data.GetView( "::2");
+            view = data.GetView("::2");
             Assert.AreEqual(new Shape(5), view.Shape);
             AssertAreEqual(new int[] { 0, 2, 4, 6, 8 }, view.Iterate<int>());
             view = data.GetView("::3");
@@ -61,6 +61,38 @@ namespace NumSharp.UnitTest.View
             view = data.GetView("-77:77:-77");
             Assert.AreEqual(new Shape(1), view.Shape);
             AssertAreEqual(new[] { 9 }, view.Iterate<int>());
+        }
+
+        [TestMethod]
+        public void GetData_1D_Negative()
+        {
+            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+            // return reduced view
+            var view = data.GetView("-7:");
+            Assert.AreEqual(new Shape(7), view.Shape);
+            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8, 9 }, view.Iterate<int>());
+            view = data.GetView(":-5");
+            Assert.AreEqual(new Shape(5), view.Shape);
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, view.Iterate<int>());
+            view = data.GetView(":-6");
+            Assert.AreEqual(new Shape(4), view.Shape);
+            AssertAreEqual(new int[] { 0, 1, 2, 3, }, view.Iterate<int>());
+            view = data.GetView("-3:-2");
+            Assert.AreEqual(new Shape(1), view.Shape);
+            AssertAreEqual(new int[] { 7 }, view.Iterate<int>());
+            // negative step!
+            view = data.GetView("-7::-1");
+            Assert.AreEqual(new Shape(4), view.Shape);
+            AssertAreEqual(new int[] { 3, 2, 1, 0 }, view.Iterate<int>());
+            view = data.GetView(":-5:-1");
+            Assert.AreEqual(new Shape(4), view.Shape);
+            AssertAreEqual(new int[] { 9, 8, 7, 6 }, view.Iterate<int>());
+            view = data.GetView(":-6:-1");
+            Assert.AreEqual(new Shape(5), view.Shape);
+            AssertAreEqual(new int[] { 9, 8, 7, 6, 5, }, view.Iterate<int>());
+            view = data.GetView("-2:-3:-1");
+            Assert.AreEqual(new Shape(1), view.Shape);
+            AssertAreEqual(new int[] { 8 }, view.Iterate<int>());
         }
 
         [TestMethod]
