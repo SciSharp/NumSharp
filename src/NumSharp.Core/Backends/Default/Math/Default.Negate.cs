@@ -41,8 +41,7 @@ namespace NumSharp.Backends
                         {
                             var val = *(addr + i);
                             if (val == #3)
-                                *(out_addr + i) =
- #3;
+                                *(out_addr + i) = #3;
                             else
                                 *(out_addr + i) = Convert.To#1(~val+1);
                         }
