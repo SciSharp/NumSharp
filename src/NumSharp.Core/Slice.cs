@@ -206,15 +206,11 @@ namespace NumSharp
 
         // return the size of the slice, given the data dimension on this axis
         // note: this works only with sanitized shapes!
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSize()
         {
             var astep = Math.Abs(Step);
             return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
-        }
-
-        public int GetAbsStep()
-        {
-            return Math.Abs(Step);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -240,6 +236,7 @@ namespace NumSharp
         /// <summary>
         /// Transforms a user-defined slice values with missing info into a fully defined slice
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Slice Sanitize(int dim)
         {
             var start = GetAbsStart(dim);
