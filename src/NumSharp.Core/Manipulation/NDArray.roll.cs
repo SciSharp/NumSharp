@@ -21,7 +21,7 @@ namespace NumSharp
             shift = (axis == 0) ? (-1) * shift : shift;
 
             shift = ((shift % this.shape[axis]) < 0) ? shift + this.shape[axis] : shift;
-
+            //TODO! rest of data types and remove usage of .Data, it'll fail if this NDArray's shape is a slice.
             switch (dtype.Name)
             {
                 case "Int32":
@@ -32,7 +32,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);
@@ -46,7 +46,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);
@@ -60,7 +60,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(slice, indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);

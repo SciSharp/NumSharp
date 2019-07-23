@@ -1437,6 +1437,34 @@ namespace NumSharp.Backends
             *((T*)this.Address + _shape.GetIndexInShape(indices)) = value;
         }
 
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(object value, params int[] indices)
+        {
+            if (value is NDArray nd)
+            {
+                if (nd.Shape.IsEmpty)
+                    throw new InvalidOperationException("Can't SetData when value is an empty NDArray");
+                if (nd.Shape.IsScalar || nd.size==1)
+                {
+                    SetIndex(nd.GetAtIndex(0), _shape.GetIndexInShape(indices));
+                    return;
+                }
+
+                SetData(nd, indices);
+                return;
+            }
+
+            SetIndex(value, _shape.GetIndexInShape(indices));
+        }
+
         public unsafe void SetIndex<T>(T value, int index) where T : unmanaged
         {
             *((T*)this.Address + index) = value;
@@ -1532,7 +1560,6 @@ namespace NumSharp.Backends
                     *((decimal*)Address + index) = (decimal)value;
                     break;
                 }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -1564,6 +1591,13 @@ namespace NumSharp.Backends
             if (value.GetTypeCode != _typecode) 
                 value = value.astype(_typecode, true);
 
+            if (value.Shape.IsScalar)
+            {
+                SetData(value.GetAtIndex(0), indices);
+                return;
+            }
+                
+
             unsafe
             {
                 var (subShape, offset) = _shape.GetSubshape(indices);
@@ -1576,7 +1610,6 @@ namespace NumSharp.Backends
                 //TODO! what if dtype are different! handle casting!
                 //TODO! What if value is sliced?
                 Buffer.MemoryCopy(value.Storage.Address, Address + offset * step, len, len);
-                //TODO! TEST!
             }
         }
 

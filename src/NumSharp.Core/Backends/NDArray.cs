@@ -293,9 +293,61 @@ namespace NumSharp
             return Storage.GetData<T>();
         }
 
-        public T Data<T>(params int[] indice) where T : unmanaged => (T)Storage.GetValue(indice); //TODO! this should use unmanaged address
+        /// <summary>
+        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(IArraySlice value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
 
-        public void SetData<T>(T value, params int[] indice) where T : unmanaged => Storage.SetData(value, indice);
+        /// <summary>
+        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(NDArray value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(object value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
+        {
+            Storage.SetData<T>(value, indices);
+        }
 
         /// <summary>
         ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="dtype"/> and casts <see cref="values"/> if necessary.

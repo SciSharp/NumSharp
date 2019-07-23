@@ -178,7 +178,7 @@ namespace NumSharp.Generic
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                this[slice].Array = value.Data<T>();
+                base[slice] = value;
             }
         }
 
@@ -192,7 +192,7 @@ namespace NumSharp.Generic
             get => base[slices].MakeGeneric<T>();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => this[slice].Array = value.Data<T>();
+            set => base[slices] = value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

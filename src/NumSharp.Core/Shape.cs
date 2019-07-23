@@ -60,6 +60,23 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Create a shape that represents a vector.
+        /// </summary>
+        /// <remarks>Faster than calling Shape's constructor</remarks>
+        public static Shape Vector(int length, ViewInfo viewInfo)
+        {
+            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length, ViewInfo = viewInfo };
+
+            unchecked
+            {
+                shape._hashCode = 26599 ^ length * 397;
+            }
+
+            shape.IsScalar = false;
+            return shape;
+        }
+
+        /// <summary>
         ///     Create a shape that represents a matrix.
         /// </summary>
         /// <remarks>Faster than calling Shape's constructor</remarks>
@@ -168,6 +185,7 @@ namespace NumSharp
             //default vals already sets: ret.size = 0;
             //default vals already sets: ret._hashCode = 0;
             //default vals already sets: ret.IsScalar = false;
+            //default vals already sets: ret.ViewInfo = null;
         }
 
 
@@ -273,7 +291,7 @@ namespace NumSharp
         public (Shape Shape, int Offset) GetSubshape(params int[] indicies)
         {
             if (indicies.Length == 0)
-                throw new ArgumentException("Selection indexes cannot be an empty collection.", nameof(indicies));
+                return (this, 0);
 
             //compute offset
             int offset = 0;
