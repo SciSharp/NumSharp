@@ -12,7 +12,7 @@ namespace NumSharp
     {
         private static readonly int[] _vectorStrides = {1};
 
-        public ViewInfo ViewInfo;
+        internal ViewInfo ViewInfo;
 
         public bool IsSliced
         {
