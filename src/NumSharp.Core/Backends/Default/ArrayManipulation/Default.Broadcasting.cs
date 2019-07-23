@@ -124,7 +124,7 @@ namespace NumSharp.Backends
                         }
                         else if (mit.Dimensions[i] != tmp)
                         {
-                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape"); //TODO mismatch
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
                     }
                 }
@@ -225,7 +225,7 @@ namespace NumSharp.Backends
                         }
                         else if (mit.Dimensions[i] != tmp)
                         {
-                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape"); //TODO mismatch
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
                     }
 
@@ -246,7 +246,7 @@ namespace NumSharp.Backends
                         }
                         else if (mit.Dimensions[i] != tmp)
                         {
-                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape"); //TODO mismatch
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
                     }
                 }

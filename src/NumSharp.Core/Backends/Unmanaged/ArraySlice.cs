@@ -635,7 +635,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
         int IMemoryBlock.BytesLength
         {
-            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
+            [MethodImpl((MethodImplOptions)768)] get => Count * InfoOf<T>.Size;
         }
 
         /// <summary>

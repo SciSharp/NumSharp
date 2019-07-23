@@ -251,8 +251,6 @@ namespace NumSharp
         /// </summary>
         public int[] shape => Storage.Shape.Dimensions;
 
-        public int len => Storage.Shape.NDim == 0 ? 1 : Storage.Shape.Dimensions[0];
-
         /// <summary>
         /// Dimension count
         /// </summary>

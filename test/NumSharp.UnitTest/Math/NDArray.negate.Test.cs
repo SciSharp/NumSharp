@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.Maths
             var nd2 = -nd1;
 
             //assertions
-            Assert.IsTrue(nd1.len == nd2.len);
+            Assert.IsTrue(nd1.size == nd2.size);
         }
     }
 }

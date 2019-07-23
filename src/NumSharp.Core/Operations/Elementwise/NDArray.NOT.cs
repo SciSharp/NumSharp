@@ -14,27 +14,27 @@ namespace NumSharp
             var result = new NDArray(typeof(bool), self.shape);
             switch (self.GetTypeCode)
             {
-                case NPTypeCode.Boolean:
+#if _REGEN
+                case NPTypeCode.Boolean: 
                 {
                     var from = (bool*)self.Address;
                     var to = (bool*)result.Address;
+                    var len = result.size;
 
-                    var len = result.len;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = !*(from + len);
+                        *(to + i) = !*(from + i); //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-#if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach except(supported_currently_supported, "Boolean"),except(supported_currently_supported_lowercase, "bool")%
 	            case NPTypeCode.#1: 
                 {
                     var from = (#2*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -43,14 +43,26 @@ namespace NumSharp
 		            throw new NotSupportedException();
 #else
 
+
+                case NPTypeCode.Boolean: 
+                {
+                    var from = (bool*)self.Address;
+                    var to = (bool*)result.Address;
+                    var len = result.size;
+
+                    for (int i = 0; i < len; i++)
+                        *(to + i) = !*(from + i); //if val is 0 then write true
+
+                    return result.MakeGeneric<bool>();
+                }
 	            case NPTypeCode.Byte: 
                 {
                     var from = (byte*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -59,9 +71,9 @@ namespace NumSharp
                     var from = (short*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -70,9 +82,9 @@ namespace NumSharp
                     var from = (ushort*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -81,9 +93,9 @@ namespace NumSharp
                     var from = (int*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -92,9 +104,9 @@ namespace NumSharp
                     var from = (uint*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -103,9 +115,9 @@ namespace NumSharp
                     var from = (long*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -114,9 +126,9 @@ namespace NumSharp
                     var from = (ulong*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -125,9 +137,9 @@ namespace NumSharp
                     var from = (char*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -136,9 +148,9 @@ namespace NumSharp
                     var from = (double*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -147,9 +159,9 @@ namespace NumSharp
                     var from = (float*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
@@ -158,9 +170,9 @@ namespace NumSharp
                     var from = (decimal*)self.Address;
                     var to = (bool*)result.Address;
 
-                    var len = result.len;
+                    var len = result.size;
                     for (int i = 0; i < len; i++)
-                        *(to + i) = *(from + len) == 0; //if val is 0 then write true
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }

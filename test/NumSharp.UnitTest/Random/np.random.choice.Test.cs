@@ -20,10 +20,10 @@ namespace NumSharp.UnitTest.RandomSampling
 
             NDArray actual = np.random.choice(high); // Not specifying size means 1 single value is wanted
 
-            Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
+            Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 
             // Verify that all elements in output are within the range
-            for (int i = 0; i < actual.len; i++)
+            for (int i = 0; i < actual.size; i++)
             {
                 Assert.IsTrue(actual[i] >= low, "Element was less than expected");
                 Assert.IsTrue(actual[i] < high, "Element was greater than expected");
@@ -41,10 +41,10 @@ namespace NumSharp.UnitTest.RandomSampling
 
             NDArray actual = np.random.choice(high, nrSamples);
 
-            Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
+            Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 
             // Verify that all elements in output are within the range
-            for (int i = 0; i < actual.len; i++)
+            for (int i = 0; i < actual.size; i++)
             {
                 Assert.IsTrue(actual[i] >= low, "Element was less than expected");
                 Assert.IsTrue(actual[i] < high, "Element was greater than expected");
@@ -62,10 +62,10 @@ namespace NumSharp.UnitTest.RandomSampling
 
             NDArray actual = np.random.choice(5, nrSamples, probabilities: probabilities);
 
-            Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
+            Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 
             // Verify that all elements in output are within the range
-            for (int i = 0; i < actual.len; i++)
+            for (int i = 0; i < actual.size; i++)
             {
                 Assert.IsTrue(actual[i] >= low, "Element was less than expected");
                 Assert.IsTrue(actual[i] < high, "Element was greater than expected");
@@ -121,10 +121,10 @@ namespace NumSharp.UnitTest.RandomSampling
 
             NDArray actual = np.random.choice(int_arr, nrSamples, probabilities: probabilities);
 
-            Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
+            Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 
             // Verify that all elements in output are within the possibilities
-            for (int i = 0; i < actual.len; i++)
+            for (int i = 0; i < actual.size; i++)
             {
                 Assert.IsTrue((int)actual[i] != (int)int_arr[2], "Sampled zero-probability element");
             }
