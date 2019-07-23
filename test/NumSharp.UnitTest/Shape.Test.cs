@@ -195,10 +195,16 @@ namespace NumSharp.UnitTest
             new Shape(10).Slice(":7").ViewInfo.Slices[0].Should().Be(new Slice(0, 7, 1));
             new Shape(10).Slice("7:").ViewInfo.Slices[0].Should().Be(new Slice(7, 10, 1));
             new Shape(10).Slice("-7:").ViewInfo.Slices[0].Should().Be(new Slice(3, 10, 1));
-            // slize sanitation (prerequisite for shape slicing)
+            // slice sanitation (prerequisite for shape slicing)
             new Slice("-77:77").Sanitize(10).Should().Be(new Slice(0,10,1));
-            new Slice("::77").Sanitize(10).Should().Be(new Slice(0, 10, 10));
+            new Slice("::77").Sanitize(10).Should().Be(new Slice(0, 10, 77)); //<-- too large step is not to be sanitized, it is just that.
+        }
 
+        [TestMethod]
+        public void RepeatedSlicing()
+        {
+            new Shape(10).Slice(":").Slice(":").ViewInfo.Slices[0].Should().Be(new Slice(0, 10, 1));
+            new Shape(10).Slice(":5").Slice("2:").Slice("::2").ViewInfo.Slices[0].Should().Be(new Slice(2, 5, 2));
         }
     }
 }

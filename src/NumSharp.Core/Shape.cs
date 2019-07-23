@@ -218,14 +218,14 @@ namespace NumSharp
             int offset;
             if (IsSliced)
             {
-                if (select.Length>dimensions.Length)
+                if (select.Length > dimensions.Length)
                     throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
                 // TODO: perf opt
-                    var vi = ViewInfo;
+                var vi = ViewInfo;
                 if (dimensions.Length == 0 && select.Length == 1)
                 {
                     var slice = vi.Slices[0];
-                    var start = slice.Start.Value;
+                    var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
                     return start + select[0] * slice.Step;
                 }
 
@@ -240,7 +240,7 @@ namespace NumSharp
                             continue;
                         }
                         var slice = vi.Slices[i];
-                        var start = slice.Start.Value;
+                        var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
 
                         offset += strides[i] * (start + @select[i] * slice.Step);
                     }
@@ -457,17 +457,13 @@ namespace NumSharp
 
         public Shape Slice(params Slice[] input_slices)
         {
-            if (this.IsSliced)
-            {
-                throw new NotImplementedException("Recursive Slicing not implemented yet! We must merge and flatten ViewInfo here!");
-            }
             var slices = input_slices.Length != Dimensions.Length ? input_slices : new Slice[Dimensions.Length];
             var sliced_axes_unreduced = new int[Dimensions.Length];
-            for(int i =0; i<Dimensions.Length; i++)
+            for (int i = 0; i < Dimensions.Length; i++)
             {
                 var dim = Dimensions[i];
-                var slice = input_slices.Length>i ? input_slices[i] : NumSharp.Slice.All();
-                slices[i]=slice.Sanitize(dim);
+                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All();
+                slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice.Sanitize(dim)) : slice.Sanitize(dim);
                 sliced_axes_unreduced[i] = slices[i].GetSize();
             };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
