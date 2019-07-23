@@ -243,7 +243,7 @@ namespace NumSharp
                 if (dimensions.Length == 0 && select.Length == 1)
                 {
                     var slice = vi.Slices[0];
-                    var start = slice.Start.Value;
+                    var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
                     return start + select[0] * slice.Step;
                 }
 
@@ -259,7 +259,7 @@ namespace NumSharp
                         }
 
                         var slice = vi.Slices[i];
-                        var start = slice.Start.Value;
+                        var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
 
                         offset += strides[i] * (start + @select[i] * slice.Step);
                     }

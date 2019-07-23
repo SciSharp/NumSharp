@@ -2169,17 +2169,20 @@ namespace NumSharp.Backends
             set => SetIndex(value, _shape.GetIndexInShape(indices));
         }
 
-        public unsafe List<T> Iterate<T>() where T : unmanaged
+        public unsafe T[] ToArray<T>() where T : unmanaged
         {
-            
-            var ret = new List<T>();
-            var addr = (T*)Address;
+            if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
+                throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
+
             var shape = Shape;
+            var ret = new T[shape.Size];
+            var addr = (T*)Address;
             var incr = new NDIndexArrayIncrementor(shape.dimensions);
             int[] current = incr.Index;
+            int i = 0;
             do
             {
-                ret.Add(*(addr + shape.GetIndexInShape(current)));
+                ret[i++]=(*(addr + shape.GetIndexInShape(current)));
             } while (incr.Next() != null);
 
             return ret;
