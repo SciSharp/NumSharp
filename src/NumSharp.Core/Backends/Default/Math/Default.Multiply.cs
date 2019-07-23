@@ -19,299 +19,34 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Multiply(NDArray x, NDArray y)
+        public override NDArray Multiply(NDArray lhs, NDArray rhs)
         {
-            return null;
+            switch (lhs.GetTypeCode)
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1: return Multiply#1(lhs, rhs);
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+	            case NPTypeCode.Boolean: return MultiplyBoolean(lhs, rhs);
+	            case NPTypeCode.Byte: return MultiplyByte(lhs, rhs);
+	            case NPTypeCode.Int16: return MultiplyInt16(lhs, rhs);
+	            case NPTypeCode.UInt16: return MultiplyUInt16(lhs, rhs);
+	            case NPTypeCode.Int32: return MultiplyInt32(lhs, rhs);
+	            case NPTypeCode.UInt32: return MultiplyUInt32(lhs, rhs);
+	            case NPTypeCode.Int64: return MultiplyInt64(lhs, rhs);
+	            case NPTypeCode.UInt64: return MultiplyUInt64(lhs, rhs);
+	            case NPTypeCode.Char: return MultiplyChar(lhs, rhs);
+	            case NPTypeCode.Double: return MultiplyDouble(lhs, rhs);
+	            case NPTypeCode.Single: return MultiplySingle(lhs, rhs);
+	            case NPTypeCode.Decimal: return MultiplyDecimal(lhs, rhs);
+	            default:
+		            throw new NotSupportedException();
+#endif
+            }
 
-            //        return x.Storage * y.Storage;
-            //        /// following code is for determine if scalar or not
-            //        /// also for determine result
-            //        int scalarNo = !(x.ndim == 0 || y.ndim == 0) ? 0 : -1;
-
-            //        if (scalarNo == 0)
-            //        {
-            //            if (!Enumerable.SequenceEqual(x.shape, y.shape))
-            //            {
-            //                throw new IncorrectShapeException();
-            //            }
-            //        }
-            //        else
-            //        {
-            //            if (x.ndim == 0)
-            //                scalarNo = 1;
-            //            else
-            //                scalarNo = 2;
-            //        }
-
-            //        NDArray result = null;
-
-            //        switch (scalarNo)
-            //        {
-            //            case 1:
-            //                {
-            //                    result = new NDArray(y.dtype, y.shape);
-            //                    break;
-            //                }
-            //            case 2:
-            //                {
-            //                    result = new NDArray(x.dtype, x.shape);
-            //                    break;
-            //                }
-            //            default:
-            //                {
-            //                    result = new NDArray(x.dtype, x.shape);
-            //                    break;
-            //                }
-            //        }
-
-            //        var np1SysArr = x.Array;
-            //        var np2SysArr = y.Array;
-            //        var np3SysArr = result.Array;
-
-            //        switch (np3SysArr)
-            //        {
-            //            case byte[] resArr:
-            //                {
-            //                    var np1Array = np1SysArr as byte[];
-            //                    var np2Array = np2SysArr as byte[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<byte>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<byte>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                    {
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = (byte)(np1Array[idx] * np2Array[idx]);
-            //                        });
-            //                    }
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        var scalar = x.CloneData<int>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = (byte)(scalar * np2Array[idx]);
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        switch(Type.GetTypeCode(y.dtype))
-            //                        {
-            //                            case TypeCode.Int32:
-            //                                {
-            //                                    var scalar = y.CloneData<int>()[0];
-            //                                    for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                                        resArr[idx] = (byte)(np1Array[idx] * scalar);
-            //                                }
-            //                                break;
-            //                            case TypeCode.Single:
-            //                                {
-            //                                    var scalar = y.CloneData<float>()[0];
-            //                                    for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                                        resArr[idx] = (byte)(np1Array[idx] * scalar);
-            //                                }
-            //                                break;
-            //                            default:
-            //                                throw new NotImplementedException($"Default.Multiply {y.dtype}");
-            //                        }
-            //                    }
-            //                    break;
-            //                }
-
-            //            case ushort[] resArr:
-            //                {
-            //                    var np1Array = np1SysArr as ushort[];
-            //                    var np2Array = np2SysArr as ushort[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<ushort>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<ushort>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                    {
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = (ushort)(np1Array[idx] * np2Array[idx]);
-            //                        });
-            //                    }
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        var scalar = x.CloneData<int>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = (ushort)(scalar * np2Array[idx]);
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        var scalar = y.CloneData<int>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = (ushort)(np1Array[idx] * scalar);
-            //                    }
-            //                    break;
-            //                }
-
-            //            case int[] resArr:
-            //                {
-            //                    var np1Array = np1SysArr as int[];
-            //                    var np2Array = np2SysArr as int[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<int>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<int>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                    {
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //                        });
-            //                    }
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        var scalar = x.CloneData<int>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = scalar * np2Array[idx];
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        var scalar = y.CloneData<int>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * scalar;
-            //                    }
-            //                    break;
-            //                }
-
-            //            case System.Int64[] resArr:
-            //                {
-            //                    System.Int64[] np1Array = np1SysArr as System.Int64[];
-            //                    System.Int64[] np2Array = np2SysArr as System.Int64[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<System.Int64>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<System.Int64>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        System.Int64 scalar = x.CloneData<System.Int64>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = scalar * np2Array[idx];
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        System.Int64 scalar = y.CloneData<System.Int64>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * scalar;
-            //                    }
-            //                    break;
-            //                }
-
-            //            case float[] resArr:
-            //                {
-            //                    var np1Array = np1SysArr as float[];
-            //                    var np2Array = np2SysArr as float[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<float>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<float>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                    {
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //                        });
-            //                    }
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        var scalar = x.CloneData<float>()[0];
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = scalar * np2Array[idx];
-            //                        });
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        var scalar = y.CloneData<float>()[0];
-            //                        Parallel.For(0, np3SysArr.Length, idx =>
-            //                        {
-            //                            resArr[idx] = np1Array[idx] * scalar;
-            //                        });
-            //                    }
-            //                    break;
-            //                }
-
-            //            case System.Double[] resArr:
-            //                {
-            //                    System.Double[] np1Array = np1SysArr as System.Double[];
-            //                    System.Double[] np2Array = np2SysArr as System.Double[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<System.Double>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<System.Double>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        System.Double scalar = x.CloneData<System.Double>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = scalar * np2Array[idx];
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        System.Double scalar = y.CloneData<System.Double>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * scalar;
-            //                    }
-            //                    break;
-            //                }
-
-            //            case System.Numerics.Complex[] resArr:
-            //                {
-            //                    System.Numerics.Complex[] np1Array = np1SysArr as System.Numerics.Complex[];
-            //                    System.Numerics.Complex[] np2Array = np2SysArr as System.Numerics.Complex[];
-            //                    np1Array = (np1Array == null) ? x.CloneData<System.Numerics.Complex>() : np1Array;
-            //                    np2Array = (np2Array == null) ? y.CloneData<System.Numerics.Complex>() : np2Array;
-
-            //                    if (scalarNo == 0)
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //                    else if (scalarNo == 1)
-            //                    {
-            //                        System.Numerics.Complex scalar = x.CloneData<System.Numerics.Complex>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = scalar * np2Array[idx];
-            //                    }
-            //                    else if (scalarNo == 2)
-            //                    {
-            //                        System.Numerics.Complex scalar = y.CloneData<System.Numerics.Complex>()[0];
-            //                        for (int idx = 0; idx < np3SysArr.Length; idx++)
-            //                            resArr[idx] = np1Array[idx] * scalar;
-            //                    }
-            //                    break;
-            //                }
-
-            //            /*case System.Numerics.Quaternion[] resArr : 
-            //{
-            //    System.Numerics.Quaternion[] np1Array = np1SysArr as System.Numerics.Quaternion[];
-            //    System.Numerics.Quaternion[] np2Array = np2SysArr as System.Numerics.Quaternion[];
-            //    np1Array = (np1Array == null) ? np1.Storage.CloneData<System.Numerics.Quaternion>() : np1Array;
-            //    np2Array = (np2Array == null) ? np2.Storage.CloneData<System.Numerics.Quaternion>() : np2Array;
-
-            //    if (scalarNo == 0 )
-            //        for( int idx = 0; idx < np3SysArr.Length;idx++)
-            //            resArr[idx] = np1Array[idx] * np2Array[idx];
-            //    else if (scalarNo == 1 )
-            //    {
-            //        System.Numerics.Quaternion scalar = np1.Storage.CloneData<System.Numerics.Quaternion>()[0];
-            //        for( int idx = 0; idx < np3SysArr.Length;idx++)
-            //            resArr[idx] = scalar * np2Array[idx];
-            //    }
-            //    else if (scalarNo == 2 )
-            //    {
-            //        System.Numerics.Quaternion scalar = np2.Storage.CloneData<System.Numerics.Quaternion>()[0];
-            //        for( int idx = 0; idx < np3SysArr.Length;idx++)
-            //            resArr[idx] = np1Array[idx] * scalar;
-            //    }
-            //    break;
-            //}*/
-            //            default:
-            //                {
-            //                    throw new IncorrectTypeException();
-            //                }
-            //        }
-
-            //        return result;
         }
     }
 }

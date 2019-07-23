@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         {
             var left = np.zeros(new Shape(5, 5)) + 5d;
             var right = np.ones(new Shape(5, 5));
-            var ret = left + right;
-            ret.GetData<double>().All(d => d == 6).Should().BeTrue();
+            var ret = left - right;
+            ret.GetData<double>().All(d => d == 4).Should().BeTrue();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -281,7 +281,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -289,13 +289,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -303,13 +304,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -317,13 +319,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -331,13 +334,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -345,13 +349,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -359,13 +364,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -373,13 +379,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -387,13 +394,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -401,13 +409,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -415,13 +424,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Boolean_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -429,13 +439,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -443,13 +454,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -457,13 +469,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -471,13 +484,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -485,13 +499,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -499,13 +514,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -513,13 +529,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -527,13 +544,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -541,13 +559,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -555,13 +574,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -569,13 +589,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Byte_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -583,13 +604,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -597,13 +619,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -611,13 +634,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -625,13 +649,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -639,13 +664,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -653,13 +679,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -667,13 +694,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -681,13 +709,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -695,13 +724,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -709,13 +739,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -723,13 +754,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int16_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -737,13 +769,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -751,13 +784,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -765,13 +799,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -779,13 +814,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -793,13 +829,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -807,13 +844,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -821,13 +859,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -835,13 +874,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -849,13 +889,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -863,13 +904,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -877,13 +919,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt16_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -891,13 +934,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -905,13 +949,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -919,13 +964,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -933,13 +979,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -947,13 +994,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -961,13 +1009,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -975,13 +1024,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -989,13 +1039,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1003,13 +1054,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1017,13 +1069,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1031,13 +1084,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int32_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1045,13 +1099,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1059,13 +1114,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1073,13 +1129,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1087,13 +1144,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1101,13 +1159,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1115,13 +1174,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1129,13 +1189,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1143,13 +1204,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1157,13 +1219,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1171,13 +1234,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1185,13 +1249,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt32_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1199,13 +1264,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1213,13 +1279,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1227,13 +1294,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1241,13 +1309,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1255,13 +1324,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1269,13 +1339,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1283,13 +1354,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1297,13 +1369,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1311,13 +1384,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1325,13 +1399,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1339,13 +1414,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Int64_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1353,13 +1429,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1367,13 +1444,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1381,13 +1459,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1395,13 +1474,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1409,13 +1489,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1423,13 +1504,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1437,13 +1519,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1451,13 +1534,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1465,13 +1549,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1479,13 +1564,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1493,13 +1579,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_UInt64_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1507,13 +1594,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1521,13 +1609,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1535,13 +1624,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1549,13 +1639,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1563,13 +1654,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1577,13 +1669,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1591,13 +1684,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1605,13 +1699,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1619,13 +1714,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1633,13 +1729,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1647,13 +1744,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Char_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Char) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1661,13 +1759,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1675,13 +1774,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1689,13 +1789,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1703,13 +1804,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1717,13 +1819,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1731,13 +1834,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1745,13 +1849,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1759,13 +1864,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1773,13 +1879,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Char()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Char);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1787,13 +1894,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1801,13 +1909,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Double_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1815,13 +1924,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Single_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
@@ -1829,13 +1939,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
+
         [TestMethod]
         public void Subtract_Single_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
             var ret = left - right;
-            
+
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);

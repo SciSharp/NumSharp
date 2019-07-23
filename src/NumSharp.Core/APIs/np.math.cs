@@ -7,16 +7,16 @@ namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray add(NDArray x, NDArray y)
+        public static NDArray add(in NDArray x, in NDArray y)
             => BackendFactory.GetEngine().Add(x, y);
 
-        public static NDArray divide(NDArray x, NDArray y)
+        public static NDArray divide(in NDArray x, in NDArray y)
             => BackendFactory.GetEngine().Divide(x, y);
 
-        public static NDArray multiply(NDArray x, NDArray y)
+        public static NDArray multiply(in NDArray x, in NDArray y)
             => BackendFactory.GetEngine().Multiply(x, y);
 
-        public static NDArray subtract(NDArray x, NDArray y)
+        public static NDArray subtract(in NDArray x, in NDArray y)
             => BackendFactory.GetEngine().Subtract(x, y);
 
         /// <summary>

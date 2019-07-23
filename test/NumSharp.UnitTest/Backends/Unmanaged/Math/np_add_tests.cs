@@ -10,7 +10,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
     [TestClass]
     public class np_add_tests
     {
-
         [TestMethod]
         public void UInt8AddTest1()
         {
@@ -18,7 +17,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
             var nd2 = nd1 + (byte)2;
 
-            nd2.array_equal(new byte[] { 2, 3, 4 }).Should().BeTrue();
+            nd2.array_equal(new byte[] {2, 3, 4}).Should().BeTrue();
         }
 
         [TestMethod]
@@ -27,7 +26,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             var nd1 = np.arange(3).astype(np.uint16);
 
             var nd2 = nd1 + (byte)2;
-            nd2.array_equal(new ushort[] { 2, 3, 4 }).Should().BeTrue();
+            nd2.array_equal(new ushort[] {2, 3, 4}).Should().BeTrue();
         }
 
         [TestMethod]

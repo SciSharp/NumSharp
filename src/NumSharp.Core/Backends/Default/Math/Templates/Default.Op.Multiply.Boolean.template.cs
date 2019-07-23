@@ -1,5 +1,5 @@
 ﻿#if _REGEN_TEMPLATE
-%template "../Add/Default.Add.#1.cs" for every ["Boolean"]
+%template "../Multiply/Default.Multiply.#1.cs" for every ["Boolean"]
 #endif
 
 using System;
@@ -23,21 +23,21 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
-        public unsafe NDArray AddBoolean(in NDArray lhs, in NDArray rhs)
+        public unsafe NDArray MultiplyBoolean(in NDArray lhs, in NDArray rhs)
         {
             //lhs is NDArray of bool
             switch (rhs.GetTypeCode)
             {
 #if _REGEN
-                %op = "+"
-                %op_bool = "|"
+                %op = "*"
+                %op_bool = "&"
                 case NPTypeCode.Boolean:
                 {
                     //if return type is scalar
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) %(op_bool) *((bool*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar(Convert.ChangeType((*((bool*)lhs.Address)) %(op_bool) (*((bool*)rhs.Address)), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -54,7 +54,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = (*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToBoolean((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToByte((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToByte((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt16((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt16((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -90,7 +90,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt16((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt16((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -102,7 +102,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt32((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt32((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -114,7 +114,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt32((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt32((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -126,7 +126,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt64((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToInt64((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -138,7 +138,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt64((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToUInt64((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -150,7 +150,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToChar((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToChar((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -162,7 +162,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToDouble((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToDouble((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -174,7 +174,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToSingle((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToSingle((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -186,7 +186,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToDecimal((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current))) %(op_bool) *(rhs_address + BroadcastedRightShape.GetIndexInShape(current)));
+                                *(ret_address + retShape.GetIndexInShape(current)) = Convert.ToDecimal((*(lhs_address + BroadcastedLeftShape.GetIndexInShape(current)) ? 1 : 0) %(op_bool) (*(rhs_address + BroadcastedRightShape.GetIndexInShape(current)) ? 1 : 0));
                             } while (incr.Next() != null);
 
                             return ret;
