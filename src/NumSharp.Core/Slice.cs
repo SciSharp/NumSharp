@@ -193,7 +193,7 @@ namespace NumSharp
 
         public static Slice Index(int index)
         {
-            return new Slice(index, index + 1) { IsIndex = true };
+            return new Slice(index, index + 1) {IsIndex = true};
         }
 
         public override string ToString()
@@ -233,7 +233,7 @@ namespace NumSharp
             var stop = Step < 0 ? Start : Stop;
             var astop = stop < 0 ? dim + stop : stop;
             if (astop.HasValue && astop < 0)
-                astop=dim;
+                astop = dim;
             return Math.Min(dim, astop ?? dim);
         }
 
@@ -245,7 +245,7 @@ namespace NumSharp
             var start = GetAbsStart(dim);
             var stop = GetAbsStop(dim);
             if (Step < 0)
-                return new Slice( stop - 1, start - 1, Step);
+                return new Slice(stop - 1, start - 1, Step);
             return new Slice(start, stop, Step);
         }
     }
