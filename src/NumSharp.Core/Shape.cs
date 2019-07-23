@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -384,22 +385,29 @@ namespace NumSharp
             return size;
         }
 
-        //TODO! figure what to name this.
-        public static int[] GetShape(int[] dims, int axis = -1)
+        public static int[] GetAxis(ref Shape shape, int axis)
         {
-            switch (axis)
-            {
-                case -1:
-                    return dims;
-                case 0:
-                    return dims.Skip(1).Take(dims.Length - 1).ToArray();
-                case 1:
-                    return new int[] {dims[0]}.Concat(dims.Skip(2).Take(dims.Length - 2)).ToArray();
-                case 2:
-                    return dims.Take(2).ToArray();
-                default:
-                    throw new NotImplementedException($"GetCoordinates shape: {string.Join(", ", dims)} axis: {axis}");
-            }
+            return GetAxis(shape.dimensions, axis);
+        }
+
+        public static int[] GetAxis(Shape shape, int axis)
+        {
+            return GetAxis(shape.dimensions, axis);
+        }
+
+        public static int[] GetAxis(in int[] dims, int axis)
+        {
+            if (dims == null)
+                throw new ArgumentNullException(nameof(dims));
+
+            if (dims.Length == 0)
+                return Array.Empty<int>();
+
+            if (axis <= -1) axis = dims.Length - 1;
+            if (axis >= dims.Length)
+                throw new AxisOutOfRangeException(dims.Length, axis);
+
+            return dims.RemoveAt(axis);
         }
 
         /// <summary>
@@ -411,15 +419,15 @@ namespace NumSharp
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
 
-            bool isMultiDim = false;
+            bool isJagged = false;
 
             {
                 var type = array.GetType();
-                isMultiDim = array.Rank == 1 && type.IsArray && type.GetElementType().IsArray;
+                isJagged = array.Rank == 1 && type.IsArray && type.GetElementType().IsArray;
             }
 
             var l = new List<int>(16);
-            if (isMultiDim)
+            if (isJagged)
             {
                 // ReSharper disable once PossibleNullReferenceException
                 Array arr = array;
@@ -477,11 +485,9 @@ namespace NumSharp
                 slices[i] = slice.Sanitize(dim);
                 sliced_axes_unreduced[i] = slices[i].GetSize();
             }
-
-            ;
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
-            var viewInfo = new ViewInfo() {OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced)};
-            return new Shape(sliced_axes) {ViewInfo = viewInfo};
+            var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
+            return new Shape(sliced_axes) { ViewInfo = viewInfo };
         }
 
         #endregion
