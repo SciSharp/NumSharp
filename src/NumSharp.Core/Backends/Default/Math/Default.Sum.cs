@@ -256,7 +256,7 @@ namespace NumSharp.Backends
 
         private NDArray Sum0(NDArray x, int axis)
         {
-            var shape = Shape.GetShape(x.shape, axis);
+            var shape = Shape.GetAxis(x.shape, axis);
             var size = Shape.GetSize(shape);
             int i = 0;
 
@@ -333,7 +333,7 @@ namespace NumSharp.Backends
 
         private NDArray Sum1(NDArray x, int axis)
         {
-            var shape = Shape.GetShape(x.shape, axis);
+            var shape = Shape.GetAxis(x.shape, axis);
             var size = Shape.GetSize(shape);
             int i = 0;
 
@@ -411,7 +411,7 @@ namespace NumSharp.Backends
 
         private NDArray Sum2(NDArray x, int axis)
         {
-            var shape = Shape.GetShape(x.shape, axis);
+            var shape = Shape.GetAxis(x.shape, axis);
             var size = Shape.GetSize(shape);
             int i = 0;
 
