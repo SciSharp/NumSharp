@@ -123,31 +123,19 @@ namespace NumSharp
             {
                 if (slices.Length == 0)
                     throw new ArgumentException("At least one slice definition expected");
-                //if (slices.Length == 1)
-                //{
-                //    var s = slices[0];
-                //    if (s.Step == 1)
-                //    {
-                //        if (s.IsIndex)
-                //            return GetData(s.Start ?? 0);
-                //        s.Start = (slice is null ? 0 : slice.Start) + Math.Max(0, s.Start.HasValue ? s.Start.Value : 0);
-                //        s.Stop = (slice is null ? 0 : slice.Start) +
-                //                 Math.Min(s.Stop.HasValue ? s.Stop.Value : shape[0], shape[0]);
-                //        var new_shape= new int[] {s.Length.Value}.Concat(Shape.GetShape(shape, 0)).ToArray();
-                //        var nd = new NDArray(Array, new_shape);
-                //        nd.Storage.Slice = s;
-                //        return nd;
-                //    }
-                //}
-                return null;
-                //TODO! return new NDArray(new ViewStorage(Storage, slices));
+                return new NDArray(Storage.GetView(slices));
             }
             set
             {
                 throw new NotImplementedException("slice data set is not implemented.");
             }
         }
-        //TODO! What is the use of this? Makes no sense
+        //TODO! masking with boolean array
+        // example:
+        //
+        // a = np.arange(12);
+        // b=a[a > 6];
+        //
         //public NDArray this[NDArray<bool> booleanArray]
         //{
         //    get
