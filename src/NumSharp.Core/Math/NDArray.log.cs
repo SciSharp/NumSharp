@@ -8,12 +8,21 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Natural logarithm, element-wise.
-        ///
-        /// The natural logarithm log is the inverse of the exponential function, so that log(exp(x)) = x.The natural logarithm is logarithm in base e.
+        ///     Natural logarithm, element-wise.
         /// </summary>
-        /// <returns></returns>
-        public NDArray log()
-            => BackendFactory.GetEngine().Log(this);
+        /// <param name="dtype">The dtype of the returned NDArray</param>
+        /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.log.html</remarks>
+        public NDArray log(Type dtype = null)
+            => BackendFactory.GetEngine().Log(this, dtype);
+
+        /// <summary>
+        ///     Natural logarithm, element-wise.
+        /// </summary>
+        /// <param name="typeCode">The dtype of the returned NDArray</param>
+        /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.log.html</remarks>
+        public NDArray log(NPTypeCode typeCode)
+            => BackendFactory.GetEngine().Log(this, typeCode);
     }
 }

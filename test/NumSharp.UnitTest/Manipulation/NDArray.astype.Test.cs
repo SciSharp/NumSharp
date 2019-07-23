@@ -109,6 +109,15 @@ namespace NumSharp.UnitTest
             int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
         }
 
+        [TestMethod]
+        public void CastEmptyNDArray()
+        {
+            var nd = new NDArray(NPTypeCode.Int32);
+            var int16_copied = nd.astype(np.uint16, true);
+            int16_copied.Should().BeEquivalentTo(nd);
+            int16_copied.Shape.IsEmpty.Should().BeTrue();
+        }
+
         [TestMethod, Ignore("String dtype is not supported")]
         public void CastingStringToByte()
         {

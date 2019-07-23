@@ -29,5 +29,6 @@ namespace NumSharp.UnitTest
             bytes.Length.Should().Be(nd.size * sizeof(int));
             Assert.IsTrue(Enumerable.SequenceEqual(new byte[] {3, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0}, bytes));
         }
+
     }
 }

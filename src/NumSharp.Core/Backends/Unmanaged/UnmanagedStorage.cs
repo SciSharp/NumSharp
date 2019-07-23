@@ -1399,6 +1399,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
+        /// <remarks>Copies only if <typeparamref name="T"/> does not equal to <see cref="DType"/></remarks>
         public ArraySlice<T> GetData<T>() where T : unmanaged
         {
             if (!typeof(T).IsValidNPType())

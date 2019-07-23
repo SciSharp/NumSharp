@@ -451,9 +451,14 @@ namespace NumSharp
 
         public IEnumerator GetEnumerator()
         {
-            return Array.GetEnumerator();
-        }
+            return Array?.GetEnumerator() ?? _empty().GetEnumerator();
 
+            IEnumerable _empty()
+            {
+                yield break;
+            }
+        }
+        
         /// <summary>
         /// New view of array with the same data.
         /// </summary>
