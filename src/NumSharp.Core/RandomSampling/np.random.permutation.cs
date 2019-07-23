@@ -6,21 +6,45 @@ namespace NumSharp
 {
     public partial class NumPyRandom
     {
-        public NDArray permutation(int max)
+        /// <summary>
+        ///     Randomly permute a sequence, or return a permuted range.
+        /// </summary>
+        /// <param name="x">If x is an integer, randomly permute np.arange(x).</param>
+        /// <returns>Permuted sequence or array range.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</remarks>
+        public NDArray permutation(int x)
         {
-            int[] orders = new int[max];
+            var nd = np.arange(x);
 
-            var nd = np.arange(max);
-
-            for (int i = 0; i < max; i++)
+            for (int i = 0; i < x; i++)
             {
-                var pos = randomizer.Next(0, max);
-                var zero = nd.Data<int>(0);
-                nd[0] = (NDArray)nd.Data<int>(pos);
-                nd[pos] = (NDArray) zero;
+                var pos = randomizer.Next(x);
+                var zero = nd.GetInt32(0);
+                nd.SetAtIndex(nd.GetAtIndex(pos), 0);
+                nd.SetAtIndex(zero, pos);
             }
 
             return nd;
+        }
+
+        /// <summary>
+        ///     Randomly permute a sequence, or return a permuted range.
+        /// </summary>
+        /// <param name="x">If x is an integer, randomly permute np.arange(x).</param>
+        /// <returns>Permuted sequence or array range.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</remarks>
+        public NDArray permutation(NDArray x)
+        {
+            var len = x.size;
+            for (int i = 0; i < len; i++)
+            {
+                var pos = randomizer.Next(len);
+                var zero = x.GetAtIndex(0); //TODO! this doesn't support ndim>1
+                x.SetAtIndex(x.GetAtIndex(pos), 0);
+                x.SetAtIndex(zero, pos);
+            }
+
+            return x;
         }
     }
 }
