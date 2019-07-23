@@ -192,7 +192,7 @@ namespace NumSharp
 
         public static Slice Index(int index)
         {
-            return new Slice(index, index + 1) {IsIndex = true};
+            return new Slice(index, index + 1) { IsIndex = true };
         }
 
         public override string ToString()
@@ -203,7 +203,7 @@ namespace NumSharp
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
         }
 
-        // return the size of the slice, given the data dimension on this axiy
+        // return the size of the slice, given the data dimension on this axis
         public int GetSize(int dim)
         {
             var absStart = GetAbsStart(dim);
@@ -231,6 +231,16 @@ namespace NumSharp
             var absStopN = Stop < 0 ? dim + Stop : Stop;
             var absStop = Step < 0 ? (absStopN ?? 0) : (absStopN ?? dim);
             return absStop;
+        }
+
+        /// <summary>
+        /// clips a user-defined slice against real array size to allow for overshooting
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="stop"></param>
+        public Slice Clip(int start, int stop)
+        {
+            return new Slice(Start==null ? Start : Math.Max(0, Start.Value), Stop==null ? Stop :Math.Min(Stop.Value, stop), Step);
         }
     }
 }

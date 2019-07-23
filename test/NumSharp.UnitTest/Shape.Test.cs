@@ -184,5 +184,12 @@ namespace NumSharp.UnitTest
             Shape.Matrix(0, 0).Should().Be(new Shape(0, 0));
             Shape.Matrix(0, 0).strides.Should().ContainInOrder(new Shape(0, 0).strides);
         }
+
+
+        [TestMethod]
+        public void Slicing()
+        {
+            new Shape(10).Slice("-77:77").Should().Be(new Shape(10));
+        }
     }
 }
