@@ -52,9 +52,7 @@ namespace NumSharp
 
             unchecked
             {
-                int hash = 26599; //('C' * 397)
-                hash ^= length * 397;
-                shape._hashCode = hash;
+                shape._hashCode = 26599 ^ length * 397;
             }
 
             shape.IsScalar = false;

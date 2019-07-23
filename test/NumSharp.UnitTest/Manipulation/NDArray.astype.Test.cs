@@ -156,18 +156,18 @@ namespace NumSharp.UnitTest
         [TestMethod, Ignore("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
-            var nd = np.ones(np.int32, 3, 3);
-            nd[2, 2].Data<int>()[0].Should().Be(1);
-            var output_copied = nd.astype(np.complex128, true);
-            var output = nd.astype(np.complex128, false);
-
-            //test copying
-            output_copied.Array.Should().Equal(nd.Array);
-            output.Array.Should().Equal(nd.Array);
-            output_copied.Array.GetType().GetElementType().Should().Be<Complex>();
-            output.Array.GetType().GetElementType().Should().Be<Complex>();
-
-            output_copied[2, 2].Data<Complex>(0).Should().Be(new Complex(1, 0));
+            //var nd = np.ones(np.int32, 3, 3);
+            //nd[2, 2].Data<int>()[0].Should().Be(1);
+            //var output_copied = nd.astype(np.complex128, true);
+            //var output = nd.astype(np.complex128, false);
+            //
+            ////test copying
+            //output_copied.Array.Should().Equal(nd.Array);
+            //output.Array.Should().Equal(nd.Array);
+            //output_copied.Array.GetType().GetElementType().Should().Be<Complex>();
+            //output.Array.GetType().GetElementType().Should().Be<Complex>();
+            //
+            //output_copied[2, 2].GetComplex(0).Should().Be(new Complex(1, 0));
         }
     }
 }

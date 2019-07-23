@@ -17,8 +17,8 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.Data<int>(1, 1) == 5);
-            Assert.IsTrue(nd.Data<int>(2, 0) == 8);
+            Assert.IsTrue(nd.GetInt32(1, 1) == 5);
+            Assert.IsTrue(nd.GetInt32(2, 0) == 8);
         }
 
         [TestMethod]
@@ -49,13 +49,13 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.Data<int>(0, 3) == 3);
-            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
+            Assert.IsTrue(nd.GetInt32(0, 3) == 3);
+            Assert.IsTrue(nd.GetInt32(1, 3) == 7);
 
             // set value
             nd.SetData(10, 0, 0);
-            Assert.IsTrue(nd.Data<int>(0, 0) == 10);
-            Assert.IsTrue(nd.Data<int>(1, 3) == 7);
+            Assert.IsTrue(nd.GetInt32(0, 0) == 10);
+            Assert.IsTrue(nd.GetInt32(1, 3) == 7);
         }
 
         //TODO! NDArray[NDArray]

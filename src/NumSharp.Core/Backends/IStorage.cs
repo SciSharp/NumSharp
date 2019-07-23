@@ -24,11 +24,6 @@ namespace NumSharp
     public interface IStorage : ICloneable
     {
         /// <summary>
-        ///     Does this instance support spanning?
-        /// </summary>
-        bool SupportsSpan { get; }
-
-        /// <summary>
         ///     The data type of internal storage array.
         /// </summary>
         /// <value>numpys equal dtype</value>
@@ -51,11 +46,6 @@ namespace NumSharp
         /// </summary>
         /// <value>Numpy's equivalent to np.shape</value>
         Shape Shape { get; }
-
-        /// <summary>
-        ///     The current slice this <see cref="IStorage"/> instance currently represent.
-        /// </summary>
-        Slice Slice { get; set; }
 
         /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
@@ -227,10 +217,6 @@ namespace NumSharp
         /// </summary>
         /// <param name="dimensions"></param>
         void Reshape(params int[] dimensions);
-
-        ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged;
-
-        ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged;
 
         #region Get Methods
 

@@ -19,8 +19,8 @@ namespace NumSharp.UnitTest.Creation
             Buffer.BlockCopy(ints, 0, bytes, 0, bytes.Length);
 
             var nd = np.frombuffer(bytes, np.int32);
-            Assert.AreEqual(nd.Data<int>(0), 100);
-            Assert.AreEqual(nd.Data<int>(4), 500);
+            Assert.AreEqual(nd.GetInt32(0), 100);
+            Assert.AreEqual(nd.GetInt32(4), 500);
         }
     }
 }

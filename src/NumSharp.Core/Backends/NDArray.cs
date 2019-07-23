@@ -166,7 +166,7 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size) : this(dtype, new Shape(size), true) { }
+        public NDArray(Type dtype, int size) : this(dtype, Shape.Vector(size), true) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -183,7 +183,7 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(NPTypeCode dtype, int size) : this(dtype, new Shape(size), true) { }
+        public NDArray(NPTypeCode dtype, int size) : this(dtype, Shape.Vector(size), true) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -260,8 +260,6 @@ namespace NumSharp
 
         public char order => Storage.Shape.Order;
 
-        public Slice slice => Storage.Slice;
-
         public int[] strides => Storage.Shape.Strides;
 
         internal Shape Shape
@@ -292,12 +290,7 @@ namespace NumSharp
         /// <returns></returns>
         public ArraySlice<T> Data<T>() where T : unmanaged
         {
-            if (slice is null)
-                return Storage.GetData<T>();
-            else if (Storage.SupportsSpan)
-                return Storage.View<T>();
-            else
-                return Storage.GetData<T>();
+            return Storage.GetData<T>();
         }
 
         public T Data<T>(params int[] indice) where T : unmanaged => (T)Storage.GetValue(indice); //TODO! this should use unmanaged address
@@ -399,6 +392,7 @@ namespace NumSharp
         }
 
         public ArraySlice<T> CloneData<T>() where T : unmanaged => Storage.CloneData<T>();
+
         public IArraySlice CloneData() => Storage.CloneData();
 
         /// <summary>

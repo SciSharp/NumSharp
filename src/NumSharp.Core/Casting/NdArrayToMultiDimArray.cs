@@ -45,7 +45,7 @@ namespace NumSharp
             for (int idx = 0; idx < this.size; idx++)
             {
                 indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
+                idxValue = array[Storage.Shape.GetIndexInShape(indexes)];
                 dotNetArray.SetValue(idxValue, indexes);
             }
 
