@@ -326,18 +326,6 @@ namespace NumSharp
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public void Reshape(params int[] dims)
-        {
-            this = new Shape(dims);
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        public void Reshape(ref Shape shape)
-        {
-            this = shape;
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
         public static int GetSize(int[] dims)
         {
             int size = 1;
