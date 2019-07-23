@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest
 {
@@ -17,6 +18,8 @@ namespace NumSharp.UnitTest
                 AssertSequenceEqual(expected as Array, given as Array);
             else if (expected is ICollection && given is ICollection)
                 AssertSequenceEqual(expected as ICollection, given as ICollection);
+            else if (expected is IArraySlice && given is IArraySlice)
+                AssertSequenceEqual((expected as IArraySlice).ToArray(), (given as IArraySlice).ToArray());
             else
                 Assert.AreEqual(expected, given, msg ?? $"Expected '{expected}', given '{given}'");
         }
@@ -32,5 +35,6 @@ namespace NumSharp.UnitTest
             for (int i = 0; i < a.Length; i++)
                 AssertAreEqual(a.GetValue(i), b.GetValue(i), $"Elements at index {i} differ. Expected'{a.GetValue(i)}', given '{b.GetValue(i)}'");
         }
+
     }
 }
