@@ -35,7 +35,7 @@ namespace NumSharp
         public abstract NDArray Power(NDArray x, ValueType y);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(NDArray x, int? axis = null);
-        public abstract NDArray Negate(NDArray x);
+        public abstract NDArray Negate(in NDArray x);
 
         #endregion
 
