@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -215,7 +216,39 @@ namespace NumSharp
         public int GetIndexInShape(params int[] select)
         {
             int offset;
+            if (IsSliced)
+            {
+                if (select.Length>dimensions.Length)
+                    throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
+                // TODO: perf opt
+                    var vi = ViewInfo;
+                if (dimensions.Length == 0 && select.Length == 1)
+                {
+                    var slice = vi.Slices[0];
+                    var start = slice.Start.Value;
+                    return start + select[0] * slice.Step;
+                }
 
+                offset = 0;
+                unchecked
+                {
+                    for (int i = 0; i < @select.Length; i++)
+                    {
+                        if (vi.Slices.Length <= i)
+                        {
+                            offset += strides[i] * @select[i];
+                            continue;
+                        }
+                        var slice = vi.Slices[i];
+                        var start = slice.Start.Value;
+
+                        offset += strides[i] * (start + @select[i] * slice.Step);
+                    }
+                }
+                return offset;
+            }
+
+            // no slicing
             if (dimensions.Length == 0 && select.Length == 1)
                 return select[0];
 
@@ -225,7 +258,6 @@ namespace NumSharp
                 for (int i = 0; i < @select.Length; i++)
                     offset += strides[i] * @select[i];
             }
-
             return offset;
         }
 
@@ -239,7 +271,7 @@ namespace NumSharp
         /// <param name="select"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int GetIndexInShape(Slice slice, params int[] select) => GetIndexInShape(@select);
+        public int GetIndexInShape(Slice slice, params int[] select) => GetIndexInShape(@select); // TODO: this should probably be removed. it doesn#t do anything!
 
         /// <summary>
         ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contegious) inside the current storage.
@@ -423,13 +455,21 @@ namespace NumSharp
         public Shape Slice(string slicing_notation)
             => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
-        public Shape Slice(params Slice[] slices)
+        public Shape Slice(params Slice[] input_slices)
         {
             if (this.IsSliced)
             {
                 throw new NotImplementedException("Recursive Slicing not implemented yet! We must merge and flatten ViewInfo here!");
             }
-            var sliced_axes_unreduced = Dimensions.Select((dim, i) => slices[i].Clip(0,dim).GetSize(dim)).ToArray();
+            var slices = input_slices.Length != Dimensions.Length ? input_slices : new Slice[Dimensions.Length];
+            var sliced_axes_unreduced = new int[Dimensions.Length];
+            for(int i =0; i<Dimensions.Length; i++)
+            {
+                var dim = Dimensions[i];
+                var slice = input_slices.Length>i ? input_slices[i] : NumSharp.Slice.All();
+                slices[i]=slice.Sanitize(dim);
+                sliced_axes_unreduced[i] = slices[i].GetSize();
+            };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
             return new Shape(sliced_axes) { ViewInfo = viewInfo };

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -204,12 +205,11 @@ namespace NumSharp
         }
 
         // return the size of the slice, given the data dimension on this axis
-        public int GetSize(int dim)
+        // note: this works only with sanitized shapes!
+        public int GetSize()
         {
-            var absStart = GetAbsStart(dim);
-            var absStop = GetAbsStop(dim);
-            var absStep = GetAbsStep();
-            return ((absStop - absStart) + (absStep - 1)) / absStep;
+            var astep = Math.Abs(Step);
+            return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
         }
 
         public int GetAbsStep()
@@ -217,30 +217,36 @@ namespace NumSharp
             return Math.Abs(Step);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetAbsStart(int dim)
         {
-            // Note: No handling of out of range
-            var absStartN = Start < 0 ? dim + Start : Start;
-            var absStart = Step < 0 ? (absStartN ?? dim) : (absStartN ?? 0);
-            return absStart;
+            var start = Step < 0 ? Stop : Start;
+            var astart = start < 0 ? dim + start : start;
+            if (astart.HasValue && astart < 0)
+                astart = 0;
+            return astart ?? 0;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetAbsStop(int dim)
         {
-            // Note: No handling of out of range
-            var absStopN = Stop < 0 ? dim + Stop : Stop;
-            var absStop = Step < 0 ? (absStopN ?? 0) : (absStopN ?? dim);
-            return absStop;
+            var stop = Step < 0 ? Start : Stop;
+            var astop = stop < 0 ? dim + stop : stop;
+            if (astop.HasValue && astop < 0)
+                astop=dim;
+            return Math.Min(dim, astop ?? dim);
         }
 
         /// <summary>
-        /// clips a user-defined slice against real array size to allow for overshooting
+        /// Transforms a user-defined slice values with missing info into a fully defined slice
         /// </summary>
-        /// <param name="start"></param>
-        /// <param name="stop"></param>
-        public Slice Clip(int start, int stop)
+        public Slice Sanitize(int dim)
         {
-            return new Slice(Start==null ? Start : Math.Max(0, Start.Value), Stop==null ? Stop :Math.Min(Stop.Value, stop), Step);
+            var start = GetAbsStart(dim);
+            var stop = GetAbsStop(dim);
+            if (Step < 0)
+                return new Slice( stop - 1, start - 1, Step);
+            return new Slice(start, stop, Step);
         }
     }
 }

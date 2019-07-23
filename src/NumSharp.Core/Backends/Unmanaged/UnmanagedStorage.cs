@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
@@ -2221,5 +2222,21 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => SetIndex(value, _shape.GetIndexInShape(Slice, indices));
         }
+
+        public unsafe List<T> Iterate<T>() where T : unmanaged
+        {
+            var ret = new List<T>();
+            var addr = (T*)Address;
+            var shape = Shape;
+            var incr = new NDIndexArrayIncrementor(shape.dimensions);
+            int[] current = incr.Index;
+            do
+            {
+                ret.Add(*(addr + shape.GetIndexInShape(current)));
+            } while (incr.Next() != null);
+
+            return ret;
+        }
+
     }
 }

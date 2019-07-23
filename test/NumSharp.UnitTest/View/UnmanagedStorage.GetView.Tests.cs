@@ -18,43 +18,49 @@ namespace NumSharp.UnitTest.View
             // return identical view
             var view = data.GetView( ":");
             Assert.AreEqual(new Shape(10), view.Shape);
-            AssertAreEqual(data.GetData(), view.GetData());
+            AssertAreEqual(data.Iterate<int>(), view.Iterate<int>());
             view = data.GetView( "-77:77");
             Assert.AreEqual(new Shape(10), view.Shape);
-            AssertAreEqual(data.GetData(), view.GetData());
+            AssertAreEqual(data.Iterate<int>(), view.Iterate<int>());
             // return reduced view
             view = data.GetView( "7:");
             Assert.AreEqual(new Shape(3), view.Shape);
-            AssertAreEqual(new int[] { 7, 8, 9 }, view.GetData());
+            AssertAreEqual(new int[] { 7, 8, 9 }, view.Iterate<int>());
             view = data.GetView( ":5");
             Assert.AreEqual(new Shape(5), view.Shape);
-            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, view.GetData());
+            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, view.Iterate<int>());
             view = data.GetView( "2:3");
             Assert.AreEqual(new Shape(1), view.Shape);
-            AssertAreEqual(new int[] { 2 }, view.GetData());
+            AssertAreEqual(new int[] { 2 }, view.Iterate<int>());
             // return stepped view
             view = data.GetView( "::2");
             Assert.AreEqual(new Shape(5), view.Shape);
-            AssertAreEqual(new int[] { 0, 2, 4, 6, 8 }, view.GetData());
+            AssertAreEqual(new int[] { 0, 2, 4, 6, 8 }, view.Iterate<int>());
             view = data.GetView("::3");
             Assert.AreEqual(new Shape(4), view.Shape);
-            AssertAreEqual(new int[] { 0, 3, 6, 9 }, view.GetData());
+            AssertAreEqual(new int[] { 0, 3, 6, 9 }, view.Iterate<int>());
+            view = data.GetView("::77");
+            Assert.AreEqual(new Shape(1), view.Shape);
+            AssertAreEqual(new[] { 0 }, view.Iterate<int>());
             view = data.GetView("-77:77:77");
             Assert.AreEqual(new Shape(1), view.Shape);
-            AssertAreEqual(new[] { 0 }, view.GetData());
+            AssertAreEqual(new[] { 0 }, view.Iterate<int>());
             // negative step!
             view = data.GetView("::-1");
             Assert.AreEqual(new Shape(10), view.Shape);
-            AssertAreEqual(data.GetData().OfType<int>().Reverse().ToArray(), view.GetData());
+            AssertAreEqual(data.Iterate<int>().OfType<int>().Reverse().ToArray(), view.Iterate<int>());
             view = data.GetView("::-2");
             Assert.AreEqual(new Shape(5), view.Shape);
-            AssertAreEqual(new int[] { 9, 7, 5, 3, 1 }, view.GetData());
+            AssertAreEqual(new int[] { 9, 7, 5, 3, 1 }, view.Iterate<int>());
             view = data.GetView("::-3");
             Assert.AreEqual(new Shape(4), view.Shape);
-            AssertAreEqual(new int[] { 9, 6, 3, 0 }, view.GetData());
+            AssertAreEqual(new int[] { 9, 6, 3, 0 }, view.Iterate<int>());
+            view = data.GetView("::-77");
+            Assert.AreEqual(new Shape(1), view.Shape);
+            AssertAreEqual(new[] { 9 }, view.Iterate<int>());
             view = data.GetView("-77:77:-77");
             Assert.AreEqual(new Shape(1), view.Shape);
-            AssertAreEqual(new[] { 9 }, view.GetData());
+            AssertAreEqual(new[] { 9 }, view.Iterate<int>());
         }
 
 //        [TestMethod]
@@ -126,30 +132,30 @@ namespace NumSharp.UnitTest.View
 //            Assert.AreEqual(new Shape(10), identical.Shape);
 //            var view1 = new ViewStorage(identical, "1:9");
 //            Assert.AreEqual(new Shape(8), view1.Shape);
-//            AssertAreEqual(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, }, view1.GetData());
+//            AssertAreEqual(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, }, view1.Iterate<int>());
 //            var view2 = new ViewStorage(view1, "::-2");
 //            Assert.AreEqual(new Shape(4), view2.Shape);
-//            AssertAreEqual(new int[] { 8, 6, 4, 2, }, view2.GetData());
+//            AssertAreEqual(new int[] { 8, 6, 4, 2, }, view2.Iterate<int>());
 //            var view3 = new ViewStorage(view2, "::-3");
 //            Assert.AreEqual(new Shape(2), view3.Shape);
-//            AssertAreEqual(new int[] { 2, 8 }, view3.GetData());
+//            AssertAreEqual(new int[] { 2, 8 }, view3.Iterate<int>());
 //            // all must see the same modifications, no matter if original or any view is modified
 //            // modify original
 //            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
-//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.GetData());
-//            AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.GetData());
-//            AssertAreEqual(new int[] { -2, -8 }, view3.GetData());
+//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.Iterate<int>());
+//            AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { -2, -8 }, view3.Iterate<int>());
 //            // modify views
 //            view1.SetData(88, 7);
-//            AssertAreEqual(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9 }, data.GetData());
-//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, }, view1.GetData());
-//            AssertAreEqual(new int[] { 88, -6, -4, -2, }, view2.GetData());
-//            AssertAreEqual(new int[] { -2, 88 }, view3.GetData());
+//            AssertAreEqual(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9 }, data.Iterate<int>());
+//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, }, view1.Iterate<int>());
+//            AssertAreEqual(new int[] { 88, -6, -4, -2, }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { -2, 88 }, view3.Iterate<int>());
 //            view3.SetData(22, 0);
-//            AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9 }, data.GetData());
-//            AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, }, view1.GetData());
-//            AssertAreEqual(new int[] { 88, -6, -4, 22, }, view2.GetData());
-//            AssertAreEqual(new int[] { 22, 88 }, view3.GetData());
+//            AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9 }, data.Iterate<int>());
+//            AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, }, view1.Iterate<int>());
+//            AssertAreEqual(new int[] { 88, -6, -4, 22, }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { 22, 88 }, view3.Iterate<int>());
 //        }
 
 //        [TestMethod]
@@ -182,20 +188,20 @@ namespace NumSharp.UnitTest.View
 //            // return identical view
 //            var view = data.GetView( ":");
 //            Assert.AreEqual(new Shape(3, 3), view.Shape);
-//            AssertAreEqual(data.GetData(), view.GetData());
+//            AssertAreEqual(data.Iterate<int>(), view.Iterate<int>());
 //            // return reduced view
 //            view = data.GetView( "1:");
 //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-//            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.Iterate<int>());
 //            view = data.GetView( "1:,:");
 //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-//            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.Iterate<int>());
 //            view = data.GetView( ":,1:");
 //            Assert.AreEqual(new Shape(3, 2), view.Shape);
-//            AssertAreEqual(new int[] { 1, 2, 4, 5, 7, 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 1, 2, 4, 5, 7, 8 }, view.Iterate<int>());
 //            view = data.GetView( "1:2, 0:1");
 //            Assert.AreEqual(new Shape(1, 1), view.Shape);
-//            AssertAreEqual(new int[] { 3 }, view.GetData());
+//            AssertAreEqual(new int[] { 3 }, view.Iterate<int>());
 //            // return stepped view
 //            //>>> x
 //            //array([[0, 1, 2],
@@ -217,19 +223,19 @@ namespace NumSharp.UnitTest.View
 //            //array([[6, 7, 8]])
 //            view = data.GetView( "::2");
 //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-//            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8 }, view.Iterate<int>());
 //            view = data.GetView( "::3");
 //            Assert.AreEqual(new Shape(1, 3), view.Shape);
-//            AssertAreEqual(new int[] { 0, 1, 2 }, view.GetData());
+//            AssertAreEqual(new int[] { 0, 1, 2 }, view.Iterate<int>());
 //            view = data.GetView( "::-1");
 //            Assert.AreEqual(new Shape(3, 3), view.Shape);
-//            AssertAreEqual(new int[] { 6, 7, 8, 3, 4, 5, 0, 1, 2, }, view.GetData());
+//            AssertAreEqual(new int[] { 6, 7, 8, 3, 4, 5, 0, 1, 2, }, view.Iterate<int>());
 //            view = data.GetView( "::-2");
 //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-//            AssertAreEqual(new int[] { 6, 7, 8, 0, 1, 2, }, view.GetData());
+//            AssertAreEqual(new int[] { 6, 7, 8, 0, 1, 2, }, view.Iterate<int>());
 //            view = data.GetView( "::-3");
 //            Assert.AreEqual(new Shape(1, 3), view.Shape);
-//            AssertAreEqual(new int[] { 6, 7, 8, }, view.GetData());
+//            AssertAreEqual(new int[] { 6, 7, 8, }, view.Iterate<int>());
 //            // N-Dim Stepping
 //            //>>> x[::2,::2]
 //            //array([[0, 2],
@@ -240,10 +246,10 @@ namespace NumSharp.UnitTest.View
 //            //       [2, 0]])
 //            view = data.GetView( "::2, ::2");
 //            Assert.AreEqual(new Shape(2, 2), view.Shape);
-//            AssertAreEqual(new int[] { 0, 2, 6, 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 0, 2, 6, 8 }, view.Iterate<int>());
 //            view = data.GetView( "::-1, ::-2");
 //            Assert.AreEqual(new Shape(3, 2), view.Shape);
-//            AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.GetData());
+//            AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.Iterate<int>());
 //        }
 
 //        [TestMethod]
@@ -264,42 +270,42 @@ namespace NumSharp.UnitTest.View
 //            //       [1, 2, 3, 4, 5, 6, 7, 8]])
 //            var view1 = new ViewStorage(identical, ":,1:9");
 //            Assert.AreEqual(new Shape(2, 8), view1.Shape);
-//            AssertAreEqual(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8 }, view1.GetData());
+//            AssertAreEqual(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8 }, view1.Iterate<int>());
 //            //>>> x[:, 1:9][:,::- 2]
 //            //array([[8, 6, 4, 2],
 //            //       [8, 6, 4, 2]])
 //            var view2 = new ViewStorage(view1, ":,::-2");
 //            Assert.AreEqual(new Shape(2, 4), view2.Shape);
-//            AssertAreEqual(new int[] { 8, 6, 4, 2, 8, 6, 4, 2 }, view2.GetData());
+//            AssertAreEqual(new int[] { 8, 6, 4, 2, 8, 6, 4, 2 }, view2.Iterate<int>());
 //            //>>> x[:, 1:9][:,::- 2][:,::- 3]
 //            //array([[2, 8],
 //            //       [2, 8]])
 //            var view3 = new ViewStorage(view2, ":,::-3");
 //            Assert.AreEqual(new Shape(2, 2), view3.Shape);
-//            AssertAreEqual(new int[] { 2, 8, 2, 8 }, view3.GetData());
+//            AssertAreEqual(new int[] { 2, 8, 2, 8 }, view3.Iterate<int>());
 //            // all must see the same modifications, no matter if original or any view is modified
 //            // modify original
 //            data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
-//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, -1, -2, -3, -4, -5, -6, -7, -8 }, view1.GetData());
-//            AssertAreEqual(new int[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.GetData());
-//            AssertAreEqual(new int[] { -2, -8, -2, -8 }, view3.GetData());
+//            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, -1, -2, -3, -4, -5, -6, -7, -8 }, view1.Iterate<int>());
+//            AssertAreEqual(new int[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { -2, -8, -2, -8 }, view3.Iterate<int>());
 //            // modify views
 //            view1.SetData(88, 0, 7);
 //            view1.SetData(888, 1, 7);
 //            AssertAreEqual(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9, 0, -1, -2, -3, -4, -5, -6, -7, 888, -9 },
-//                data.GetData());
+//                data.Iterate<int>());
 //            AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, -1, -2, -3, -4, -5, -6, -7, 888 },
-//                view1.GetData());
-//            AssertAreEqual(new int[] { 88, -6, -4, -2, 888, -6, -4, -2 }, view2.GetData());
-//            AssertAreEqual(new int[] { -2, 88, -2, 888 }, view3.GetData());
+//                view1.Iterate<int>());
+//            AssertAreEqual(new int[] { 88, -6, -4, -2, 888, -6, -4, -2 }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { -2, 88, -2, 888 }, view3.Iterate<int>());
 //            view3.SetData(22, 0, 0);
 //            view3.SetData(222, 1, 0);
 //            AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9, 0, -1, 222, -3, -4, -5, -6, -7, 888, -9 },
-//                data.GetData());
+//                data.Iterate<int>());
 //            AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, -1, 222, -3, -4, -5, -6, -7, 888 },
-//                view1.GetData());
-//            AssertAreEqual(new int[] { 88, -6, -4, 22, 888, -6, -4, 222 }, view2.GetData());
-//            AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.GetData());
+//                view1.Iterate<int>());
+//            AssertAreEqual(new int[] { 88, -6, -4, 22, 888, -6, -4, 222 }, view2.Iterate<int>());
+//            AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.Iterate<int>());
 //        }
 
 //        [TestMethod]
@@ -310,7 +316,7 @@ namespace NumSharp.UnitTest.View
 //            // return scalar
 //            var view = data.GetView( "7");
 //            Assert.AreEqual(new Shape(), view.Shape);
-//            AssertAreEqual(new int[] { 7 }, view.GetData());
+//            AssertAreEqual(new int[] { 7 }, view.Iterate<int>());
 //        }
 
 //        [TestMethod]
@@ -333,18 +339,18 @@ namespace NumSharp.UnitTest.View
 //            // return identical view
 //            var view = data.GetView( "1");
 //            Assert.AreEqual(new Shape(3), view.Shape);
-//            AssertAreEqual(new int[] { 3, 4, 5 }, view.GetData());
+//            AssertAreEqual(new int[] { 3, 4, 5 }, view.Iterate<int>());
 //            // return reduced view
 //            view = data.GetView( ":,1");
 //            Assert.AreEqual(new Shape(3), view.Shape);
-//            AssertAreEqual(new int[] { 1, 4, 7 }, view.GetData());
+//            AssertAreEqual(new int[] { 1, 4, 7 }, view.Iterate<int>());
 //            view = data.GetView( "2,2");
 //            Assert.AreEqual(new Shape(), view.Shape);
-//            AssertAreEqual(new int[] { 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 8 }, view.Iterate<int>());
 //            // recursive dimensionality reduction
 //            view = new ViewStorage(data.GetView( "2"), "2");
 //            Assert.AreEqual(new Shape(), view.Shape);
-//            AssertAreEqual(new int[] { 8 }, view.GetData());
+//            AssertAreEqual(new int[] { 8 }, view.Iterate<int>());
 //        }
 
 //        [TestMethod]
@@ -355,13 +361,13 @@ namespace NumSharp.UnitTest.View
 //            Assert.AreEqual(new Shape(3, 3), data.Shape);
 //            var view = data.GetView( "2");
 //            Assert.AreEqual(new Shape(3), view.Shape);
-//            //AssertAreEqual(new int[] { 6, 7, 8 }, view.GetData());
+//            //AssertAreEqual(new int[] { 6, 7, 8 }, view.Iterate<int>());
 //            var view1 = new ViewStorage(view, "2");
 //            Assert.AreEqual(new Shape(), view1.Shape);
-//            AssertAreEqual(new int[] { 8 }, view1.GetData());
+//            AssertAreEqual(new int[] { 8 }, view1.Iterate<int>());
 //            var view2 = new ViewStorage(view, ":2:-1");
 //            Assert.AreEqual(new Shape(2), view2.Shape);
-//            AssertAreEqual(new int[] { 7, 6 }, view2.GetData());
+//            AssertAreEqual(new int[] { 7, 6 }, view2.Iterate<int>());
 //        }
 
 //        [TestMethod]
