@@ -13,6 +13,24 @@ namespace NumSharp.Utilities
     public static class Arrays
     {
         /// <summary>
+        ///     Removes a specific index from given array.
+        /// </summary>
+        /// <param name="source">The array to remove <paramref name="index"/> from.</param>
+        /// <param name="index">The index to remove.</param>
+        /// <returns></returns>
+        public static T[] RemoveAt<T>(this T[] source, int index)
+        {
+            T[] dest = new T[source.Length - 1];
+            if (index > 0)
+                Array.Copy(source, 0, dest, 0, index);
+
+            if (index < source.Length - 1)
+                Array.Copy(source, index + 1, dest, index, source.Length - index - 1);
+
+            return dest;
+        }
+
+        /// <summary>
         ///     Flattens any type of <see cref="Array"/>.
         /// </summary>
         /// <remarks>Supports both jagged array and multi-dim arrays.</remarks>
