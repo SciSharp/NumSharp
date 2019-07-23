@@ -1865,6 +1865,19 @@ namespace NumSharp.Backends
             _shape = shape;
         }
 
+        public UnmanagedStorage GetView(string slicing_notation)
+        {
+            var slices = Slice.ParseSlices(slicing_notation);
+            return GetView(slices);
+        }
+
+        public UnmanagedStorage GetView(params Slice[] slices)
+        {
+            // return a new UnmanagedStorage object with view parameters set
+            return Alias(this.Shape.Slice(slices));
+        }
+
+        // TODO: this legacy interface should be eliminated (henon) 
         public ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged //TODO! this should return UnmanagedStorage
         {
             if (slice is null)
@@ -1882,6 +1895,7 @@ namespace NumSharp.Backends
             }
         }
 
+        // TODO: this legacy interface should be eliminated (henon)
         public ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged
         {
             int stride = _shape.NDim == 0 ? 1 : _shape.Strides[indice.Length - 1];
