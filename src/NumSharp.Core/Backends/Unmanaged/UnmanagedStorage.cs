@@ -1660,7 +1660,7 @@ namespace NumSharp.Backends
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
 
-            SetInternalArray(_ChangeTypeOfArray(values, values.GetType().GetElementType()));
+            SetInternalArray(_ChangeTypeOfArray(values, _dtype));
 
             if (_shape.IsEmpty)
                 _shape = new Shape(values.Length);
@@ -1775,7 +1775,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(values));
 
             _shape = shape;
-            SetInternalArray(_ChangeTypeOfArray(values, values.GetType().GetElementType()));
+            SetInternalArray(_ChangeTypeOfArray(values, _dtype));
 
         }
 
