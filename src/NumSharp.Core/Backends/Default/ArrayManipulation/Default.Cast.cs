@@ -36,11 +36,15 @@ namespace NumSharp.Backends
                 //casting needed
                 if (copy)
                 {
+                    if (nd.Shape.IsSliced)
+                        nd = clone();
+
                     return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype), false), nd.Shape));
                 }
                 else
                 {
-                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.Cast(dtype), false), nd.Shape);
+                    var storage = nd.Shape.IsSliced ? nd.Storage.Clone() : nd.Storage;
+                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(storage.InternalArray.Cast(dtype), false), storage.Shape);
                     return nd;
                 }
             }
