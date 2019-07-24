@@ -1,17 +1,29 @@
 ﻿using System;
 using System.Linq;
 using System.Numerics;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
     [TestClass]
-    public class np_ones_Test
+    public class np_full_Test
     {
+        [TestMethod]
+        public void Full_Like()
+        {
+            var a = np.zeros((10, 10));
+            var alike = np.full_like(a, 5d);
+            alike.Shape.size.Should().Be(100);
+            alike.shape.Should().ContainInOrder(10, 10);
+            alike.Array.GetIndex(0).Should().Be(5).And.BeOfType<double>();
+        }
+
         [TestMethod]
         public void SimpleInt1D()
         {
-            var np1 = np.ones(new Shape(5));
+            var np1 = np.full(1d, new Shape(5));
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 5);
         }
@@ -19,7 +31,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void SimpleInt2D()
         {
-            var np1 = np.ones(new Shape(5, 5));
+            var np1 = np.full(1d, new Shape(5, 5));
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 25);
         }
@@ -27,7 +39,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void SimpleDouble3D()
         {
-            var np1 = np.ones(new Shape(5, 5, 5));
+            var np1 = np.full(1d, new Shape(5, 5, 5));
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 125);
         }
@@ -46,11 +58,11 @@ namespace NumSharp.UnitTest.Creation
         [DataRow(typeof(decimal))]
         //TODO! [DataRow(typeof(Complex))]
         [DataRow(typeof(bool))]
-        public void One_AllTypes(Type dtype)
+        public void Full_AllTypes(Type dtype)
         {
-            var np1 = np.ones(new Shape(3, 3, 3), dtype);
-            Assert.IsTrue(np1.dtype == dtype);
-            Assert.IsTrue(np1.Array.GetIndex(0).GetType() == dtype);
+            var np1 = np.full(Activator.CreateInstance(dtype), new Shape(3, 3, 3), dtype);
+            np1.dtype.Should().Be(dtype);
+            np1.Array.GetIndex(0).GetType().Should().Be(dtype);
         }
     }
 }
