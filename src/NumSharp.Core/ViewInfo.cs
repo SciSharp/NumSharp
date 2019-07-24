@@ -6,7 +6,7 @@ namespace NumSharp
 {
     public class ViewInfo
     {
-        public Slice[] Slices;
+        public SliceDef[] Slices;
         public Shape OriginalShape;
         public Shape UnreducedShape;
     }

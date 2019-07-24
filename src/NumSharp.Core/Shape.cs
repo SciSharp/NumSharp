@@ -243,7 +243,7 @@ namespace NumSharp
                 if (dimensions.Length == 0 && select.Length == 1)
                 {
                     var slice = vi.Slices[0];
-                    var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
+                    var start = slice.Start;
                     return start + select[0] * slice.Step;
                 }
 
@@ -258,7 +258,7 @@ namespace NumSharp
                             continue;
                         }
                         var slice = vi.Slices[i];
-                        var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
+                        var start = slice.Start;
 
                         offset += strides[i] * (start + @select[i] * slice.Step);
                     }
@@ -449,6 +449,7 @@ namespace NumSharp
         /// <summary>
         ///     Recalculate hashcode from current dimension and layout.
         /// </summary>
+        [MethodImpl((MethodImplOptions)768)]
         internal void ComputeHashcode()
         {
             if (dimensions.Length > 0)
@@ -465,19 +466,22 @@ namespace NumSharp
 
         #region Slicing support
 
+        [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(string slicing_notation)
             => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
+        [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(params Slice[] input_slices)
         {
-            var slices = input_slices.Length != Dimensions.Length ? input_slices : new Slice[Dimensions.Length];
+            var slices = new SliceDef[Dimensions.Length];
             var sliced_axes_unreduced = new int[Dimensions.Length];
             for (int i = 0; i < Dimensions.Length; i++)
             {
                 var dim = Dimensions[i];
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All();
-                slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice.Sanitize(dim)) : slice.Sanitize(dim);
-                sliced_axes_unreduced[i] = slices[i].GetSize();
+                var slice_def = slice.ToSliceDef(dim);
+                slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice_def) : slice_def;
+                sliced_axes_unreduced[i] = slices[i].Count;
             };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };

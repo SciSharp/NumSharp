@@ -193,7 +193,7 @@ namespace NumSharp
 
         public static Slice Index(int index)
         {
-            return new Slice(index, index + 1) {IsIndex = true};
+            return new Slice(index, index + 1) { IsIndex = true };
         }
 
         public override string ToString()
@@ -213,43 +213,171 @@ namespace NumSharp
             return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetAbsStart(int dim)
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public int GetAbsStart(int dim)
+        //{
+        //    var start = Step < 0 ? Stop : Start;
+        //    var astart = start < 0 ? dim + start + (Step < 0 ? 1 : 0) : start;
+        //    if (astart.HasValue && astart < 0)
+        //        astart = 0;
+        //    return astart ?? 0;
+        //}
+
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public int GetAbsStop(int dim)
+        //{
+        //    var stop = Step < 0 ? Start : Stop;
+        //    var astop = stop < 0 ? dim + stop + (Step < 0 ? 1 : 0) : stop;
+        //    if (astop.HasValue && astop < 0)
+        //        astop = dim;
+        //    return Math.Min(dim, astop ?? dim);
+        //}
+
+        ///// <summary>
+        ///// Transforms a user-defined slice values with missing info into a fully defined slice
+        ///// </summary>
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public Slice Sanitize(int dim)
+        //{
+        //    var start = GetAbsStart(dim);
+        //    var stop = GetAbsStop(dim);
+        //    if (start > stop)
+        //        (start, stop) = (stop, start);
+        //    // check start/stop alignment with Step
+        //    if (Step > 1)
+        //        stop -= ((stop - 1) - start) % Step;
+        //    else if (Step < -1)
+        //        start += ((stop - 1) - start) % Step;
+        //    return new Slice(start, stop, Step);
+        //}
+
+        /// <summary>
+        /// Converts the user Slice into an internal SliceDef which is easier to calculate with
+        /// </summary>
+        /// <param name="dim"></param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public SliceDef ToSliceDef(int dim)
         {
-            var start = Step < 0 ? Stop : Start;
-            var astart = start < 0 ? dim + start + (Step < 0 ? 1 : 0) : start;
-            if (astart.HasValue && astart < 0)
-                astart = 0;
-            return astart ?? 0;
+            if (IsIndex)
+                return new SliceDef(Start??0);
+            if (Step == 0)
+                return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+            var astep = Math.Abs(Step);
+            if (Step > 0)
+            {
+                var start = Start ?? 0;
+                var stop = Stop ?? dim;
+                if (start >= dim)
+                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                if (start < 0)
+                    start = Math.Abs(start) <= dim ? dim + start : 0;
+                if (stop > dim)
+                    stop = dim;
+                if (stop < 0)
+                    stop = Math.Abs(stop) <= dim ? dim + stop : 0;
+                if (start >= stop)
+                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
+                return new SliceDef() { Start = start, Step = Step, Count = count };
+            }
+            else
+            {
+                // negative step!
+                var start = Start ?? dim-1;
+                var stop = Stop ?? -1;
+                if (start < 0)
+                    start = Math.Abs(start) <= dim ? dim + start : 0;
+                if (start >= dim)
+                    start = dim-1;
+                if (Stop < 0)
+                    stop = Math.Abs(stop) <= dim ? dim + stop : -1;
+                if (start <= stop)
+                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
+                var retval= new SliceDef() { Start = start, Step = Step, Count = count };
+                return retval;
+            }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetAbsStop(int dim)
+
+
+    }
+
+    public struct SliceDef
+    {
+        public int Start; // start index in array
+        public int Step; // positive => forward from Start, 
+        public int Count; // number of steps to take from Start (1 means just take Start, 0 means take nothing, -1 means this is an index)
+
+        public SliceDef(int start, int step, int count)
         {
-            var stop = Step < 0 ? Start : Stop;
-            var astop = stop < 0 ? dim + stop + (Step < 0 ? 1 : 0) : stop;
-            if (astop.HasValue && astop < 0)
-                astop = dim;
-            return Math.Min(dim, astop ?? dim);
+            (Start, Step, Count) = (start, step, count);
+        }
+
+        public SliceDef(int idx)
+        {
+            (Start, Step, Count) = (idx, 1, -1);
         }
 
         /// <summary>
-        /// Transforms a user-defined slice values with missing info into a fully defined slice
+        /// (Start>>Step*Count)
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Slice Sanitize(int dim)
+        /// <param name="def"></param>
+        public SliceDef(string def)
         {
-            var start = GetAbsStart(dim);
-            var stop = GetAbsStop(dim);
-            return new Slice(start, stop, Step);
+            if (def == "()")
+            {
+                (Start, Step, Count) = (0, 0, 0);
+                return;
+            }
+            var m = Regex.Match(def, @"\((\d+)>>(-?\d+)\*(\d+)\)");
+            Start = int.Parse(m.Groups[1].Value);
+            Step = int.Parse(m.Groups[2].Value);
+            Count = int.Parse(m.Groups[3].Value);
+        }
+
+        public bool IsIndex
+        {
+            [MethodImpl((MethodImplOptions)768)]
+            get => Count == -1;
+        }
+
+        /// <summary>
+        /// reverts the order of the slice sequence
+        /// </summary>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public SliceDef Invert()
+        {
+            return new SliceDef() { Count = Count, Start = (Start + Step * Count), Step = -Step };
+        }
+
+        public override string ToString()
+        {
+            if (IsIndex)
+                return $"[{Start}]";
+            if (Count <= 0)
+                return "()";
+            return $"({Start}>>{Step}*{Count})";
         }
 
         /// <summary>
         /// Merge calculates the resulting one-time slice on the original data if it is sliced repeatedly
         /// </summary>
-        public Slice Merge(Slice other)
+        [MethodImpl((MethodImplOptions)768)]
+        public SliceDef Merge(SliceDef other)
         {
-            return new Slice(Start + other.Start, Start + other.Stop, Step * other.Step);
+            if (other.Count == 0)
+                return new SliceDef() { Start = 0, Step = 0, Count = 0 };
+            var self = this;
+            var result= new SliceDef()
+            {
+                Start = self.Start + other.Start * self.Step,
+                Step = Step * other.Step,
+                Count = other.Count,
+            };
+            return result;
         }
     }
 }

@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.View
             view = data.GetView("::-77");
             Assert.AreEqual(new Shape(1), view.Shape);
             AssertAreEqual(new[] { 9 }, view.ToArray<int>());
-            view = data.GetView("-77:77:-77");
+            view = data.GetView("77:-77:-77");
             Assert.AreEqual(new Shape(1), view.Shape);
             AssertAreEqual(new[] { 9 }, view.ToArray<int>());
         }
@@ -151,7 +151,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(6, view.GetData<int>(1));
             Assert.AreEqual(3, view.GetData<int>(2));
             Assert.AreEqual(0, view.GetData<int>(3));
-            view = data.GetView("-77:77:-77");
+            view = data.GetView("77:-77:-77");
             Assert.AreEqual(9, view.GetData<int>(0));
         }
 
@@ -174,6 +174,7 @@ namespace NumSharp.UnitTest.View
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
             data.ReplaceData(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 });
+            var arr = view1.ToArray<int>();
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.ToArray<int>());
             AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, -8 }, view3.ToArray<int>());
