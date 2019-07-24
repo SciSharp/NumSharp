@@ -1907,6 +1907,7 @@ namespace NumSharp.Backends
 
         public UnmanagedStorage Clone()
         {
+            //TODO! When the shape is sliced, clone only slice data.
             var puffer = Engine.GetStorage(_dtype);
             puffer.Allocate(InternalArray.Clone(), _shape);
             return puffer;
