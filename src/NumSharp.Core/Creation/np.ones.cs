@@ -40,7 +40,7 @@ namespace NumSharp
         /// <param name="shapes">Shape of the new array.</param>
         /// <typeparam name="T">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</typeparam>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones<T>(params int[] shapes)
+        public static NDArray ones<T>(params int[] shapes) where T : unmanaged
         {
             return ones(new Shape(shapes), typeof(T));
         }
@@ -72,12 +72,12 @@ namespace NumSharp
         ///     Return a new array of given shape and type, filled with ones.
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
-        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <param name="typeCode">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, NPTypeCode dtype)
+        public static NDArray ones(Shape shape, NPTypeCode typeCode)
         {
             object one = null;
-            switch (dtype)
+            switch (typeCode)
             {
                 case NPTypeCode.Complex:
                     one = new Complex(1d, 0d);
@@ -87,13 +87,16 @@ namespace NumSharp
                     break;
                 case NPTypeCode.String:
                     one = "1";
+                    break;                
+                case NPTypeCode.Char:
+                    one = '1';
                     break;
                 default:
-                    one = Convert.ChangeType((byte)1, dtype.AsType());
+                    one = Convert.ChangeType((byte)1, typeCode.AsType());
                     break;
             }
 
-            return new NDArray(ArraySlice.Allocate(dtype, shape.size, one), shape);
+            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
         }
     }
 }
