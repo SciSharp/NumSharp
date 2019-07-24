@@ -43,10 +43,10 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var z = np.dot(x, y);
 
-            Assert.AreEqual(z.Data<int>(0), 5);
-            Assert.AreEqual(z.Data<int>(1), 8);
-            Assert.AreEqual(z.Data<int>(2), 10);
-            Assert.AreEqual(z.Data<int>(3), 13);
+            Assert.AreEqual(z.GetInt32(0), 5);
+            Assert.AreEqual(z.GetInt32(1), 8);
+            Assert.AreEqual(z.GetInt32(2), 10);
+            Assert.AreEqual(z.GetInt32(3), 13);
         }
 
         [TestMethod]

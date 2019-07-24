@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
 namespace NumSharp.Backends
@@ -14,14 +15,24 @@ namespace NumSharp.Backends
         /// <returns></returns>
         public override bool All(NDArray nd)
         {
-            var data = nd.Data<bool>();
-            for (int i = 0; i < data.Count; i++)
+            if (nd.GetTypeCode != NPTypeCode.Boolean)
             {
-                if (!data[i])
-                    return false;
+                throw new NotSupportedException("DefaultEngine.All supports only boolean dtype."); //TODO!
             }
+            unsafe
+            {
+                var addr = (bool*)nd.Address;
+                var shape = nd.Shape;
+                var incr = new NDIndexArrayIncrementor(shape.Dimensions);
+                do
+                {
+                    if (!(*(addr + shape.GetIndexInShape(incr.Index))))
+                        return false;
 
-            return true;
+                } while (incr.Next() != null);
+
+                return true;
+            }
         }
 
         /// <summary>
@@ -32,7 +43,7 @@ namespace NumSharp.Backends
         /// <returns>Returns an array of bools</returns>
         public override NDArray<bool> All(NDArray nd, int axis)
         {
-            throw new NotImplementedException($"np.all axis {axis}");
+            throw new NotImplementedException($"np.all axis {axis}"); //TODO! 
         }
     }
 }

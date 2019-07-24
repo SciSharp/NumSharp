@@ -19,15 +19,15 @@ namespace NumSharp
         ///     Low performance
         ///     Use generic Data{T} and SetData{T}(value, shape) method for better performance
         /// </summary>
-        /// <param name="select"></param>
+        /// <param name="indices"></param>
         /// <returns></returns>
-        public NDArray this[params int[] select]
+        public NDArray this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => GetData(select);
+            get => GetData(indices);
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => Storage.SetData(value, select);
-        }        
+            set => Storage.SetData(value, indices);
+        }
         
         /// <summary>
         ///     Used to perform filtering by whats true and whats false.

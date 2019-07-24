@@ -35,16 +35,16 @@ namespace NumSharp
 
         private void PrettyPrint(StringBuilder s, bool flat = false)
         {
-            if (shape.Length == 0)
+            if (Shape.IsScalar)
             {
-                s.Append($"{Storage.GetIndex(0)}");
+                s.Append(this.Cast<object>().First());
                 return;
             }
 
             if (shape.Length == 1)
             {
                 s.Append("[");
-                s.Append(string.Join(", ", this.Array.OfType<object>().Select(x => x == null ? "null" : x.ToString())));
+                s.Append(string.Join(", ", this.Cast<object>().Select(x => x == null ? "null" : x.ToString())));
                 s.Append("]");
                 return;
             }

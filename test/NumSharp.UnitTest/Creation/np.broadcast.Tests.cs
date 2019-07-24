@@ -24,12 +24,12 @@ namespace NumSharp.UnitTest.Creation
 
             var (b, c) = np.broadcast_arrays(nd1, nd2);
 
-            Assert.IsTrue(b.Data<int>(0, 0) == 1.0);
-            Assert.IsTrue(b.Data<int>(0, 1) == 2.0);
-            Assert.IsTrue(b.Data<int>(0, 2) == 3.0);
-            Assert.IsTrue(c.Data<int>(0, 0) == 4.0);
-            Assert.IsTrue(c.Data<int>(0, 1) == 4.0);
-            Assert.IsTrue(c.Data<int>(0, 2) == 4.0);
+            Assert.IsTrue(b.GetInt32(0, 0) == 1.0);
+            Assert.IsTrue(b.GetInt32(0, 1) == 2.0);
+            Assert.IsTrue(b.GetInt32(0, 2) == 3.0);
+            Assert.IsTrue(c.GetInt32(0, 0) == 4.0);
+            Assert.IsTrue(c.GetInt32(0, 1) == 4.0);
+            Assert.IsTrue(c.GetInt32(0, 2) == 4.0);
             Assert.IsTrue(b.size == 6);
             Assert.IsTrue(c.size == 6);
         }

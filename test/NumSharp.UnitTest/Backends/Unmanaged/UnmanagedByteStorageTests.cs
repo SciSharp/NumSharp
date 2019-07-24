@@ -2,6 +2,7 @@
 using System.Numerics;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
@@ -57,121 +58,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [TestMethod]
-        public void GetSubshape()
-        {
-            //initialize
-            (Shape Shape, int Offset) ret;
-            var nd = new NDArray(new ArraySlice<int>(new UnmanagedMemoryBlock<int>(25, 0)), new Shape(5, 5));
-            var arr = new int[5, 5];
-            var arr2 = new int[5, 1, 5];
-
-            for (int i = 0; i < nd.size; i++)
-            {
-                nd.Storage.SetIndex(i, i);
-            }
-
-            for (int i = 0; i < 5; i++)
-            {
-                for (int j = 0; j < 5; j++)
-                {
-                    arr[i, j] = i * 5 + j;
-                }
-            }
-
-            for (int i = 0; i < 5; i++)
-            {
-                for (int j = 0; j < 1; j++)
-                {
-                    for (int k = 0; k < 5; k++)
-                    {
-                        arr2[i, j, k] = i * 5 + j * 1 + k;
-                    }
-                }
-            }
-
-
-            //test case 1
-            nd.Shape = new Shape(5, 5);
-
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(0);
-            arr[0, 0].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5);
-            arr[1, 0].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(1, 4);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 4);
-            arr[1, 4].Should().Be(ret.Offset);
-
-
-            //test case 2
-            nd.Shape = new Shape(5, 1, 5);
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(0);
-            arr2[0, 0, 0].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(5);
-            arr2[1, 0, 0].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(1, 0, 1);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 1);
-            arr2[1, 0, 1].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(2, 0, 1);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 * 2 + 1);
-            arr2[2, 0, 1].Should().Be(ret.Offset);
-
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(0);
-
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(5);
-
-            ret = nd.Shape.GetSubshape(1, 0, 3);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 3);
-            arr2[1, 0, 3].Should().Be(ret.Offset);
-
-
-            //test case 3
-            nd.Shape = new Shape(1, 1, 5, 5);
-            ret = nd.Shape.GetSubshape(0, 0, 3, 3);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(18);
-
-            ret = nd.Shape.GetSubshape(0, 0, 3);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(15);
-
-            ret = ret.Shape.GetSubshape(2);
-            ret.Shape.Size.Should().Be(1);
-            ret.Shape.NDim.Should().Be(0);
-            ret.Shape.IsScalar.Should().BeTrue();
-
-
-            //test case 4
-            nd.Shape = new Shape(1, 5, 5, 1);
-            ret = nd.Shape.GetSubshape(0, 1);
-            ret.Offset.Should().Be(5);
-            ret.Shape.NDim.Should().Be(2);
-            ret.Shape.Dimensions[0].Should().Be(5);
-            ret.Shape.Dimensions[1].Should().Be(1);
-        }
-
-
-        [TestMethod]
         public void ScalarCreation()
         {
             UnmanagedByteStorage<int>.Scalar(5).GetIndex(0).Should().Be(5);
@@ -190,6 +76,71 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void ScalarBoolean()
         {
             UnmanagedByteStorage<bool>.Scalar(false).GetIndex(0).Should().Be(false);
+        }
+
+        [TestMethod]
+        public void SetData_Vector()
+        {
+            var arr = np.zeros(new Shape(10, 10), NPTypeCode.Double);
+            var other = np.ones(Shape.Vector(10), NPTypeCode.Double);
+            arr.SetData(other, 0);
+            for (int i = 0; i < 1; i++)
+            {
+                for (int j = 0; j < 10; j++)
+                {
+                    arr.GetDouble(i, j).Should().Be(1);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void SetData_Scalar()
+        {
+            var arr = np.zeros(new Shape(10, 10), NPTypeCode.Double);
+            var other = NDArray.Scalar(1, NPTypeCode.Double);
+            arr.SetData(other, 0, 3);
+            arr.GetDouble(0, 3).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void SetData_ND()
+        {
+            var arr = np.zeros(new Shape(10, 10), NPTypeCode.Double);
+            var other = np.ones(new Shape(10, 10), NPTypeCode.Double);
+            arr.SetData(other);
+            arr.Storage.AsArray<double>().All(v => v == 1).Should().Be(true);
+        }
+
+        [TestMethod]
+        public void GetData_Vector()
+        {
+            var arr = np.ones(new Shape(10, 10), NPTypeCode.Double);
+            var other = arr[0];
+            other.size.Should().Be(10);
+            for (int i = 0; i < other.size; i++)
+            {
+                other.GetAtIndex<double>(i).Should().Be(1);
+            }
+        }
+
+        [TestMethod]
+        public void GetData_Scalar()
+        {
+            var arr = np.ones(new Shape(10, 10), NPTypeCode.Double);
+            var other = arr[0, 0];
+            other.Shape.IsScalar.Should().BeTrue();
+            other.size.Should().Be(1);
+            for (int i = 0; i < other.size; i++)
+            {
+                other.GetAtIndex<double>(i).Should().Be(1);
+            }
+        }
+
+        [TestMethod]
+        public void GetData_ND()
+        {
+            var arr = np.zeros(new Shape(1, 10, 10), NPTypeCode.Double);
+            arr[0].Shape.dimensions.Should().ContainInOrder(10, 10);
         }
     }
 }

@@ -16,20 +16,22 @@ namespace NumSharp
             if (a.size == 0)
                 return a;
 
+            //we create an nd-array of the shape and then slice/split it on axis index.
             var shape = np.array(a.shape);
-            var left = shape[$":{axis}"].Array.Cast<int>();
-            var right = shape[$"{axis}:"].Array.Cast<int>();
+            var left = shape[$":{axis}"].Cast<int>();
+            var right = shape[$"{axis}:"].Cast<int>();
 
-            return a.reshape(_combineEnumerables(left, __one, right).ToArray());
-        }
+            //then we append a 1 dim between the slice/split.
+            return new NDArray(a.Storage.Alias(new Shape(_combineEnumerables(left, __one, right).ToArray())));
 
-        private static IEnumerable<T> _combineEnumerables<T>(params IEnumerable<T>[] arrays)
-        {
-            foreach (var arr in arrays)
+            IEnumerable<T> _combineEnumerables<T>(params IEnumerable<T>[] arrays)
             {
-                foreach (var val in arr)
+                foreach (var arr in arrays)
                 {
-                    yield return val;
+                    foreach (var val in arr)
+                    {
+                        yield return val;
+                    }
                 }
             }
         }

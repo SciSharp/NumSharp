@@ -51,12 +51,6 @@ namespace NumSharp.Backends
         protected NPTypeCode _typecode;
 
         protected Shape _shape;
-        //protected Slice _slice; //todo! Unused? theres a similar property below with get and set
-
-        /// <summary>
-        ///     Does this instance support spanning?
-        /// </summary>
-        public bool SupportsSpan => true; //TODO! now that we always support spanning, I think we should remove it.
 
         /// <summary>
         ///     The data type of internal storage array.
@@ -102,15 +96,9 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The current slice this <see cref="IStorage"/> instance currently represent.
-        /// </summary>
-        public Slice Slice { get; set; } //todo! shouldn't it be read-only?
-
-        /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
         public TensorEngine Engine { get; internal set; }
-
 
         public static UnmanagedStorage Scalar<T>(T value) where T : unmanaged
         {
@@ -1431,7 +1419,7 @@ namespace NumSharp.Backends
         {
             unsafe
             {
-                return *((T*)Address + _shape.GetIndexInShape(Slice, indices));
+                return *((T*)Address + _shape.GetIndexInShape(indices));
             }
         }
 
@@ -1447,6 +1435,34 @@ namespace NumSharp.Backends
         public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
         {
             *((T*)this.Address + _shape.GetIndexInShape(indices)) = value;
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(object value, params int[] indices)
+        {
+            if (value is NDArray nd)
+            {
+                if (nd.Shape.IsEmpty)
+                    throw new InvalidOperationException("Can't SetData when value is an empty NDArray");
+                if (nd.Shape.IsScalar || nd.size==1)
+                {
+                    SetIndex(nd.GetAtIndex(0), _shape.GetIndexInShape(indices));
+                    return;
+                }
+
+                SetData(nd, indices);
+                return;
+            }
+
+            SetIndex(value, _shape.GetIndexInShape(indices));
         }
 
         public unsafe void SetIndex<T>(T value, int index) where T : unmanaged
@@ -1544,7 +1560,6 @@ namespace NumSharp.Backends
                     *((decimal*)Address + index) = (decimal)value;
                     break;
                 }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -1572,6 +1587,17 @@ namespace NumSharp.Backends
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
+            //if dtypes doesn't match, cast value
+            if (value.GetTypeCode != _typecode) 
+                value = value.astype(_typecode, true);
+
+            if (value.Shape.IsScalar)
+            {
+                SetData(value.GetAtIndex(0), indices);
+                return;
+            }
+                
+
             unsafe
             {
                 var (subShape, offset) = _shape.GetSubshape(indices);
@@ -1582,9 +1608,8 @@ namespace NumSharp.Backends
                 var len = step * value.Storage.Count;
 
                 //TODO! what if dtype are different! handle casting!
-
+                //TODO! What if value is sliced?
                 Buffer.MemoryCopy(value.Storage.Address, Address + offset * step, len, len);
-                //TODO! TEST!
             }
         }
 
@@ -1602,16 +1627,17 @@ namespace NumSharp.Backends
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
 
+            var (subShape, offset) = _shape.GetSubshape(indices);
+            if (subShape != value.Count)
+                throw new IncorrectShapeException($"Can't SetData to a from a shape of ({value.Count}) to target shape {subShape}");
+
             unsafe
             {
-                var (subShape, offset) = _shape.GetSubshape(indices); //TODO! We dont need subshape unless it is debug mode.
-                if (subShape.size != value.Count)
-                    throw new IncorrectShapeException();
-
                 var step = value.ItemLength;
                 var len = step * value.Count;
                 Buffer.MemoryCopy(value.Address, Address + offset * step, len, len);
                 //TODO! TEST!
+                //TODO! What is this storage is sliced.
             }
         }
 
@@ -1879,36 +1905,9 @@ namespace NumSharp.Backends
             return Alias(this.Shape.Slice(slices));
         }
 
-        // TODO: this legacy interface should be eliminated (henon) 
-        public ArraySlice<T> View<T>(Slice slice = null) where T : unmanaged //TODO! this should return UnmanagedStorage
-        {
-            if (slice is null)
-                slice = Slice;
-
-            if (slice is null)
-            {
-                return GetData<T>();
-            }
-            else
-            {
-                var shape = Shape.GetShape(_shape.Dimensions, axis: 0);
-                var offset = Shape.GetSize(shape);
-                return GetData<T>().Slice(slice.Start.Value * offset, slice.Length.Value * offset);
-            }
-        }
-
-        // TODO: this legacy interface should be eliminated (henon)
-        public ArraySlice<T> GetSpanData<T>(Slice slice, params int[] indice) where T : unmanaged
-        {
-            int stride = _shape.NDim == 0 ? 1 : _shape.Strides[indice.Length - 1];
-            int idx = _shape.GetIndexInShape(Slice, indice);
-            int offset = idx + (Slice is null ? 0 : Slice.Start.Value) * _shape.Strides[0];
-
-            return GetData<T>().Slice(offset, stride);
-        }
-
         public UnmanagedStorage Clone()
         {
+            //TODO! When the shape is sliced, clone only slice data.
             var puffer = Engine.GetStorage(_dtype);
             puffer.Allocate(InternalArray.Clone(), _shape);
             return puffer;
@@ -1930,7 +1929,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
         public #2 Get#1(params int[] indices)
-            => _array#1[_shape.GetIndexInShape(Slice, indices)];
+            => _array#1[_shape.GetIndexInShape(indices)];
 
         %
 #else
@@ -1942,7 +1941,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         public bool GetBoolean(params int[] indices)
-            => _arrayBoolean[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayBoolean[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
@@ -1951,7 +1950,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         public byte GetByte(params int[] indices)
-            => _arrayByte[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayByte[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/> from internal storage.
@@ -1960,7 +1959,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         public short GetInt16(params int[] indices)
-            => _arrayInt16[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt16[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/> from internal storage.
@@ -1969,7 +1968,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         public ushort GetUInt16(params int[] indices)
-            => _arrayUInt16[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt16[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/> from internal storage.
@@ -1978,7 +1977,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         public int GetInt32(params int[] indices)
-            => _arrayInt32[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt32[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/> from internal storage.
@@ -1987,7 +1986,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         public uint GetUInt32(params int[] indices)
-            => _arrayUInt32[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt32[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/> from internal storage.
@@ -1996,7 +1995,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         public long GetInt64(params int[] indices)
-            => _arrayInt64[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayInt64[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/> from internal storage.
@@ -2005,7 +2004,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         public ulong GetUInt64(params int[] indices)
-            => _arrayUInt64[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayUInt64[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/> from internal storage.
@@ -2014,7 +2013,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         public char GetChar(params int[] indices)
-            => _arrayChar[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayChar[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
@@ -2023,7 +2022,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         public double GetDouble(params int[] indices)
-            => _arrayDouble[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayDouble[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/> from internal storage.
@@ -2032,7 +2031,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         public float GetSingle(params int[] indices)
-            => _arraySingle[_shape.GetIndexInShape(Slice, indices)];
+            => _arraySingle[_shape.GetIndexInShape(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/> from internal storage.
@@ -2041,7 +2040,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(params int[] indices)
-            => _arrayDecimal[_shape.GetIndexInShape(Slice, indices)];
+            => _arrayDecimal[_shape.GetIndexInShape(indices)];
 #endif
 
         #endregion
@@ -2059,77 +2058,25 @@ namespace NumSharp.Backends
             {
 #if _REGEN
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
-	            case NPTypeCode.#1:
-	            {
-		            return *((#2*)Address + _shape.GetIndexInShape(Slice, indices));
-	            }
-
+	            case NPTypeCode.#1: return *((#2*)Address + _shape.GetIndexInShape(indices));
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean:
-                {
-                    return *((bool*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Byte:
-                {
-                    return *((byte*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Int16:
-                {
-                    return *((short*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    return *((ushort*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Int32:
-                {
-                    return *((int*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.UInt32:
-                {
-                    return *((uint*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    return *((long*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    return *((ulong*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Char:
-                {
-                    return *((char*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Double:
-                {
-                    return *((double*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Single:
-                {
-                    return *((float*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    return *((decimal*)Address + _shape.GetIndexInShape(Slice, indices));
-                }
-
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Byte: return *((byte*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Int16: return *((short*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Int32: return *((int*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Int64: return *((long*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Char: return *((char*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Double: return *((double*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Single: return *((float*)Address + _shape.GetIndexInShape(indices));
+	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetIndexInShape(indices));
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
@@ -2220,13 +2167,14 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => GetValue(indices);
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => SetIndex(value, _shape.GetIndexInShape(Slice, indices));
+            set => SetIndex(value, _shape.GetIndexInShape(indices));
         }
 
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
+
             var shape = Shape;
             var ret = new T[shape.Size];
             var addr = (T*)Address;

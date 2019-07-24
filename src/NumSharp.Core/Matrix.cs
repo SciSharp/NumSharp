@@ -60,7 +60,7 @@ namespace NumSharp
             {
                 for (int jdx = 0; jdx < matrix[0].Length; jdx++)
                 {
-                    this[idx, jdx] = (NDArray) Double.Parse(matrix[idx][jdx]);
+                    this[idx, jdx] = (NDArray)Double.Parse(matrix[idx][jdx]);
                 }
             }
         }
@@ -80,18 +80,18 @@ namespace NumSharp
                     {
                         for (int jdx = 0; jdx < (dim1 - 1); jdx++)
                         {
-                            returnValue += Data<double>(idx, jdx) + ", ";
+                            returnValue += GetDouble(idx, jdx) + ", ";
                         }
 
-                        returnValue += Data<double>(idx, dim1 - 1) + "],   \n        [";
+                        returnValue += GetDouble(idx, dim1 - 1) + "],   \n        [";
                     }
 
                     for (int jdx = 0; jdx < (dim1 - 1); jdx++)
                     {
-                        returnValue += Data<double>(dim0 - 1, jdx) + ", ";
+                        returnValue += GetDouble(dim0 - 1, jdx) + ", ";
                     }
 
-                    returnValue += Data<double>(dim0 - 1, dim1 - 1) + "]])";
+                    returnValue += GetDouble(dim0 - 1, dim1 - 1) + "]])";
                 }
                     break;
             }

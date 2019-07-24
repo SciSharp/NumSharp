@@ -71,8 +71,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine)
-        { }
+        internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -178,7 +177,7 @@ namespace NumSharp.Generic
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                this[slice].Array = value.Data<T>();
+                base[slice] = value;
             }
         }
 
@@ -192,7 +191,7 @@ namespace NumSharp.Generic
             get => base[slices].MakeGeneric<T>();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => this[slice].Array = value.Data<T>();
+            set => base[slices] = value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

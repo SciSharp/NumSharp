@@ -25,9 +25,8 @@ namespace NumSharp.UnitTest.Creation
         {
             var list = new int[][] {new int[] {1, 2}, new int[] {3, 4}};
 
-            var n = np.array(list);
-            n.ToString();
-            var val = n.Data<int>(1, 0);
+            var nd = np.array(list);
+            var val = nd.GetInt32(1, 0);
             Assert.IsTrue(val == 3);
 
             var list1 = new int[,] {{1, 2, 3}, {2, 3, 1}};

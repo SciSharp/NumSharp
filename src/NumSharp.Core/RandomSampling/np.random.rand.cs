@@ -25,15 +25,19 @@ namespace NumSharp
         /// </summary>
         public NDArray rand(Shape shape)
         {
-            NDArray ndArray = new NDArray(typeof(double), shape);
-            ArraySlice<double> numArray = ndArray.Data<double>();
-            for (int index = 0; index < ndArray.size; ++index)
+            NDArray ret = new NDArray(typeof(double), shape, false);
+
+            unsafe
             {
-                numArray[index] = randomizer.NextDouble();
+                var addr = (double*)ret.Address;
+                var incr = new NDIndexArrayIncrementor(ref shape);
+                do
+                {
+                    *(addr + shape.GetIndexInShape(incr.Index)) = randomizer.NextDouble();
+                } while (incr.Next() != null);
             }
 
-            ndArray.ReplaceData(numArray);
-            return ndArray;
+            return ret;
         }
 
         /// <summary>

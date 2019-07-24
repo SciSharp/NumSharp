@@ -6,21 +6,32 @@ namespace NumSharp
 {
     public partial class NumPyRandom
     {
-        public NDArray permutation(int max)
+        /// <summary>
+        ///     Randomly permute a sequence, or return a permuted range.
+        /// </summary>
+        /// <param name="x">If x is an integer, randomly permute np.arange(x).</param>
+        /// <returns>Permuted sequence or array range.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</remarks>
+        public NDArray permutation(int x)
         {
-            int[] orders = new int[max];
-
-            var nd = np.arange(max);
-
-            for (int i = 0; i < max; i++)
-            {
-                var pos = randomizer.Next(0, max);
-                var zero = nd.Data<int>(0);
-                nd[0] = (NDArray)nd.Data<int>(pos);
-                nd[pos] = (NDArray) zero;
-            }
+            var nd = np.arange(x);
+            np.random.shuffle(nd);
 
             return nd;
+        }
+
+        /// <summary>
+        ///     Randomly permute a sequence, or return a permuted range.
+        /// </summary>
+        /// <param name="x">If x is an integer, randomly permute np.arange(x).</param>
+        /// <returns>Permuted sequence or array range.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</remarks>
+        public NDArray permutation(NDArray x)
+        {
+            x = x.copy();
+            np.random.shuffle(x);
+
+            return x;
         }
     }
 }

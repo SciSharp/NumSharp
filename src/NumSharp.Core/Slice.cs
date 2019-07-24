@@ -193,7 +193,7 @@ namespace NumSharp
 
         public static Slice Index(int index)
         {
-            return new Slice(index, index + 1) { IsIndex = true };
+            return new Slice(index, index + 1) {IsIndex = true};
         }
 
         public override string ToString()
@@ -241,6 +241,8 @@ namespace NumSharp
         {
             var start = GetAbsStart(dim);
             var stop = GetAbsStop(dim);
+            if (Step < 0)
+                return new Slice(stop - 1, start - 1, Step);
             return new Slice(start, stop, Step);
         }
 

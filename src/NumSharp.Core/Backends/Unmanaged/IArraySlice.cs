@@ -9,9 +9,11 @@ namespace NumSharp.Backends.Unmanaged
         IMemoryBlock MemoryBlock { get; }
 
         T GetIndex<T>(int index) where T : unmanaged;
+
         object GetIndex(int index);
 
         void SetIndex<T>(int index, T value) where T : unmanaged;
+
         void SetIndex(int index, object value);
 
         new IArraySlice Clone();
