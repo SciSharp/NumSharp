@@ -494,14 +494,29 @@ namespace NumSharp
 
         public IEnumerator GetEnumerator()
         {
+            if (Shape.IsSliced)
+                return _sliced().GetEnumerator();
+
             return Array?.GetEnumerator() ?? _empty().GetEnumerator();
+
+            IEnumerable _sliced()
+            {
+                if (size == 0)
+                    yield break;
+                
+                var incr = new NDIndexArrayIncrementor(shape);
+                do
+                {
+                    yield return GetAtIndex(Shape.GetIndexInShape(incr.Index));
+                } while (incr.Next() != null);
+            }
 
             IEnumerable _empty()
             {
                 yield break;
             }
         }
-        
+
         /// <summary>
         /// New view of array with the same data.
         /// </summary>
