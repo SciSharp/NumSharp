@@ -709,14 +709,14 @@ namespace NumSharp
         /// <returns>A new object that is a copy of this instance.</returns>
         object ICloneable.Clone()
         {
-            return Clone(false);
+            return Clone(true);
         }
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
-        public Shape Clone(bool deep = false)
+        public Shape Clone(bool deep = true)
         {
             return deep ? new Shape(this) : this;
         }

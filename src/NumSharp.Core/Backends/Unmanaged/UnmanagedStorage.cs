@@ -1359,6 +1359,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public IArraySlice CloneData()
         {
+            //TODO! this should clone based on the slice!
             return InternalArray.Clone();
         }
 
@@ -1369,7 +1370,7 @@ namespace NumSharp.Backends
         /// <typeparam name="T">The type that is expected.</typeparam>
         public ArraySlice<T> AsArray<T>() where T : unmanaged
         {
-            //if (!typeof(T).IsValidNPType())
+            //TODO! this should clone based on the slice!
             return (ArraySlice<T>)InternalArray;
         }
 
@@ -1380,6 +1381,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as <see cref="ArraySlice{T}"/></returns>
         public ArraySlice<T> CloneData<T>() where T : unmanaged
         {
+            //TODO! this should clone based on the slice!
             return (ArraySlice<T>)InternalArray.Clone();
         }
 
@@ -1392,14 +1394,14 @@ namespace NumSharp.Backends
         public ArraySlice<T> GetData<T>() where T : unmanaged
         {
             if (!typeof(T).IsValidNPType())
-            {
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
-            }
 
             //if (typeof(T).Name != _DType.Name)
             //{
             //    Console.WriteLine($"Warning: GetData {typeof(T).Name} is not {_DType.Name} of storage.");
             //}
+
+            //TODO! this should clone based on the slice!
 
             var internalArray = InternalArray;
             if (internalArray is ArraySlice<T> ret)
@@ -1462,16 +1464,20 @@ namespace NumSharp.Backends
                 return;
             }
 
+            //TODO! this should support slice!
+
             SetIndex(value, _shape.GetIndexInShape(indices));
         }
 
         public unsafe void SetIndex<T>(T value, int index) where T : unmanaged
         {
+            //TODO! this should support slice!
             *((T*)this.Address + index) = value;
         }
 
         public unsafe void SetIndex(object value, int index)
         {
+            //TODO! this should support slice!
             switch (_typecode)
             {
 #if _REGEN
@@ -1569,6 +1575,7 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         public unsafe T GetIndex<T>(int index) where T : unmanaged
         {
+            //TODO! this should support slice!
             return *((T*)Address + index);
         }
 
@@ -1584,6 +1591,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public void SetData(NDArray value, params int[] indices)
         {
+            //TODO! this should support slice!
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
@@ -1749,7 +1757,9 @@ namespace NumSharp.Backends
             if (_typecode == NPTypeCode.Empty)
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 
-            SetInternalArray(nd.Array);
+            //todo! what if nd is sliced
+            
+            SetInternalArray(nd.Shape.IsSliced ? nd.Storage.CloneData() : nd.Array);
         }
 
         /// <summary>
@@ -1908,6 +1918,7 @@ namespace NumSharp.Backends
         public UnmanagedStorage Clone()
         {
             //TODO! When the shape is sliced, clone only slice data.
+            //TODO! after we clone a slice, shape must be cleaned from slices!
             var puffer = Engine.GetStorage(_dtype);
             puffer.Allocate(InternalArray.Clone(), _shape);
             return puffer;
