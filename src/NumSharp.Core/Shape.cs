@@ -11,7 +11,7 @@ namespace NumSharp
 {
     public struct Shape : ICloneable, IEquatable<Shape>, IComparable<Shape>, IComparable
     {
-        private static readonly int[] _vectorStrides = {1};
+        private static readonly int[] _vectorStrides = { 1 };
 
         internal ViewInfo ViewInfo;
 
@@ -41,7 +41,7 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static readonly Shape Scalar = new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue};
+        public static readonly Shape Scalar = new Shape(Array.Empty<int>()) { size = 1, _hashCode = int.MinValue };
 
         /// <summary>
         ///     Create a shape that represents a vector.
@@ -49,7 +49,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length};
+            var shape = new Shape { dimensions = new[] { length }, strides = _vectorStrides, layout = 'C', size = length };
 
             unchecked
             {
@@ -66,7 +66,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length, ViewInfo viewInfo)
         {
-            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length, ViewInfo = viewInfo };
+            var shape = new Shape { dimensions = new[] { length }, strides = _vectorStrides, layout = 'C', size = length, ViewInfo = viewInfo };
 
             unchecked
             {
@@ -83,7 +83,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Matrix(int rows, int cols)
         {
-            var shape = new Shape {dimensions = new[] {rows, cols}, strides = new int[] {cols, 1}, layout = 'C', size = rows * cols};
+            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, layout = 'C', size = rows * cols };
 
             unchecked
             {
@@ -181,7 +181,7 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public static Shape Empty(int ndim)
         {
-            return new Shape {dimensions = new int[ndim], strides = new int[ndim]};
+            return new Shape { dimensions = new int[ndim], strides = new int[ndim] };
             //default vals already sets: ret.layout = 0;
             //default vals already sets: ret.size = 0;
             //default vals already sets: ret._hashCode = 0;
@@ -238,7 +238,7 @@ namespace NumSharp
             {
                 if (select.Length > dimensions.Length)
                     throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
-                // TODO! perf opt
+                // TODO: perf opt
                 var vi = ViewInfo;
                 if (dimensions.Length == 0 && select.Length == 1)
                 {
@@ -257,14 +257,12 @@ namespace NumSharp
                             offset += strides[i] * @select[i];
                             continue;
                         }
-
                         var slice = vi.Slices[i];
                         var start = slice.Step < 0 ? slice.Stop.Value - 1 : slice.Start.Value;
 
                         offset += strides[i] * (start + @select[i] * slice.Step);
                     }
                 }
-
                 return offset;
             }
 
@@ -278,7 +276,6 @@ namespace NumSharp
                 for (int i = 0; i < @select.Length; i++)
                     offset += strides[i] * @select[i];
             }
-
             return offset;
         }
 
@@ -336,7 +333,7 @@ namespace NumSharp
         {
             int[] dimIndexes = null;
             if (strides.Length == 1)
-                dimIndexes = new int[] {select};
+                dimIndexes = new int[] { select };
 
             else if (layout == 'C')
             {
@@ -473,18 +470,15 @@ namespace NumSharp
 
         public Shape Slice(params Slice[] input_slices)
         {
-            if (this.IsSliced)
-                throw new NotImplementedException("Recursive Slicing not implemented yet! We must merge and flatten ViewInfo here!");
-
             var slices = input_slices.Length != Dimensions.Length ? input_slices : new Slice[Dimensions.Length];
             var sliced_axes_unreduced = new int[Dimensions.Length];
             for (int i = 0; i < Dimensions.Length; i++)
             {
                 var dim = Dimensions[i];
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All();
-                slices[i] = slice.Sanitize(dim);
+                slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice.Sanitize(dim)) : slice.Sanitize(dim);
                 sliced_axes_unreduced[i] = slices[i].GetSize();
-            }
+            };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
             return new Shape(sliced_axes) { ViewInfo = viewInfo };
@@ -494,25 +488,25 @@ namespace NumSharp
 
         #region Implicit Operators
 
-        public static explicit operator int[](Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
+        public static explicit operator int[] (Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
         public static explicit operator int(Shape shape) => shape.Size;
         public static implicit operator Shape(int dim) => new Shape(dim);
 
-        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
+        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => new Shape(dims.Item1, dims.Item2);
 
-        public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
+        public static explicit operator (int, int, int) (Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);
 
-        public static explicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
+        public static explicit operator (int, int, int, int) (Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4);
 
-        public static explicit operator (int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5);
 
-        public static explicit operator (int, int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
 
         #endregion

@@ -241,8 +241,6 @@ namespace NumSharp
         {
             var start = GetAbsStart(dim);
             var stop = GetAbsStop(dim);
-            if (Step < 0)
-                return new Slice(stop - 1, start - 1, Step);
             return new Slice(start, stop, Step);
         }
 
@@ -251,7 +249,7 @@ namespace NumSharp
         /// </summary>
         public Slice Merge(Slice other)
         {
-            return new Slice(Start+other.Start, Start+other.Stop, Step*other.Step);
+            return new Slice(Start + other.Start, Start + other.Stop, Step * other.Step);
         }
     }
 }
