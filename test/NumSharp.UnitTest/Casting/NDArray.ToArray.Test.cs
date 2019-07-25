@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ToDotNetArray()
         {
+            //TODO! this test is not a test because it doesn't even have assertions
             var oneDArray = np.arange(10.0);
             var oneDArrayDotNet = (double[])oneDArray.ToMuliDimArray<double>();
 

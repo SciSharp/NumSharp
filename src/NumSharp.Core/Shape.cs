@@ -285,7 +285,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
-        /// <remarks>Used for slicing, return's shape is the new shape of the slice and offset is the offset from current address.</remarks>
+        /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public (Shape Shape, int Offset) GetSubshape(params int[] indicies)
         {
@@ -300,13 +300,34 @@ namespace NumSharp
             {
                 unchecked
                 {
-                    for (int i = 0; i < indicies.Length; i++)
-                        offset += strides[i] * indicies[i];
+                    if (IsSliced)
+                    {
+                        var vi = ViewInfo;
+                        var orig_strides = ViewInfo.OriginalShape.strides;
+                        for (int i = 0; i < indicies.Length; i++)
+                        {
+                            if (vi.Slices.Length <= i)
+                            {
+                                offset += orig_strides[i] * indicies[i];
+                                continue;
+                            }
+                            var slice = vi.Slices[i];
+                            var start = slice.Start;
+
+                            offset += orig_strides[i] * (start + indicies[i] * slice.Step);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < indicies.Length; i++)
+                            offset += strides[i] * indicies[i];
+                    }
                 }
             }
 
-            if (offset >= size)
-                throw new IndexOutOfRangeException($"Shape({string.Join(", ", indicies)})");
+            var orig_shape=IsSliced ? ViewInfo.OriginalShape : this;
+            if (offset >= orig_shape.Size)
+                throw new IndexOutOfRangeException($"The offset ${offset} is out of range in Shape {orig_shape.Size}");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
