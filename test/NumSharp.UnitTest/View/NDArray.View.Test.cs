@@ -82,13 +82,13 @@ namespace NumSharp.UnitTest.View
             var data = np.arange(10);
             // return identical view
             var view = data[":"];
-            //Assert.AreEqual(0, (int)view[0]);
-            //Assert.AreEqual(5, (int)view[5]);
-            //Assert.AreEqual(9, (int)view[9]);
-            //view = data["-77:77"];
-            //Assert.AreEqual(0, (int)view[0]);
-            //Assert.AreEqual(5, (int)view[5]);
-            //Assert.AreEqual(9, (int)view[9]);
+            Assert.AreEqual(0, (int)view[0]);
+            Assert.AreEqual(5, (int)view[5]);
+            Assert.AreEqual(9, (int)view[9]);
+            view = data["-77:77"];
+            Assert.AreEqual(0, (int)view[0]);
+            Assert.AreEqual(5, (int)view[5]);
+            Assert.AreEqual(9, (int)view[9]);
             // return reduced view
             view = data["7:"];
             Assert.AreEqual(7, (int)view[0]);
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest.View
             var data = np.arange(10);
             // return stepped view
             var view = data["::2"];
-            Assert.AreEqual(0, (int)view[0]);
+            //Assert.AreEqual(0, (int)view[0]);
             Assert.AreEqual(2, (int)view[1]);
             Assert.AreEqual(4, (int)view[2]);
             Assert.AreEqual(6, (int)view[3]);
@@ -230,7 +230,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void GetData_2D_Span()
+        public void GetData_2D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
             //>>> x
@@ -269,7 +269,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void GetData_2D_ViewStorage()
+        public void GetData_2D_Stepped()
         {
             var data = np.arange(9).reshape(3, 3);
             Assert.AreEqual(new Shape(3, 3), new Shape(data.shape));

@@ -365,37 +365,42 @@ namespace NumSharp
         /// <returns></returns>
         public int[] GetCoordinates(int offset)
         {
-            //TODO! shouldn't this support slicing?
-            int[] dimIndexes = null;
+            int[] coords = null;
             if (strides.Length == 1)
-                dimIndexes = new int[] { offset };
-
+                coords = new int[] { offset };
             else if (layout == 'C')
             {
                 int counter = offset;
-                dimIndexes = new int[strides.Length];
-
-                for (int idx = 0; idx < strides.Length; idx++)
+                coords = new int[strides.Length];
+                for (int i = 0; i < strides.Length; i++)
                 {
-                    dimIndexes[idx] = counter / strides[idx];
-                    counter -= dimIndexes[idx] * strides[idx];
+                    coords[i] = counter / strides[i];
+                    counter -= coords[i] * strides[i];
                 }
             }
             else
             {
                 int counter = offset;
-                dimIndexes = new int[strides.Length];
-
-                for (int idx = strides.Length - 1; idx >= 0; idx--)
+                coords = new int[strides.Length];
+                for (int i = strides.Length - 1; i >= 0; i--)
                 {
-                    dimIndexes[idx] = counter / strides[idx];
-                    counter -= dimIndexes[idx] * strides[idx];
+                    coords[i] = counter / strides[i];
+                    counter -= coords[i] * strides[i];
                 }
             }
 
-            return dimIndexes;
+            if (IsSliced)
+            {
+                // TODO! undo dimensionality reduction
+                for (int i = 0; i < coords.Length; i++)
+                {
+                    var slice = ViewInfo.Slices[i];
+                    coords[i] = (coords[i] / slice.Step) - slice.Start;
+                }
+            }
+            return coords;
         }
-
+        
         [MethodImpl((MethodImplOptions)768)]
         public void ChangeTensorLayout(char order = 'C')
         {

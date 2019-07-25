@@ -385,7 +385,13 @@ namespace NumSharp.UnitTest
             new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[1].Should().Be(new SliceDef("(1>>1*2)"));
         }
 
-        
+
+        [TestMethod]
+        public void GetCoordsFromIndex_2D()
+        {
+            var shape=new Shape(3, 3).Slice(":,1:");
+            // todo: test get coords from index with sliced shapes
+        }
 
     }
 }
