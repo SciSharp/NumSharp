@@ -247,6 +247,7 @@ namespace NumSharp
                     return start + select[0] * slice.Step;
                 }
 
+                var orig_strides = vi.OriginalShape.strides;
                 offset = 0;
                 unchecked
                 {
@@ -254,13 +255,13 @@ namespace NumSharp
                     {
                         if (vi.Slices.Length <= i)
                         {
-                            offset += strides[i] * @select[i];
+                            offset += orig_strides[i] * @select[i];
                             continue;
                         }
                         var slice = vi.Slices[i];
                         var start = slice.Start;
 
-                        offset += strides[i] * (start + @select[i] * slice.Step);
+                        offset += orig_strides[i] * (start + @select[i] * slice.Step);
                     }
                 }
                 return offset;

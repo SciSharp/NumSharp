@@ -192,104 +192,105 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88 }, view3.ToArray<int>());
         }
 
-        //        [TestMethod]
-        //        public void GetData_2D()
-        //        {
-        //            //>>> x = np.arange(9).reshape(3, 3)
-        //            //>>> x
-        //            //array([[0, 1, 2],
-        //            //       [3, 4, 5],
-        //            //       [6, 7, 8]])
-        //            //>>> x[:]
-        //            //array([[0, 1, 2],
-        //            //       [3, 4, 5],
-        //            //       [6, 7, 8]])
-        //            //>>> x[1:]
-        //            //array([[3, 4, 5],
-        //            //       [6, 7, 8]])
-        //            //>>> x[1:,:]
-        //            //array([[3, 4, 5],
-        //            //       [6, 7, 8]])
-        //            //>>> x[:, 1:]
-        //            //array([[1, 2],
-        //            //       [4, 5],
-        //            //       [7, 8]])
-        //            //>>> x[1:2, 0:1]
-        //            //array([[3]])
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
-        //            data.Reshape(3, 3);
-        //            Assert.AreEqual(new Shape(3, 3), data.Shape);
-        //            // return identical view
-        //            var view = data.GetView( ":");
-        //            Assert.AreEqual(new Shape(3, 3), view.Shape);
-        //            AssertAreEqual(data.ToArray<int>(), view.ToArray<int>());
-        //            // return reduced view
-        //            view = data.GetView( "1:");
-        //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.ToArray<int>());
-        //            view = data.GetView( "1:,:");
-        //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.ToArray<int>());
-        //            view = data.GetView( ":,1:");
-        //            Assert.AreEqual(new Shape(3, 2), view.Shape);
-        //            AssertAreEqual(new int[] { 1, 2, 4, 5, 7, 8 }, view.ToArray<int>());
-        //            view = data.GetView( "1:2, 0:1");
-        //            Assert.AreEqual(new Shape(1, 1), view.Shape);
-        //            AssertAreEqual(new int[] { 3 }, view.ToArray<int>());
-        //            // return stepped view
-        //            //>>> x
-        //            //array([[0, 1, 2],
-        //            //       [3, 4, 5],
-        //            //       [6, 7, 8]])
-        //            //>>> x[::2]
-        //            //array([[0, 1, 2],
-        //            //       [6, 7, 8]])
-        //            //>>> x[::3]
-        //            //array([[0, 1, 2]])
-        //            //>>> x[::- 1]
-        //            //array([[6, 7, 8],
-        //            //       [3, 4, 5],
-        //            //       [0, 1, 2]])
-        //            //>>> x[::- 2]
-        //            //array([[6, 7, 8],
-        //            //       [0, 1, 2]])
-        //            //>>> x[::- 3]
-        //            //array([[6, 7, 8]])
-        //            view = data.GetView( "::2");
-        //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8 }, view.ToArray<int>());
-        //            view = data.GetView( "::3");
-        //            Assert.AreEqual(new Shape(1, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 0, 1, 2 }, view.ToArray<int>());
-        //            view = data.GetView( "::-1");
-        //            Assert.AreEqual(new Shape(3, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 6, 7, 8, 3, 4, 5, 0, 1, 2, }, view.ToArray<int>());
-        //            view = data.GetView( "::-2");
-        //            Assert.AreEqual(new Shape(2, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 6, 7, 8, 0, 1, 2, }, view.ToArray<int>());
-        //            view = data.GetView( "::-3");
-        //            Assert.AreEqual(new Shape(1, 3), view.Shape);
-        //            AssertAreEqual(new int[] { 6, 7, 8, }, view.ToArray<int>());
-        //            // N-Dim Stepping
-        //            //>>> x[::2,::2]
-        //            //array([[0, 2],
-        //            //       [6, 8]])
-        //            //>>> x[::- 1,::- 2]
-        //            //array([[8, 6],
-        //            //       [5, 3],
-        //            //       [2, 0]])
-        //            view = data.GetView( "::2, ::2");
-        //            Assert.AreEqual(new Shape(2, 2), view.Shape);
-        //            AssertAreEqual(new int[] { 0, 2, 6, 8 }, view.ToArray<int>());
-        //            view = data.GetView( "::-1, ::-2");
-        //            Assert.AreEqual(new Shape(3, 2), view.Shape);
-        //            AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.ToArray<int>());
-        //        }
+        [TestMethod]
+        public void GetData_2D()
+        {
+            //>>> x = np.arange(9).reshape(3, 3)
+            //>>> x
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> x[:]
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> x[1:]
+            //array([[3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> x[1:,:]
+            //array([[3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> x[:, 1:]
+            //array([[1, 2],
+            //       [4, 5],
+            //       [7, 8]])
+            //>>> x[1:2, 0:1]
+            //array([[3]])
+            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+            data.Reshape(3, 3);
+            Assert.AreEqual(new Shape(3, 3), data.Shape);
+            // return identical view
+            var view = data.GetView(":");
+            //Assert.AreEqual(new Shape(3, 3), view.Shape);
+            //AssertAreEqual(data.ToArray<int>(), view.ToArray<int>());
+            //// return reduced view
+            //view = data.GetView("1:");
+            //Assert.AreEqual(new Shape(2, 3), view.Shape);
+            //AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.ToArray<int>());
+            //view = data.GetView("1:,:");
+            //Assert.AreEqual(new Shape(2, 3), view.Shape);
+            //AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.ToArray<int>());
+
+            view = data.GetView(":,1:");
+            Assert.AreEqual(new Shape(3, 2), view.Shape);
+            AssertAreEqual(new int[] { 1, 2, 4, 5, 7, 8 }, view.ToArray<int>());
+            view = data.GetView("1:2, 0:1");
+            Assert.AreEqual(new Shape(1, 1), view.Shape);
+            AssertAreEqual(new int[] { 3 }, view.ToArray<int>());
+            // return stepped view
+            //>>> x
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> x[::2]
+            //array([[0, 1, 2],
+            //       [6, 7, 8]])
+            //>>> x[::3]
+            //array([[0, 1, 2]])
+            //>>> x[::- 1]
+            //array([[6, 7, 8],
+            //       [3, 4, 5],
+            //       [0, 1, 2]])
+            //>>> x[::- 2]
+            //array([[6, 7, 8],
+            //       [0, 1, 2]])
+            //>>> x[::- 3]
+            //array([[6, 7, 8]])
+            view = data.GetView("::2");
+            Assert.AreEqual(new Shape(2, 3), view.Shape);
+            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8 }, view.ToArray<int>());
+            view = data.GetView("::3");
+            Assert.AreEqual(new Shape(1, 3), view.Shape);
+            AssertAreEqual(new int[] { 0, 1, 2 }, view.ToArray<int>());
+            view = data.GetView("::-1");
+            Assert.AreEqual(new Shape(3, 3), view.Shape);
+            AssertAreEqual(new int[] { 6, 7, 8, 3, 4, 5, 0, 1, 2, }, view.ToArray<int>());
+            view = data.GetView("::-2");
+            Assert.AreEqual(new Shape(2, 3), view.Shape);
+            AssertAreEqual(new int[] { 6, 7, 8, 0, 1, 2, }, view.ToArray<int>());
+            view = data.GetView("::-3");
+            Assert.AreEqual(new Shape(1, 3), view.Shape);
+            AssertAreEqual(new int[] { 6, 7, 8, }, view.ToArray<int>());
+            // N-Dim Stepping
+            //>>> x[::2,::2]
+            //array([[0, 2],
+            //       [6, 8]])
+            //>>> x[::- 1,::- 2]
+            //array([[8, 6],
+            //       [5, 3],
+            //       [2, 0]])
+            view = data.GetView("::2, ::2");
+            Assert.AreEqual(new Shape(2, 2), view.Shape);
+            AssertAreEqual(new int[] { 0, 2, 6, 8 }, view.ToArray<int>());
+            view = data.GetView("::-1, ::-2");
+            Assert.AreEqual(new Shape(3, 2), view.Shape);
+            AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.ToArray<int>());
+        }
 
         //        [TestMethod]
         //        public void NestedView_2D()
         //        {
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         //            data.Reshape(2, 10);
         //            //>>> x = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         //            //>>> x = x.reshape(2, 10)
@@ -345,7 +346,7 @@ namespace NumSharp.UnitTest.View
         //        [TestMethod]
         //        public void Reduce_1D_to_Scalar()
         //        {
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         //            Assert.AreEqual(new Shape(10), data.Shape);
         //            // return scalar
         //            var view = data.GetView( "7");
@@ -367,7 +368,7 @@ namespace NumSharp.UnitTest.View
         //            //array([1, 4, 7])
         //            //>>> x[2, 2]
         //            //8
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
         //            data.Reshape(3, 3);
         //            Assert.AreEqual(new Shape(3, 3), data.Shape);
         //            // return identical view
@@ -390,7 +391,7 @@ namespace NumSharp.UnitTest.View
         //        [TestMethod]
         //        public void NestedDimensionalityReduction()
         //        {
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
         //            data.Reshape(3, 3);
         //            Assert.AreEqual(new Shape(3, 3), data.Shape);
         //            var view = data.GetView( "2");
@@ -407,16 +408,16 @@ namespace NumSharp.UnitTest.View
         //        [TestMethod]
         //        public void ToStringTest()
         //        {
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         //            var view = new ViewStorage(data);
         //            Console.WriteLine(view.ToString(flat: true));
         //            Assert.AreEqual("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", view.ToString(flat: true));
-        //            data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
         //            data.Reshape(3, 3);
         //            view = new ViewStorage(data);
         //            Console.WriteLine(view.ToString(flat: true));
         //            Assert.AreEqual("[[0, 1, 2], [3, 4, 5], [6, 7, 8]]", view.ToString(flat: true));
-        //            data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
+        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
         //            data.Reshape(2,2,2);
         //            view = new ViewStorage(data);
         //            Console.WriteLine(view.ToString(flat: true));
@@ -426,18 +427,18 @@ namespace NumSharp.UnitTest.View
         //        [TestMethod]
         //        public void ToString_NonFlatTest()
         //        {
-        //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
         //            var view = new ViewStorage(data);
         //            Console.WriteLine(view);
         //            Assert.AreEqual("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", view.ToString(flat: false));
-        //            data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
         //            data.Reshape(3, 3);
         //            view = new ViewStorage(data);
         //            Console.WriteLine(view);
         //            Assert.AreEqual("[[0, 1, 2], \r\n" +
         //                            "[3, 4, 5], \r\n" +
         //                            "[6, 7, 8]]", view.ToString(flat: false));
-        //            data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
+        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
         //            data.Reshape(2, 2, 2);
         //            view = new ViewStorage(data);
         //            Console.WriteLine(view);
