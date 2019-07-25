@@ -222,6 +222,21 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Retrieve the transformed offset if <see cref="IsSliced"/> is true, otherwise returns <paramref name="offset"/>.
+        /// </summary>
+        /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
+        /// <returns>The transformed offset.</returns>
+        /// <remarks>Avoid using unless it is unclear if shape is sliced or not.</remarks>
+        public int GetOffset(int offset)
+        {
+            // ReSharper disable once ConvertIfStatementToReturnStatement
+            if (ViewInfo == null)
+                return offset;
+
+            return GetIndexInShape(GetDimIndexOutShape(offset));
+        }
+
+        /// <summary>
         ///     get store position by shape<br></br>
         ///     for example: 2 x 2 row major<br></br>
         ///     [[1, 2, 3], [4, 5, 6]]<br></br>

@@ -1920,7 +1920,7 @@ namespace NumSharp.Backends
 
             var (subShape, offset) = _shape.GetSubshape(indices);
             if (subShape.Size != value.Count)
-                throw new IncorrectShapeException($"Can't SetData because the lenght of the value ({value.Count}) doesn't match the size of the shape of this array ({subShape})");
+                throw new IncorrectShapeException($"Can't SetData because the length of the value ({value.Count}) doesn't match the size of the shape of this array ({subShape})");
 
             unsafe
             {
