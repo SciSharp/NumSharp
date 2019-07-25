@@ -30,7 +30,7 @@ namespace NumSharp
                     var newData = new int[this.size];
                     for (int idx = 0; idx < this.size; idx++)
                     {
-                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
                         newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
@@ -44,7 +44,7 @@ namespace NumSharp
                     var newData = new float[this.size];
                     for (int idx = 0; idx < this.size; idx++)
                     {
-                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
                         newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
@@ -58,7 +58,7 @@ namespace NumSharp
                     var newData = new double[this.size];
                     for (int idx = 0; idx < this.size; idx++)
                     {
-                        int[] indexes = this.Storage.Shape.GetDimIndexOutShape(idx);
+                        int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
                         newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
                     }
