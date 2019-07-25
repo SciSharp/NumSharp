@@ -94,11 +94,11 @@ namespace NumSharp.UnitTest
             (a == null).Should().BeTrue();
             (null == b).Should().BeTrue();
 
-            a = 5;
-            b = 4;
+            a = (Shape)5;
+            b = (Shape)4;
             (a != b).Should().BeTrue();
 
-            b = 5;
+            b = (Shape)5;
             (a == b).Should().BeTrue();
 
             a = new Shape(1, 2, 3, 4, 5);
@@ -208,7 +208,7 @@ namespace NumSharp.UnitTest
 
             for (int i = 0; i < nd.size; i++)
             {
-                nd.Storage.SetIndex(i, i);
+                nd.Storage.SetAtIndex(i, i);
             }
 
             for (int i = 0; i < 5; i++)

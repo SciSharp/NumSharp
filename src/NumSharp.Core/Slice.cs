@@ -54,6 +54,10 @@ namespace NumSharp
     /// </summary>
     public class Slice
     {
+        public static readonly Slice All = new Slice(null, null);
+
+        public static readonly Slice None = Index(0);
+
         public int? Start { get; set; }
         public int? Stop { get; set; }
         public int Step { get; set; } = 1;
@@ -185,12 +189,7 @@ namespace NumSharp
         }
 
         #endregion
-
-        public static Slice All()
-        {
-            return new Slice(null, null);
-        }
-
+        
         public static Slice Index(int index)
         {
             return new Slice(index, index + 1) { IsIndex = true };

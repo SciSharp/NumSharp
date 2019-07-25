@@ -699,7 +699,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreNotEqual(new Slice("-5:-8"), new Slice("-5:-8:2"));
 
             // Create functions
-            Assert.AreEqual(Slice.All(), new Slice(":"));
+            Assert.AreEqual(Slice.All, new Slice(":"));
             Assert.AreEqual(Slice.Index(17), new Slice("17:18"));
 
             // invalid values

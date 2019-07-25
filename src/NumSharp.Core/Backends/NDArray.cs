@@ -296,7 +296,7 @@ namespace NumSharp
         {
             return Storage.GetData<T>();
         }
-
+        
         /// <summary>
         ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
         /// </summary>
@@ -505,14 +505,184 @@ namespace NumSharp
 
             IEnumerable _sliced()
             {
-                if (size == 0)
+
+
+#if _REGEN
+		    #region Compute
+		    switch (GetTypeCode)
+		    {
+			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    case NPTypeCode.#1:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return Get#1(incr.Index);
+                    } while (incr.Next() != null);
                     yield break;
-                
-                var incr = new NDIndexArrayIncrementor(shape);
-                do
-                {
-                    yield return GetAtIndex(Shape.GetIndexInShape(incr.Index));
-                } while (incr.Next() != null);
+			    }
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
+		    #endregion
+#else
+		    #region Compute
+		    switch (GetTypeCode)
+		    {
+			    case NPTypeCode.Boolean:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetBoolean(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Byte:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetByte(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Int16:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetInt16(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.UInt16:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetUInt16(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Int32:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetInt32(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.UInt32:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetUInt32(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Int64:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetInt64(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.UInt64:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetUInt64(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Char:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetChar(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Double:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetDouble(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Single:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetSingle(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    case NPTypeCode.Decimal:
+			    {
+				    if (size == 0)
+                        yield break;
+
+                    var incr = new NDIndexArrayIncrementor(shape);
+                    do
+                    {
+                        yield return GetDecimal(incr.Index);
+                    } while (incr.Next() != null);
+                    yield break;
+			    }
+			    default:
+				    throw new NotSupportedException();
+		    }
+		    #endregion
+#endif
+
             }
 
             IEnumerable _empty()
@@ -536,6 +706,18 @@ namespace NumSharp
         }
 
         #region Getters
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="bool"/>.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool GetBoolean(params int[] indices)
+        {
+            return Storage.GetBoolean(indices);
+        }
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/>.
@@ -689,7 +871,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public object GetAtIndex(int index)
         {
-            return Storage.GetIndex(index);
+            return Storage.GetAtIndex(index);
         }
 
         /// <summary>
@@ -714,7 +896,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetAtIndex(object obj, int index)
         {
-            Storage.SetIndex(obj, index);
+            Storage.SetAtIndex(obj, index);
         }
 
         /// <summary>

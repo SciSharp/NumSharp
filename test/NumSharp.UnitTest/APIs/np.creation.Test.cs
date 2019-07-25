@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.APIs
         {
             var x = np.ndarray((2, 3), dtype: np.int32, order: 'F');
             for (int i = 0; i < 6; i++)
-                x.itemset(i, i + 1);
+                x.itemset((Shape) i, i + 1);
             // todo: Assert the result!
         }
 

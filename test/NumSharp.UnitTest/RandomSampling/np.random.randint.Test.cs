@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             for (int i = 0; i < 50; i++)
             {
-                var result_1 = np.random.randint(2, size: 10); // 10 numbers between [2, int.MaxValue)
+                var result_1 = np.random.randint(2, size: (Shape)10); // 10 numbers between [2, int.MaxValue)
                 result_1.Array.As<int[]>().All(v => v >= 0 && v < 2).Should().BeTrue();
                 result_1.Array.As<int[]>().Should().HaveCount(10);
 
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 result_7.Array.As<int[]>().All(v => v >= 0 && v < 10).Should().BeTrue();
                 result_7.Array.As<int[]>().Should().HaveCount(2 * 2);
 
-                var result_8 = np.random.randint(1, 5, 8); // 8 numbers between [1, 5)
+                var result_8 = np.random.randint(1, 5, (Shape) 8); // 8 numbers between [1, 5)
                 result_8.Array.As<int[]>().All(v => v >= 1 && v < 5).Should().BeTrue();
                 result_8.Array.As<int[]>().Should().HaveCount(8);
 

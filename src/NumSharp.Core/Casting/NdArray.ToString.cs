@@ -19,7 +19,7 @@ namespace NumSharp
             var s = new StringBuilder();
             if (shape.Length == 0)
             {
-                s.Append($"{Storage.GetIndex(0)}");
+                s.Append($"{Storage.GetAtIndex(0)}");
             }
             else
             {
@@ -37,7 +37,7 @@ namespace NumSharp
         {
             if (Shape.IsScalar)
             {
-                s.Append(this.Cast<object>().First());
+                s.Append($"{Storage.GetAtIndex(0)}");
                 return;
             }
 

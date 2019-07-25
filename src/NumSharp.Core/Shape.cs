@@ -135,7 +135,6 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)512)]
         public Shape(params int[] dims)
         {
-            this.ViewInfo = null;
             if (dims == null)
             {
                 strides = dims = dimensions = Array.Empty<int>();
@@ -176,6 +175,7 @@ namespace NumSharp
             }
 
             IsScalar = size == 1 && dims.Length == 0;
+            ViewInfo = null;
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -359,22 +359,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     get position in shape by store position<br></br>
-        ///     [[1, 2, 3], [4, 5, 6]]<br></br>
-        ///     GetDimIndexOutShape(1) = (0, 1)<br></br>
-        ///     GetDimIndexOutShape(4) = (1, 1)
+        ///     Transforms offset index into coordinates that matches this shape.
         /// </summary>
-        /// <param name="select"></param>
+        /// <param name="offset"></param>
         /// <returns></returns>
-        public int[] GetDimIndexOutShape(int select)
+        public int[] GetDimIndexOutShape(int offset)
         {
+            //TODO! shouldn't this support slicing?
             int[] dimIndexes = null;
             if (strides.Length == 1)
-                dimIndexes = new int[] { select };
+                dimIndexes = new int[] { offset };
 
             else if (layout == 'C')
             {
-                int counter = select;
+                int counter = offset;
                 dimIndexes = new int[strides.Length];
 
                 for (int idx = 0; idx < strides.Length; idx++)
@@ -385,7 +383,7 @@ namespace NumSharp
             }
             else
             {
-                int counter = select;
+                int counter = offset;
                 dimIndexes = new int[strides.Length];
 
                 for (int idx = strides.Length - 1; idx >= 0; idx--)
@@ -429,7 +427,7 @@ namespace NumSharp
             return GetAxis(shape.dimensions, axis);
         }
 
-        public static int[] GetAxis(in int[] dims, int axis)
+        public static int[] GetAxis(int[] dims, int axis)
         {
             if (dims == null)
                 throw new ArgumentNullException(nameof(dims));
@@ -504,18 +502,20 @@ namespace NumSharp
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape Slice(string slicing_notation)
-            => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
+        public Shape Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
         [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(params Slice[] input_slices)
         {
+            if (IsEmpty)
+                throw new InvalidOperationException("Unable to slice an empty shape.");
+
             var slices = new SliceDef[Dimensions.Length];
             var sliced_axes_unreduced = new int[Dimensions.Length];
             for (int i = 0; i < Dimensions.Length; i++)
             {
                 var dim = Dimensions[i];
-                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All();
+                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
                 var slice_def = slice.ToSliceDef(dim);
                 slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice_def) : slice_def;
                 sliced_axes_unreduced[i] = slices[i].Count;
@@ -736,25 +736,16 @@ namespace NumSharp
 
         #endregion
 
-        public override string ToString()
-        {
-            return "(" + string.Join(", ", dimensions) + ")";
-        }
+        public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>
-        object ICloneable.Clone()
-        {
-            return Clone(true);
-        }
+        object ICloneable.Clone() => Clone(true);
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
-        public Shape Clone(bool deep = true)
-        {
-            return deep ? new Shape(this) : this;
-        }
+        public Shape Clone(bool deep = true) => deep ? new Shape(this) : this;
     }
 }

@@ -49,20 +49,20 @@ namespace NumSharp
 	                default:
 		                throw new NotSupportedException();
 #else
-                    case NPTypeCode.Boolean: return nd.FromJaggedArray<bool>(array);
-                    case NPTypeCode.Byte: return nd.FromJaggedArray<byte>(array);
-                    case NPTypeCode.Int16: return nd.FromJaggedArray<short>(array);
-                    case NPTypeCode.UInt16: return nd.FromJaggedArray<ushort>(array);
-                    case NPTypeCode.Int32: return nd.FromJaggedArray<int>(array);
-                    case NPTypeCode.UInt32: return nd.FromJaggedArray<uint>(array);
-                    case NPTypeCode.Int64: return nd.FromJaggedArray<long>(array);
-                    case NPTypeCode.UInt64: return nd.FromJaggedArray<ulong>(array);
-                    case NPTypeCode.Char: return nd.FromJaggedArray<char>(array);
-                    case NPTypeCode.Double: return nd.FromJaggedArray<double>(array);
-                    case NPTypeCode.Single: return nd.FromJaggedArray<float>(array);
-                    case NPTypeCode.Decimal: return nd.FromJaggedArray<decimal>(array);
-                    default:
-                        throw new NotSupportedException();
+	                case NPTypeCode.Boolean: return nd.FromJaggedArray<bool>(array);
+	                case NPTypeCode.Byte: return nd.FromJaggedArray<byte>(array);
+	                case NPTypeCode.Int16: return nd.FromJaggedArray<short>(array);
+	                case NPTypeCode.UInt16: return nd.FromJaggedArray<ushort>(array);
+	                case NPTypeCode.Int32: return nd.FromJaggedArray<int>(array);
+	                case NPTypeCode.UInt32: return nd.FromJaggedArray<uint>(array);
+	                case NPTypeCode.Int64: return nd.FromJaggedArray<long>(array);
+	                case NPTypeCode.UInt64: return nd.FromJaggedArray<ulong>(array);
+	                case NPTypeCode.Char: return nd.FromJaggedArray<char>(array);
+	                case NPTypeCode.Double: return nd.FromJaggedArray<double>(array);
+	                case NPTypeCode.Single: return nd.FromJaggedArray<float>(array);
+	                case NPTypeCode.Decimal: return nd.FromJaggedArray<decimal>(array);
+	                default:
+		                throw new NotSupportedException();
 #endif
                 }
             }
@@ -102,11 +102,31 @@ namespace NumSharp
 
         public static explicit operator Array(NDArray nd)
         {
-            //todo! cache generic invocation.
-            var methods = nd.GetType().GetMethods().Where(x => x.Name.Equals("ToMuliDimArray") && x.IsGenericMethod && x.ReturnType.Name.Equals("Array"));
-            var genMethods = methods.First().MakeGenericMethod(nd.dtype);
-
-            return (Array)genMethods.Invoke(nd, null);
+            switch (nd.GetTypeCode)
+            {
+#if _REGEN
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+	            case NPTypeCode.Boolean: return nd.ToMuliDimArray<bool>();
+	            case NPTypeCode.Byte: return nd.ToMuliDimArray<byte>();
+	            case NPTypeCode.Int16: return nd.ToMuliDimArray<short>();
+	            case NPTypeCode.UInt16: return nd.ToMuliDimArray<ushort>();
+	            case NPTypeCode.Int32: return nd.ToMuliDimArray<int>();
+	            case NPTypeCode.UInt32: return nd.ToMuliDimArray<uint>();
+	            case NPTypeCode.Int64: return nd.ToMuliDimArray<long>();
+	            case NPTypeCode.UInt64: return nd.ToMuliDimArray<ulong>();
+	            case NPTypeCode.Char: return nd.ToMuliDimArray<char>();
+	            case NPTypeCode.Double: return nd.ToMuliDimArray<double>();
+	            case NPTypeCode.Single: return nd.ToMuliDimArray<float>();
+	            case NPTypeCode.Decimal: return nd.ToMuliDimArray<decimal>();
+	            default:
+		            throw new NotSupportedException();
+#endif
+            }
         }
 
         public static implicit operator NDArray(string str)
