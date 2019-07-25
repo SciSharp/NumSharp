@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
+// ReSharper disable once CheckNamespace
 namespace NumSharp.Backends
 {
     /// <summary>
@@ -935,7 +936,6 @@ namespace NumSharp.Backends
         ///     Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
         /// </summary>
         /// <param name="sourceArray">The array to change his type</param>
-        /// <param name="to_dtype">The type to change to.</param>
         /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
         /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
         [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
@@ -1991,11 +1991,7 @@ namespace NumSharp.Backends
 
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
-        public UnmanagedStorage GetView(params Slice[] slices)
-        {
-            // return a new UnmanagedStorage object with view parameters set
-            return Alias(_shape.Slice(slices));
-        }
+        public UnmanagedStorage GetView(params Slice[] slices) => Alias(_shape.Slice(slices));
 
         #endregion
 
