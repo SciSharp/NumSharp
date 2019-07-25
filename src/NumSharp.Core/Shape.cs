@@ -255,11 +255,11 @@ namespace NumSharp
                     throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
                 // TODO: perf opt
                 var vi = ViewInfo;
-                if (dimensions.Length == 0 && select.Length == 1)
+                if (dimensions.Length == 0)
                 {
                     var slice = vi.Slices[0];
                     var start = slice.Start;
-                    return start + select[0] * slice.Step;
+                    return start;
                 }
 
                 var orig_strides = vi.OriginalShape.strides;

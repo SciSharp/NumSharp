@@ -2267,10 +2267,11 @@ namespace NumSharp.Backends
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
-
-            var shape = Shape;
-            var ret = new T[shape.Size];
             var addr = (T*)Address;
+            var shape = Shape;
+            if (shape.Dimensions.Length==0)
+                return new T[] { (*(addr + shape.GetOffset())) };
+            var ret = new T[shape.Size];
             var incr = new NDIndexArrayIncrementor(shape.dimensions);
             int[] current = incr.Index;
             int i = 0;

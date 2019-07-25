@@ -343,16 +343,16 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.ToArray<int>());
         }
 
-        //        [TestMethod]
-        //        public void Reduce_1D_to_Scalar()
-        //        {
-        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
-        //            Assert.AreEqual(new Shape(10), data.Shape);
-        //            // return scalar
-        //            var view = data.GetView( "7");
-        //            Assert.AreEqual(new Shape(), view.Shape);
-        //            AssertAreEqual(new int[] { 7 }, view.ToArray<int>());
-        //        }
+        [TestMethod]
+        public void Reduce_1D_to_Scalar()
+        {
+            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+            Assert.AreEqual(new Shape(10), data.Shape);
+            // return scalar
+            var view = data.GetView("7");
+            Assert.AreEqual(new Shape(), view.Shape);
+            AssertAreEqual(new int[] { 7 }, view.ToArray<int>());
+        }
 
         //        [TestMethod]
         //        public void Reduce_2D_to_1D_and_0D()
