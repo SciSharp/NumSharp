@@ -485,7 +485,8 @@ namespace NumSharp
                 sliced_axes_unreduced[i] = slices[i].Count;
             };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
-            var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
+            var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
+            var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
             return new Shape(sliced_axes) { ViewInfo = viewInfo };
         }
 
