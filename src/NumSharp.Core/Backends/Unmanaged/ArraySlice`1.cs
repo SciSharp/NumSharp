@@ -242,6 +242,25 @@ namespace NumSharp.Backends.Unmanaged
             AsSpan.CopyTo(destination);
         }
 
+        /// <param name="destination"></param>
+        /// <param name="sourceOffset">offset of source via count (not bytes)</param>
+        [MethodImpl((MethodImplOptions)768)]
+        public void CopyTo(Span<T> destination, int sourceOffset)
+        {
+            new Span<T>(Address + sourceOffset, Count - sourceOffset).CopyTo(destination);
+            AsSpan.CopyTo(destination);
+        }
+
+        /// <param name="destination"></param>
+        /// <param name="sourceOffset">offset of source via count (not bytes)</param>
+        /// <param name="sourceLength">How many items to copy</param>
+        [MethodImpl((MethodImplOptions)768)]
+        public void CopyTo(Span<T> destination, int sourceOffset, int sourceLength)
+        {
+            new Span<T>(Address + sourceOffset, sourceLength).CopyTo(destination);
+            AsSpan.CopyTo(destination);
+        }
+
         [EditorBrowsable(EditorBrowsableState.Never)]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T GetPinnableReference()
