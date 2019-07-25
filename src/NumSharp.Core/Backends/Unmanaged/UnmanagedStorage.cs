@@ -1553,7 +1553,7 @@ namespace NumSharp.Backends
         public unsafe void SetAtIndex<T>(T value, int index) where T : unmanaged
         {
             //TODO! this should support slice!
-            *((T*)this.Address + _shape.GetOffset(index)) = value;
+            *((T*)this.Address + _shape.TransformOffset(index)) = value;
         }
 
         public unsafe void SetAtIndex(object value, int index)
@@ -2044,7 +2044,7 @@ namespace NumSharp.Backends
             switch (TypeCode)
             {
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
-	            case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(index));
+	            case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
 	            %
 	            default:
 		            throw new NotSupportedException();
@@ -2052,26 +2052,26 @@ namespace NumSharp.Backends
 #else
             switch (TypeCode)
             {
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(index));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(index));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(index));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(index));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(index));
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Int16: return *((short*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Int32: return *((int*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
+	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
+	            default:
+		            throw new NotSupportedException();
             }
 #endif
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.GetOffset(index));
+        public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
 
 
         /// <summary>

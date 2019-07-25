@@ -227,7 +227,7 @@ namespace NumSharp
         /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
         /// <returns>The transformed offset.</returns>
         /// <remarks>Avoid using unless it is unclear if shape is sliced or not.</remarks>
-        public int GetOffset(int offset)
+        public int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
             if (ViewInfo == null)
