@@ -16,6 +16,8 @@
  * along with this program.  If not, see <http://www.apache.org/licenses/LICENSE-2.0/>.
  */
 
+//TODO! Complete all TODOs return(?:.*;|;)[\n\r]{1,2}[\t\s]+//
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -264,7 +266,9 @@ namespace NumSharp
 
         internal Shape Shape
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.Shape;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => Storage.Reshape(value);
         }
 

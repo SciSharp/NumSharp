@@ -119,12 +119,6 @@ namespace NumSharp
         ArraySlice<T> GetData<T>() where T : unmanaged;
 
         /// <summary>
-        ///     Attempts to cast internal storage to an array of type <typeparamref name="T"/> and returns the result, therefore results can be null.
-        /// </summary>
-        /// <typeparam name="T">The type that is expected.</typeparam>
-        ArraySlice<T> AsArray<T>() where T : unmanaged;
-
-        /// <summary>
         ///     Get all elements from cloned storage as T[] and cast dtype
         /// </summary>
         /// <typeparam name="T">cloned storgae dtype</typeparam>

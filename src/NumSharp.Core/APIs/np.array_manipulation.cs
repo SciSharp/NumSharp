@@ -18,14 +18,6 @@ namespace NumSharp
         public static int roll(NDArray nd, int shift, int axis = -1)
             => (int) nd.roll(shift, axis);
 
-        /// <summary>
-        /// Return a contiguous flattened array.
-        /// 
-        /// A 1-D array, containing the elements of the input, is returned.A copy is made only if needed.
-        /// </summary>
-        public static NDArray ravel(NDArray a)
-            => a.ravel();
-
         public static NDArray transpose(NDArray x, int[] axes = null)
             => BackendFactory.GetEngine().Transpose(x, axes: axes);
 

@@ -442,7 +442,7 @@ namespace NumSharp
                     l.Add(array.GetLength(dim));
                 }
             }
-
+            
             return l.ToArray();
         }
 
@@ -496,10 +496,10 @@ namespace NumSharp
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
         public static explicit operator int(Shape shape) => shape.Size;
-        public static implicit operator Shape(int dim) => new Shape(dim);
+        public static explicit operator Shape(int dim) => Shape.Vector(dim);
 
-        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
-        public static implicit operator Shape((int, int) dims) => new Shape(dims.Item1, dims.Item2);
+        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0); //TODO! this should return (0,0) but rather (dim[0], dim[1]) regardless of size.
+        public static implicit operator Shape((int, int) dims) => Shape.Matrix(dims.Item1, dims.Item2);
 
         public static explicit operator (int, int, int) (Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);

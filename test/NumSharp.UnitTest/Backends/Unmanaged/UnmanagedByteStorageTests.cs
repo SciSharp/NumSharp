@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var arr = np.zeros(new Shape(10, 10), NPTypeCode.Double);
             var other = np.ones(new Shape(10, 10), NPTypeCode.Double);
             arr.SetData(other);
-            arr.Storage.AsArray<double>().All(v => v == 1).Should().Be(true);
+            arr.Storage.InternalArray.As<ArraySlice<double>>().All(v => v == 1).Should().Be(true);
         }
 
         [TestMethod]

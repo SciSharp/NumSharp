@@ -151,6 +151,15 @@ namespace NumSharp.Generic
         }
 
         /// <summary>
+        ///     Gets the address that this NDArray starts from.
+        /// </summary>
+        internal new unsafe T* Address
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (T*)Storage.Address;
+        }
+
+        /// <summary>
         /// indexing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
@@ -192,6 +201,13 @@ namespace NumSharp.Generic
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => base[slices] = value;
+        }
+
+        public new T GetAtIndex(int index)
+        {
+            unsafe {
+                return *(Address + index); //TODO! change this to Shape.offset->offset
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

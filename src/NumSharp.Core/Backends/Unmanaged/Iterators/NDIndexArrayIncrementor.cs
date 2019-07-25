@@ -54,13 +54,6 @@ namespace NumSharp.Backends.Unmanaged {
                 subcursor = resetto;
             }
 
-            //Console.Write("[");
-            //for (int i = 0; i < dimensions.Length; i++)
-            //{
-            //    Console.Write($"{Index[i]}, ");
-            //}
-            //
-            //Console.WriteLine("]");
             return Index;
         }
     }

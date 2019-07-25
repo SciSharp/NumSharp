@@ -151,6 +151,51 @@ namespace NumSharp.Backends
             return r;
         }
 
+        /// <summary>
+        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype.
+        /// </summary>
+        /// <typeparam name="T">The dtype to convert to</typeparam>
+        /// <returns>A copy of this <see cref="UnmanagedStorage"/> casted to a specific dtype.</returns>
+        /// <remarks>Always copies, If dtype==typeof(T) then a <see cref="Clone"/> is returned.</remarks>
+        public UnmanagedStorage Cast<T>() where T : unmanaged
+        {
+            if (Shape.IsEmpty)
+                return new UnmanagedStorage(typeof(T));
+
+            if (_dtype == typeof(T))
+                return Clone();
+
+            return new UnmanagedStorage((ArraySlice<T>)InternalArray.Cast(typeof(T).GetTypeCode()), new Shape((int[])Shape.dimensions.Clone()));
+        }
+
+        /// <summary>
+        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype.
+        /// </summary>
+        /// <param name="typeCode">The dtype to convert to</param>
+        /// <returns>A copy of this <see cref="UnmanagedStorage"/> casted to a specific dtype.</returns>
+        /// <remarks>Always copies, If dtype==typeof(T) then a <see cref="Clone"/> is returned.</remarks>
+        public UnmanagedStorage Cast(NPTypeCode typeCode)
+        {
+            if (Shape.IsEmpty)
+                return new UnmanagedStorage(typeCode);
+
+            if (_typecode == typeCode)
+                return Clone();
+
+            return new UnmanagedStorage((IArraySlice)InternalArray.Cast(typeCode), new Shape((int[])Shape.dimensions.Clone()));
+        }
+
+        /// <summary>
+        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype.
+        /// </summary>
+        /// <param name="dtype">The dtype to convert to</param>
+        /// <returns>A copy of this <see cref="UnmanagedStorage"/> casted to a specific dtype.</returns>
+        /// <remarks>Always copies, If dtype==typeof(T) then a <see cref="Clone"/> is returned.</remarks>
+        public UnmanagedStorage Cast(Type dtype)
+        {
+            return Cast(dtype.GetTypeCode());
+        }
+
         private UnmanagedStorage() { }
 
         /// <summary>
@@ -1353,25 +1398,263 @@ namespace NumSharp.Backends
             return InternalArray;
         }
 
+
         /// <summary>
         ///     Clone internal storage and get reference to it
         /// </summary>
         /// <returns>reference to cloned storage as System.Array</returns>
         public IArraySlice CloneData()
         {
-            //TODO! this should clone based on the slice!
-            return InternalArray.Clone();
-        }
+            //Incase shape is not sliced, we can copy the internal buffer.
+            if (!Shape.IsSliced)
+                return InternalArray.Clone();
 
+            //Linear copy of all the sliced items.
+            //TODO! once we have nd.Shape.GetOffset(), impl it here
+            var shape = Shape;
+            var ret = ArraySlice.Allocate(InternalArray.TypeCode, shape.size, false);
 
-        /// <summary>
-        ///     Attempts to cast internal storage to an array of type <typeparamref name="T"/> and returns the result, therefore results can be null.
-        /// </summary>
-        /// <typeparam name="T">The type that is expected.</typeparam>
-        public ArraySlice<T> AsArray<T>() where T : unmanaged
-        {
-            //TODO! this should clone based on the slice!
-            return (ArraySlice<T>)InternalArray;
+            switch (InternalArray.TypeCode)
+            {
+#if _REGEN
+
+                #region Compute
+     
+	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            case NPTypeCode.#1:
+	            {
+		            var arr = (ArraySlice<#2>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+	            }
+	            %
+	            default:
+		            throw new NotSupportedException();
+                #endregion
+#else
+
+                #region Compute
+     
+                case NPTypeCode.Boolean:
+                {
+                    var arr = (ArraySlice<bool>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Byte:
+                {
+                    var arr = (ArraySlice<byte>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Int16:
+                {
+                    var arr = (ArraySlice<short>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.UInt16:
+                {
+                    var arr = (ArraySlice<ushort>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Int32:
+                {
+                    var arr = (ArraySlice<int>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.UInt32:
+                {
+                    var arr = (ArraySlice<uint>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Int64:
+                {
+                    var arr = (ArraySlice<long>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.UInt64:
+                {
+                    var arr = (ArraySlice<ulong>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Char:
+                {
+                    var arr = (ArraySlice<char>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Double:
+                {
+                    var arr = (ArraySlice<double>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Single:
+                {
+                    var arr = (ArraySlice<float>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                case NPTypeCode.Decimal:
+                {
+                    var arr = (ArraySlice<decimal>)ret;
+                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
+                    int[] current = incr.Index;
+                    unsafe
+                    {
+                        var addr = arr.Address;
+                        int i = 0;
+
+                        _repeat:
+                        ret[i++] = (*(addr + shape.GetIndexInShape(current)));
+                        if (incr.Next() != null)
+                            goto _repeat;
+                        return ret;
+                    }
+                }
+                default:
+                    throw new NotSupportedException();
+                #endregion
+#endif
+            }
         }
 
         /// <summary>
@@ -1381,8 +1664,7 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as <see cref="ArraySlice{T}"/></returns>
         public ArraySlice<T> CloneData<T>() where T : unmanaged
         {
-            //TODO! this should clone based on the slice!
-            return (ArraySlice<T>)InternalArray.Clone();
+            return (ArraySlice<T>)CloneData();
         }
 
         /// <summary>
@@ -1390,7 +1672,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>reference to internal (casted) storage as T[]</returns>
-        /// <remarks>Copies only if <typeparamref name="T"/> does not equal to <see cref="DType"/></remarks>
+        /// <remarks>Copies if <typeparamref name="T"/> does not equal to <see cref="DType"/> or if Shape is sliced.</remarks>
         public ArraySlice<T> GetData<T>() where T : unmanaged
         {
             if (!typeof(T).IsValidNPType())
@@ -1454,7 +1736,7 @@ namespace NumSharp.Backends
             {
                 if (nd.Shape.IsEmpty)
                     throw new InvalidOperationException("Can't SetData when value is an empty NDArray");
-                if (nd.Shape.IsScalar || nd.size==1)
+                if (nd.Shape.IsScalar || nd.size == 1)
                 {
                     SetIndex(nd.GetAtIndex(0), _shape.GetIndexInShape(indices));
                     return;
@@ -1566,6 +1848,7 @@ namespace NumSharp.Backends
                     *((decimal*)Address + index) = (decimal)value;
                     break;
                 }
+
                 default:
                     throw new NotSupportedException();
 #endif
@@ -1596,7 +1879,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(value));
 
             //if dtypes doesn't match, cast value
-            if (value.GetTypeCode != _typecode) 
+            if (value.GetTypeCode != _typecode)
                 value = value.astype(_typecode, true);
 
             if (value.Shape.IsScalar)
@@ -1604,7 +1887,7 @@ namespace NumSharp.Backends
                 SetData(value.GetAtIndex(0), indices);
                 return;
             }
-                
+
 
             unsafe
             {
@@ -1636,7 +1919,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(value));
 
             var (subShape, offset) = _shape.GetSubshape(indices);
-            if (subShape != value.Count)
+            if (subShape.size != value.Count)
                 throw new IncorrectShapeException($"Can't SetData to a from a shape of ({value.Count}) to target shape {subShape}");
 
             unsafe
@@ -1758,7 +2041,7 @@ namespace NumSharp.Backends
                 throw new NotSupportedException($"{_dtype.Name} as a dtype is not supported.");
 
             //todo! what if nd is sliced
-            
+
             SetInternalArray(nd.Shape.IsSliced ? nd.Storage.CloneData() : nd.Array);
         }
 
@@ -1776,7 +2059,6 @@ namespace NumSharp.Backends
 
             _shape = shape;
             SetInternalArray(_ChangeTypeOfArray(values, _dtype));
-
         }
 
         /// <summary>
@@ -2074,20 +2356,20 @@ namespace NumSharp.Backends
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Byte: return *((byte*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Int16: return *((short*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Int32: return *((int*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Int64: return *((long*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Char: return *((char*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Double: return *((double*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Single: return *((float*)Address + _shape.GetIndexInShape(indices));
-	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetIndexInShape(indices));
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Int16: return *((short*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Int32: return *((int*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Int64: return *((long*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Char: return *((char*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Double: return *((double*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Single: return *((float*)Address + _shape.GetIndexInShape(indices));
+                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetIndexInShape(indices));
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -2194,11 +2476,10 @@ namespace NumSharp.Backends
             int i = 0;
             do
             {
-                ret[i++]=(*(addr + shape.GetIndexInShape(current)));
+                ret[i++] = (*(addr + shape.GetIndexInShape(current)));
             } while (incr.Next() != null);
 
             return ret;
         }
-
     }
 }
