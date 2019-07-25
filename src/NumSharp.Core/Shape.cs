@@ -243,54 +243,56 @@ namespace NumSharp
         ///     GetOffset(0, 1) = 1<br></br>
         ///     GetOffset(1, 1) = 5
         /// </summary>
-        /// <param name="select"></param>
+        /// <param name="coords"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int GetOffset(params int[] select)
+        public int GetOffset(params int[] coords)
         {
             int offset;
             if (IsSliced)
             {
-                if (select.Length > dimensions.Length)
-                    throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
-                // TODO: perf opt
                 var vi = ViewInfo;
-                if (dimensions.Length == 0)
-                {
-                    var slice = vi.Slices[0];
-                    var start = slice.Start;
-                    return start;
-                }
+                if (coords.Length > vi.UnreducedShape.dimensions.Length)
+                    throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
+
+                //if (dimensions.Length == 0)
+                //{
+                //    var slice = vi.Slices[0];
+                //    var start = slice.Start;
+                //    return start;
+                //}
 
                 var orig_strides = vi.OriginalShape.strides;
                 offset = 0;
                 unchecked
                 {
-                    for (int i = 0; i < @select.Length; i++)
+                    for (int i = 0; i < coords.Length; i++)
                     {
                         if (vi.Slices.Length <= i)
                         {
-                            offset += orig_strides[i] * @select[i];
+                            offset += orig_strides[i] * coords[i];
                             continue;
                         }
                         var slice = vi.Slices[i];
                         var start = slice.Start;
-
-                        offset += orig_strides[i] * (start + @select[i] * slice.Step);
+                        if (slice.IsIndex)
+                            offset += orig_strides[i] * start + coords[i];
+                        else 
+                            offset += orig_strides[i] * (start + coords[i] * slice.Step);
                     }
                 }
                 return offset;
             }
 
             // no slicing
-            if (dimensions.Length == 0 && select.Length == 1)
-                return select[0];
+            if (dimensions.Length == 0 && coords.Length == 1)
+                return coords[0];
 
             offset = 0;
             unchecked
             {
-                for (int i = 0; i < @select.Length; i++)
-                    offset += strides[i] * @select[i];
+                for (int i = 0; i < coords.Length; i++)
+                    offset += strides[i] * coords[i];
             }
             return offset;
         }
@@ -340,7 +342,7 @@ namespace NumSharp
                 }
             }
 
-            var orig_shape=IsSliced ? ViewInfo.OriginalShape : this;
+            var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
                 throw new IndexOutOfRangeException($"The offset ${offset} is out of range in Shape {orig_shape.Size}");
 
@@ -400,7 +402,7 @@ namespace NumSharp
             }
             return coords;
         }
-        
+
         [MethodImpl((MethodImplOptions)768)]
         public void ChangeTensorLayout(char order = 'C')
         {
@@ -482,7 +484,7 @@ namespace NumSharp
                     l.Add(array.GetLength(dim));
                 }
             }
-            
+
             return l.ToArray();
         }
 
@@ -523,8 +525,9 @@ namespace NumSharp
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
                 var slice_def = slice.ToSliceDef(dim);
                 slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice_def) : slice_def;
-                sliced_axes_unreduced[i] = slices[i].Count;
-            };
+                var count = Math.Abs(slices[i].Count); // for index-slices count would be -1 but we need 1.
+                sliced_axes_unreduced[i] = count;
+            }
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
             var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
