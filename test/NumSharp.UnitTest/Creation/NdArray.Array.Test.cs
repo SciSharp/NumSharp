@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Creation
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    Console.WriteLine(n.GetIndexInShape(i, j));
+                    Console.WriteLine(n.GetOffset(i, j));
                 }
             }
         }

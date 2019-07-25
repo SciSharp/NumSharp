@@ -178,7 +178,7 @@ namespace NumSharp.Backends.Unmanaged
             if (indices.Length != _shape.NDim)
                 throw new InvalidOperationException();
 #endif
-            *(Address + _shape.GetIndexInShape(indices)) = value;
+            *(Address + _shape.GetOffset(indices)) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]

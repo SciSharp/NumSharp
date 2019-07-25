@@ -233,20 +233,20 @@ namespace NumSharp
             if (ViewInfo == null)
                 return offset;
 
-            return GetIndexInShape(GetCoordinates(offset));
+            return GetOffset(GetCoordinates(offset));
         }
 
         /// <summary>
         ///     get store position by shape<br></br>
         ///     for example: 2 x 2 row major<br></br>
         ///     [[1, 2, 3], [4, 5, 6]]<br></br>
-        ///     GetIndexInShape(0, 1) = 1<br></br>
-        ///     GetIndexInShape(1, 1) = 5
+        ///     GetOffset(0, 1) = 1<br></br>
+        ///     GetOffset(1, 1) = 5
         /// </summary>
         /// <param name="select"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int GetIndexInShape(params int[] select)
+        public int GetOffset(params int[] select)
         {
             int offset;
             if (IsSliced)

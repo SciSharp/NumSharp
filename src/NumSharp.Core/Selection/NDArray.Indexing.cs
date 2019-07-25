@@ -200,7 +200,7 @@ namespace NumSharp
         //            if (boolDotNetArray[idx])
         //            {
         //                int[] indexes = booleanArray.Storage.Shape.GetDimIndexOutShape(idx);
-        //                Array.SetValue(scalarObj, Storage.Shape.GetIndexInShape(slice, indexes));
+        //                Array.SetValue(scalarObj, Storage.Shape.GetOffset(slice, indexes));
         //            }
         //        }
 

@@ -85,16 +85,16 @@ namespace NumSharp.UnitTest.Creation
             ret.LeftShape.dimensions.Should().ContainInOrder(5, 5);
             ret.RightShape.dimensions.Should().ContainInOrder(5, 5);
             ret.RightShape.strides.Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret.RightShape.GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret.LeftShape.GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 5).Select(i => ret.RightShape.GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 5).Select(i => ret.LeftShape.GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
 
             ret = DefaultEngine.Broadcast(Shape.Scalar, new Shape(5, 5));
             ret.LeftShape.dimensions.Should().ContainInOrder(5, 5);
             ret.RightShape.dimensions.Should().ContainInOrder(5, 5);
             ret.LeftShape.strides.Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret.LeftShape.GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret.RightShape.GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 5).Select(i => ret.LeftShape.GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 5).Select(i => ret.RightShape.GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
 
             ret = DefaultEngine.Broadcast(new Shape(5, 5), new Shape(5, 5));
@@ -118,9 +118,9 @@ namespace NumSharp.UnitTest.Creation
             ret = DefaultEngine.Broadcast(new Shape(5, 4), new Shape(1));
             ret.LeftShape.dimensions.Should().ContainInOrder(5, 4);
             ret.RightShape.dimensions.Should().ContainInOrder(5, 4);
-            indexes2(5, 4).Select(i => ret.LeftShape.GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 4).Select(i => ret.LeftShape.GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
-            indexes2(5, 4).Select(i => ret.RightShape.GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 4).Select(i => ret.RightShape.GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
 
 
             ret = DefaultEngine.Broadcast(new Shape(5, 4), new Shape(4));
@@ -152,16 +152,16 @@ namespace NumSharp.UnitTest.Creation
             ret[0].dimensions.Should().ContainInOrder(5, 5);
             ret[1].dimensions.Should().ContainInOrder(5, 5);
             ret[1].strides.Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret[1].GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret[0].GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 5).Select(i => ret[1].GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 5).Select(i => ret[0].GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
 
             ret = DefaultEngine.Broadcast(new Shape[]{Shape.Scalar, new Shape(5, 5)});
             ret[0].dimensions.Should().ContainInOrder(5, 5);
             ret[1].dimensions.Should().ContainInOrder(5, 5);
             ret[0].strides.Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret[0].GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
-            indexes2(5, 5).Select(i => ret[1].GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 5).Select(i => ret[0].GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 5).Select(i => ret[1].GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
 
             ret = DefaultEngine.Broadcast(new Shape[]{new Shape(5, 5), new Shape(5, 5)});
@@ -185,9 +185,9 @@ namespace NumSharp.UnitTest.Creation
             ret = DefaultEngine.Broadcast(new Shape[]{new Shape(5, 4), new Shape(1)});
             ret[0].dimensions.Should().ContainInOrder(5, 4);
             ret[1].dimensions.Should().ContainInOrder(5, 4);
-            indexes2(5, 4).Select(i => ret[0].GetIndexInShape(i.i1, i.i2))
+            indexes2(5, 4).Select(i => ret[0].GetOffset(i.i1, i.i2))
                 .Should().BeInAscendingOrder().And.Subject.First().Should().Be(0);
-            indexes2(5, 4).Select(i => ret[1].GetIndexInShape(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
+            indexes2(5, 4).Select(i => ret[1].GetOffset(i.i1, i.i2)).Should().AllBeEquivalentTo(0);
 
             ret = DefaultEngine.Broadcast(new Shape[]{new Shape(5, 4), new Shape(4)});
             ret[0].dimensions.Should().ContainInOrder(5, 4);

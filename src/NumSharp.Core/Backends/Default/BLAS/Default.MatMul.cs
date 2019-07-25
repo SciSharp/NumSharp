@@ -31,7 +31,7 @@ namespace NumSharp.Backends
 //                            {
 //                                int sum = 0;
 //                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
 //                                nd[row, col] = sum;
 //                            }
 //                        }
@@ -55,7 +55,7 @@ namespace NumSharp.Backends
 //                            {
 //                                float sum = 0;
 //                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
 //                                nd[row, col] = sum;
 //                            }
 //                        }
@@ -79,7 +79,7 @@ namespace NumSharp.Backends
 //                            {
 //                                double sum = 0;
 //                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetIndexInShape(row, s)] * datay[y.GetIndexInShape(s, col)];
+//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
 //                                nd[row, col] = sum;
 //                            }
 //                        }

@@ -18,7 +18,7 @@
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
         public #2 Get#1(params int[] indices)
-            => _array#1[Shape.GetIndexInShape(Slice, indices)];
+            => _array#1[Shape.GetOffset(Slice, indices)];
 
         %
 #else

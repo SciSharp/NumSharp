@@ -26,7 +26,7 @@ namespace NumSharp.Backends
                 var incr = new NDIndexArrayIncrementor(shape.Dimensions);
                 do
                 {
-                    if (!(*(addr + shape.GetIndexInShape(incr.Index))))
+                    if (!(*(addr + shape.GetOffset(incr.Index))))
                         return false;
 
                 } while (incr.Next() != null);

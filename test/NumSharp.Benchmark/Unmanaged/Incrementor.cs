@@ -10,7 +10,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //|            Method |     Mean |    Error |   StdDev |   Median |      Min |        Max | Ratio | RatioSD |
     //|------------------ |---------:|---------:|---------:|---------:|---------:|-----------:|------:|--------:|
     //| OffsetIncrementor | 898.2 us | 30.68 us | 416.4 us | 747.5 us | 682.0 us | 3,483.5 us |  1.41 |    0.70 |
-    //|   GetIndexInShape | 658.4 us | 10.43 us | 141.6 us | 612.6 us | 542.0 us | 2,724.8 us |  1.00 |    0.00 |
+    //|   GetOffset | 658.4 us | 10.43 us | 141.6 us | 612.6 us | 542.0 us | 2,724.8 us |  1.00 |    0.00 |
 
     [SimpleJob(RunStrategy.ColdStart, targetCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
@@ -45,11 +45,11 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark(Baseline = true)]
-        public void GetIndexInShape()
+        public void GetOffset()
         {
             for (int i = 0; i < 100_000; i++)
             {
-                shape.GetIndexInShape(0, 0, i);
+                shape.GetOffset(0, 0, i);
             }
         }
     }

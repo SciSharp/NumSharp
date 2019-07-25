@@ -32,7 +32,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetOffset(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);
@@ -46,7 +46,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetOffset(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);
@@ -60,7 +60,7 @@ namespace NumSharp
                     {
                         int[] indexes = this.Storage.Shape.GetCoordinates(idx);
                         indexes[axis] = (indexes[axis] + shift) % this.shape[axis];
-                        newData[this.Storage.Shape.GetIndexInShape(indexes)] = data[idx];
+                        newData[this.Storage.Shape.GetOffset(indexes)] = data[idx];
                     }
 
                     return new NDArray(newData, this.shape);

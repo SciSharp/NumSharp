@@ -50,7 +50,7 @@ namespace NumSharp
             for (int idx = 0; idx < this.size; idx++)
             {
                 indexes = pufferShape.GetCoordinates(idx);
-                idxValue = array[Storage.Shape.GetIndexInShape(indexes)];
+                idxValue = array[Storage.Shape.GetOffset(indexes)];
                 dotNetArray.SetValue(idxValue, indexes);
             }
 

@@ -49,7 +49,7 @@ namespace NumSharp
 
                     for (int i = 0; i < ret.Length; i++)
                     for (int j = 0; j < ret[0].Length; j++)
-                        ret[i][j] = GetAtIndex<T>(shape.GetIndexInShape(i, j));
+                        ret[i][j] = GetAtIndex<T>(shape.GetOffset(i, j));
 
                     return ret;
 

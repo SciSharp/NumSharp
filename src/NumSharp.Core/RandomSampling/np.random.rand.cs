@@ -33,7 +33,7 @@ namespace NumSharp
                 var incr = new NDIndexArrayIncrementor(ref shape);
                 do
                 {
-                    *(addr + shape.GetIndexInShape(incr.Index)) = randomizer.NextDouble();
+                    *(addr + shape.GetOffset(incr.Index)) = randomizer.NextDouble();
                 } while (incr.Next() != null);
             }
 

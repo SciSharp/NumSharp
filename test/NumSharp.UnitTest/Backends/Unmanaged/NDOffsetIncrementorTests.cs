@@ -13,23 +13,23 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(3, 3, 1, 2);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 1, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 1, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 2, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 2, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 1, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 1, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 2, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 2, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 0, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 0, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 1, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 1, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 2, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 2, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(0, 1, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 1, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(0, 2, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 2, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(1, 1, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 1, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(1, 2, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 2, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(2, 0, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(2, 0, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(2, 1, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(2, 1, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(2, 2, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(2, 2, 0, 1));
             sh.Next().Should().Be(-1);
         }
 
@@ -39,8 +39,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(1, 1, 1, 3);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 0, 1));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 0, 2));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 0, 1));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 0, 2));
 
             sh.Next().Should().Be(-1);
         }
@@ -51,8 +51,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(3, 1, 1, 1);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(2, 0, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(2, 0, 0, 0));
 
             sh.Next().Should().Be(-1);
         }
@@ -63,8 +63,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(1, 1, 3, 1);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 1, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 2, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 1, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 2, 0));
 
             sh.Next().Should().Be(-1);
         }
@@ -75,11 +75,11 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(2, 1, 3, 1);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 1, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(0, 0, 2, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 0, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 1, 0));
-            sh.Next().Should().Be(shape.GetIndexInShape(1, 0, 2, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 1, 0));
+            sh.Next().Should().Be(shape.GetOffset(0, 0, 2, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 0, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 1, 0));
+            sh.Next().Should().Be(shape.GetOffset(1, 0, 2, 0));
 
             sh.Next().Should().Be(-1);
         }
@@ -99,7 +99,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(2);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(1));
+            sh.Next().Should().Be(shape.GetOffset(1));
 
             sh.Next().Should().Be(-1);
         }
@@ -110,8 +110,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var shape = new Shape(100);
             var sh = new NDOffsetIncrementor(ref shape);
             sh.Offset.Should().Be(0);
-            sh.Next().Should().Be(shape.GetIndexInShape(1));
-            sh.Next().Should().Be(shape.GetIndexInShape(2));
+            sh.Next().Should().Be(shape.GetOffset(1));
+            sh.Next().Should().Be(shape.GetOffset(2));
         }
 
         [TestMethod]
