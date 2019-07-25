@@ -31,6 +31,11 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        public T[] ToArray<T>() where T : unmanaged
+        {
+            return Storage.ToArray<T>();
+        }
+
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
             Array dotNetArray = Arrays.Create(typeof(T), this.shape);

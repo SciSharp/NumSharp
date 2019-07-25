@@ -312,39 +312,6 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void ShapeSlicing()
-        {
-            new Shape(10).Slice(":").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
-            new Shape(10).Slice("-77:77").Should().Be(new Shape(10));
-            new Shape(10).Slice("-77:77").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
-            new Shape(10).Slice(":7").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*7)"));
-            new Shape(10).Slice("7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(7>>1*3)"));
-            new Shape(10).Slice("-7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(3>>1*7)"));
-        }
-
-        //[TestMethod]
-        //public void SliceSanitation()
-        //{
-        //    // slice sanitation(prerequisite for shape slicing and correct merging!)
-        //    new Slice("0:10").Sanitize(10).Should().Be(new Slice(0, 10, 1));
-        //    new Slice(":").Sanitize(10).Should().Be(new Slice(0, 10, 1));
-        //    new Slice("1:9").Sanitize(10).Should().Be(new Slice(1, 9, 1));
-        //    new Slice("2:3").Sanitize(10).Should().Be(new Slice(2, 3, 1));
-        //    new Slice("-77:77").Sanitize(10).Should().Be(new Slice(0, 10, 1));
-        //    new Slice("::77").Sanitize(10).Should().Be(new Slice(0, 1, 77));
-        //    new Slice("::7").Sanitize(10).Should().Be(new Slice(0, 8, 7));
-        //    new Slice("::2").Sanitize(10).Should().Be(new Slice(0, 9, 2));
-        //    new Slice("::-2").Sanitize(10).Should().Be(new Slice(1, 10, -2));
-        //    new Slice("::-7").Sanitize(10).Should().Be(new Slice(2, 10, -7));
-        //    new Slice("2:10:-7").Sanitize(10).Should().Be(new Slice(2, 10, -7));
-        //    new Slice("1:10:-7").Sanitize(10).Should().Be(new Slice(2, 10, -7));
-        //    new Slice("-7::- 1").Sanitize(10).Should().Be(new Slice(0, 4, -1));
-        //    new Slice("2:9:-2").Sanitize(10).Should().Be(new Slice(2, 9, -2));
-        //    //new Slice("-77:77:-77").Sanitize(10).Should().Be(new Slice(9, 10, -77));
-        //}
-
-
-        [TestMethod]
         public void SliceDef()
         {
             // slice sanitation (prerequisite for shape slicing and correct merging!)
@@ -380,7 +347,18 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void RepeatedSlicing()
+        public void ShapeSlicing_1D()
+        {
+            new Shape(10).Slice(":").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
+            new Shape(10).Slice("-77:77").Should().Be(new Shape(10));
+            new Shape(10).Slice("-77:77").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
+            new Shape(10).Slice(":7").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*7)"));
+            new Shape(10).Slice("7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(7>>1*3)"));
+            new Shape(10).Slice("-7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(3>>1*7)"));
+        }
+
+        [TestMethod]
+        public void RepeatedSlicing_1D()
         {
             new Shape(10).Slice(":").Slice(":").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
             new Shape(10).Slice(":5").Slice("2:").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>1*3)"));
@@ -395,7 +373,19 @@ namespace NumSharp.UnitTest
             new Shape(10).Slice("1:9").Slice("::-2").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>4*2)"));
             new Shape(10).Slice("0:9").Slice("::-2").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>4*3)"));
             new Shape(20).Slice("3:19").Slice("1:15:2").Slice("2:6:2").ViewInfo.Slices[0].Should().Be(new SliceDef("(8>>4*2)"));
+            // the repeatedly sliced shape needs to have the original shape
+            new Shape(20).Slice("3:19").Slice("1:15:2").Slice("2:6:2").ViewInfo.OriginalShape.Should().Be(new Shape(20));
         }
+
+        [TestMethod]
+        public void ShapeSlicing_2D()
+        {
+            new Shape(3, 3).Slice(":,1:").Should().Be(new Shape(3, 2));
+            new Shape(3,3).Slice(":,1:").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*3)"));
+            new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[1].Should().Be(new SliceDef("(1>>1*2)"));
+        }
+
+        
 
     }
 }

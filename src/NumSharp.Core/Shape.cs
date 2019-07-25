@@ -247,6 +247,7 @@ namespace NumSharp
                     return start + select[0] * slice.Step;
                 }
 
+                var orig_strides = vi.OriginalShape.strides;
                 offset = 0;
                 unchecked
                 {
@@ -254,13 +255,13 @@ namespace NumSharp
                     {
                         if (vi.Slices.Length <= i)
                         {
-                            offset += strides[i] * @select[i];
+                            offset += orig_strides[i] * @select[i];
                             continue;
                         }
                         var slice = vi.Slices[i];
                         var start = slice.Start;
 
-                        offset += strides[i] * (start + @select[i] * slice.Step);
+                        offset += orig_strides[i] * (start + @select[i] * slice.Step);
                     }
                 }
                 return offset;
@@ -284,7 +285,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
-        /// <remarks>Used for slicing, return's shape is the new shape of the slice and offset is the offset from current address.</remarks>
+        /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public (Shape Shape, int Offset) GetSubshape(params int[] indicies)
         {
@@ -299,13 +300,34 @@ namespace NumSharp
             {
                 unchecked
                 {
-                    for (int i = 0; i < indicies.Length; i++)
-                        offset += strides[i] * indicies[i];
+                    if (IsSliced)
+                    {
+                        var vi = ViewInfo;
+                        var orig_strides = ViewInfo.OriginalShape.strides;
+                        for (int i = 0; i < indicies.Length; i++)
+                        {
+                            if (vi.Slices.Length <= i)
+                            {
+                                offset += orig_strides[i] * indicies[i];
+                                continue;
+                            }
+                            var slice = vi.Slices[i];
+                            var start = slice.Start;
+
+                            offset += orig_strides[i] * (start + indicies[i] * slice.Step);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < indicies.Length; i++)
+                            offset += strides[i] * indicies[i];
+                    }
                 }
             }
 
-            if (offset >= size)
-                throw new IndexOutOfRangeException($"Shape({string.Join(", ", indicies)})");
+            var orig_shape=IsSliced ? ViewInfo.OriginalShape : this;
+            if (offset >= orig_shape.Size)
+                throw new IndexOutOfRangeException($"The offset ${offset} is out of range in Shape {orig_shape.Size}");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -484,7 +506,8 @@ namespace NumSharp
                 sliced_axes_unreduced[i] = slices[i].Count;
             };
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
-            var viewInfo = new ViewInfo() { OriginalShape = this, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
+            var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
+            var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
             return new Shape(sliced_axes) { ViewInfo = viewInfo };
         }
 

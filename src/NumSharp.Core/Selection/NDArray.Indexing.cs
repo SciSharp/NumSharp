@@ -214,6 +214,14 @@ namespace NumSharp
         /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indices)
         {
+            // TODO: we can achive even better performance by distinguishing between stepped and non-stepped slices ...
+            // ... non-stepped slices could still use the other solution below if GetSubshape supports slicing
+            var this_shape = Storage.Shape;
+            if (this_shape.IsSliced && this_shape.ViewInfo.Slices.Any(slice_def=>slice_def.Step!=1))
+            {
+                // in this case we can not get a slice of contiguous memory, so we slice
+                return new NDArray(Storage.GetView(indices.Select(i=>Slice.Index(i)).ToArray()));
+            }
             var (shape, offset) = Storage.Shape.GetSubshape(indices);
             return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));
         }
