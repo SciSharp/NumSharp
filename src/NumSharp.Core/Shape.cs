@@ -233,7 +233,7 @@ namespace NumSharp
             if (ViewInfo == null)
                 return offset;
 
-            return GetIndexInShape(GetDimIndexOutShape(offset));
+            return GetIndexInShape(GetCoordinates(offset));
         }
 
         /// <summary>
@@ -363,7 +363,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="offset"></param>
         /// <returns></returns>
-        public int[] GetDimIndexOutShape(int offset)
+        public int[] GetCoordinates(int offset)
         {
             //TODO! shouldn't this support slicing?
             int[] dimIndexes = null;
