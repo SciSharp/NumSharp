@@ -502,5 +502,8 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(new Shape(2), new Shape(view2.shape));
             AssertAreEqual(new int[] {7, 6}, view2.ToArray<int>());
         }
+
+
+
     }
 }
