@@ -153,7 +153,7 @@ namespace NumSharp.Backends
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
-                SetInternalArray(r.InternalArray);
+                r.SetInternalArray(InternalArray);
             return r;
         }
 
