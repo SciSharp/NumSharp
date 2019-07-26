@@ -370,6 +370,8 @@ namespace NumSharp
             if (other.Count == 0)
                 return new SliceDef() { Start = 0, Step = 0, Count = 0 };
             var self = this;
+            if (other.IsIndex)
+                return new SliceDef(self.Start + other.Start * self.Step);
             var result= new SliceDef()
             {
                 Start = self.Start + other.Start * self.Step,

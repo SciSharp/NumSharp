@@ -458,6 +458,19 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
+        public void DimensionalityReduction4D_to_1D()
+        {
+            var t = np.arange(15).reshape(1, 1, 3, 5);
+            var view = t[Slice.Index(0), Slice.Index(0), Slice.All, Slice.Index(0)];
+            Assert.AreEqual(new Shape(3), view.Shape);
+            AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
+            t = np.arange(30).reshape(2, 1, 3, 5);
+            view = t[Slice.Index(0), Slice.Index(0), Slice.All, Slice.Index(0)];
+            Assert.AreEqual(new Shape(3), view.Shape);
+            AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
+        }
+
+        [TestMethod]
         public void NestedDimensionalityReduction_Span()
         {
             var data = np.arange(9).reshape(3, 3);
