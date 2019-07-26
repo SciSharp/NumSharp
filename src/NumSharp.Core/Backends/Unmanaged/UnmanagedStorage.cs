@@ -122,7 +122,8 @@ namespace NumSharp.Backends
             r._shape = _shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            SetInternalArray(r.InternalArray);
+            if (InternalArray != null)
+                r.SetInternalArray(InternalArray);
             return r;
         }
 
@@ -136,7 +137,8 @@ namespace NumSharp.Backends
             r._shape = shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            r.SetInternalArray(InternalArray);
+            if (InternalArray != null)
+                r.SetInternalArray(InternalArray);
             return r;
         }
 
@@ -150,7 +152,8 @@ namespace NumSharp.Backends
             r._shape = shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
-            SetInternalArray(r.InternalArray);
+            if (InternalArray != null)
+                SetInternalArray(r.InternalArray);
             return r;
         }
 
@@ -1028,7 +1031,7 @@ namespace NumSharp.Backends
             if (shape.IsSliced)
             {
                 values = values.Clone();
-                shape = new Shape((int[]) shape.dimensions.Clone());
+                shape = new Shape((int[])shape.dimensions.Clone());
             }
 
             _shape = shape;
@@ -1255,9 +1258,9 @@ namespace NumSharp.Backends
 #else
 
                 #region Compute
-     
-	            case NPTypeCode.Boolean:
-	            {
+
+                case NPTypeCode.Boolean:
+                {
                     var iter = new NDIterator<bool>((ArraySlice<bool>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1266,9 +1269,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Byte:
-	            {
+                }
+
+                case NPTypeCode.Byte:
+                {
                     var iter = new NDIterator<byte>((ArraySlice<byte>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1277,9 +1281,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Int16:
-	            {
+                }
+
+                case NPTypeCode.Int16:
+                {
                     var iter = new NDIterator<short>((ArraySlice<short>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1288,9 +1293,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.UInt16:
-	            {
+                }
+
+                case NPTypeCode.UInt16:
+                {
                     var iter = new NDIterator<ushort>((ArraySlice<ushort>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1299,9 +1305,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Int32:
-	            {
+                }
+
+                case NPTypeCode.Int32:
+                {
                     var iter = new NDIterator<int>((ArraySlice<int>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1310,9 +1317,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.UInt32:
-	            {
+                }
+
+                case NPTypeCode.UInt32:
+                {
                     var iter = new NDIterator<uint>((ArraySlice<uint>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1321,9 +1329,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Int64:
-	            {
+                }
+
+                case NPTypeCode.Int64:
+                {
                     var iter = new NDIterator<long>((ArraySlice<long>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1332,9 +1341,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.UInt64:
-	            {
+                }
+
+                case NPTypeCode.UInt64:
+                {
                     var iter = new NDIterator<ulong>((ArraySlice<ulong>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1343,9 +1353,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Char:
-	            {
+                }
+
+                case NPTypeCode.Char:
+                {
                     var iter = new NDIterator<char>((ArraySlice<char>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1354,9 +1365,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Double:
-	            {
+                }
+
+                case NPTypeCode.Double:
+                {
                     var iter = new NDIterator<double>((ArraySlice<double>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1365,9 +1377,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Single:
-	            {
+                }
+
+                case NPTypeCode.Single:
+                {
                     var iter = new NDIterator<float>((ArraySlice<float>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1376,9 +1389,10 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            case NPTypeCode.Decimal:
-	            {
+                }
+
+                case NPTypeCode.Decimal:
+                {
                     var iter = new NDIterator<decimal>((ArraySlice<decimal>)ret, ref shape);
                     int i = 0;
                     var hasNext = iter.HasNext;
@@ -1387,10 +1401,13 @@ namespace NumSharp.Backends
                         ret[i++] = moveNext();
 
                     return ret;
-	            }
-	            default:
-		            throw new NotSupportedException();
+                }
+
+                default:
+                    throw new NotSupportedException();
+
                 #endregion
+
 #endif
             }
         }
@@ -1486,40 +1503,40 @@ namespace NumSharp.Backends
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                    *((bool*)Address + _shape.TransformOffset(index)) = (bool) value;
+                    *((bool*)Address + _shape.TransformOffset(index)) = (bool)value;
                     return;
                 case NPTypeCode.Byte:
-                    *((byte*)Address + _shape.TransformOffset(index)) = (byte) value;
+                    *((byte*)Address + _shape.TransformOffset(index)) = (byte)value;
                     return;
                 case NPTypeCode.Int16:
-                    *((short*)Address + _shape.TransformOffset(index)) = (short) value;
+                    *((short*)Address + _shape.TransformOffset(index)) = (short)value;
                     return;
                 case NPTypeCode.UInt16:
-                    *((ushort*)Address + _shape.TransformOffset(index)) = (ushort) value;
+                    *((ushort*)Address + _shape.TransformOffset(index)) = (ushort)value;
                     return;
                 case NPTypeCode.Int32:
-                    *((int*)Address + _shape.TransformOffset(index)) = (int) value;
+                    *((int*)Address + _shape.TransformOffset(index)) = (int)value;
                     return;
                 case NPTypeCode.UInt32:
-                    *((uint*)Address + _shape.TransformOffset(index)) = (uint) value;
+                    *((uint*)Address + _shape.TransformOffset(index)) = (uint)value;
                     return;
                 case NPTypeCode.Int64:
-                    *((long*)Address + _shape.TransformOffset(index)) = (long) value;
+                    *((long*)Address + _shape.TransformOffset(index)) = (long)value;
                     return;
                 case NPTypeCode.UInt64:
-                    *((ulong*)Address + _shape.TransformOffset(index)) = (ulong) value;
+                    *((ulong*)Address + _shape.TransformOffset(index)) = (ulong)value;
                     return;
                 case NPTypeCode.Char:
-                    *((char*)Address + _shape.TransformOffset(index)) = (char) value;
+                    *((char*)Address + _shape.TransformOffset(index)) = (char)value;
                     return;
                 case NPTypeCode.Double:
-                    *((double*)Address + _shape.TransformOffset(index)) = (double) value;
+                    *((double*)Address + _shape.TransformOffset(index)) = (double)value;
                     return;
                 case NPTypeCode.Single:
-                    *((float*)Address + _shape.TransformOffset(index)) = (float) value;
+                    *((float*)Address + _shape.TransformOffset(index)) = (float)value;
                     return;
                 case NPTypeCode.Decimal:
-                    *((decimal*)Address + _shape.TransformOffset(index)) = (decimal) value;
+                    *((decimal*)Address + _shape.TransformOffset(index)) = (decimal)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -1924,20 +1941,20 @@ namespace NumSharp.Backends
 #else
             switch (TypeCode)
             {
-	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Int16: return *((short*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Int32: return *((int*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Int16: return *((short*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Int32: return *((int*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.UInt32: return *((uint*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
+                default:
+                    throw new NotSupportedException();
             }
 #endif
         }
@@ -2149,7 +2166,7 @@ namespace NumSharp.Backends
             int i = 0;
             do
             {
-                ret[i++] = (*(addr + Shape.GetOffset(current))); 
+                ret[i++] = (*(addr + Shape.GetOffset(current)));
             } while (incr.Next() != null);
 
             return ret;
