@@ -265,6 +265,9 @@ namespace NumSharp
 
         public int[] strides => Storage.Shape.Strides;
 
+        //TODO! when reshaping a slice is done - this should not clone in case of a sliced shape.
+        public NDArray flat => Shape.IsSliced ? new NDArray(Storage.Clone(), Shape.Vector(size)) : new NDArray(Storage, Shape.Vector(size));
+
         internal Shape Shape
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
