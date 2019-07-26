@@ -300,7 +300,7 @@ namespace NumSharp
         {
             return Storage.GetData<T>();
         }
-        
+
         /// <summary>
         ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
         /// </summary>
@@ -422,25 +422,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Gets the internal storage and converts it to <typeparamref name="T"/> if necessary.
-        /// </summary>
-        /// <typeparam name="T">The returned type.</typeparam>
-        /// <returns>An array of type <typeparamref name="T"/></returns>
-        public ArraySlice<T> GetData<T>() where T : unmanaged
-        {
-            return Storage.GetData<T>();
-        }
-
-        /// <summary>
-        ///     Get reference to internal data storage
-        /// </summary>
-        /// <returns>reference to internal storage as System.Array</returns>
-        public IArraySlice GetData()
-        {
-            return Storage.GetData();
-        }
-
-        /// <summary>
         ///     Get: Gets internal storage array by calling <see cref="IStorage.GetData"/><br></br>
         ///     Set: Replace internal storage by calling <see cref="IStorage.ReplaceData(System.Array)"/>
         /// </summary>
@@ -463,10 +444,7 @@ namespace NumSharp
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy = true)
-        {
-            return TensorEngine.Cast(this, dtype, copy);
-        }
+        public NDArray astype(Type dtype, bool copy = true) => TensorEngine.Cast(this, dtype, copy);
 
         /// <summary>
         ///     Copy of the array, cast to a specified type.
@@ -475,219 +453,63 @@ namespace NumSharp
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy = true)
-        {
-            return TensorEngine.Cast(this, typeCode, copy);
-        }
+        public NDArray astype(NPTypeCode typeCode, bool copy = true) => TensorEngine.Cast(this, typeCode, copy);
 
         /// <summary>
         /// Clone the whole NDArray
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
         /// <returns>Cloned NDArray</returns>
-        object ICloneable.Clone()
-        {
-            return Clone();
-        }
+        object ICloneable.Clone() => Clone();
 
         /// <summary>
         /// Clone the whole NDArray
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
         /// <returns>Cloned NDArray</returns>
-        public NDArray Clone()
-        {
-            return new NDArray(this.Storage.Clone(), Shape.Clone(true)) {tensorEngine = TensorEngine};
-        }
+        public NDArray Clone() => new NDArray(this.Storage.Clone()) {tensorEngine = TensorEngine};
 
         public IEnumerator GetEnumerator()
         {
-            if (Shape.IsSliced)
-                return _sliced().GetEnumerator();
-
-            return Array?.GetEnumerator() ?? _empty().GetEnumerator();
-
-            IEnumerable _sliced()
-            {
-
+            if (Array == null || Shape.IsEmpty || Shape.size == 0)
+                return _empty().GetEnumerator();
 
 #if _REGEN
-		    #region Compute
-		    switch (GetTypeCode)
-		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
-			    case NPTypeCode.#1:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return Get#1(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-		    #endregion
+            #region Compute
+		switch (GetTypeCode)
+		{
+			%foreach supported_currently_supported,supported_currently_supported_lowercase%
+			case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
+			%
+			default:
+				throw new NotSupportedException();
+		}
+            #endregion
 #else
-		    #region Compute
-		    switch (GetTypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-			    {
-				    if (size == 0)
-                        yield break;
 
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetBoolean(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Byte:
-			    {
-				    if (size == 0)
-                        yield break;
+            #region Compute
 
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetByte(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Int16:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetInt16(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.UInt16:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetUInt16(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Int32:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetInt32(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.UInt32:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetUInt32(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Int64:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetInt64(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.UInt64:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetUInt64(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Char:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetChar(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Double:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetDouble(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Single:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetSingle(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    case NPTypeCode.Decimal:
-			    {
-				    if (size == 0)
-                        yield break;
-
-                    var incr = new NDIndexArrayIncrementor(shape);
-                    do
-                    {
-                        yield return GetDecimal(incr.Index);
-                    } while (incr.Next() != null);
-                    yield break;
-			    }
-			    default:
-				    throw new NotSupportedException();
-		    }
-		    #endregion
-#endif
-
+            switch (GetTypeCode)
+            {
+                case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
+                case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
+                case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
+                case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
+                case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
+                case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
+                case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
+                case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
+                case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
+                case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
+                case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
+                case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
+                default:
+                    throw new NotSupportedException();
             }
+
+            #endregion
+
+#endif
 
             IEnumerable _empty()
             {
@@ -712,16 +534,26 @@ namespace NumSharp
         #region Getters
 
         /// <summary>
+        ///     Gets the internal storage and converts it to <typeparamref name="T"/> if necessary.
+        /// </summary>
+        /// <typeparam name="T">The returned type.</typeparam>
+        /// <returns>An array of type <typeparamref name="T"/></returns>
+        public ArraySlice<T> GetData<T>() where T : unmanaged => Storage.GetData<T>();
+
+        /// <summary>
+        ///     Get reference to internal data storage
+        /// </summary>
+        /// <returns>reference to internal storage as System.Array</returns>
+        public IArraySlice GetData() => Storage.GetData();
+
+        /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool GetBoolean(params int[] indices)
-        {
-            return Storage.GetBoolean(indices);
-        }
+        public bool GetBoolean(params int[] indices) => Storage.GetBoolean(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/>.
@@ -730,10 +562,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public byte GetByte(params int[] indices)
-        {
-            return Storage.GetByte(indices);
-        }
+        public byte GetByte(params int[] indices) => Storage.GetByte(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/>.
@@ -742,10 +571,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public char GetChar(params int[] indices)
-        {
-            return Storage.GetChar(indices);
-        }
+        public char GetChar(params int[] indices) => Storage.GetChar(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/>.
@@ -754,10 +580,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public decimal GetDecimal(params int[] indices)
-        {
-            return Storage.GetDecimal(indices);
-        }
+        public decimal GetDecimal(params int[] indices) => Storage.GetDecimal(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/>.
@@ -766,10 +589,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public double GetDouble(params int[] indices)
-        {
-            return Storage.GetDouble(indices);
-        }
+        public double GetDouble(params int[] indices) => Storage.GetDouble(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/>.
@@ -778,10 +598,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public short GetInt16(params int[] indices)
-        {
-            return Storage.GetInt16(indices);
-        }
+        public short GetInt16(params int[] indices) => Storage.GetInt16(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/>.
@@ -790,10 +607,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetInt32(params int[] indices)
-        {
-            return Storage.GetInt32(indices);
-        }
+        public int GetInt32(params int[] indices) => Storage.GetInt32(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/>.
@@ -802,10 +616,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long GetInt64(params int[] indices)
-        {
-            return Storage.GetInt64(indices);
-        }
+        public long GetInt64(params int[] indices) => Storage.GetInt64(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/>.
@@ -814,10 +625,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public float GetSingle(params int[] indices)
-        {
-            return Storage.GetSingle(indices);
-        }
+        public float GetSingle(params int[] indices) => Storage.GetSingle(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/>.
@@ -826,10 +634,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ushort GetUInt16(params int[] indices)
-        {
-            return Storage.GetUInt16(indices);
-        }
+        public ushort GetUInt16(params int[] indices) => Storage.GetUInt16(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/>.
@@ -838,10 +643,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint GetUInt32(params int[] indices)
-        {
-            return Storage.GetUInt32(indices);
-        }
+        public uint GetUInt32(params int[] indices) => Storage.GetUInt32(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/>.
@@ -850,10 +652,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ulong GetUInt64(params int[] indices)
-        {
-            return Storage.GetUInt64(indices);
-        }
+        public ulong GetUInt64(params int[] indices) => Storage.GetUInt64(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -862,10 +661,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object GetValue(params int[] indices)
-        {
-            return Storage.GetValue(indices);
-        }
+        public object GetValue(params int[] indices) => Storage.GetValue(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -874,10 +670,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T GetValue<T>(params int[] indices) where T : unmanaged
-        {
-            return Storage.GetData<T>(indices);
-        }
+        public T GetValue<T>(params int[] indices) where T : unmanaged => Storage.GetData<T>(indices);
 
         /// <summary>
         ///     Retrieves value of 
@@ -885,10 +678,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object GetAtIndex(int index)
-        {
-            return Storage.GetAtIndex(index);
-        }
+        public object GetAtIndex(int index) => Storage.GetAtIndex(index);
 
         /// <summary>
         ///     Retrieves value of 
@@ -896,13 +686,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T GetAtIndex<T>(int index) where T : unmanaged
-        {
-            unsafe
-            {
-                return *((T*)Address + index);
-            }
-        }
+        public T GetAtIndex<T>(int index) where T : unmanaged => Storage.GetAtIndex<T>(index);
 
         /// <summary>
         ///     Retrieves value of 
@@ -910,10 +694,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetAtIndex(object obj, int index)
-        {
-            Storage.SetAtIndex(obj, index);
-        }
+        public void SetAtIndex(object obj, int index) => Storage.SetAtIndex(obj, index);
 
         /// <summary>
         ///     Retrieves value of 
@@ -921,16 +702,24 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetAtIndex<T>(T value, int index) where T : unmanaged
-        {
-            //TODO! it might be not wise to provide a method that can corrupt memory. should we lower performance but perform checks?
-            unsafe
-            {
-                *((T*)Address + index) = value;
-            }
-        }
+        public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
+
 
         //TODO! add SetInt32 and such methods!
+#if _REGEN
+	%foreach supported_currently_supported,supported_currently_supported_lowercase%
+	    /// <summary>
+        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Set#1(#2 value, params int[] indices) => Storage.Set#1(indices);
+
+    %
+#else
+#endif
 
         #endregion
 
