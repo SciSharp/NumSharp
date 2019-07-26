@@ -2235,16 +2235,15 @@ namespace NumSharp.Backends
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
-
-            var shape = Shape;
-            var ret = new T[shape.Size];
             var addr = (T*)Address;
-            var incr = new NDIndexArrayIncrementor(shape.dimensions);
+            var unreduced_shape = Shape.IsSliced? Shape.ViewInfo.UnreducedShape : Shape;
+            var ret = new T[Shape.Size];
+            var incr = new NDIndexArrayIncrementor(unreduced_shape.dimensions);
             int[] current = incr.Index;
             int i = 0;
             do
             {
-                ret[i++] = (*(addr + shape.GetOffset(current)));
+                ret[i++] = (*(addr + Shape.GetOffset(current))); 
             } while (incr.Next() != null);
 
             return ret;
