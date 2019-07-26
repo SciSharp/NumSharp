@@ -31,7 +31,7 @@ namespace NumSharp
                 low = 0;
             }
 
-            if (size.IsScalar)
+            if (size.IsEmpty || size.IsScalar)
                 return NDArray.Scalar(randomizer.NextLong(low, high), typecode);
 
             var nd = new NDArray(dtype, size); //allocation called inside.
