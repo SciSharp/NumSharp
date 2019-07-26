@@ -705,20 +705,113 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
-        //TODO! add SetInt32 and such methods!
 #if _REGEN
 	%foreach supported_currently_supported,supported_currently_supported_lowercase%
-	    /// <summary>
-        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
+        /// <summary>
+        ///     Sets a #2 at specific coordinates.
         /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Set#1(#2 value, params int[] indices) => Storage.Set#1(indices);
+        public void Set#1(#2 value, params int[] indices) => Storage.Set#1(value, indices);
 
     %
 #else
+        /// <summary>
+        ///     Sets a bool at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetBoolean(bool value, params int[] indices) => Storage.SetBoolean(value, indices);
+
+        /// <summary>
+        ///     Sets a byte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetByte(byte value, params int[] indices) => Storage.SetByte(value, indices);
+
+        /// <summary>
+        ///     Sets a short at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt16(short value, params int[] indices) => Storage.SetInt16(value, indices);
+
+        /// <summary>
+        ///     Sets a ushort at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt16(ushort value, params int[] indices) => Storage.SetUInt16(value, indices);
+
+        /// <summary>
+        ///     Sets a int at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt32(int value, params int[] indices) => Storage.SetInt32(value, indices);
+
+        /// <summary>
+        ///     Sets a uint at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt32(uint value, params int[] indices) => Storage.SetUInt32(value, indices);
+
+        /// <summary>
+        ///     Sets a long at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt64(long value, params int[] indices) => Storage.SetInt64(value, indices);
+
+        /// <summary>
+        ///     Sets a ulong at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt64(ulong value, params int[] indices) => Storage.SetUInt64(value, indices);
+
+        /// <summary>
+        ///     Sets a char at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetChar(char value, params int[] indices) => Storage.SetChar(value, indices);
+
+        /// <summary>
+        ///     Sets a double at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetDouble(double value, params int[] indices) => Storage.SetDouble(value, indices);
+
+        /// <summary>
+        ///     Sets a float at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetSingle(float value, params int[] indices) => Storage.SetSingle(value, indices);
+
+        /// <summary>
+        ///     Sets a decimal at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetDecimal(decimal value, params int[] indices) => Storage.SetDecimal(value, indices);
 #endif
 
         #endregion
