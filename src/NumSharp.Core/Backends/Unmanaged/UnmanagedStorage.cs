@@ -1075,20 +1075,20 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Allocate <paramref name="values"/> into memory.
+        ///     Allocate <paramref name="array"/> into memory.
         /// </summary>
-        /// <param name="values">The array to set as internal data storage</param>
-        /// <remarks>Does not copy <paramref name="values"/></remarks>
-        public void Allocate(Array values)
+        /// <param name="array">The array to set as internal data storage</param>
+        /// <remarks>Does not copy <paramref name="array"/></remarks>
+        public void Allocate(Array array)
         {
-            if (values == null)
-                throw new ArgumentNullException(nameof(values));
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
 
-            if (values.Length == 0)
-                throw new ArgumentException("values can't be an empty array", nameof(values));
+            if (array.Length == 0)
+                throw new ArgumentException("values can't be an empty array", nameof(array));
 
-            var slice = ArraySlice.FromArray(values);
-            _Allocate(values.ResolveShape(), slice);
+            var slice = ArraySlice.FromArray(array);
+            _Allocate(Shape.ExtractShape(array), slice);
         }
 
         /// <summary>
