@@ -518,17 +518,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// New view of array with the same data.
+        ///     New view of array with the same data.
         /// </summary>
+        /// <param name="dtype">
+        ///     Data-type descriptor of the returned view, e.g., float32 or int16. The default, None, results in the view having the same data-type as a.
+        ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
+        /// </param>
         /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.view.html</remarks>
         public NDArray view(Type dtype = null)
         {
-            if (dtype != null && dtype != this.dtype)
-                Storage.ReplaceData(Array, dtype);
-
-            var nd = new NDArray(Array, shape);
-
-            return nd;
+            //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
+            return dtype==null ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
         }
 
         #region Getters
