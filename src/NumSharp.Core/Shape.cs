@@ -243,56 +243,60 @@ namespace NumSharp
         ///     GetOffset(0, 1) = 1<br></br>
         ///     GetOffset(1, 1) = 5
         /// </summary>
-        /// <param name="coords"></param>
+        /// <param name="in_coords"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int GetOffset(params int[] coords)
+        public int GetOffset(params int[] in_coords)
         {
             int offset;
+            var coords = new List<int>( in_coords);
             if (IsSliced)
             {
                 var vi = ViewInfo;
-                if (coords.Length > vi.UnreducedShape.dimensions.Length)
+                if (in_coords.Length > vi.UnreducedShape.dimensions.Length)
                     throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
 
-                //if (dimensions.Length == 0)
-                //{
-                //    var slice = vi.Slices[0];
-                //    var start = slice.Start;
-                //    return start;
-                //}
-
+                if (vi.OriginalShape.NDim > NDim)
+                {
+                    // fill in reduced dimensions in the provided coordinates 
+                    for (int i = 0; i < vi.OriginalShape.NDim; i++)
+                    {
+                        var slice = ViewInfo.Slices[i];
+                        if (slice.IsIndex)
+                            coords.Insert(i, 0);
+                    }
+                }
                 var orig_strides = vi.OriginalShape.strides;
                 offset = 0;
                 unchecked
                 {
-                    for (int i = 0; i < coords.Length; i++)
+                    for (int i = 0; i < in_coords.Length; i++)
                     {
                         if (vi.Slices.Length <= i)
                         {
-                            offset += orig_strides[i] * coords[i];
+                            offset += orig_strides[i] * in_coords[i];
                             continue;
                         }
                         var slice = vi.Slices[i];
                         var start = slice.Start;
                         if (slice.IsIndex)
-                            offset += orig_strides[i] * start + coords[i];
+                            offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
                         else
-                            offset += orig_strides[i] * (start + coords[i] * slice.Step);
+                            offset += orig_strides[i] * (start + in_coords[i] * slice.Step);
                     }
                 }
                 return offset;
             }
 
             // no slicing
-            if (dimensions.Length == 0 && coords.Length == 1)
-                return coords[0];
+            if (dimensions.Length == 0 && in_coords.Length == 1)
+                return in_coords[0];
 
             offset = 0;
             unchecked
             {
-                for (int i = 0; i < coords.Length; i++)
-                    offset += strides[i] * coords[i];
+                for (int i = 0; i < in_coords.Length; i++)
+                    offset += strides[i] * in_coords[i];
             }
             return offset;
         }
