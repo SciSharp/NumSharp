@@ -270,11 +270,11 @@ namespace NumSharp
                 offset = 0;
                 unchecked
                 {
-                    for (int i = 0; i < in_coords.Length; i++)
+                    for (int i = 0; i < coords.Count; i++)
                     {
                         if (vi.Slices.Length <= i)
                         {
-                            offset += orig_strides[i] * in_coords[i];
+                            offset += orig_strides[i] * coords[i];
                             continue;
                         }
                         var slice = vi.Slices[i];
@@ -282,7 +282,7 @@ namespace NumSharp
                         if (slice.IsIndex)
                             offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
                         else
-                            offset += orig_strides[i] * (start + in_coords[i] * slice.Step);
+                            offset += orig_strides[i] * (start + coords[i] * slice.Step);
                     }
                 }
                 return offset;
