@@ -8,7 +8,7 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        /// Generates a random sample from a given 1-D array
+        ///     Generates a random sample from a given 1-D array
         /// </summary>
         /// <param name="arr">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
         /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
@@ -18,12 +18,12 @@ namespace NumSharp
         public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             int arrSize = arr.size;
-            NDArray idx = np.random.choice(arrSize, shape, probabilities: probabilities);
-            return arr[idx];
+            NDArray mask = np.random.choice(arrSize, shape, probabilities: probabilities);
+            return arr[mask];
         }
 
         /// <summary>
-        ///  Generates a random sample from a given 1-D array
+        ///     Generates a random sample from a given 1-D array
         /// </summary>
         /// <param name="a">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
         /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
@@ -39,13 +39,14 @@ namespace NumSharp
 
             NDArray arr = np.arange(a);
             NDArray idx = null;
-            //Debug.WriteLine($"arr: {arr}");
-            if (probabilities is null)
+
+            if (probabilities == null)
             {
                 idx = np.random.randint(0, arr.size, shape);
             }
             else
             {
+
                 NDArray cdf = np.cumsum(probabilities);
                 cdf /= cdf[cdf.size - 1];
                 NDArray uniformSamples = np.random.uniform(0, 1, (int[]) shape);

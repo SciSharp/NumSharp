@@ -10,7 +10,7 @@ namespace NumSharp.Benchmark.Unmanaged
     //|            Method |       Mean |    Error |   StdDev |     Median |        Min |        Max | Ratio | RatioSD |
     //|------------------ |-----------:|---------:|---------:|-----------:|-----------:|-----------:|------:|--------:|
     //| OffsetIncrementor | 1,049.5 us | 6.060 us | 82.25 us | 1,030.6 us | 1,006.9 us | 2,119.3 us |  1.42 |    0.15 |
-    //|   GetOffset |   745.3 us | 6.163 us | 83.64 us |   728.0 us |   685.1 us | 2,746.7 us |  1.00 |    0.00 |
+    //|         GetOffset |   745.3 us | 6.163 us | 83.64 us |   728.0 us |   685.1 us | 2,746.7 us |  1.00 |    0.00 |
 
     [SimpleJob(RunStrategy.ColdStart, targetCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
