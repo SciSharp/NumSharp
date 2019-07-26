@@ -135,7 +135,12 @@ namespace NumSharp
         {
             if (order != 'C')
                 shape.ChangeTensorLayout(order);
-            Storage.Allocate(values, shape);
+            var slice = ArraySlice.FromArray(values);
+
+            if (shape.IsEmpty)
+                shape = new Shape(slice.Count);
+
+            Storage.Allocate(slice, shape);
         }
 
         /// <summary>
