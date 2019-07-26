@@ -1239,20 +1239,14 @@ namespace NumSharp.Backends
 	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
 	            case NPTypeCode.#1:
 	            {
-		            var arr = (ArraySlice<#2>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    var iter = new NDIterator<#2>((ArraySlice<#2>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
+                    return ret;
 	            }
 	            %
 	            default:
@@ -1261,228 +1255,142 @@ namespace NumSharp.Backends
 #else
 
                 #region Compute
+     
+	            case NPTypeCode.Boolean:
+	            {
+                    var iter = new NDIterator<bool>((ArraySlice<bool>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.Boolean:
-                {
-                    var arr = (ArraySlice<bool>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.Byte:
+	            {
+                    var iter = new NDIterator<byte>((ArraySlice<byte>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
+                    return ret;
+	            }
+	            case NPTypeCode.Int16:
+	            {
+                    var iter = new NDIterator<short>((ArraySlice<short>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.Byte:
-                {
-                    var arr = (ArraySlice<byte>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.UInt16:
+	            {
+                    var iter = new NDIterator<ushort>((ArraySlice<ushort>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
+                    return ret;
+	            }
+	            case NPTypeCode.Int32:
+	            {
+                    var iter = new NDIterator<int>((ArraySlice<int>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.Int16:
-                {
-                    var arr = (ArraySlice<short>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.UInt32:
+	            {
+                    var iter = new NDIterator<uint>((ArraySlice<uint>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
+                    return ret;
+	            }
+	            case NPTypeCode.Int64:
+	            {
+                    var iter = new NDIterator<long>((ArraySlice<long>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.UInt16:
-                {
-                    var arr = (ArraySlice<ushort>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.UInt64:
+	            {
+                    var iter = new NDIterator<ulong>((ArraySlice<ulong>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
+                    return ret;
+	            }
+	            case NPTypeCode.Char:
+	            {
+                    var iter = new NDIterator<char>((ArraySlice<char>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.Int32:
-                {
-                    var arr = (ArraySlice<int>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.Double:
+	            {
+                    var iter = new NDIterator<double>((ArraySlice<double>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
+                    return ret;
+	            }
+	            case NPTypeCode.Single:
+	            {
+                    var iter = new NDIterator<float>((ArraySlice<float>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                case NPTypeCode.UInt32:
-                {
-                    var arr = (ArraySlice<uint>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
+                    return ret;
+	            }
+	            case NPTypeCode.Decimal:
+	            {
+                    var iter = new NDIterator<decimal>((ArraySlice<decimal>)ret, ref shape);
+                    int i = 0;
+                    var hasNext = iter.HasNext;
+                    var moveNext = iter.MoveNext;
+                    while (hasNext())
+                        ret[i++] = moveNext();
 
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    var arr = (ArraySlice<long>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    var arr = (ArraySlice<ulong>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.Char:
-                {
-                    var arr = (ArraySlice<char>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.Double:
-                {
-                    var arr = (ArraySlice<double>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.Single:
-                {
-                    var arr = (ArraySlice<float>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    var arr = (ArraySlice<decimal>)ret;
-                    var incr = new NDIndexArrayIncrementor(shape.dimensions);
-                    int[] current = incr.Index;
-                    unsafe
-                    {
-                        var addr = arr.Address;
-                        int i = 0;
-
-                        _repeat:
-                        ret[i++] = (*(addr + shape.GetOffset(current)));
-                        if (incr.Next() != null)
-                            goto _repeat;
-                        return ret;
-                    }
-                }
-
-                default:
-                    throw new NotSupportedException();
-
+                    return ret;
+	            }
+	            default:
+		            throw new NotSupportedException();
                 #endregion
-
 #endif
             }
         }
@@ -2096,7 +2004,6 @@ namespace NumSharp.Backends
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => SetAtIndex(value, _shape.GetOffset(indices));
         }
-
 
 #if _REGEN
         #region Direct Getters
