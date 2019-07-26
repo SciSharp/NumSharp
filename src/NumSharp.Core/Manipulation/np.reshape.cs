@@ -16,8 +16,8 @@ namespace NumSharp
         public static NDArray reshape(NDArray nd, params int[] shape)
         {
             return nd.reshape(shape);
-        }     
-        
+        }
+
         /// <summary>
         ///     Gives a new shape to an array without changing its data.
         /// </summary>
