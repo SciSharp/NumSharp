@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-namespace NumSharp.Backends.Unmanaged {
+namespace NumSharp.Backends.Unmanaged
+{
     public class NDIndexArrayIncrementor
     {
+        private readonly Action<NDIndexArrayIncrementor> endCallback;
         private readonly int[] dimensions;
         private readonly int resetto;
         public readonly int[] Index;
@@ -17,11 +19,20 @@ namespace NumSharp.Backends.Unmanaged {
             resetto = subcursor = dimensions.Length - 1;
         }
 
+        public NDIndexArrayIncrementor(ref Shape shape, Action<NDIndexArrayIncrementor> endCallback) : this(ref shape)
+        {
+            this.endCallback = endCallback;
+        }
+
         public NDIndexArrayIncrementor(int[] dims)
         {
             dimensions = dims;
             Index = new int[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
+        }
+
+        public NDIndexArrayIncrementor(int[] dims, Action<NDIndexArrayIncrementor> endCallback) : this(dims) {
+            this.endCallback = endCallback;
         }
 
         public void Reset()
@@ -43,6 +54,7 @@ namespace NumSharp.Backends.Unmanaged {
                     if (--subcursor <= -1)
                     {
                         //TODO somehow can we skip all ones?
+                        endCallback?.Invoke(this);
                         return null;
                     }
                 } while (dimensions[subcursor] <= 1);
