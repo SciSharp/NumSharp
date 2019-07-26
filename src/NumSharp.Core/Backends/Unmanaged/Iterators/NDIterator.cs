@@ -162,13 +162,8 @@ namespace NumSharp.Backends.Unmanaged
 
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () =>
-                        {
-                            var ret = *((T*)localBlock.Address + iterator.Offset);
-                            iterator.Next();
-                            return ret;
-                        };
+                        var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                        MoveNext = () => *((T*)localBlock.Address + iterator.Next());
                         Reset = () => iterator.Reset();
                         HasNext = () => iterator.HasNext;
                         break;
@@ -261,13 +256,8 @@ namespace NumSharp.Backends.Unmanaged
                         break;
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () =>
-                        {
-                            var ret = *((T*)localBlock.Address + iterator.Offset);
-                            iterator.Next();
-                            return ret;
-                        };
+                        var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                        MoveNext = () => *((T*)localBlock.Address + iterator.Next());
                         HasNext = () =>
                         {
                             if (iterator.HasNext) return true;

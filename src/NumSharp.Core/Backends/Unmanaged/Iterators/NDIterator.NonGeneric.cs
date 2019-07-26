@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
 
 
 #if _REGEN
-        #region Compute
+            #region Compute
 		switch (localBlock.TypeCode)
 		{
 			%foreach supported_currently_supported,supported_currently_supported_lowercase%
@@ -151,13 +151,8 @@ namespace NumSharp.Backends.Unmanaged
 
                         case IteratorType.Matrix:
                         case IteratorType.Tensor:
-                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                            MoveNext = () =>
-                            {
-                                var ret = *((#2*)localBlock.Address + iterator.Offset);
-                                iterator.Next();
-                                return ret;
-                            };
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((#2*)localBlock.Address + iterator.Next());
                             Reset = () => iterator.Reset();
                             HasNext = () => iterator.HasNext;
                             break;
@@ -175,1359 +170,1272 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
             #region Compute
-
-            switch (localBlock.TypeCode)
-            {
-                case NPTypeCode.Boolean:
+		switch (localBlock.TypeCode)
+		{
+			case NPTypeCode.Boolean:
+			{
+				if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((bool*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((bool*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((bool*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((bool*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((bool*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((bool*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((bool*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((bool*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((bool*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((bool*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Byte:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((bool*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((bool*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((bool*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Byte:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((byte*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((byte*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((byte*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((byte*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((byte*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((byte*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((byte*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((byte*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((byte*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((byte*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Int16:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((byte*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((byte*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((byte*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Int16:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((short*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((short*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((short*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((short*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((short*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((short*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((short*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((short*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((short*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((short*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.UInt16:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((short*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((short*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((short*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.UInt16:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((ushort*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((ushort*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((ushort*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((ushort*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((ushort*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((ushort*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((ushort*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ushort*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((ushort*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((ushort*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Int32:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((ushort*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((ushort*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((ushort*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Int32:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((int*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((int*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((int*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((int*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((int*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((int*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((int*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((int*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((int*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((int*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.UInt32:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((int*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((int*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((int*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.UInt32:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((uint*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((uint*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((uint*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((uint*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((uint*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((uint*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((uint*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((uint*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((uint*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((uint*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Int64:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((uint*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((uint*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((uint*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Int64:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((long*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((long*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((long*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((long*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((long*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((long*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((long*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((long*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((long*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((long*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.UInt64:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((long*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((long*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((long*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.UInt64:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((ulong*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((ulong*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((ulong*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((ulong*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((ulong*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((ulong*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((ulong*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ulong*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((ulong*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((ulong*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Char:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((ulong*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((ulong*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((ulong*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Char:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((char*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((char*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((char*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((char*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((char*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((char*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((char*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((char*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((char*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((char*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Double:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((char*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((char*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((char*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Double:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((double*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((double*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((double*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((double*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((double*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((double*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((double*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((double*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((double*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((double*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Single:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((double*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((double*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((double*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Single:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((float*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((float*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((float*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((float*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((float*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((float*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((float*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((float*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
-                    }
 
-                    break;
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((float*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((float*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
                 }
-
-                case NPTypeCode.Decimal:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, not auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((float*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
+
+                        case IteratorType.Vector:
+                            MoveNext = () => *((float*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((float*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			case NPTypeCode.Decimal:
+			{
+				if (Shape.IsSliced)
+                {
+                    //Shape is sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var hasNext = new Reference<bool>(true);
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((decimal*)localBlock.Address + offset);
-                                    };
-                                }
-                                else
-                                {
-                                    MoveNext = () =>
-                                    {
-                                        hasNext.Value = false;
-                                        return *((decimal*)localBlock.Address);
-                                    };
-                                }
-
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((decimal*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var hasNext = new Reference<bool>(true);
-                                var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-
                                 MoveNext = () =>
                                 {
-                                    var ret = *((decimal*)localBlock.Address + getOffset(index));
-                                    iterator.Next();
-                                    return ret;
+                                    hasNext.Value = false;
+                                    return *((decimal*)localBlock.Address + offset);
                                 };
-
-                                Reset = () =>
-                                {
-                                    iterator.Reset();
-                                    hasNext.Value = true;
-                                };
-
-                                HasNext = () => hasNext.Value;
-                                break;
                             }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, not auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                var hasNext = new Reference<bool>(true);
+                            else
+                            {
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
                                     return *((decimal*)localBlock.Address);
                                 };
-                                Reset = () => hasNext.Value = true;
-                                HasNext = () => hasNext.Value;
-                                break;
+                            }
 
-                            case IteratorType.Vector:
-                                MoveNext = () => *((decimal*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () => index < Shape.size;
-                                break;
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((decimal*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => iterator.HasNext;
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
                         }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((decimal*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
+                        }
+
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var hasNext = new Reference<bool>(true);
+                            var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            
+                            MoveNext = () =>
+                            {
+                                var ret = *((decimal*)localBlock.Address + getOffset(index));
+                                iterator.Next();
+                                return ret;
+                            };
+                            
+                            Reset = () =>
+                            {
+                                iterator.Reset();
+                                hasNext.Value = true;
+                            };
+                            
+                            HasNext = () => hasNext.Value;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
-
-                    break;
                 }
+                else
+                {
+                    //Shape is not sliced, not auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            var hasNext = new Reference<bool>(true);
+                            MoveNext = () =>
+                            {
+                                hasNext.Value = false;
+                                return *((decimal*)localBlock.Address);
+                            };
+                            Reset = () => hasNext.Value = true;
+                            HasNext = () => hasNext.Value;
+                            break;
 
-                default:
-                    throw new NotSupportedException();
-            }
+                        case IteratorType.Vector:
+                            MoveNext = () => *((decimal*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+                            break;
 
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((decimal*)localBlock.Address + iterator.Next());
+                            Reset = () => iterator.Reset();
+                            HasNext = () => iterator.HasNext;
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                break;
+			}
+			default:
+				throw new NotSupportedException();
+		}
             #endregion
-
 #endif
         }
 
@@ -1537,7 +1445,7 @@ namespace NumSharp.Backends.Unmanaged
             Shape shape = Shape;
 
 #if _REGEN
-        #region Compute
+            #region Compute
 		switch (localBlock.TypeCode)
 		{
 			%foreach supported_currently_supported,supported_currently_supported_lowercase%
@@ -1622,13 +1530,8 @@ namespace NumSharp.Backends.Unmanaged
                             break;
                         case IteratorType.Matrix:
                         case IteratorType.Tensor:
-                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                            MoveNext = () =>
-                            {
-                                var ret = *((#2*)localBlock.Address + iterator.Offset);
-                                iterator.Next();
-                                return ret;
-                            };
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((#2*)localBlock.Address + iterator.Next());
                             HasNext = () =>
                             {
                                 if (iterator.HasNext) return true;
@@ -1650,1227 +1553,1164 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
             #region Compute
-
-            switch (localBlock.TypeCode)
-            {
-                case NPTypeCode.Boolean:
+		switch (localBlock.TypeCode)
+		{
+			case NPTypeCode.Boolean:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((bool*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((bool*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((bool*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((bool*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((bool*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((bool*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(bool*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((bool*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((bool*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((bool*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((bool*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Byte:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(bool*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((bool*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((byte*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((byte*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((bool*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((byte*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((byte*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(byte*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((byte*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((byte*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Int16:
+			}
+            break;
+			case NPTypeCode.Byte:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((short*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((short*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((byte*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((byte*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((short*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((short*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(short*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((short*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((short*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((byte*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((byte*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.UInt16:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(byte*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((byte*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((ushort*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((ushort*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((byte*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((ushort*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ushort*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(ushort*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((ushort*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ushort*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Int32:
+			}
+            break;
+			case NPTypeCode.Int16:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((int*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((int*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((short*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((short*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((int*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((int*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(int*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((int*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((int*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((short*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((short*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.UInt32:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(short*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((short*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((uint*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((uint*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((short*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((uint*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((uint*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(uint*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((uint*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((uint*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Int64:
+			}
+            break;
+			case NPTypeCode.UInt16:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((long*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((long*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((ushort*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((ushort*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((long*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((long*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(long*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((long*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((long*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((ushort*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((ushort*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.UInt64:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(ushort*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((ushort*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((ulong*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((ulong*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((ushort*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((ulong*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ulong*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(ulong*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((ulong*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((ulong*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Char:
+			}
+            break;
+			case NPTypeCode.Int32:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((char*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((char*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((int*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((int*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((char*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((char*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(char*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((char*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((char*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((int*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((int*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Double:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(int*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((int*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((double*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((double*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((int*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((double*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((double*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(double*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((double*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((double*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Single:
+			}
+            break;
+			case NPTypeCode.UInt32:
+			{
+                if (Shape.IsSliced)
                 {
-                    if (Shape.IsSliced)
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
+                        case IteratorType.Scalar:
                         {
-                            case IteratorType.Scalar:
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((float*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((float*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
+                                MoveNext = () => *((uint*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((uint*)localBlock.Address);
                             }
 
-                            case IteratorType.Vector:
-                            {
-                                MoveNext = () => *((float*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((float*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
                         }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
+
+                        case IteratorType.Vector:
                         {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(float*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((float*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((float*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
+                            MoveNext = () => *((uint*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((uint*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
                                     iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
                         }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                case NPTypeCode.Decimal:
+                else
                 {
-                    if (Shape.IsSliced)
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
                     {
-                        //Shape is sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(uint*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((uint*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
                             {
-                                var offset = shape.TransformOffset(0);
-                                if (offset != 0)
-                                {
-                                    MoveNext = () => *((decimal*)localBlock.Address + offset);
-                                }
-                                else
-                                {
-                                    MoveNext = () => *((decimal*)localBlock.Address);
-                                }
-
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            case IteratorType.Vector:
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((uint*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
                             {
-                                MoveNext = () => *((decimal*)localBlock.Address + shape.GetOffset(index++));
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            }
-
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                            {
-                                var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
-                                Func<int[], int> getOffset = shape.GetOffset;
-                                var index = iterator.Index;
-                                MoveNext = () =>
-                                {
-                                    var ret = *((decimal*)localBlock.Address + getOffset(index));
-                                    if (iterator.Next() == null)
-                                        iterator.Reset();
-                                    return ret;
-                                };
-                                Reset = () => iterator.Reset();
-                                HasNext = () => true;
-                                break;
-                            }
-
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
-                    }
-                    else
-                    {
-                        //Shape is not sliced, auto-resetting
-                        switch (Type)
-                        {
-                            case IteratorType.Scalar:
-                                MoveNext = () => *(decimal*)localBlock.Address;
-                                Reset = () => { };
-                                HasNext = () => true;
-                                break;
-                            case IteratorType.Vector:
-                                MoveNext = () => *((decimal*)localBlock.Address + index++);
-                                Reset = () => index = 0;
-                                HasNext = () =>
-                                {
-                                    if (index < Shape.size) return true;
-                                    index = 0;
-                                    return true;
-                                };
-                                break;
-                            case IteratorType.Matrix:
-                            case IteratorType.Tensor:
-                                var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides, Shape.size); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                                MoveNext = () =>
-                                {
-                                    var ret = *((decimal*)localBlock.Address + iterator.Offset);
-                                    iterator.Next();
-                                    return ret;
-                                };
-                                HasNext = () =>
-                                {
-                                    if (iterator.HasNext) return true;
-                                    iterator.Reset();
-                                    return true;
-                                };
-                                break;
-                            default:
-                                throw new ArgumentOutOfRangeException();
-                        }
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
                 }
-                    break;
-                default:
-                    throw new NotSupportedException();
-            }
+			}
+            break;
+			case NPTypeCode.Int64:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((long*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((long*)localBlock.Address);
+                            }
 
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((long*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((long*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(long*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((long*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((long*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			case NPTypeCode.UInt64:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((ulong*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((ulong*)localBlock.Address);
+                            }
+
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((ulong*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((ulong*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(ulong*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((ulong*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((ulong*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			case NPTypeCode.Char:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((char*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((char*)localBlock.Address);
+                            }
+
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((char*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((char*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(char*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((char*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((char*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			case NPTypeCode.Double:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((double*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((double*)localBlock.Address);
+                            }
+
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((double*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((double*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(double*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((double*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((double*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			case NPTypeCode.Single:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((float*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((float*)localBlock.Address);
+                            }
+
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((float*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((float*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(float*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((float*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((float*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			case NPTypeCode.Decimal:
+			{
+                if (Shape.IsSliced)
+                {
+                    //Shape is sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                        {
+                            var offset = shape.TransformOffset(0);
+                            if (offset != 0)
+                            {
+                                MoveNext = () => *((decimal*)localBlock.Address + offset);
+                            }
+                            else
+                            {
+                                MoveNext = () => *((decimal*)localBlock.Address);
+                            }
+
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        case IteratorType.Vector:
+                        {
+                            MoveNext = () => *((decimal*)localBlock.Address + shape.GetOffset(index++));
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        }
+                        
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                        {
+                            var iterator = new NDIndexArrayIncrementor(ref shape, incr => incr.Reset());
+                            Func<int[], int> getOffset = shape.GetOffset;
+                            var index = iterator.Index;
+                            MoveNext = () =>
+                            {
+                                var ret = *((decimal*)localBlock.Address + getOffset(index));
+                                if (iterator.Next() == null)
+                                    iterator.Reset();
+                                return ret;
+                            };
+                            Reset = () => iterator.Reset();
+                            HasNext = () => true;
+                            break;
+                        }
+
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+                else
+                {
+                    //Shape is not sliced, auto-resetting
+                    switch (Type)
+                    {
+                        case IteratorType.Scalar:
+                            MoveNext = () => *(decimal*)localBlock.Address;
+                            Reset = () => { };
+                            HasNext = () => true;
+                            break;
+                        case IteratorType.Vector:
+                            MoveNext = () => *((decimal*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () =>
+                            {
+                                if (index < Shape.size) return true;
+                                index = 0;
+                                return true;
+                            };
+                            break;
+                        case IteratorType.Matrix:
+                        case IteratorType.Tensor:
+                            var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                            MoveNext = () => *((decimal*)localBlock.Address + iterator.Next());
+                            HasNext = () =>
+                            {
+                                if (iterator.HasNext) return true;
+                                iterator.Reset();
+                                return true;
+                            };
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+			}
+            break;
+			default:
+				throw new NotSupportedException();
+		}
             #endregion
-
 #endif
         }
 

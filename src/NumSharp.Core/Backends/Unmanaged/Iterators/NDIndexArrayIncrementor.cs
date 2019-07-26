@@ -54,6 +54,9 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public int[] Next()
         {
+            if (subcursor <= -1)
+                return null;
+
             if (++Index[subcursor] >= dimensions[subcursor])
             {
                 _repeat:

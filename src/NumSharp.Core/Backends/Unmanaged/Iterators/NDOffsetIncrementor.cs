@@ -6,35 +6,35 @@ namespace NumSharp.Backends.Unmanaged
     {
         private readonly NDIndexArrayIncrementor incr;
         private readonly int[] strides;
-        private readonly int shapeSize;
-        public int Offset;
+        private readonly int[] index;
+        private bool hasNext;
 
-        public NDOffsetIncrementor(ref Shape shape) : this(shape.dimensions, shape.strides, shape.size)
+        public NDOffsetIncrementor(ref Shape shape) : this(shape.dimensions, shape.strides)
         { }
 
-        public NDOffsetIncrementor(Shape shape) : this(shape.dimensions, shape.strides, shape.size)
+        public NDOffsetIncrementor(Shape shape) : this(shape.dimensions, shape.strides)
         { }
 
-        public NDOffsetIncrementor(int[] dims, int[] strides, int shapeSize)
+        public NDOffsetIncrementor(int[] dims, int[] strides)
         {
             this.strides = strides;
-            this.shapeSize = shapeSize;
             incr = new NDIndexArrayIncrementor(dims);
+            index = incr.Index;
+            hasNext = true;
         }
 
-        public bool HasNext => Offset < shapeSize;
+        public bool HasNext => hasNext;
 
         public void Reset()
         {
             incr.Reset();
-            Offset = 0;
+            hasNext = true;
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public int Next()
         {
-            var index = incr.Next();
-            if (index == null)
+            if (!hasNext)
                 return -1;
 
             int offset = 0;
@@ -44,7 +44,11 @@ namespace NumSharp.Backends.Unmanaged
                     offset += strides[i] * index[i];
             }
 
-            Offset = offset;
+            if (incr.Next() == null)
+                hasNext = false;
+
+            //TODO! we need to support slice here!
+
             return offset;
         }
     }
