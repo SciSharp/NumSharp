@@ -1087,26 +1087,8 @@ namespace NumSharp.Backends
             if (values.Length == 0)
                 throw new ArgumentException("values can't be an empty array", nameof(values));
 
-            Shape shape;
-            //get lengths incase it is multi-dimensional
-            if (values.Rank > 1)
-            {
-                int[] dim = new int[values.Rank];
-                for (int idx = 0; idx < dim.Length; idx++)
-                    dim[idx] = values.GetLength(idx);
-                shape = new Shape(dim);
-            }
-            else
-            {
-                shape = new Shape(values.Length);
-            }
-
-            Type elementType = values.GetType();
-            // ReSharper disable once PossibleNullReferenceException
-            while (elementType.IsArray)
-                elementType = elementType.GetElementType();
             var slice = ArraySlice.FromArray(values);
-            _Allocate(shape, slice);
+            _Allocate(values.ResolveShape(), slice);
         }
 
         /// <summary>

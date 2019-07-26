@@ -144,6 +144,85 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        ///     Resolves the shape of this given array.
+        /// </summary>
+        /// <param name="array"></param>
+        /// <remarks>Supports multi-dim and jagged arrays.</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        public static (Shape Shape, Type Type) ResolveShapeAndType(this Array array)
+        {
+            //get lengths incase it is multi-dimensional
+            if (array.Rank > 1)
+            {
+                //is multidim
+                int[] dim = new int[array.Rank];
+                for (int idx = 0; idx < dim.Length; idx++)
+                    dim[idx] = array.GetLength(idx);
+                return (new Shape(dim), array.GetType().GetElementType());
+            }
+            else
+            {
+                if (array.GetType().GetElementType()?.IsArray == true)
+                {
+                    //is jagged
+                    Array curr = array;
+                    var dimList = new List<int>(16);
+                    do
+                    {
+                        var child = (Array)curr.GetValue(0);
+                        dimList.Add(child.Length);
+                        curr = child;
+                    } while (curr.GetType().GetElementType()?.IsArray == true);
+
+                    return (new Shape(dimList.ToArray()), curr.GetType().GetElementType());
+                }
+
+                //is 1d
+                return (new Shape(array.Length), array.GetType().GetElementType());
+            }
+        }
+
+        /// <summary>
+        ///     Resolves the shape of this given array.
+        /// </summary>
+        /// <param name="array"></param>
+        /// <remarks>Supports multi-dim and jagged arrays.</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        public static Shape ResolveShape(this Array array)
+        {
+            Shape shape;
+            //get lengths incase it is multi-dimensional
+            if (array.Rank > 1)
+            {
+                int[] dim = new int[array.Rank];
+                for (int idx = 0; idx < dim.Length; idx++)
+                    dim[idx] = array.GetLength(idx);
+                shape = new Shape(dim);
+            }
+            else
+            {
+                if (array.GetType().GetElementType()?.IsArray == true)
+                {
+                    //is jagged
+                    Array curr = array;
+                    var dimList = new List<int>(16);
+                    do
+                    {
+                        var child = (Array)curr.GetValue(0);
+                        dimList.Add(child.Length);
+                        curr = child;
+                    } while (curr.GetType().GetElementType()?.IsArray == true);
+
+                    return new Shape(dimList.ToArray());
+                }
+
+                shape = new Shape(array.Length);
+            }
+
+            return shape;
+        }
+
+        /// <summary>
         ///     Creates an array of 1D of type <paramref name="type"/>.
         /// </summary>
         /// <typeparam name="T">The type of the array</typeparam>
@@ -157,7 +236,7 @@ namespace NumSharp.Utilities
             while (type.IsArray)
                 type = type.GetElementType();
             var l = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(type));
-            foreach (var v in enumerable) 
+            foreach (var v in enumerable)
                 l.Add(v);
 
             return (Array)l.GetType().GetMethod("ToArray", BindingFlags.Public | BindingFlags.Instance).Invoke(l, null);
