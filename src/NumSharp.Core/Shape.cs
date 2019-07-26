@@ -264,6 +264,8 @@ namespace NumSharp
                         var slice = ViewInfo.Slices[i];
                         if (slice.IsIndex)
                             coords.Insert(i, 0);
+                        if (coords.Count == orig_ndim)
+                            break;
                     }
                 }
                 var orig_strides = vi.OriginalShape.strides;
