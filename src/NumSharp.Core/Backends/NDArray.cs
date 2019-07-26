@@ -705,7 +705,6 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
-
         //TODO! add SetInt32 and such methods!
 #if _REGEN
 	%foreach supported_currently_supported,supported_currently_supported_lowercase%
