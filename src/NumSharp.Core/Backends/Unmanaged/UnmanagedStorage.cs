@@ -1550,9 +1550,13 @@ namespace NumSharp.Backends
             SetAtIndex(value, _shape.GetOffset(indices));
         }
 
+        public unsafe void SetAtIndexUnsafe(object value, int index)
+        {
+            InternalArray.SetIndex(index, value);
+        }
+
         public unsafe void SetAtIndex<T>(T value, int index) where T : unmanaged
         {
-            //TODO! this should support slice!
             *((T*)this.Address + _shape.TransformOffset(index)) = value;
         }
 
@@ -1565,8 +1569,8 @@ namespace NumSharp.Backends
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 %foreach supported_currently_supported,supported_currently_supported_lowercase%
                 case NPTypeCode.#1:
-                    *((#2*)Address + index) = (#2) value;
-                    break;
+                    *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
+                    return;
                 %
                 default:
                     throw new NotSupportedException();
@@ -1574,77 +1578,41 @@ namespace NumSharp.Backends
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                {
-                    *((bool*)Address + index) = (bool)value;
-                    break;
-                }
-
+                    *((bool*)Address + _shape.TransformOffset(index)) = (bool) value;
+                    return;
                 case NPTypeCode.Byte:
-                {
-                    *((byte*)Address + index) = (byte)value;
-                    break;
-                }
-
+                    *((byte*)Address + _shape.TransformOffset(index)) = (byte) value;
+                    return;
                 case NPTypeCode.Int16:
-                {
-                    *((short*)Address + index) = (short)value;
-                    break;
-                }
-
+                    *((short*)Address + _shape.TransformOffset(index)) = (short) value;
+                    return;
                 case NPTypeCode.UInt16:
-                {
-                    *((ushort*)Address + index) = (ushort)value;
-                    break;
-                }
-
+                    *((ushort*)Address + _shape.TransformOffset(index)) = (ushort) value;
+                    return;
                 case NPTypeCode.Int32:
-                {
-                    *((int*)Address + index) = (int)value;
-                    break;
-                }
-
+                    *((int*)Address + _shape.TransformOffset(index)) = (int) value;
+                    return;
                 case NPTypeCode.UInt32:
-                {
-                    *((uint*)Address + index) = (uint)value;
-                    break;
-                }
-
+                    *((uint*)Address + _shape.TransformOffset(index)) = (uint) value;
+                    return;
                 case NPTypeCode.Int64:
-                {
-                    *((long*)Address + index) = (long)value;
-                    break;
-                }
-
+                    *((long*)Address + _shape.TransformOffset(index)) = (long) value;
+                    return;
                 case NPTypeCode.UInt64:
-                {
-                    *((ulong*)Address + index) = (ulong)value;
-                    break;
-                }
-
+                    *((ulong*)Address + _shape.TransformOffset(index)) = (ulong) value;
+                    return;
                 case NPTypeCode.Char:
-                {
-                    *((char*)Address + index) = (char)value;
-                    break;
-                }
-
+                    *((char*)Address + _shape.TransformOffset(index)) = (char) value;
+                    return;
                 case NPTypeCode.Double:
-                {
-                    *((double*)Address + index) = (double)value;
-                    break;
-                }
-
+                    *((double*)Address + _shape.TransformOffset(index)) = (double) value;
+                    return;
                 case NPTypeCode.Single:
-                {
-                    *((float*)Address + index) = (float)value;
-                    break;
-                }
-
+                    *((float*)Address + _shape.TransformOffset(index)) = (float) value;
+                    return;
                 case NPTypeCode.Decimal:
-                {
-                    *((decimal*)Address + index) = (decimal)value;
-                    break;
-                }
-
+                    *((decimal*)Address + _shape.TransformOffset(index)) = (decimal) value;
+                    return;
                 default:
                     throw new NotSupportedException();
 #endif

@@ -66,6 +66,7 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage;
+            storage.SetShapeUnsafe(shape);
             tensorEngine = storage.Engine;
         }
 
@@ -263,6 +264,9 @@ namespace NumSharp
         public char order => Storage.Shape.Order;
 
         public int[] strides => Storage.Shape.Strides;
+
+        //TODO! when reshaping a slice is done - this should not clone in case of a sliced shape.
+        public NDArray flat => Shape.IsSliced ? new NDArray(Storage.Clone(), Shape.Vector(size)) : new NDArray(Storage, Shape.Vector(size));
 
         internal Shape Shape
         {
@@ -861,6 +865,18 @@ namespace NumSharp
         public object GetValue(params int[] indices)
         {
             return Storage.GetValue(indices);
+        }
+
+        /// <summary>
+        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public T GetValue<T>(params int[] indices) where T : unmanaged
+        {
+            return Storage.GetData<T>(indices);
         }
 
         /// <summary>

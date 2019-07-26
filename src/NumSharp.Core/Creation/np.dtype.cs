@@ -185,7 +185,6 @@ namespace NumSharp
 
             if (Enum.TryParse<NPTypeCode>(dtype, out var code))
             {
-
                 switch (code)
                 {
                     case NPTypeCode.NDArray: return new DType(typeof(IntPtr)); //todo! ??

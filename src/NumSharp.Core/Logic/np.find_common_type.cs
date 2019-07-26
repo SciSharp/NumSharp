@@ -704,6 +704,15 @@ namespace NumSharp
         /// <summary>
         ///     Resolves to which type should the output be.
         /// </summary>
+        [MethodImpl((MethodImplOptions)512)]
+        public static NPTypeCode find_common_type(params string[] involvedTypes)
+        {
+            return _can_coerce_all(involvedTypes.Select(s => dtype(s).typecode).ToArray());
+        }
+
+        /// <summary>
+        ///     Resolves to which type should the output be.
+        /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
         [MethodImpl((MethodImplOptions)512)]
         internal static NPTypeCode _FindCommonType(NDArray firstNDArray, NDArray secondNDArray)
