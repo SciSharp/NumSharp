@@ -62,15 +62,16 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void CloneCheck()
+        public unsafe void CloneCheck()
         {
-            var strg1DCpy = (UnmanagedStorage)strg1D.Clone();
+            var l = strg1D;
+            var r = strg1D.Clone();
 
-            Assert.IsTrue(strg1DCpy.DType == strg1DCpy.GetData().GetType().GetElementType());
-            Assert.IsFalse(strg1D.GetData() == strg1DCpy.GetData());
-            Assert.IsTrue(strg1D.GetData().Count == strg1DCpy.GetData().Count);
-
-            //TODO! Assert.IsTrue(Enumerable.SequenceEqual(strg1DCpy.GetData<double>(), strg1D.GetData<double>()));
+            ReferenceEquals(l, r).Should().BeFalse();
+            l.DType.Should().Be(r.DType);
+            (l.InternalArray.Address != r.InternalArray.Address).Should().BeTrue();
+            l.Count.Should().Be(r.Count);
+            l.Shape.Should().Be(r.Shape);
         }
 
         [TestMethod, Ignore("Transpose is not implemented")]

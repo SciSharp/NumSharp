@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void Case1()
         {
-            np.eye(3, k: 1);
+            var g = np.eye(3, k: 1);
             var ret = new NDArray(new float[][] {new float[] {0.0f, 1.0f, 0.0f}, new float[] {0.0f, 0f, 1.0f}, new float[] {0f, 0f, 0f}}, Shape.Matrix(3, 3));
         }
 
