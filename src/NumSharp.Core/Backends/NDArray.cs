@@ -66,6 +66,7 @@ namespace NumSharp
         internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage;
+            storage.SetShapeUnsafe(shape);
             tensorEngine = storage.Engine;
         }
 
