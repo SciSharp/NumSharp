@@ -277,7 +277,7 @@ namespace NumSharp
                         var start = slice.Start;
                         if (slice.IsIndex)
                             offset += orig_strides[i] * start + coords[i];
-                        else 
+                        else
                             offset += orig_strides[i] * (start + coords[i] * slice.Step);
                     }
                 }
@@ -517,20 +517,41 @@ namespace NumSharp
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
 
-            var slices = new SliceDef[Dimensions.Length];
-            var sliced_axes_unreduced = new int[Dimensions.Length];
-            for (int i = 0; i < Dimensions.Length; i++)
+            var slices = new List<SliceDef>();
+            var sliced_axes_unreduced = new List<int>();
+            for (int i = 0; i < NDim; i++)
             {
                 var dim = Dimensions[i];
                 var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
                 var slice_def = slice.ToSliceDef(dim);
-                slices[i] = this.IsSliced ? ViewInfo.Slices[i].Merge(slice_def) : slice_def;
+                slices.Add(slice_def);
                 var count = Math.Abs(slices[i].Count); // for index-slices count would be -1 but we need 1.
-                sliced_axes_unreduced[i] = count;
+                sliced_axes_unreduced.Add(count);
+            }
+            if (IsSliced)
+            {
+                // merge new slices with existing ones and insert the indices of the parent shape that were previously reduced
+                for (int i = 0; i < ViewInfo.OriginalShape.NDim; i++)
+                {
+                    var orig_slice = ViewInfo.Slices[i];
+                    if (orig_slice.IsIndex)
+                    {
+                        slices.Insert(i, orig_slice);
+                        sliced_axes_unreduced.Insert(i,1);
+                        continue;
+                    }
+                    slices[i] = ViewInfo.Slices[i].Merge(slices[i]);
+                    sliced_axes_unreduced[i]= Math.Abs(slices[i].Count);
+                }
             }
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
-            var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices, UnreducedShape = new Shape(sliced_axes_unreduced) };
+            var viewInfo = new ViewInfo()
+            {
+                OriginalShape = origin,
+                Slices = slices.ToArray(),
+                UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),
+            };
             return new Shape(sliced_axes) { ViewInfo = viewInfo };
         }
 
