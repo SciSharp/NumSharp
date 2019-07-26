@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.View
         [TestMethod]
         public void GetData_1D_Stepping()
         {
-            // these slicing operations should be executed with ViewStorage internally
+            // these slicing operations should be executed with Stepping internally
             var data = np.arange(10);
             // return stepped view
             var view = data["::2"];
@@ -82,8 +82,11 @@ namespace NumSharp.UnitTest.View
             var data = np.arange(10);
             // return identical view
             var view = data[":"];
-           // Assert.AreEqual(0, (int)view[0]);
-            Assert.AreEqual(5, (int)view[5]);
+            // Assert.AreEqual(0, (int)view[0]);
+            Assert.AreEqual(5, (int)data[5]);
+            Assert.AreEqual(9, (int)data[9]);
+            var nd5 = view[5];
+            Assert.AreEqual(5, (int)nd5);
             Assert.AreEqual(9, (int)view[9]);
             view = data["-77:77"];
             Assert.AreEqual(0, (int)view[0]);
@@ -138,12 +141,12 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(6, (int)view[1]);
             Assert.AreEqual(3, (int)view[2]);
             Assert.AreEqual(0, (int)view[3]);
-            view = data["-77:77:-77"];
+            view = data["77:-77:-77"];
             Assert.AreEqual(9, (int)view[0]);
         }
 
         [TestMethod]
-        public void Shared_Data_1D_Span()
+        public void Shared_Data_1D()
         {
             var data = np.arange(10);
             // return identical view
@@ -154,13 +157,13 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(99, (int)view[9]);
             view[1] = 11;
             Assert.AreEqual(11, (int)data[1]);
-            data.ReplaceData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
+            data.SetData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
             Assert.AreEqual(-1, (int)data[1]);
             Assert.AreEqual(-1, (int)view[1]);
         }
 
         [TestMethod]
-        public void NestedView_1D_Span()
+        public void NestedView_1D()
         {
             var data = np.arange(10);
             // return identical view
@@ -177,7 +180,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] {5, 6}, view3.ToArray<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.ReplaceData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
+            data.SetData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
             AssertAreEqual(new int[] {-1, -2, -3, -4, -5, -6, -7, -8,}, view1.ToArray<int>());
             AssertAreEqual(new int[] {-5, -6, -7, -8,}, view2.ToArray<int>());
             AssertAreEqual(new int[] {-5, -6}, view3.ToArray<int>());
@@ -195,7 +198,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void NestedView_1D_ViewStorage()
+        public void NestedView_1D_Stepping()
         {
             var data = np.arange(10);
             // return identical view
@@ -212,7 +215,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] {2, 8}, view3.ToArray<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.ReplaceData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
+            data.SetData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
             AssertAreEqual(new int[] {-1, -2, -3, -4, -5, -6, -7, -8,}, view1.ToArray<int>());
             AssertAreEqual(new int[] {-8, -6, -4, -2,}, view2.ToArray<int>());
             AssertAreEqual(new int[] {-2, -8}, view3.ToArray<int>());
@@ -362,7 +365,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] {2, 8, 2, 8}, view3.ToArray<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.ReplaceData(new int[] {0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9});
+            data.SetData(new int[,] {{0, -1, -2, -3, -4, -5, -6, -7, -8, -9}, {0, -1, -2, -3, -4, -5, -6, -7, -8, -9}});
             AssertAreEqual(new int[] {-1, -2, -3, -4, -5, -6, -7, -8, -1, -2, -3, -4, -5, -6, -7, -8}, view1.ToArray<int>());
             AssertAreEqual(new int[] {-8, -6, -4, -2, -8, -6, -4, -2}, view2.ToArray<int>());
             AssertAreEqual(new int[] {-2, -8, -2, -8}, view3.ToArray<int>());
@@ -397,7 +400,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void Reduce_2D_to_1D_and_0D_Span()
+        public void Reduce_2D_to_1D_and_0D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
             //>>> x
@@ -425,7 +428,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void Reduce_2D_to_1D_and_0D_ViewStorage()
+        public void Reduce_2D_to_1D_and_0D_Stepping()
         {
             //>>> x = np.arange(9).reshape(3, 3)
             //>>> x
@@ -472,7 +475,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void NestedDimensionalityReduction_Span()
+        public void NestedDimensionalityReduction()
         {
             var data = np.arange(9).reshape(3, 3);
             Assert.AreEqual(new Shape(3, 3), new Shape(data.shape));
@@ -488,7 +491,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void NestedDimensionalityReduction_ViewStorage()
+        public void NestedDimensionalityReduction_Stepped()
         {
             var data = np.arange(9).reshape(3, 3);
             Assert.AreEqual(new Shape(3, 3), new Shape(data.shape));
@@ -498,7 +501,7 @@ namespace NumSharp.UnitTest.View
             var view1 = view["2"];
             Assert.AreEqual(new Shape(), new Shape(view1.shape));
             AssertAreEqual(new int[] {8}, view1.ToArray<int>());
-            var view2 = view[":2:-1"];
+            var view2 = view["1::-1"];
             Assert.AreEqual(new Shape(2), new Shape(view2.shape));
             AssertAreEqual(new int[] {7, 6}, view2.ToArray<int>());
         }

@@ -221,7 +221,9 @@ namespace NumSharp
             if (this_shape.IsSliced)
             {
                 // in this case we can not get a slice of contiguous memory, so we slice
-                return new NDArray(Storage.GetView(indices.Select(i=>Slice.Index(i)).ToArray()));
+                var view = Storage.GetView(indices.Select(i => Slice.Index(i)).ToArray());
+                var nd= new NDArray(view);
+                return nd;
             }
             var (shape, offset) = Storage.Shape.GetSubshape(indices);
             return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));

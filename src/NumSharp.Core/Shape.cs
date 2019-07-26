@@ -255,8 +255,8 @@ namespace NumSharp
                 var vi = ViewInfo;
                 if (in_coords.Length > vi.UnreducedShape.dimensions.Length)
                     throw new InvalidEnumArgumentException($"select has too many coordinates for this shape");
-
-                if (vi.OriginalShape.NDim > NDim)
+                var orig_ndim = vi.OriginalShape.NDim;
+                if (orig_ndim > NDim && orig_ndim > in_coords.Length)
                 {
                     // fill in reduced dimensions in the provided coordinates 
                     for (int i = 0; i < vi.OriginalShape.NDim; i++)

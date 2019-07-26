@@ -900,7 +900,7 @@ namespace NumSharp
         {
             unsafe
             {
-                return *((T*)Address + index);
+                return *((T*)Address + Shape.GetOffset(index));
             }
         }
 
@@ -926,7 +926,7 @@ namespace NumSharp
             //TODO! it might be not wise to provide a method that can corrupt memory. should we lower performance but perform checks?
             unsafe
             {
-                *((T*)Address + index) = value;
+                *((T*)Address + Shape.GetOffset(index)) = value;
             }
         }
 
