@@ -113,6 +113,7 @@ namespace NumSharp
 
             set
             {
+                Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
                 throw new NotImplementedException("slice data set is not implemented for types less NDArray's.");
             }
         }
