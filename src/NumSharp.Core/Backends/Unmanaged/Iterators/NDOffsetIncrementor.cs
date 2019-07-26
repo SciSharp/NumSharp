@@ -9,15 +9,12 @@ namespace NumSharp.Backends.Unmanaged
         private readonly int shapeSize;
         public int Offset;
 
-        /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDOffsetIncrementor(ref Shape shape) : this(shape.dimensions, shape.strides, shape.size)
         { }
 
-        /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDOffsetIncrementor(Shape shape) : this(shape.dimensions, shape.strides, shape.size)
         { }
 
-        /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDOffsetIncrementor(int[] dims, int[] strides, int shapeSize)
         {
             this.strides = strides;

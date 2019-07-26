@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-namespace NumSharp.Backends.Unmanaged {
+namespace NumSharp.Backends.Unmanaged
+{
     public class NDExtendedIndexArrayIncrementor
     {
         private readonly int _extendBy;
@@ -14,8 +15,11 @@ namespace NumSharp.Backends.Unmanaged {
         /// <param name="extendBy">By how many items should <see cref="Index"/> be extended</param>
         public NDExtendedIndexArrayIncrementor(ref Shape shape, int extendBy)
         {
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+
             _extendBy = extendBy;
-            dimensions = shape.dimensions;
+            dimensions = shape.IsScalar ? new int[] {1} : shape.dimensions;
             nonExtendedLength = dimensions.Length;
             Index = new int[nonExtendedLength + extendBy];
             resetto = subcursor = dimensions.Length - 1;
@@ -25,6 +29,12 @@ namespace NumSharp.Backends.Unmanaged {
         /// <param name="extendBy">By how many items should <see cref="Index"/> be extended</param>
         public NDExtendedIndexArrayIncrementor(int[] dims, int extendBy)
         {
+            if (dims == null)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+
+            if (dims.Length == 0)
+                dims = new int[] {1};
+
             dimensions = dims;
             _extendBy = extendBy;
             nonExtendedLength = dimensions.Length;
@@ -52,7 +62,7 @@ namespace NumSharp.Backends.Unmanaged {
                     {
                         //TODO somehow can we skip all ones entierly?
                         subcursor = resetto;
-                        return Index;
+                        return null;
                     }
                 } while (dimensions[subcursor] <= 1);
 

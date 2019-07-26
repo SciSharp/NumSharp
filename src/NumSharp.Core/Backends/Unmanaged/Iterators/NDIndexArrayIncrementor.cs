@@ -14,7 +14,10 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDIndexArrayIncrementor(ref Shape shape)
         {
-            dimensions = shape.dimensions;
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+
+            dimensions = shape.IsScalar ? new[] {1} : shape.dimensions;
             Index = new int[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
@@ -26,12 +29,19 @@ namespace NumSharp.Backends.Unmanaged
 
         public NDIndexArrayIncrementor(int[] dims)
         {
+            if (dims == null)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+
+            if (dims.Length == 0)
+                dims = new int[] {1};
+
             dimensions = dims;
             Index = new int[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
-        public NDIndexArrayIncrementor(int[] dims, Action<NDIndexArrayIncrementor> endCallback) : this(dims) {
+        public NDIndexArrayIncrementor(int[] dims, Action<NDIndexArrayIncrementor> endCallback) : this(dims)
+        {
             this.endCallback = endCallback;
         }
 
@@ -80,6 +90,9 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDIndexArrayIncrementorAutoResetting(ref Shape shape)
         {
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementorAutoResetting with an empty shape.");
+
             dimensions = shape.dimensions;
             Index = new int[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
@@ -87,6 +100,12 @@ namespace NumSharp.Backends.Unmanaged
 
         public NDIndexArrayIncrementorAutoResetting(int[] dims)
         {
+            if (dims == null)
+                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementorAutoResetting with an empty shape.");
+
+            if (dims.Length == 0)
+                dims = new int[] {1};
+
             dimensions = dims;
             Index = new int[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
