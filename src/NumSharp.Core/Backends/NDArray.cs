@@ -865,6 +865,18 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public T GetValue<T>(params int[] indices) where T : unmanaged
+        {
+            return Storage.GetData<T>(indices);
+        }
+
+        /// <summary>
         ///     Retrieves value of 
         /// </summary>
         /// <param name="index"></param>
