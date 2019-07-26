@@ -18,6 +18,9 @@ namespace NumSharp.Backends.Unmanaged
 
         public NDIterator(IMemoryBlock block, Shape shape, bool autoReset = false)
         {
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIterator with an empty shape.");
+
             AutoReset = autoReset;
             Block = block;
             Shape = shape;
@@ -33,8 +36,8 @@ namespace NumSharp.Backends.Unmanaged
             setDefaults();
         }
 
-        public NDIterator(NDArray arr, bool autoReset = false) : this(arr.Storage, autoReset) { }
-        private NDIterator(UnmanagedStorage storage, bool autoReset = false) : this(storage.InternalArray, storage.Shape, autoReset) { }
+        public NDIterator(NDArray arr, bool autoReset = false) : this(arr?.Storage, autoReset) { }
+        private NDIterator(UnmanagedStorage storage, bool autoReset = false) : this(storage?.InternalArray, storage?.Shape ?? default, autoReset) { }
 
         protected void setDefaults()
         {

@@ -16,11 +16,13 @@ namespace NumSharp.Backends.Unmanaged
         public Func<bool> HasNext;
         public Action Reset;
 
-        /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDIterator(IMemoryBlock<T> block, Shape shape, bool autoReset = false)
         {
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIterator with an empty shape.");
+
             AutoReset = autoReset;
-            Block = block;
+            Block = block ?? throw new ArgumentNullException(nameof(block));
             Shape = shape;
             if (shape.IsScalar)
                 Type = IteratorType.Scalar;
@@ -34,8 +36,28 @@ namespace NumSharp.Backends.Unmanaged
             setDefaults();
         }
 
-        public NDIterator(NDArray arr, bool autoReset = false) : this(arr.Storage, autoReset) { }
-        private NDIterator(UnmanagedStorage storage, bool autoReset = false) : this((IMemoryBlock<T>)storage.InternalArray, storage.Shape, autoReset) { }
+        public NDIterator(IMemoryBlock<T> block, ref Shape shape, bool autoReset = false)
+        {
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIterator with an empty shape.");
+
+            AutoReset = autoReset;
+            Block = block ?? throw new ArgumentNullException(nameof(block));
+            Shape = shape;
+            if (shape.IsScalar)
+                Type = IteratorType.Scalar;
+            else if (shape.NDim == 1)
+                Type = IteratorType.Vector;
+            else if (shape.NDim == 2)
+                Type = IteratorType.Matrix;
+            else
+                Type = IteratorType.Tensor;
+
+            setDefaults();
+        }
+
+        public NDIterator(NDArray arr, bool autoReset = false) : this(arr?.Storage, autoReset) { }
+        public NDIterator(UnmanagedStorage storage, bool autoReset = false) : this((IMemoryBlock<T>)storage?.InternalArray, storage?.Shape ?? default, autoReset) { }
 
         protected void setDefaults()
         {
@@ -94,20 +116,20 @@ namespace NumSharp.Backends.Unmanaged
                         var iterator = new NDIndexArrayIncrementor(ref shape, _ => hasNext.Value = false);
                         Func<int[], int> getOffset = shape.GetOffset;
                         var index = iterator.Index;
-                        
+
                         MoveNext = () =>
                         {
                             var ret = *((T*)localBlock.Address + getOffset(index));
                             iterator.Next();
                             return ret;
                         };
-                        
+
                         Reset = () =>
                         {
                             iterator.Reset();
                             hasNext.Value = true;
                         };
-                        
+
                         HasNext = () => hasNext.Value;
                         break;
                     }
@@ -194,7 +216,7 @@ namespace NumSharp.Backends.Unmanaged
                         };
                         break;
                     }
-                    
+
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
                     {
@@ -275,7 +297,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             var next = MoveNext;
             var hasNext = HasNext;
-            
+
             while (hasNext())
                 yield return next();
         }
