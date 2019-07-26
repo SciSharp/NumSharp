@@ -820,99 +820,87 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                 {
                     InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
-                    Address = (byte*)_arrayBoolean.Address;
+                    Address = (byte*) _arrayBoolean.Address;
                     Count = _arrayBoolean.Count;
                     break;
                 }
-
                 case NPTypeCode.Byte:
                 {
                     InternalArray = _arrayByte = (ArraySlice<byte>)array;
-                    Address = (byte*)_arrayByte.Address;
+                    Address = _arrayByte.Address;
                     Count = _arrayByte.Count;
                     break;
                 }
-
                 case NPTypeCode.Int16:
                 {
                     InternalArray = _arrayInt16 = (ArraySlice<short>)array;
-                    Address = (byte*)_arrayInt16.Address;
+                    Address = (byte*) _arrayInt16.Address;
                     Count = _arrayInt16.Count;
                     break;
                 }
-
                 case NPTypeCode.UInt16:
                 {
                     InternalArray = _arrayUInt16 = (ArraySlice<ushort>)array;
-                    Address = (byte*)_arrayUInt16.Address;
+                    Address = (byte*) _arrayUInt16.Address;
                     Count = _arrayUInt16.Count;
                     break;
                 }
-
                 case NPTypeCode.Int32:
                 {
                     InternalArray = _arrayInt32 = (ArraySlice<int>)array;
-                    Address = (byte*)_arrayInt32.Address;
+                    Address = (byte*) _arrayInt32.Address;
                     Count = _arrayInt32.Count;
                     break;
                 }
-
                 case NPTypeCode.UInt32:
                 {
                     InternalArray = _arrayUInt32 = (ArraySlice<uint>)array;
-                    Address = (byte*)_arrayUInt32.Address;
+                    Address = (byte*) _arrayUInt32.Address;
                     Count = _arrayUInt32.Count;
                     break;
                 }
-
                 case NPTypeCode.Int64:
                 {
                     InternalArray = _arrayInt64 = (ArraySlice<long>)array;
-                    Address = (byte*)_arrayInt64.Address;
+                    Address = (byte*) _arrayInt64.Address;
                     Count = _arrayInt64.Count;
                     break;
                 }
-
                 case NPTypeCode.UInt64:
                 {
                     InternalArray = _arrayUInt64 = (ArraySlice<ulong>)array;
-                    Address = (byte*)_arrayUInt64.Address;
+                    Address = (byte*) _arrayUInt64.Address;
                     Count = _arrayUInt64.Count;
                     break;
                 }
-
                 case NPTypeCode.Char:
                 {
                     InternalArray = _arrayChar = (ArraySlice<char>)array;
-                    Address = (byte*)_arrayChar.Address;
+                    Address = (byte*) _arrayChar.Address;
                     Count = _arrayChar.Count;
                     break;
                 }
-
                 case NPTypeCode.Double:
                 {
                     InternalArray = _arrayDouble = (ArraySlice<double>)array;
-                    Address = (byte*)_arrayDouble.Address;
+                    Address = (byte*) _arrayDouble.Address;
                     Count = _arrayDouble.Count;
                     break;
                 }
-
                 case NPTypeCode.Single:
                 {
                     InternalArray = _arraySingle = (ArraySlice<float>)array;
-                    Address = (byte*)_arraySingle.Address;
+                    Address = (byte*) _arraySingle.Address;
                     Count = _arraySingle.Count;
                     break;
                 }
-
                 case NPTypeCode.Decimal:
                 {
                     InternalArray = _arrayDecimal = (ArraySlice<decimal>)array;
-                    Address = (byte*)_arrayDecimal.Address;
+                    Address = (byte*) _arrayDecimal.Address;
                     Count = _arrayDecimal.Count;
                     break;
                 }
-
                 default:
                     throw new NotSupportedException();
 #endif
@@ -1441,9 +1429,7 @@ namespace NumSharp.Backends
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
         public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
-        {
-            *((T*)this.Address + _shape.GetOffset(indices)) = value;
-        }
+            => *((T*)this.Address + _shape.GetOffset(indices)) = value;
 
         /// <summary>
         ///     Set a single value at given <see cref="indices"/>.
@@ -1475,6 +1461,9 @@ namespace NumSharp.Backends
             SetAtIndex(value, _shape.GetOffset(indices));
         }
 
+        /// <summary>
+        ///     Performs a set of index without calling <see cref="Shape.TransformOffset(int)"./>
+        /// </summary>
         public unsafe void SetAtIndexUnsafe(object value, int index)
         {
             InternalArray.SetIndex(index, value);
@@ -1487,7 +1476,6 @@ namespace NumSharp.Backends
 
         public unsafe void SetAtIndex(object value, int index)
         {
-            //TODO! this should support slice!
             switch (_typecode)
             {
 #if _REGEN
@@ -1612,6 +1600,184 @@ namespace NumSharp.Backends
                 //TODO! What is this storage is sliced.
             }
         }
+
+        #region Typed Setters
+
+#if _REGEN
+	%foreach supported_currently_supported,supported_currently_supported_lowercase%
+        /// <summary>
+        ///     Sets a #2 at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Set#1(#2 value, params int[] indices)         
+        {
+            unsafe {
+                *((#2*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+    %
+#else
+        /// <summary>
+        ///     Sets a bool at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetBoolean(bool value, params int[] indices)         
+        {
+            unsafe {
+                *((bool*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a byte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetByte(byte value, params int[] indices)         
+        {
+            unsafe {
+                *((byte*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a short at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt16(short value, params int[] indices)         
+        {
+            unsafe {
+                *((short*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a ushort at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt16(ushort value, params int[] indices)         
+        {
+            unsafe {
+                *((ushort*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a int at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt32(int value, params int[] indices)         
+        {
+            unsafe {
+                *((int*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a uint at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt32(uint value, params int[] indices)         
+        {
+            unsafe {
+                *((uint*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a long at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetInt64(long value, params int[] indices)         
+        {
+            unsafe {
+                *((long*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a ulong at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetUInt64(ulong value, params int[] indices)         
+        {
+            unsafe {
+                *((ulong*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a char at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetChar(char value, params int[] indices)         
+        {
+            unsafe {
+                *((char*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a double at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetDouble(double value, params int[] indices)         
+        {
+            unsafe {
+                *((double*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a float at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetSingle(float value, params int[] indices)         
+        {
+            unsafe {
+                *((float*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a decimal at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetDecimal(decimal value, params int[] indices)         
+        {
+            unsafe {
+                *((decimal*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+#endif
+
+#endregion
 
         /// <summary>
         ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
@@ -1839,9 +2005,9 @@ namespace NumSharp.Backends
             SetInternalArray(nd.Array);
         }
 
-        #endregion
+#endregion
 
-        #region Shaping
+#region Shaping
 
         /// <summary>
         ///     Changes the shape representing this storage.
@@ -1880,17 +2046,17 @@ namespace NumSharp.Backends
             Count = _shape.size;
         }
 
-        #region Slicing
+#region Slicing
 
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
         public UnmanagedStorage GetView(params Slice[] slices) => Alias(_shape.Slice(slices));
 
-        #endregion
+#endregion
 
-        #endregion
+#endregion
 
-        #region Getters
+#region Getters
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
@@ -2023,7 +2189,7 @@ namespace NumSharp.Backends
         }
 
 #if _REGEN
-        #region Direct Getters
+#region Direct Getters
      
         %foreach supported_currently_supported,supported_currently_supported_lowercase%
         /// <summary>
@@ -2036,10 +2202,10 @@ namespace NumSharp.Backends
             => _array#1[_shape.GetOffset(indices)];
 
         %
-        #endregion
+#endregion
 #else
 
-        #region Direct Getters
+#region Direct Getters
 
         /// <summary>
         ///     Retrieves value of type <see cref="bool"/> from internal storage.
@@ -2149,11 +2315,11 @@ namespace NumSharp.Backends
         public decimal GetDecimal(params int[] indices)
             => _arrayDecimal[_shape.GetOffset(indices)];
 
-        #endregion
+#endregion
 
 #endif
 
-        #endregion
+#endregion
 
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
