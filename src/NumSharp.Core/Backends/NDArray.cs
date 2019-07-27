@@ -157,6 +157,10 @@ namespace NumSharp
         {
             if (order != 'C')
                 shape.ChangeTensorLayout(order);
+
+            if (shape.IsEmpty)
+                shape = Shape.Vector(values.Count);
+
             Storage.Allocate(values, shape);
         }
 

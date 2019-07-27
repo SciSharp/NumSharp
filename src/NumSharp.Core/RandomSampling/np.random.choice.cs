@@ -33,9 +33,7 @@ namespace NumSharp
         public NDArray choice(int a, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             if (shape.IsEmpty)
-            {
-                shape = new Shape(1);
-            }
+                shape = Shape.Scalar;
 
             NDArray arr = np.arange(a);
             NDArray idx = null;
