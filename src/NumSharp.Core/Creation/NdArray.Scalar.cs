@@ -18,7 +18,7 @@ namespace NumSharp
         /// <param name="dtype">The type of the scalar.</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
-        public static NDArray Scalar(ValueType value, Type dtype)
+        public static NDArray Scalar(object value, Type dtype)
         {
             return new NDArray(UnmanagedStorage.Scalar(Convert.ChangeType(value, dtype)));
         }
@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="value">The value of the scalar</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
-        public static NDArray Scalar(ValueType value)
+        public static NDArray Scalar(object value)
         {
             return new NDArray(UnmanagedStorage.Scalar(value));
         }
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <param name="typeCode">The type code of the scalar.</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
-        public static NDArray Scalar(ValueType value, NPTypeCode typeCode)
+        public static NDArray Scalar(object value, NPTypeCode typeCode)
         {
             return new NDArray(UnmanagedStorage.Scalar(Convert.ChangeType(value, typeCode.AsType())));
         }
