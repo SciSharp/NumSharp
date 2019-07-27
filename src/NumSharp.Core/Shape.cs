@@ -140,7 +140,7 @@ namespace NumSharp
             this.dimensions = (int[])other.dimensions.Clone();
             this.strides = (int[])other.strides.Clone();
             this.IsScalar = other.IsScalar;
-            this.ViewInfo = other.ViewInfo;
+            this.ViewInfo = other.ViewInfo?.Clone();
         }
 
         [MethodImpl((MethodImplOptions)512)]
