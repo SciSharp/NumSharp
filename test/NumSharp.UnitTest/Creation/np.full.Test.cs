@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Creation
         [DataRow(typeof(bool))]
         public void Full_AllTypes(Type dtype)
         {
-            var np1 = np.full(Activator.CreateInstance(dtype), new Shape(3, 3, 3), dtype);
+            var np1 = np.full((ValueType) Activator.CreateInstance(dtype), new Shape(3, 3, 3), dtype);
             np1.dtype.Should().Be(dtype);
             np1.Array.GetIndex(0).GetType().Should().Be(dtype);
         }

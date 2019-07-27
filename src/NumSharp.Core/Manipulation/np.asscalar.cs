@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -12,7 +13,7 @@ namespace NumSharp
         /// <param name="nd">Input NDArray of size 1.</param>
         /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
-        public static T asscalar<T>(NDArray nd)
+        public static T asscalar<T>(NDArray nd) where T : unmanaged
         {
             if (nd.size != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
@@ -44,7 +45,7 @@ namespace NumSharp
         /// <param name="nd">Input NDArray of size 1.</param>
         /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
-        public static object asscalar(NDArray nd)
+        public static ValueType asscalar(NDArray nd)
         {
             if (nd.size != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
@@ -57,11 +58,38 @@ namespace NumSharp
         /// <param name="arr">Input array of size 1.</param>
         /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
-        public static object asscalar(Array arr)
+        public static ValueType asscalar(Array arr)
         {
             if (arr.Length != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
-            return arr.GetValue(0);
+            return (ValueType) arr.GetValue(0);
+        }
+
+        /// <summary>
+        ///     Convert an array of size 1 to its scalar equivalent.
+        /// </summary>
+        /// <param name="arr">Input array of size 1.</param>
+        /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        public static T asscalar<T>(ArraySlice<T> arr) where T : unmanaged
+        {
+            if (arr.Count != 1)
+                throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
+            return arr[0];
+        }
+
+        /// <summary>
+        ///     Convert an array of size 1 to its scalar equivalent.
+        /// </summary>
+        /// <param name="arr">Input array of size 1.</param>
+        /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        public static T asscalar<T>(IArraySlice arr) where T : unmanaged
+        {
+            if (arr.Count != 1)
+                throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
+
+            return (T)Convert.ChangeType(arr[0], typeof(T));
         }
     }
 }
