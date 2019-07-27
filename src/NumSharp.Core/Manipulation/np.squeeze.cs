@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Drawing;
+using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -32,16 +33,15 @@ namespace NumSharp
         public static NDArray squeeze(NDArray a, int axis)
         {
             if (axis < 0)
-                axis = a.ndim + axis;
+                axis = a.ndim + axis; //handle negative axis
 
             if (axis >= a.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            var shape = a.shape;
-            if (shape[axis] != 1)
-                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {shape[axis]} and not 1.");
+            if (a.shape[axis] != 1)
+                throw new IncorrectShapeException($"Unable to squeeze axis {axis} because it is of length {a.shape[axis]} and not 1.");
 
-            return a.reshape(shape.RemoveAt(axis));
+            return a.reshape(squeeze_fast(a.Shape, axis));
         }
 
         /// <summary>
@@ -54,6 +54,34 @@ namespace NumSharp
         {
             //TODO! what will happen if its a slice?
             return new Shape(shape.dimensions.Where(d=>d!=1).ToArray());
+        }
+
+        /// <summary>
+        ///     Remove single-dimensional entries from the shape of an array.
+        /// </summary>
+        /// <param name="a">Input data.</param>
+        /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
+        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static NDArray squeeze_fast(NDArray a, int axis)
+        {
+            return a.reshape(squeeze_fast(a.Shape, axis));
+        }
+
+        /// <summary>
+        ///     Remove single-dimensional entries from the shape of an array.
+        /// </summary>
+        /// <param name="a">Input data.</param>
+        /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
+        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Shape squeeze_fast(Shape a, int axis)
+        {
+            return new Shape(((int[])a.dimensions.Clone()).RemoveAt(axis));
         }
     }
 }
