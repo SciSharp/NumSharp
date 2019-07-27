@@ -238,6 +238,7 @@ namespace NumSharp
         /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
         /// <returns>The transformed offset.</returns>
         /// <remarks>Avoid using unless it is unclear if shape is sliced or not.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
@@ -537,7 +538,7 @@ namespace NumSharp
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
 
-            var slices = new List<SliceDef>();
+            var slices = new List<SliceDef>(16);
             var sliced_axes_unreduced = new List<int>();
             for (int i = 0; i < NDim; i++)
             {
