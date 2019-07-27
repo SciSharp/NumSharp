@@ -787,12 +787,22 @@ namespace NumSharp
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>
-        object ICloneable.Clone() => Clone(true);
+        object ICloneable.Clone() => Clone(true, false);
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
-        public Shape Clone(bool deep = true) => deep ? new Shape(this) : this;
+        public Shape Clone(bool deep = true, bool unview = false)
+        {
+            if (!deep && !unview)
+                return this; //basic struct reassign
+
+            var ret = deep ? new Shape(this) : (Shape)MemberwiseClone();
+            if (unview)
+                ret.ViewInfo = null;
+
+            return ret;
+        }
     }
 }
