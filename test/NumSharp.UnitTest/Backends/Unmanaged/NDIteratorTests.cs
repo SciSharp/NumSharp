@@ -31,7 +31,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var sh = new NDIterator<int>(nd, true);
             int acc = 0;
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
-                Console.WriteLine(acc += sh.MoveNext());
+            {
+                var val = sh.MoveNext();
+                Console.WriteLine((acc += val) + " | " + val);
+            }
 
             acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
         }

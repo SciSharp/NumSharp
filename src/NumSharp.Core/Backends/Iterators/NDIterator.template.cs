@@ -179,8 +179,15 @@ namespace NumSharp.Backends
                     case IteratorType.Vector:
                         {
                             var size = Shape.size;
-                            MoveNext = () => convert(*((__1__*)localBlock.Address + shape.GetOffset(index >= size ? index = 0 : index++)));
+                            MoveNext = () =>
+                            {
+                                var ret = convert(*((__1__*)localBlock.Address + shape.GetOffset(index++)));
+                                if (index >= size)
+                                    index = 0;
+                                return ret;
+                            };
                             MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
+
                             Reset = () => index = 0;
                             HasNext = () => true;
                             break;
@@ -221,7 +228,13 @@ namespace NumSharp.Backends
                         break;
                     case IteratorType.Vector:
                         var size = Shape.size;
-                        MoveNext = () => convert(*((__1__*)localBlock.Address + (index >= size ? index = 0 : index++)));
+                        MoveNext = () =>
+                        {
+                            var ret = convert(*((__1__*)localBlock.Address + index++));
+                            if (index >= size)
+                                index = 0;
+                            return ret;
+                        };
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => index = 0;
                         HasNext = () => true;

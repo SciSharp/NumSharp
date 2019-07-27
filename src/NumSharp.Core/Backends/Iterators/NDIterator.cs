@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -273,9 +274,21 @@ namespace NumSharp.Backends
                     case IteratorType.Vector:
                     {
                         var size = Shape.size;
-                        MoveNext = () => *((TOut*)localBlock.Address + shape.GetOffset(index >= size ? index = 0 : index++));
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + shape.GetOffset(index >= size ? index = 0 : index++));
-                        Reset = () => index = 0;
+                        MoveNext = () =>
+                        {
+                            var ret = *((TOut*)localBlock.Address + shape.GetOffset(index++));
+                            if (index >= size)
+                                index = 0;
+                            return ret;
+                        };
+                        MoveNextReference = () =>
+                        {
+                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + shape.GetOffset(index++));
+                            if (index >= size)
+                                index = 0;
+                            return ref ret;
+                        };
+                            Reset = () => index = 0;
                         HasNext = () => true;
                         break;
                     }
@@ -320,8 +333,20 @@ namespace NumSharp.Backends
                         break;
                     case IteratorType.Vector:
                         var size = Shape.size;
-                        MoveNext = () => *((TOut*)localBlock.Address + (index >= size ? index = 0 : index++));
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + (index >= size ? index = 0 : index++));
+                        MoveNext = () =>
+                        {
+                            var ret = *((TOut*)localBlock.Address + (index++));
+                            if (index >= size)
+                                index = 0;
+                            return ret;
+                        };
+                        MoveNextReference = () =>
+                        {
+                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + (index++));
+                            if (index >= size)
+                                index = 0;
+                            return ref ret;
+                        };
                         Reset = () => index = 0;
                         HasNext = () => true;
                         break;
