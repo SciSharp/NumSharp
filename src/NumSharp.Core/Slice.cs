@@ -56,12 +56,12 @@ namespace NumSharp
     {
         public static readonly Slice All = new Slice(null, null);
 
-        public static readonly Slice None = Index(0);
+        public static readonly Slice None = new Slice(0, 0, 1);
 
-        public int? Start { get; set; }
-        public int? Stop { get; set; }
-        public int Step { get; set; } = 1;
-        public bool IsIndex { get; set; }
+        public int? Start;
+        public int? Stop;
+        public int Step;
+        public bool IsIndex;
 
         /// <summary>
         /// Length of the slice. 
@@ -160,10 +160,12 @@ namespace NumSharp
 
         public static bool operator ==(Slice a, Slice b)
         {
-            if (a == null && b == null)
+            if (ReferenceEquals(a, b))
                 return true;
-            if (b is null) return false;
-            if (a is null) return false;
+
+            if (a == null || b == null)
+                return false;
+
             return a.Start == b.Start && a.Stop == b.Stop && a.Step == b.Step;
         }
 
@@ -176,11 +178,12 @@ namespace NumSharp
         {
             if (obj == null)
                 return false;
+
             if (obj.GetType() != typeof(Slice))
                 return false;
-            var a = this;
+
             var b = (Slice)obj;
-            return a.Start == b.Start && a.Stop == b.Stop && a.Step == b.Step;
+            return Start == b.Start && Stop == b.Stop && Step == b.Step;
         }
 
         public override int GetHashCode()
@@ -189,11 +192,9 @@ namespace NumSharp
         }
 
         #endregion
-        
-        public static Slice Index(int index)
-        {
-            return new Slice(index, index + 1) { IsIndex = true };
-        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Slice Index(int index) => new Slice(index, index + 1) {IsIndex = true};
 
         public override string ToString()
         {
@@ -259,16 +260,16 @@ namespace NumSharp
         public SliceDef ToSliceDef(int dim)
         {
             if (IsIndex)
-                return new SliceDef(Start??0);
+                return new SliceDef(Start ?? 0);
             if (Step == 0)
-                return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                return new SliceDef() {Count = 0, Start = 0, Step = 0};
             var astep = Math.Abs(Step);
             if (Step > 0)
             {
                 var start = Start ?? 0;
                 var stop = Stop ?? dim;
                 if (start >= dim)
-                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                    return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 if (start < 0)
                     start = Math.Abs(start) <= dim ? dim + start : 0;
                 if (stop > dim)
@@ -276,25 +277,25 @@ namespace NumSharp
                 if (stop < 0)
                     stop = Math.Abs(stop) <= dim ? dim + stop : 0;
                 if (start >= stop)
-                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                    return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
-                return new SliceDef() { Start = start, Step = Step, Count = count };
+                return new SliceDef() {Start = start, Step = Step, Count = count};
             }
             else
             {
                 // negative step!
-                var start = Start ?? dim-1;
+                var start = Start ?? dim - 1;
                 var stop = Stop ?? -1;
                 if (start < 0)
                     start = Math.Abs(start) <= dim ? dim + start : 0;
                 if (start >= dim)
-                    start = dim-1;
+                    start = dim - 1;
                 if (Stop < 0)
                     stop = Math.Abs(stop) <= dim ? dim + stop : -1;
                 if (start <= stop)
-                    return new SliceDef() { Count = 0, Start = 0, Step = 0 };
+                    return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
-                var retval= new SliceDef() { Start = start, Step = Step, Count = count };
+                var retval = new SliceDef() {Start = start, Step = Step, Count = count};
                 return retval;
             }
         }
@@ -330,6 +331,7 @@ namespace NumSharp
                 (Start, Step, Count) = (0, 0, 0);
                 return;
             }
+
             var m = Regex.Match(def, @"\((\d+)>>(-?\d+)\*(\d+)\)");
             Start = int.Parse(m.Groups[1].Value);
             Step = int.Parse(m.Groups[2].Value);
@@ -338,8 +340,7 @@ namespace NumSharp
 
         public bool IsIndex
         {
-            [MethodImpl((MethodImplOptions)768)]
-            get => Count == -1;
+            [MethodImpl((MethodImplOptions)768)] get => Count == -1;
         }
 
         /// <summary>
@@ -349,7 +350,7 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public SliceDef Invert()
         {
-            return new SliceDef() { Count = Count, Start = (Start + Step * Count), Step = -Step };
+            return new SliceDef() {Count = Count, Start = (Start + Step * Count), Step = -Step};
         }
 
         public override string ToString()
@@ -368,16 +369,11 @@ namespace NumSharp
         public SliceDef Merge(SliceDef other)
         {
             if (other.Count == 0)
-                return new SliceDef() { Start = 0, Step = 0, Count = 0 };
+                return new SliceDef() {Start = 0, Step = 0, Count = 0};
             var self = this;
             if (other.IsIndex)
                 return new SliceDef(self.Start + other.Start * self.Step);
-            var result= new SliceDef()
-            {
-                Start = self.Start + other.Start * self.Step,
-                Step = Step * other.Step,
-                Count = other.Count,
-            };
+            var result = new SliceDef() {Start = self.Start + other.Start * self.Step, Step = Step * other.Step, Count = other.Count,};
             return result;
         }
     }
