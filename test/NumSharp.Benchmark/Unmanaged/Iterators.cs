@@ -1,6 +1,7 @@
 ﻿using System.Linq;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Memory.Pooling;
 using NumSharp.Utilities;

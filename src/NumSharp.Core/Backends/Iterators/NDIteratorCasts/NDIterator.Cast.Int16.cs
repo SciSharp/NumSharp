@@ -2,11 +2,10 @@
 //template source: C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\Backends\Unmanaged\Iterators\CastingNDIterator.template.cs
 
 using System;
-using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Backends
 {
     public unsafe partial class NDIterator<TOut>
     {

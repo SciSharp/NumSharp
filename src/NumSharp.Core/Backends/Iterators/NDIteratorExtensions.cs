@@ -1,6 +1,7 @@
 ﻿using System;
+using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Backends
 {
     public static class NDIteratorExtensions
     {

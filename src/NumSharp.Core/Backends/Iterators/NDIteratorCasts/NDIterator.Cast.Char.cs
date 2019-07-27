@@ -2,29 +2,28 @@
 //template source: C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\Backends\Unmanaged\Iterators\CastingNDIterator.template.cs
 
 using System;
-using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Backends
 {
     public unsafe partial class NDIterator<TOut>
     {
-        protected void setDefaults_UInt64() //UInt64 is the input type
+        protected void setDefaults_Char() //Char is the input type
         {
             if (AutoReset)
             {
-                autoresetDefault_UInt64();
+                autoresetDefault_Char();
                 return;
             }
 
-            if (typeof(TOut) == typeof(UInt64))
+            if (typeof(TOut) == typeof(Char))
             {
                 setDefaults_NoCast();
                 return;
             }
 
-            var convert = Converts.FindConverter<UInt64, TOut>();
+            var convert = Converts.FindConverter<Char, TOut>();
 
             //non auto-resetting.
             var localBlock = Block;
@@ -44,7 +43,7 @@ namespace NumSharp.Backends.Unmanaged
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
-                                    return convert(*((UInt64*)localBlock.Address + offset));
+                                    return convert(*((Char*)localBlock.Address + offset));
                                 };
                                 MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             }
@@ -53,7 +52,7 @@ namespace NumSharp.Backends.Unmanaged
                                 MoveNext = () =>
                                 {
                                     hasNext.Value = false;
-                                    return convert(*((UInt64*)localBlock.Address));
+                                    return convert(*((Char*)localBlock.Address));
                                 };
                                 MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             }
@@ -65,7 +64,7 @@ namespace NumSharp.Backends.Unmanaged
 
                     case IteratorType.Vector:
                         {
-                            MoveNext = () => convert(*((UInt64*)localBlock.Address + shape.GetOffset(index++)));
+                            MoveNext = () => convert(*((Char*)localBlock.Address + shape.GetOffset(index++)));
                             MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             Reset = () => index = 0;
                             HasNext = () => index < Shape.size;
@@ -82,7 +81,7 @@ namespace NumSharp.Backends.Unmanaged
 
                             MoveNext = () =>
                             {
-                                var ret = convert(*((UInt64*)localBlock.Address + getOffset(index)));
+                                var ret = convert(*((Char*)localBlock.Address + getOffset(index)));
                                 iterator.Next();
                                 return ret;
                             };
@@ -112,7 +111,7 @@ namespace NumSharp.Backends.Unmanaged
                         MoveNext = () =>
                         {
                             hasNext.Value = false;
-                            return convert(*((UInt64*)localBlock.Address));
+                            return convert(*((Char*)localBlock.Address));
                         };
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => hasNext.Value = true;
@@ -120,7 +119,7 @@ namespace NumSharp.Backends.Unmanaged
                         break;
 
                     case IteratorType.Vector:
-                        MoveNext = () => convert(*((UInt64*)localBlock.Address + index++));
+                        MoveNext = () => convert(*((Char*)localBlock.Address + index++));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => index = 0;
                         HasNext = () => index < Shape.size;
@@ -129,7 +128,7 @@ namespace NumSharp.Backends.Unmanaged
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
                         var iterator = new NDOffsetIncrementor(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () => convert(*((UInt64*)localBlock.Address + iterator.Next()));
+                        MoveNext = () => convert(*((Char*)localBlock.Address + iterator.Next()));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => iterator.Reset();
                         HasNext = () => iterator.HasNext;
@@ -140,9 +139,9 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        protected void autoresetDefault_UInt64()
+        protected void autoresetDefault_Char()
         {
-            if (typeof(TOut) == typeof(UInt64))
+            if (typeof(TOut) == typeof(Char))
             {
                 autoresetDefault_NoCast();
                 return;
@@ -150,7 +149,7 @@ namespace NumSharp.Backends.Unmanaged
 
             var localBlock = Block;
             Shape shape = Shape;
-            var convert = Converts.FindConverter<UInt64, TOut>();
+            var convert = Converts.FindConverter<Char, TOut>();
 
             if (Shape.IsSliced)
             {
@@ -162,12 +161,12 @@ namespace NumSharp.Backends.Unmanaged
                             var offset = shape.TransformOffset(0);
                             if (offset != 0)
                             {
-                                MoveNext = () => convert(*((UInt64*)localBlock.Address + offset));
+                                MoveNext = () => convert(*((Char*)localBlock.Address + offset));
                                 MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             }
                             else
                             {
-                                MoveNext = () => convert(*((UInt64*)localBlock.Address));
+                                MoveNext = () => convert(*((Char*)localBlock.Address));
                                 MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             }
 
@@ -179,7 +178,7 @@ namespace NumSharp.Backends.Unmanaged
                     case IteratorType.Vector:
                         {
                             var size = Shape.size;
-                            MoveNext = () => convert(*((UInt64*)localBlock.Address + shape.GetOffset(index >= size ? index = 0 : index++)));
+                            MoveNext = () => convert(*((Char*)localBlock.Address + shape.GetOffset(index >= size ? index = 0 : index++)));
                             MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                             Reset = () => index = 0;
                             HasNext = () => true;
@@ -194,7 +193,7 @@ namespace NumSharp.Backends.Unmanaged
                             Func<int[], int> getOffset = shape.GetOffset;
                             MoveNext = () =>
                             {
-                                var ret = convert(*((UInt64*)localBlock.Address + getOffset(index)));
+                                var ret = convert(*((Char*)localBlock.Address + getOffset(index)));
                                 iterator.Next();
                                 return ret;
                             };
@@ -214,14 +213,14 @@ namespace NumSharp.Backends.Unmanaged
                 switch (Type)
                 {
                     case IteratorType.Scalar:
-                        MoveNext = () => convert(*(UInt64*)localBlock.Address);
+                        MoveNext = () => convert(*(Char*)localBlock.Address);
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => { };
                         HasNext = () => true;
                         break;
                     case IteratorType.Vector:
                         var size = Shape.size;
-                        MoveNext = () => convert(*((UInt64*)localBlock.Address + (index >= size ? index = 0 : index++)));
+                        MoveNext = () => convert(*((Char*)localBlock.Address + (index >= size ? index = 0 : index++)));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => index = 0;
                         HasNext = () => true;
@@ -229,7 +228,7 @@ namespace NumSharp.Backends.Unmanaged
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
                         var iterator = new NDOffsetIncrementorAutoresetting(Shape.dimensions, Shape.strides); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () => convert(*((UInt64*)localBlock.Address + iterator.Next()));
+                        MoveNext = () => convert(*((Char*)localBlock.Address + iterator.Next()));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         HasNext = () => true;
                         break;

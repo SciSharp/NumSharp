@@ -1,4 +1,4 @@
-﻿namespace NumSharp.Backends.Unmanaged {
+﻿namespace NumSharp.Backends {
     public enum IteratorStopAt
     {
         /// <summary>

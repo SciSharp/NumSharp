@@ -82,7 +82,7 @@
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
-    <Compile Remove="Backends\Unmanaged\Iterators\NDIterator.template.cs" />
+    <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
     <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
     <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
     <Compile Remove="Operations\NdArray.ElementsWise.cs" />
@@ -108,7 +108,7 @@
 
   <ItemGroup>
     <None Include="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
-    <None Include="Backends\Unmanaged\Iterators\NDIterator.template.cs" />
+    <None Include="Backends\Iterators\NDIterator.template.cs" />
     <None Include="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
     <None Include="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
   </ItemGroup>

@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Backends
 {
     public delegate ref T MoveNextReferencedDelegate<T>() where T : unmanaged;
 

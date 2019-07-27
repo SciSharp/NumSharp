@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Backends
 {
     public static class MultiIterator
     {
