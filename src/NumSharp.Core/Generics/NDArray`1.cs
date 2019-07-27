@@ -92,9 +92,8 @@ namespace NumSharp.Generic
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
-            var underlying = values.ResolveElementType();
-            if (underlying != typeof(T))
-                throw new ArgumentException($"Array type must be the same as T. {underlying.Name} != {typeof(T).Name}", nameof(values));
+            if (dtype != typeof(T))
+                throw new ArgumentException($"Array type must be the same as T. {dtype.Name} != {typeof(T).Name}", nameof(values));
         }
 
         /// <summary>
