@@ -137,7 +137,7 @@ namespace NumSharp
         {
             if (order != 'C')
                 shape.ChangeTensorLayout(order);
-            
+
             if (shape.IsEmpty)
                 shape = Shape.ExtractShape(values);
 
@@ -307,7 +307,6 @@ namespace NumSharp
         /// </summary>
         internal UnmanagedStorage Storage;
 
-
         /// <summary>
         ///     The tensor engine that handles this <see cref="NDArray"/>.
         /// </summary>
@@ -325,126 +324,6 @@ namespace NumSharp
         public ArraySlice<T> Data<T>() where T : unmanaged
         {
             return Storage.GetData<T>();
-        }
-
-        /// <summary>
-        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
-        public void SetData(IArraySlice value, params int[] indices)
-        {
-            Storage.SetData(value, indices);
-        }
-
-        /// <summary>
-        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
-        public void SetData(NDArray value, params int[] indices)
-        {
-            Storage.SetData(value, indices);
-        }
-
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
-        public void SetData(ValueType value, params int[] indices)
-        {
-            Storage.SetData(value, indices);
-        }
-
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
-        public void SetData<T>(T value, params int[] indices) where T : unmanaged
-        {
-            Storage.SetData<T>(value, indices);
-        }
-
-        /// <summary>
-        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="dtype"/> and casts <see cref="values"/> if necessary.
-        /// </summary>
-        /// <param name="values">The values to set as internal data soruce</param>
-        /// <param name="dtype">The type to change this storage to and the type to cast <see cref="values"/> if necessary.</param>
-        /// <remarks>Does not copy values unless cast is necessary.</remarks>
-        // ReSharper disable once ParameterHidesMember
-        public void ReplaceData(Array values, Type dtype)
-        {
-            Storage.ReplaceData(values, dtype);
-        }
-
-        /// <summary>
-        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="values"/> type.
-        /// </summary>
-        /// <param name="values"></param>
-        /// <remarks>Does not copy values.</remarks>
-        public void ReplaceData(Array values)
-        {
-            Storage.ReplaceData(values);
-        }
-
-        /// <summary>
-        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
-        /// </summary>
-        /// <param name="nd"></param>
-        /// <remarks>Does not copy values and does change shape and dtype.</remarks>
-        public void ReplaceData(NDArray nd)
-        {
-            Storage.ReplaceData(nd);
-        }
-
-        /// <summary>
-        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
-        /// </summary>
-        /// <param name="values"></param>
-        /// <param name="typeCode"></param>
-        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape.</remarks>
-        public void ReplaceData(Array values, NPTypeCode typeCode)
-        {
-            Storage.ReplaceData(values, typeCode);
-        }
-
-        /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
-        /// </summary>
-        /// <param name="values"></param>
-        /// <param name="dtype"></param>
-        /// <remarks>Does not copy values and doesn't change shape.</remarks>
-        public void ReplaceData(IArraySlice values, Type dtype)
-        {
-            Storage.ReplaceData(values, dtype);
-        }
-
-        /// <summary>
-        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
-        /// </summary>
-        /// <param name="values"></param>
-        /// <remarks>Does not copy values and doesn't change shape.</remarks>
-        public void ReplaceData(IArraySlice values)
-        {
-            Storage.ReplaceData(values);
         }
 
         /// <summary>
@@ -514,24 +393,27 @@ namespace NumSharp
 #else
 
             #region Compute
-		    switch (GetTypeCode)
-		    {
-			    case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
-			    case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
-			    case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
-			    case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
-			    case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
-			    case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
-			    case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
-			    case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
-			    case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
-			    case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
-			    case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
-			    case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
-			    default:
-				    throw new NotSupportedException();
-		    }
+
+            switch (GetTypeCode)
+            {
+                case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
+                case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
+                case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
+                case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
+                case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
+                case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
+                case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
+                case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
+                case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
+                case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
+                case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
+                case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
+                default:
+                    throw new NotSupportedException();
+            }
+
             #endregion
+
 #endif
 
             IEnumerable _empty()
@@ -552,7 +434,7 @@ namespace NumSharp
         public NDArray view(Type dtype = null)
         {
             //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
-            return dtype==null ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
+            return dtype == null ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
         }
 
         #region Getters
@@ -711,6 +593,131 @@ namespace NumSharp
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T GetAtIndex<T>(int index) where T : unmanaged => Storage.GetAtIndex<T>(index);
+
+        #endregion
+
+        #region Setters
+
+        /// <summary>
+        ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(IArraySlice value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a <see cref="NDArray"/> at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(NDArray value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData(ValueType value, params int[] indices)
+        {
+            Storage.SetData(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetData<T>(T value, params int[] indices) where T : unmanaged
+        {
+            Storage.SetData<T>(value, indices);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="dtype"/> and casts <see cref="values"/> if necessary.
+        /// </summary>
+        /// <param name="values">The values to set as internal data soruce</param>
+        /// <param name="dtype">The type to change this storage to and the type to cast <see cref="values"/> if necessary.</param>
+        /// <remarks>Does not copy values unless cast is necessary.</remarks>
+        // ReSharper disable once ParameterHidesMember
+        public void ReplaceData(Array values, Type dtype)
+        {
+            Storage.ReplaceData(values, dtype);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data storage and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Does not copy values.</remarks>
+        public void ReplaceData(Array values)
+        {
+            Storage.ReplaceData(values);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="nd"/> as the internal data storage and changes the internal storage data type to <see cref="nd"/> type.
+        /// </summary>
+        /// <param name="nd"></param>
+        /// <remarks>Does not copy values and does change shape and dtype.</remarks>
+        public void ReplaceData(NDArray nd)
+        {
+            Storage.ReplaceData(nd);
+        }
+
+        /// <summary>
+        ///     Set an Array to internal storage, cast it to new dtype and if necessary change dtype  
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="typeCode"></param>
+        /// <remarks>Does not copy values unless cast is necessary and doesn't change shape.</remarks>
+        public void ReplaceData(Array values, NPTypeCode typeCode)
+        {
+            Storage.ReplaceData(values, typeCode);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="dtype"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        public void ReplaceData(IArraySlice values, Type dtype)
+        {
+            Storage.ReplaceData(values, dtype);
+        }
+
+        /// <summary>
+        ///     Sets <see cref="values"/> as the internal data source and changes the internal storage data type to <see cref="values"/> type.
+        /// </summary>
+        /// <param name="values"></param>
+        /// <remarks>Does not copy values and doesn't change shape.</remarks>
+        public void ReplaceData(IArraySlice values)
+        {
+            Storage.ReplaceData(values);
+        }
+
 
         /// <summary>
         ///     Retrieves value of 
