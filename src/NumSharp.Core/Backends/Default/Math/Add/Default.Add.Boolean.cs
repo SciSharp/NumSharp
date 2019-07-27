@@ -35,7 +35,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) %(op_bool) *((bool*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) %(op_bool) *((bool*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -204,7 +204,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (#2) 1 : (#2) 0 #(op) *((#2*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (#2) 1 : (#2) 0 #(op) *((#2*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -377,7 +377,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) | *((bool*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) | *((bool*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -545,7 +545,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (byte) 1 : (byte) 0 + *((byte*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (byte) 1 : (byte) 0 + *((byte*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -713,7 +713,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (short) 1 : (short) 0 + *((short*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (short) 1 : (short) 0 + *((short*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -881,7 +881,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (ushort) 1 : (ushort) 0 + *((ushort*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (ushort) 1 : (ushort) 0 + *((ushort*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1049,7 +1049,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (int) 1 : (int) 0 + *((int*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (int) 1 : (int) 0 + *((int*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1217,7 +1217,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (uint) 1 : (uint) 0 + *((uint*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (uint) 1 : (uint) 0 + *((uint*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1385,7 +1385,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (long) 1 : (long) 0 + *((long*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (long) 1 : (long) 0 + *((long*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1553,7 +1553,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (ulong) 1 : (ulong) 0 + *((ulong*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (ulong) 1 : (ulong) 0 + *((ulong*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1721,7 +1721,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (char) 1 : (char) 0 + *((char*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (char) 1 : (char) 0 + *((char*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -1889,7 +1889,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (double) 1 : (double) 0 + *((double*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (double) 1 : (double) 0 + *((double*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -2057,7 +2057,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (float) 1 : (float) 0 + *((float*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (float) 1 : (float) 0 + *((float*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;
@@ -2225,7 +2225,7 @@ namespace NumSharp.Backends
                     var ret_type = np._FindCommonType(lhs, rhs);
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                     {
-                        return NDArray.Scalar(Convert.ChangeType(*((bool*)lhs.Address) ? (decimal) 1 : (decimal) 0 + *((decimal*)rhs.Address), (TypeCode)ret_type));
+                        return NDArray.Scalar((ValueType)Convert.ChangeType(*((bool*)lhs.Address) ? (decimal) 1 : (decimal) 0 + *((decimal*)rhs.Address), (TypeCode)ret_type));
                     }
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (bool*)lhs.Address;

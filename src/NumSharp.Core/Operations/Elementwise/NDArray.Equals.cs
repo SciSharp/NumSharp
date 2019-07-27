@@ -35,7 +35,7 @@ namespace NumSharp
                 if (left.Shape.IsEmpty || left.size == 0)
                     return Scalar<bool>(false).MakeGeneric<bool>();
 
-                return left.TensorEngine.Compare(left, Scalar(right));
+                return left.TensorEngine.Compare(left, Scalar((ValueType)right));
             }
 
             if (right is NDArray rarr)

@@ -15,6 +15,7 @@ namespace NumSharp
         /// <remarks><br></br>If this array's <see cref="Shape"/> is a slice, the a copy will be made.</remarks>
         public static NDArray ravel(NDArray a)
         {
+            //TODO! when slice reshaping is done, prevent this cloning.
             // ReSharper disable once ConvertIfStatementToReturnStatement
             if (a.Shape.IsSliced)
                 return new NDArray(new UnmanagedStorage(a.Storage.CloneData(), Shape.Vector(a.size)));
