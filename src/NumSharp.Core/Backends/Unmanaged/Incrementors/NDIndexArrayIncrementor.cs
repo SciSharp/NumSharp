@@ -68,6 +68,8 @@ namespace NumSharp.Backends.Unmanaged
                     {
                         //TODO somehow can we skip all ones?
                         endCallback?.Invoke(this);
+                        if (subcursor >= 0) //if callback has resetted it
+                            return Index;
                         return null;
                     }
                 } while (dimensions[subcursor] <= 1);
@@ -134,7 +136,7 @@ namespace NumSharp.Backends.Unmanaged
                     {
                         //TODO somehow can we skip all ones?
                         Reset();
-                        return Next(); //finished
+                        return Index; //finished
                     }
                 } while (dimensions[subcursor] <= 1);
 

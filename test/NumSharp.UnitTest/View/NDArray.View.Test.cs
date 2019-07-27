@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 
@@ -506,7 +507,38 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] {7, 6}, view2.ToArray<int>());
         }
 
+        [TestMethod]
+        public void SlicingToScalar()
+        {
+            //numpy code:
+            //lhs = np.full((6, 3, 3), 5, np.int32)
+            //lhs = lhs[::2,:,:]
+            //slice = lhs[1, 1, 2]
+            //print(slice)
+            //print(slice.shape)
+            //print(slice.ndim == 0)
 
+            //outputs:
+            //5
+            //()
+            //True
+
+            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            lhs = lhs["::2,:,:"];
+            var slice = lhs.Storage.GetData(1, 1, 2);
+            slice.Count.Should().Be(1);
+            slice.Shape.IsScalar.Should().BeTrue();
+            slice.Shape.IsSliced.Should().BeTrue("Slicing should occurs only when lhs is already sliced.");
+        }
+
+        [TestMethod]
+        public void SliceSelectsAll()
+        {
+            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var sliced = lhs[":"];
+
+            ReferenceEquals(lhs.Storage, sliced.Storage).Should().BeTrue("When slice selects all values, it shouldn't return a view but a new wrapper for Storage");
+        }
 
     }
 }

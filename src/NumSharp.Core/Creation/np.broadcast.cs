@@ -22,7 +22,7 @@ namespace NumSharp
         {
             //It shouldn't be used unless it is a very advanced code...
             public int index => throw new NotSupportedException("NumSharp does not implement iterators like numpy does.");
-            public NDIterator<int> iters => throw new NotSupportedException("NumSharp does not implement iterators like numpy does.");
+            public NDIterator iters => throw new NotSupportedException("NumSharp does not implement iterators like numpy does.");
 
             public int nd
             {

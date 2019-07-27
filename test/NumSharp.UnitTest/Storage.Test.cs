@@ -52,11 +52,11 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void IndexingCheck()
         {
-            var element1D = strg1D.GetData<double>(0);
+            var element1D = strg1D.GetValue<double>(0);
             Assert.IsTrue(element1D == 0);
             for (int idx = 1; idx < 10; idx++)
             {
-                element1D = strg1D.GetData<double>(idx);
+                element1D = strg1D.GetValue<double>(idx);
                 Assert.IsTrue(element1D == idx);
             }
         }

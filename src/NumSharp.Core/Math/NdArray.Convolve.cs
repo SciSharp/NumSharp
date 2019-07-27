@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -16,119 +18,153 @@ namespace NumSharp
         /// 
         /// If v is longer than a, the arrays are swapped before computation.
         /// </summary>
-        /// <param name="numSharpArray2"></param>
+        /// <param name="rhs"></param>
         /// <param name="mode"></param>
         /// <returns></returns>
-        public NDArray convolve(NDArray numSharpArray2, string mode = "full")
+        public NDArray convolve(NDArray rhs, string mode = "full")
         {
+            var lhs = this;
+            int nf = lhs.shape[0];
+            int ng = rhs.shape[0];
+
+            if (ndim > 1 || rhs.ndim > 1)
+                throw new IncorrectShapeException();
+            var retType = np._FindCommonType(lhs, rhs);
             return null;
-            //int nf = this.shape[0];
-            //int ng = numSharpArray2.shape[0];
+#if _REGEN
+            #region Output
+            %mod = "%"
+            switch (lhs.GetTypeCode)
+            {
+	            %foreach supported_numericals,supported_numericals_lowercase%
+	            case NPTypeCode.#1:
+	            {
+                    ArraySlice<#2> lhsarr = lhs.Storage.GetData<#2>();
+		            switch (rhs.GetTypeCode)
+                    {
+	                    %foreach supported_numericals,supported_numericals_lowercase%
+	                    case NPTypeCode.#101: 
+                        {
+                            ArraySlice<#102> rhsarr = rhs.Storage.GetData<#102>();
+	                        %foreach supported_numericals,supported_numericals_lowercase%
+		                    switch (retType)
+                            {
+                                case NPTypeCode.#201:
+                                {
+            #region Compute
+                                    switch (mode.ToLowerInvariant())
+                                    {
+                    
+                                        case "full":
+                                        {
+                                            int n = nf + ng - 1;
 
-            //if (ndim > 1)
-            //    throw new IncorrectShapeException();
+                                            var ret = new NDArray<#201>(Shape.Vector(n), true);
+                                            var outArray = (ArraySlice<#202>)ret.Array;
 
-            //var numSharpReturn = new NDArray(typeof(double));
+                                            for (int idx = 0; idx < n; ++idx)
+                                            {
+                                                int jmn = (idx >= ng - 1) ? (idx - (ng - 1)) : 0;
+                                                int jmx = (idx < nf - 1) ? idx : nf - 1;
 
-            //double[] np1 = this.Storage.GetData<double>();
-            //double[] np2 = numSharpArray2.Storage.GetData<double>();
+                                                for (int jdx = jmn; jdx <= jmx; ++jdx)
+                                                {
+                                                    outArray[idx] += Convert.To#201(lhsarr[jdx] * rhsarr[idx - jdx]);
+                                                }
+                                            }
 
-            //switch (mode)
-            //{
-            //    case "full":
-            //    {
-            //        int n = nf + ng - 1;
+                                            return ret;
+                                        }
 
-            //        var outArray = new double[n];
+                                        case "valid":
+                                        {
+                                            var min_v = (nf < ng) ? lhsarr : rhsarr;
+                                            var max_v = (nf < ng) ? rhsarr : lhsarr;
 
-            //        for (int idx = 0; idx < n; ++idx)
-            //        {
-            //            int jmn = (idx >= ng - 1) ? (idx - (ng - 1)) : 0;
-            //            int jmx = (idx < nf - 1) ? idx : nf - 1;
+                                            int n = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
 
-            //            for (int jdx = jmn; jdx <= jmx; ++jdx)
-            //            {
-            //                outArray[idx] += (np1[jdx] * np2[idx - jdx]);
-            //            }
-            //        }
+                                            var ret = new NDArray(retType, Shape.Vector(n), true);
+                                            var outArray = (ArraySlice<#202>)ret.Array;
 
-            //        numSharpReturn.Storage = numSharpReturn.TensorEngine.GetStorage(numSharpReturn.dtype);
-            //        numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
-            //        numSharpReturn.Storage.ReplaceData(outArray);
+                                            for (int idx = 0; idx < n; ++idx)
+                                            {
+                                                int kdx = idx;
 
-            //        break;
-            //    }
+                                                for (int jdx = (min_v.Count - 1); jdx >= 0; --jdx)
+                                                {
+                                                    outArray[idx] += Convert.To#202(min_v[jdx] * max_v[kdx]);
+                                                    ++kdx;
+                                                }
+                                            }
 
-            //    case "valid":
-            //    {
-            //        var min_v = (nf < ng) ? np1 : np2;
-            //        var max_v = (nf < ng) ? np2 : np1;
+                                            return ret;
+                                        }
 
-            //        int n = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
+                                        case "same":
+                                        {
+                                            // followed the discussion on 
+                                            // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
+                                            // implemented numpy convolve because we follow numpy
+                                            var npad = rhs.shape[0] - 1;
 
-            //        double[] outArray = new double[n];
+                                            if (npad #(mod) 2 == 1)
+                                            {
+                                                unsafe
+                                                {
+                                                    npad = (int)Math.Floor(((double)npad) / 2.0);
 
-            //        for (int idx = 0; idx < n; ++idx)
-            //        {
-            //            int kdx = idx;
+                                                    var arr = ArraySlice<#202>.Allocate(npad + lhsarr.Count);
+                                                    lhsarr.CopyTo(arr.AsSpan, npad);
+                                                    var retnd = new NDArray(new UnmanagedStorage(arr, Shape.Vector(lhsarr.Count)));
 
-            //            for (int jdx = (min_v.Length - 1); jdx >= 0; --jdx)
-            //            {
-            //                outArray[idx] += min_v[jdx] * max_v[kdx];
-            //                ++kdx;
-            //            }
-            //        }
+                                                    return retnd.convolve(rhs, "valid");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                {
+                                                    unsafe
+                                                    {
+                                                        npad = npad / 2;
 
-            //        numSharpReturn.Storage = numSharpReturn.TensorEngine.GetStorage(numSharpReturn.dtype);
-            //        numSharpReturn.Storage.Allocate(new Shape(outArray.Length));
-            //        numSharpReturn.Storage.ReplaceData(outArray);
+                                                        var puffer = new NDArray(retType, Shape.Vector(npad + lhsarr.Count), true);
+                                                        lhsarr.CopyTo(puffer.Storage.AsSpan<#202>(), npad);
+                                                        var np1New = puffer;
 
-            //        break;
-            //    }
+                                                        puffer = new NDArray(retType, Shape.Vector(npad + np1New.size), true);
+                                                        var cpylen = np1New.size * sizeof(#202);
+                                                        Buffer.MemoryCopy(np1New.Address, ((#202*)puffer.Address) + npad, cpylen, cpylen);
 
-            //    case "same":
-            //    {
-            //        // followed the discussion on 
-            //        // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
-            //        // implemented numpy convolve because we follow numpy
-            //        var npad = numSharpArray2.shape[0] - 1;
+                                                        return puffer.convolve(rhs, "valid");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        default:
+                                            throw new ArgumentOutOfRangeException(nameof(mode));
+                                    }
+            #endregion
+                                }
+                            }
 
-            //        double[] np1New = null;
+                            %
+                            break;
+                        }
+                        %
+                    }
+                    break;
+	            }
 
-            //        if (npad % 2 == 1)
-            //        {
-            //            npad = (int)Math.Floor(((double)npad) / 2.0);
+	            %
+	            default:
+		            throw new NotSupportedException();
+            }
 
-            //            np1New = (double[])np1.Clone();
+            #endregion
+#else
 
-            //            np1New.ToList().AddRange(new double[npad + 1]);
-            //            var puffer = (new double[npad]).ToList();
-            //            puffer.AddRange(np1New);
-            //            np1New = puffer.ToArray();
-            //        }
-            //        else
-            //        {
-            //            npad = npad / 2;
+#endif
 
-            //            np1New = (double[])np1.Clone();
-
-            //            var puffer = np1New.ToList();
-            //            puffer.AddRange(new double[npad]);
-            //            np1New = puffer.ToArray();
-
-            //            puffer = (new double[npad]).ToList();
-            //            puffer.AddRange(np1New);
-            //            np1New = puffer.ToArray();
-            //        }
-
-            //        var numSharpNew = np.array(np1New, dtype);
-
-            //        numSharpReturn = numSharpNew.convolve(numSharpArray2, "valid");
-            //        break;
-            //    }
-            //}
-
-            //return numSharpReturn;
         }
     }
 }

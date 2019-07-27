@@ -43,5 +43,17 @@ namespace NumSharp
 
             return a.reshape(shape.RemoveAt(axis));
         }
+
+        /// <summary>
+        ///     Remove single-dimensional entries from a shape.
+        /// </summary>
+        /// <param name="shape">Input shape.</param>
+        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        public static Shape squeeze(Shape shape)
+        {
+            //TODO! what will happen if its a slice?
+            return new Shape(shape.dimensions.Where(d=>d!=1).ToArray());
+        }
     }
 }

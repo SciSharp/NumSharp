@@ -80,7 +80,7 @@ namespace NumSharp
                     var data = curr.Storage.InternalArray;
                     var bytesLen = data.Count * data.ItemLength;
                     if (data.TypeCode != common_type)
-                        data.Cast(ret.Array, bytesOffset: accBytesOffset);
+                        data.CastTo(ret.Array, bytesOffset: accBytesOffset);
                     else
                         Buffer.MemoryCopy(data.Address, (retaddr + accBytesOffset), bytesLen, bytesLen);
                     accBytesOffset += bytesLen;

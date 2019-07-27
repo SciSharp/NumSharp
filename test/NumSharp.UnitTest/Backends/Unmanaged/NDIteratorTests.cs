@@ -65,14 +65,15 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Case5_Autoreset()
         {
-            var sh = new NDIterator<int>(np.arange(10), false);
+            var sh = new NDIterator<int>(np.arange(10), true);
             var acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNext;
-            while (next())
+            int i = 0;
+            while (next() && i++ < 20)
                 Console.WriteLine(acc += move());
 
-            acc.Should().Be(Enumerable.Range(0, 10).Sum());
+            acc.Should().Be(Enumerable.Range(0, 10).Sum()*2);
         }
 
         [TestMethod]
@@ -115,110 +116,80 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
         }
 
-        [TestMethod]
-        public void Case9_Nongeneric()
-        {
-            var sh = new NDIterator(np.arange(10), false);
-            var acc = 0;
-            var next = sh.HasNext;
-            var move = sh.MoveNext;
-            while (next())
-                Console.WriteLine(acc += (int)move());
-
-            acc.Should().Be(Enumerable.Range(0, 10).Sum());
-        }
 
         [TestMethod]
-        public void Case10_Nongeneric()
+        public void Case17_Reference()
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator(nd, true);
+            var sh = new NDIterator<int>(nd, false);
             int acc = 0;
-            for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
-                Console.WriteLine(acc += (int)sh.MoveNext());
-
-            acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
-        }
-
-        [TestMethod]
-        public void Case11_Sliced_Nongeneric()
-        {
-            var sh = new NDIterator(np.arange(15).reshape((3, 5))["0:2,:"], false);
-            var acc = 0;
-            var next = sh.HasNext;
-            var move = sh.MoveNext;
-            while (next())
-                Console.WriteLine(acc += (int)move());
+            for (int i = 0; i < nd.size; i++, sh.HasNext())
+                Console.WriteLine(acc += sh.MoveNextReference());
 
             acc.Should().Be(Enumerable.Range(0, 10).Sum());
         }
 
         [TestMethod]
-        public void Case12_Sliced_Nongeneric()
-        {
-            Console.WriteLine();
-            var nd = np.arange(15).reshape((3, 5))["0:2,:"];
-            var sh = new NDIterator(nd, true);
-            int acc = 0;
-
-            for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
-                Console.WriteLine(acc += (int)sh.MoveNext());
-
-            acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
-        }
-
-        [TestMethod]
-        public void Case13_Autoreset_Nongeneric()
-        {
-            var sh = new NDIterator(np.arange(10), false);
-            var acc = 0;
-            var next = sh.HasNext;
-            var move = sh.MoveNext;
-            while (next())
-                Console.WriteLine(acc += (int)move());
-
-            acc.Should().Be(Enumerable.Range(0, 10).Sum());
-        }
-
-        [TestMethod]
-        public void Case14_Autoreset_Nongeneric()
+        public void Case18_Reference()
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator(nd, true);
+            var sh = new NDIterator<int>(nd, false);
             int acc = 0;
-            for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
-                Console.WriteLine(acc += (int)sh.MoveNext());
+            for (int i = 0; i < nd.size; i++, sh.HasNext())
+                sh.MoveNextReference() = 1;
 
-            acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
+            sh.Reset();
+
+            for (int i = 0; i < nd.size; i++, sh.HasNext())
+                Console.WriteLine(acc += sh.MoveNext());
+
+            acc.Should().Be(nd.size);
         }
 
         [TestMethod]
-        public void Case15_Sliced_Autoreset_Nongeneric()
+        public void Case19_Reference_Autoreset()
         {
-            var sh = new NDIterator(np.arange(15).reshape((3, 5))["0:2,:"], false);
+            Console.WriteLine();
+            var nd = np.arange(10);
+            var sh = new NDIterator<int>(nd, true);
+            int acc = 0;
+            for (int i = 0; i < nd.size; i++, sh.HasNext())
+                sh.MoveNextReference() = 1;
+
+            for (int i = 0; i < nd.size; i++, sh.HasNext())
+                Console.WriteLine(acc += sh.MoveNext());
+
+            acc.Should().Be(nd.size);
+        }
+
+        [TestMethod]
+        public void Case20_Sliced_Autoreset_Reference()
+        {
+            var sh = new NDIterator<int>(np.arange(15).reshape((3, 5))["0:2,:"], true);
             var acc = 0;
             var next = sh.HasNext;
-            var move = sh.MoveNext;
-            while (next())
-                Console.WriteLine(acc += (int)move());
+            var move = sh.MoveNextReference;
+            int i = 0;
+            while (next() && i++ < 20)
+                Console.WriteLine(acc += (move() = 1));
 
-            acc.Should().Be(Enumerable.Range(0, 10).Sum());
+            acc.Should().Be(20);
         }
 
         [TestMethod]
-        public void Case16_Sliced_Autoreset_Nongeneric()
+        public void Case21_Sliced_Autoreset_Reference()
         {
             Console.WriteLine();
             var nd = np.arange(15).reshape((3, 5))["0:2,:"];
-            var sh = new NDIterator(nd, true);
+            var sh = new NDIterator<int>(nd, true);
             int acc = 0;
 
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
-                Console.WriteLine(acc += (int)sh.MoveNext());
+                Console.WriteLine(acc += (sh.MoveNextReference() = 1));
 
-            acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
+            acc.Should().Be(10*10);
         }
     }
 }

@@ -7,6 +7,8 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
+    //TODO! extract documentation from here and remove this interface.
+
     /// <summary>
     ///     Serves as a typed storage for an array.
     /// </summary>
@@ -21,6 +23,7 @@ namespace NumSharp
     ///      - CloneData always create a clone of storage and return this as reference object<br></br>
     ///      - CloneData{T} clone storage and cast this clone <br></br>
     /// </remarks>
+    [Obsolete("To be removed", false)]
     public interface IStorage : ICloneable
     {
         /// <summary>
@@ -132,7 +135,7 @@ namespace NumSharp
         /// <typeparam name="T">new storage data type</typeparam>
         /// <returns>element from internal storage</returns>
         /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
-        T GetData<T>(params int[] indices) where T : unmanaged;
+        T GetValue<T>(params int[] indices) where T : unmanaged;
 
         /// <summary>
         ///     Set a single value at given <see cref="indices"/>.
@@ -309,7 +312,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
-        object GetValue(params int[] indices);
+        ValueType GetValue(params int[] indices);
 
         #endregion
     }

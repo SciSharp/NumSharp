@@ -48,6 +48,18 @@ namespace NumSharp
         public static readonly Shape Scalar = new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue};
 
         /// <summary>
+        ///     Create a new scalar shape
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Shape NewScalar() => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue};
+
+        /// <summary>
+        ///     Create a new scalar shape
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo};
+
+        /// <summary>
         ///     Create a shape that represents a vector.
         /// </summary>
         /// <remarks>Faster than calling Shape's constructor</remarks>
@@ -258,9 +270,9 @@ namespace NumSharp
         public int GetOffset(params int[] indices)
         {
             int offset;
-            var coords = new List<int>(indices);
             if (IsSliced)
             {
+                var coords = new List<int>(indices);
                 var vi = ViewInfo;
                 if (indices.Length > vi.UnreducedShape.dimensions.Length)
                     throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
@@ -573,7 +585,7 @@ namespace NumSharp
             var viewInfo = new ViewInfo() {OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),};
 
             if (sliced_axes.Length == 0) //is it a scalar
-                return new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo};
+                return NewScalar(viewInfo);
 
             return new Shape(sliced_axes) {ViewInfo = viewInfo};
         }
@@ -800,6 +812,14 @@ namespace NumSharp
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
         public Shape Clone(bool deep = true, bool unview = false)
         {
+            if (IsScalar)
+            {
+                if (unview || ViewInfo==null)
+                    return Scalar;
+
+                return NewScalar(ViewInfo.Clone());
+            }
+
             if (!deep && !unview)
                 return this; //basic struct reassign
 
@@ -808,6 +828,19 @@ namespace NumSharp
                 ret.ViewInfo = null;
 
             return ret;
+        }
+
+        /// <summary>
+        ///     Returns a clean shape based on this.
+        ///     Cleans ViewInfo and returns a newly constructed.
+        /// </summary>
+        /// <returns></returns>
+        public Shape Clean()
+        {
+            if (IsScalar)
+                return NewScalar();
+
+            return new Shape((int[]) this.dimensions.Clone());
         }
     }
 }

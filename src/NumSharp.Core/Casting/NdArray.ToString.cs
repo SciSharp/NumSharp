@@ -45,7 +45,7 @@ namespace NumSharp
             if (shape.Length == 1)
             {
                 s.Append("[");
-                s.Append(string.Join(", ", new NDIterator(this, false).Select(x => x == null ? "null" : x.ToString())));
+                s.Append(string.Join(", ", this.AsIterator().Cast<object>().Select(v=>v.ToString())));
                 s.Append("]");
                 return;
             }

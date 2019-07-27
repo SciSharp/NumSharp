@@ -21,10 +21,10 @@ namespace NumSharp
             {
                 for (int col = 0; col < shape[1]; col++)
                 {
-                    double der = max.Storage.GetData<double>(col) - min.Storage.GetData<double>(col);
+                    double der = max.Storage.GetValue<double>(col) - min.Storage.GetValue<double>(col);
                     for (int row = 0; row < shape[0]; row++)
                     {
-                        this[row, col] = (NDArray) (Storage.GetData<double>(row, col) - min.Storage.GetData<double>(col)) / der;
+                        this[row, col] = (NDArray) (Storage.GetValue<double>(row, col) - min.Storage.GetValue<double>(col)) / der;
                     }
                 }
             }

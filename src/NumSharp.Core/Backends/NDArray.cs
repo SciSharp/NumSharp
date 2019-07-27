@@ -63,6 +63,8 @@ namespace NumSharp
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
+        /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
+        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
         internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage;
@@ -135,12 +137,11 @@ namespace NumSharp
         {
             if (order != 'C')
                 shape.ChangeTensorLayout(order);
-            var slice = ArraySlice.FromArray(values);
-
+            
             if (shape.IsEmpty)
-                shape = new Shape(slice.Count);
+                shape = Shape.ExtractShape(values);
 
-            Storage.Allocate(slice, shape);
+            Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
         }
 
         /// <summary>
@@ -271,7 +272,27 @@ namespace NumSharp
         public int[] strides => Storage.Shape.Strides;
 
         //TODO! when reshaping a slice is done - this should not clone in case of a sliced shape.
-        public NDArray flat => Shape.IsSliced ? new NDArray(Storage.Clone(), Shape.Vector(size)) : new NDArray(Storage, Shape.Vector(size));
+        /// <summary>
+        ///     A 1-D iterator over the array.
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html</remarks>
+        public NDArray flat
+        {
+            get
+            {
+                if (ndim == 1) //because it is already flat, there is no need to clone even if it is already sliced.
+                    return new NDArray(Storage);
+
+                if (Shape.IsSliced)
+                {
+                    return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size)));
+                }
+                else
+                {
+                    return new NDArray(Storage.Alias(Shape.Vector(size)));
+                }
+            }
+        }
 
         internal Shape Shape
         {
@@ -343,7 +364,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(object value, params int[] indices)
+        public void SetData(ValueType value, params int[] indices)
         {
             Storage.SetData(value, indices);
         }
@@ -357,7 +378,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
+        public void SetData<T>(T value, params int[] indices) where T : unmanaged
         {
             Storage.SetData<T>(value, indices);
         }
@@ -481,39 +502,36 @@ namespace NumSharp
 
 #if _REGEN
             #region Compute
-		switch (GetTypeCode)
-		{
-			%foreach supported_currently_supported,supported_currently_supported_lowercase%
-			case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
-			%
-			default:
-				throw new NotSupportedException();
-		}
+		    switch (GetTypeCode)
+		    {
+			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
 #else
 
             #region Compute
-
-            switch (GetTypeCode)
-            {
-                case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
-                case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
-                case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
-                case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
-                case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
-                case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
-                case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
-                case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
-                case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
-                case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
-                case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
-                case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
-                default:
-                    throw new NotSupportedException();
-            }
-
+		    switch (GetTypeCode)
+		    {
+			    case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
+			    case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
+			    case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
+			    case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
+			    case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
+			    case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
+			    case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
+			    case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
+			    case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
+			    case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
+			    case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
+			    case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
 
             IEnumerable _empty()
@@ -667,7 +685,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object GetValue(params int[] indices) => Storage.GetValue(indices);
+        public ValueType GetValue(params int[] indices) => Storage.GetValue(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -676,7 +694,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T GetValue<T>(params int[] indices) where T : unmanaged => Storage.GetData<T>(indices);
+        public T GetValue<T>(params int[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
 
         /// <summary>
         ///     Retrieves value of 
@@ -684,7 +702,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object GetAtIndex(int index) => Storage.GetAtIndex(index);
+        public ValueType GetAtIndex(int index) => Storage.GetAtIndex(index);
 
         /// <summary>
         ///     Retrieves value of 

@@ -45,7 +45,16 @@ namespace NumSharp
             else
                 i = (-k) * M.Value;
 
-            m[$":{M - k}"].flat[$"{i}::{M + 1}"] = 1;
+            var flat = m.flat;
+            var one = dtype != null ? Convert.ChangeType(1d, dtype) : 1d;
+            int skips = k < 0 ? Math.Abs(k)-1 : 0;
+            for (int j = k; j < flat.size; j+=N+1)
+            {
+                if (j < 0 || skips-- > 0)
+                    continue;
+                flat.SetAtIndex(one, j);
+            }
+
             return m;
         }
     }

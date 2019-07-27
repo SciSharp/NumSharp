@@ -199,7 +199,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             UnmanagedMemoryBlock<byte> cast = new UnmanagedMemoryBlock<byte>();
             try
             {
-                cast = UnmanagedMemoryBlock.Cast<int, byte>(arr);
+                cast = (UnmanagedMemoryBlock<byte>)UnmanagedMemoryBlock.CastTo<int, byte>(arr);
                 cast.Should().AllBeOfType<byte>().And.BeInAscendingOrder();
             }
             finally

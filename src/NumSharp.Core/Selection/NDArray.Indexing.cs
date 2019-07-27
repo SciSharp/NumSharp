@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -21,6 +22,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices"></param>
         /// <returns></returns>
+        [DebuggerHidden]
         public NDArray this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -106,16 +108,9 @@ namespace NumSharp
 
         public NDArray this[string slice]
         {
-            get
-            {
-                return this[Slice.ParseSlices(slice)];
-            }
+            get => this[Slice.ParseSlices(slice)];
 
-            set
-            {
-                Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
-                throw new NotImplementedException("slice data set is not implemented for types less NDArray's.");
-            }
+            set => Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
         }
 
         public NDArray this[params Slice[] slices]

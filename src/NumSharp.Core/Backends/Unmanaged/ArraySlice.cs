@@ -116,7 +116,12 @@ namespace NumSharp.Backends.Unmanaged
 
         public static IArraySlice FromMemoryBlock(IMemoryBlock block, bool copy = false)
         {
+
+            if (block is IArraySlice arr) 
+                block = arr.MemoryBlock;
+
             var type = block.GetType();
+
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(UnmanagedMemoryBlock<>))
 
                 switch (type.GetGenericArguments()[0].GetTypeCode())
