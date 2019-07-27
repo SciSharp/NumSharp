@@ -25,6 +25,11 @@ namespace NumSharp
 
         #region Math
 
+        #region Reduction
+        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false);
+
+        #endregion
+
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
@@ -36,8 +41,10 @@ namespace NumSharp
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type = null);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Sum(NDArray x, int? axis = null);
+        public abstract NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
+
 
         #endregion
 
