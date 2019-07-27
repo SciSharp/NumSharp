@@ -570,6 +570,10 @@ namespace NumSharp
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
             var viewInfo = new ViewInfo() {OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),};
+
+            if (sliced_axes.Length == 0) //is it a scalar
+                return new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo};
+
             return new Shape(sliced_axes) {ViewInfo = viewInfo};
         }
 
