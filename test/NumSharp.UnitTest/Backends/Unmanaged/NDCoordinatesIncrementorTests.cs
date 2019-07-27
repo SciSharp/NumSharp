@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {

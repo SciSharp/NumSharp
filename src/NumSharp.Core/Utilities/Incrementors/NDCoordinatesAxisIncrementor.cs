@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-namespace NumSharp.Backends.Unmanaged
+namespace NumSharp.Utilities
 {
     public class NDCoordinatesAxisIncrementor
     {
