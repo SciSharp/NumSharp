@@ -30,7 +30,7 @@ namespace NumSharp
             unsafe
             {
                 var addr = (double*)ret.Address;
-                var incr = new NDIndexArrayIncrementor(ref shape);
+                var incr = new NDCoordinatesIncrementor(ref shape);
                 do
                 {
                     *(addr + shape.GetOffset(incr.Index)) = randomizer.NextDouble();

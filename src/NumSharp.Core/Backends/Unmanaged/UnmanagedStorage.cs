@@ -2144,7 +2144,7 @@ namespace NumSharp.Backends
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
             var addr = (T*)Address;
             var ret = new T[Shape.Size];
-            var incr = new NDIndexArrayIncrementor(Shape.dimensions);
+            var incr = new NDCoordinatesIncrementor(Shape.dimensions);
             int[] current = incr.Index;
             int i = 0;
             do

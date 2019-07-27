@@ -49,7 +49,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -61,7 +61,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -73,7 +73,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -85,7 +85,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -97,7 +97,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -121,7 +121,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -133,7 +133,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -145,7 +145,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -157,7 +157,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -169,7 +169,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -218,7 +218,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -230,7 +230,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -242,7 +242,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -254,7 +254,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -266,7 +266,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -278,7 +278,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -290,7 +290,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -302,7 +302,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -314,7 +314,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -326,7 +326,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -338,7 +338,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -350,7 +350,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -391,7 +391,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -403,7 +403,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -427,7 +427,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -439,7 +439,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -451,7 +451,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -463,7 +463,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -475,7 +475,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -487,7 +487,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -499,7 +499,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -511,7 +511,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -523,7 +523,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -559,7 +559,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -571,7 +571,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -583,7 +583,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -595,7 +595,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -607,7 +607,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -619,7 +619,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -631,7 +631,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -643,7 +643,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -655,7 +655,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -667,7 +667,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -679,7 +679,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -691,7 +691,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -727,7 +727,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -739,7 +739,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -751,7 +751,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -763,7 +763,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -775,7 +775,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -787,7 +787,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -799,7 +799,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -811,7 +811,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -823,7 +823,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -835,7 +835,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -847,7 +847,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -859,7 +859,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -895,7 +895,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -907,7 +907,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -919,7 +919,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -931,7 +931,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -943,7 +943,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -955,7 +955,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -967,7 +967,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -979,7 +979,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -991,7 +991,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1003,7 +1003,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1015,7 +1015,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1027,7 +1027,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1063,7 +1063,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1075,7 +1075,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1087,7 +1087,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1099,7 +1099,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1111,7 +1111,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1123,7 +1123,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1135,7 +1135,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1147,7 +1147,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1159,7 +1159,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1171,7 +1171,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1183,7 +1183,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1195,7 +1195,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1231,7 +1231,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1243,7 +1243,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1255,7 +1255,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1267,7 +1267,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1279,7 +1279,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1291,7 +1291,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1303,7 +1303,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1315,7 +1315,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1327,7 +1327,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1339,7 +1339,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1351,7 +1351,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1363,7 +1363,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1399,7 +1399,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1411,7 +1411,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1423,7 +1423,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1435,7 +1435,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1447,7 +1447,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1459,7 +1459,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1471,7 +1471,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1483,7 +1483,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1495,7 +1495,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1507,7 +1507,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1519,7 +1519,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1531,7 +1531,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1567,7 +1567,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1579,7 +1579,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1591,7 +1591,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1603,7 +1603,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1615,7 +1615,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1627,7 +1627,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1639,7 +1639,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1651,7 +1651,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1663,7 +1663,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1675,7 +1675,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1687,7 +1687,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1699,7 +1699,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1735,7 +1735,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1747,7 +1747,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1759,7 +1759,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1771,7 +1771,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1783,7 +1783,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1795,7 +1795,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1807,7 +1807,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1819,7 +1819,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1831,7 +1831,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1843,7 +1843,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1855,7 +1855,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1867,7 +1867,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1903,7 +1903,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1915,7 +1915,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1927,7 +1927,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1939,7 +1939,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1951,7 +1951,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1963,7 +1963,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1975,7 +1975,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1987,7 +1987,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -1999,7 +1999,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2011,7 +2011,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2023,7 +2023,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2035,7 +2035,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2071,7 +2071,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2083,7 +2083,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2095,7 +2095,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2107,7 +2107,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2119,7 +2119,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2131,7 +2131,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2143,7 +2143,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2155,7 +2155,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2167,7 +2167,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2179,7 +2179,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2191,7 +2191,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2203,7 +2203,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2239,7 +2239,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Boolean:
 	                    {
 		                    var ret_address = (bool*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2251,7 +2251,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Byte:
 	                    {
 		                    var ret_address = (byte*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2263,7 +2263,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int16:
 	                    {
 		                    var ret_address = (short*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2275,7 +2275,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt16:
 	                    {
 		                    var ret_address = (ushort*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2287,7 +2287,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int32:
 	                    {
 		                    var ret_address = (int*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2299,7 +2299,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt32:
 	                    {
 		                    var ret_address = (uint*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2311,7 +2311,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Int64:
 	                    {
 		                    var ret_address = (long*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2323,7 +2323,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.UInt64:
 	                    {
 		                    var ret_address = (ulong*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2335,7 +2335,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Char:
 	                    {
 		                    var ret_address = (char*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2347,7 +2347,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Double:
 	                    {
 		                    var ret_address = (double*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2359,7 +2359,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Single:
 	                    {
 		                    var ret_address = (float*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {
@@ -2371,7 +2371,7 @@ namespace NumSharp.Backends
 	                    case NPTypeCode.Decimal:
 	                    {
 		                    var ret_address = (decimal*)ret.Address;
-                            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                             int[] current = incr.Index;
                             do
                             {

@@ -45,7 +45,7 @@ namespace NumSharp.Backends
                     
                     //iterate
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -68,7 +68,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {

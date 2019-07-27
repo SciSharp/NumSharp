@@ -4,7 +4,7 @@ namespace NumSharp.Backends.Unmanaged
 {
     public class NDOffsetIncrementor
     {
-        private readonly NDIndexArrayIncrementor incr;
+        private readonly NDCoordinatesIncrementor incr;
         private readonly int[] strides;
         private readonly int[] index;
         private bool hasNext;
@@ -16,7 +16,7 @@ namespace NumSharp.Backends.Unmanaged
         public NDOffsetIncrementor(int[] dims, int[] strides)
         {
             this.strides = strides;
-            incr = new NDIndexArrayIncrementor(dims);
+            incr = new NDCoordinatesIncrementor(dims);
             index = incr.Index;
             hasNext = true;
         }
@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
 
     public class NDOffsetIncrementorAutoresetting
     {
-        private readonly NDIndexArrayIncrementor incr;
+        private readonly NDCoordinatesIncrementor incr;
         private readonly int[] strides;
         private readonly int[] index;
 
@@ -64,7 +64,7 @@ namespace NumSharp.Backends.Unmanaged
         public NDOffsetIncrementorAutoresetting(int[] dims, int[] strides)
         {
             this.strides = strides;
-            incr = new NDIndexArrayIncrementor(dims, incrementor => incrementor.Reset());
+            incr = new NDCoordinatesIncrementor(dims, incrementor => incrementor.Reset());
             index = incr.Index;
         }
 

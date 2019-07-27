@@ -40,7 +40,7 @@ namespace NumSharp.Backends
             var ret_address = (double*)ret.Address;
             Shape retShape = ret.Shape;
 
-            var incr = new NDIndexArrayIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+            var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
             int[] current = incr.Index;
             do
             {
@@ -67,7 +67,7 @@ namespace NumSharp.Backends
             var ret = new NDArray(np._FindCommonType(lhs,rhs), new Shape(x.LeftShape.dimensions));
             Shape retShape = ret.Shape;
 
-            var incr = new NDIndexArrayIncrementor(ref x.LeftShape);
+            var incr = new NDCoordinatesIncrementor(ref x.LeftShape);
             var current = incr.Index;
             do
             {
@@ -243,9 +243,9 @@ namespace NumSharp.Backends
 
 //                                results = new NDArray(new UnmanagedStorage(ArraySlice.Allocate(outType, retShape.size, true), retShape));
 
-//                                var retIter = new NDIndexArrayIncrementor(ref retShape);
-//                                var leftIter = new NDIndexArrayIncrementor(ref leftShape);
-//                                var rightIter = new NDIndexArrayIncrementor(ref rightShape);
+//                                var retIter = new NDCoordinatesIncrementor(ref retShape);
+//                                var leftIter = new NDCoordinatesIncrementor(ref leftShape);
+//                                var rightIter = new NDCoordinatesIncrementor(ref rightShape);
 
 //                                var len = retShape.size;
 //                                int di = 0;

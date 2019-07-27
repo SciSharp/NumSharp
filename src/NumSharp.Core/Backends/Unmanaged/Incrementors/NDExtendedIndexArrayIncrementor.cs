@@ -16,7 +16,7 @@ namespace NumSharp.Backends.Unmanaged
         public NDExtendedIndexArrayIncrementor(ref Shape shape, int extendBy)
         {
             if (shape.IsEmpty || shape.size == 0)
-                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
 
             _extendBy = extendBy;
             dimensions = shape.IsScalar ? new int[] {1} : shape.dimensions;
@@ -30,7 +30,7 @@ namespace NumSharp.Backends.Unmanaged
         public NDExtendedIndexArrayIncrementor(int[] dims, int extendBy)
         {
             if (dims == null)
-                throw new InvalidOperationException("Can't construct NDIndexArrayIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
 
             if (dims.Length == 0)
                 dims = new int[] {1};
