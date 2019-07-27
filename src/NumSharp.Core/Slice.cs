@@ -301,7 +301,27 @@ namespace NumSharp
         }
 
 
+        #region Operators
 
+        public static Slice operator ++(Slice a)
+        {
+            if (a.Start.HasValue)
+                a.Start++;
+            if (a.Stop.HasValue)
+                a.Stop++;
+            return a;
+        }
+
+        public static Slice operator --(Slice a)
+        {
+            if (a.Start.HasValue)
+                a.Start--;
+            if (a.Stop.HasValue)
+                a.Stop--;
+            return a;
+        }
+
+        #endregion
     }
 
     public struct SliceDef
