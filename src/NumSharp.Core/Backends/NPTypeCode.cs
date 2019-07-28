@@ -555,5 +555,103 @@ namespace NumSharp.Backends
 
             return -1;
         }
+
+        /// <summary>
+        ///     Returns the equivalent numpy's name, e.g. <see cref="NPTypeCode.Int32"/> is np.int32, therefore the return is "int32".
+        /// </summary>
+        internal static string AsNumpyDtypeName(this NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Empty:
+                    return "";
+                case NPTypeCode.Boolean:
+                    return "bool";
+                case NPTypeCode.Char:
+                    return "uint8";
+                case NPTypeCode.Byte:
+                    return "uint8";
+                case NPTypeCode.Int16:
+                    return "int16";
+                case NPTypeCode.UInt16:
+                    return "uint16";
+                case NPTypeCode.Int32:
+                    return "int32";
+                case NPTypeCode.UInt32:
+                    return "uint32";
+                case NPTypeCode.Int64:
+                    return "int64";
+                case NPTypeCode.UInt64:
+                    return "uint64";
+                case NPTypeCode.Single:
+                    return "float32";
+                case NPTypeCode.Double:
+                    return "float64";
+                case NPTypeCode.Decimal:
+                    return "float64";
+                case NPTypeCode.String:
+                    return "string";
+                case NPTypeCode.Complex:
+                    return "complex64";
+                case NPTypeCode.NDArray:
+                    return "object";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
+            }
+        }
+
+        /// <summary>
+        ///     Gets the dtype that is used as return type in case when statistics are computed like <see cref="np.mean"/>
+        /// </summary>
+        /// <returns>dtype in case when statistics are computed like <see cref="np.mean"/></returns>
+        public static NPTypeCode GetComputingType(this NPTypeCode typeCode)
+        {
+            if (typeCode < NPTypeCode.Single)
+                return NPTypeCode.Double;
+
+            return typeCode;
+        }
+        
+        /// <summary>
+        ///     Gets the dtype that is used as accumulation in case when statistics are computed like <see cref="np.sum"/>
+        /// </summary>
+        /// <returns>dtype in case when statistics are computed like <see cref="np.sum"/></returns>
+        public static NPTypeCode GetAccumulatingType(this NPTypeCode typeCode)
+        {
+#if _REGEN
+            #region Compute
+		    switch (typeCode)
+		    {
+			    %foreach supported_currently_supported,supported_currently_supported_accumulatingType%
+			    case NPTypeCode.#1: return NPTypeCode.#2;
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
+            #endregion
+#else
+            #region Compute
+		    switch (typeCode)
+		    {
+			    case NPTypeCode.Boolean: return NPTypeCode.Int32;
+			    case NPTypeCode.Byte: return NPTypeCode.UInt32;
+			    case NPTypeCode.Int16: return NPTypeCode.Int32;
+			    case NPTypeCode.UInt16: return NPTypeCode.UInt32;
+			    case NPTypeCode.Int32: return NPTypeCode.Int32;
+			    case NPTypeCode.UInt32: return NPTypeCode.UInt32;
+			    case NPTypeCode.Int64: return NPTypeCode.Int64;
+			    case NPTypeCode.UInt64: return NPTypeCode.UInt64;
+			    case NPTypeCode.Char: return NPTypeCode.UInt32;
+			    case NPTypeCode.Double: return NPTypeCode.Double;
+			    case NPTypeCode.Single: return NPTypeCode.Single;
+			    case NPTypeCode.Decimal: return NPTypeCode.Decimal;
+			    default:
+				    throw new NotSupportedException();
+		    }
+            #endregion
+#endif
+
+            return typeCode;
+        }
     }
 }
