@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
@@ -125,5 +126,36 @@ namespace NumSharp.UnitTest
             var iter = new NDIterator<int>(slice);
             for (int i = 0; i < 6 * 3 * 3; i++, iter.HasNext()) iter.MoveNext().Should().Be(5);
         }
+
+        [TestMethod]
+        public void Case1_GetNDArrays_Axis0()
+        {
+            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var ret = a.GetNDArrays(0);
+            ret.Should().HaveCount(6);
+            var f = ret.First();
+            f.Shape.Should().Be((3, 3));
+        }
+
+        [TestMethod]
+        public void Case1_GetNDArrays_Axis1()
+        {
+            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var ret = a.GetNDArrays(1);
+            ret.Should().HaveCount(6*3);
+            var f = ret.First();
+            f.Shape.Should().Be(Shape.Vector(3));
+        }
+
+        [TestMethod]
+        public void Case1_GetNDArrays_Axis2()
+        {
+            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var ret = a.GetNDArrays(2);
+            ret.Should().HaveCount(6*3*3);
+            var f = ret.First();
+            f.Shape.Should().Be(Shape.Scalar);
+        }
+
     }
 }

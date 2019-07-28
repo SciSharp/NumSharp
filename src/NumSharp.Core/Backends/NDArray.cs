@@ -444,6 +444,54 @@ namespace NumSharp
         #region Getters
 
         /// <summary>
+        ///     Get all NDArray slices at that specific dimension.
+        /// </summary>
+        /// <param name="axis">Zero-based dimension index on which axis and forward of it to select data., e.g. dimensions=1, shape is (2,2,3,3), returned shape = 4 times of (3,3)</param>
+        /// <remarks>Does not perform copy.</remarks>
+        /// <example>
+        /// <code>
+        ///     var nd = np.arange(27).reshape(3,1,3,3);<br></br>
+        ///     var ret = nd.GetNDArrays(1);<br></br>
+        ///     Assert.IsTrue(ret.All(n=>n.Shape == new Shape(3,3));<br></br>
+        ///     Assert.IsTrue(ret.Length == 3);<br></br><br></br>
+        ///     var nd = np.arange(27).reshape(3,1,3,3);<br></br>
+        ///     
+        ///     var ret = nd.GetNDArrays(0);<br></br>
+        ///     Assert.IsTrue(ret.All(n=>n.Shape == new Shape(1,3,3));<br></br>
+        ///     Assert.IsTrue(ret.Length == 3);<br></br>
+        /// </code>
+        /// </example>
+        [SuppressMessage("ReSharper", "LoopCanBeConvertedToQuery")]
+        public NDArray[] GetNDArrays(int axis = 0)
+        {
+            axis += 1; //axis is 0-based, we need 1 based (aka count)
+            if (axis <= 0 || axis > Shape.dimensions.Length)
+                throw new ArgumentOutOfRangeException(nameof(axis));
+
+            //get all the dimensions involved till the axis
+            var dims = Storage.Shape.dimensions;
+            int[] selectDimensions = new int[axis];
+            for (int i = 0; i < axis; i++)
+                selectDimensions[i] = dims[i];
+
+            //compute len
+            int len = 1;
+            foreach (var i in selectDimensions)
+                len = len * i;
+
+            var ret = new NDArray[len];
+            var iter = new NDCoordinatesIncrementor(selectDimensions);
+            var index = iter.Index; //heap the pointer to that array.
+            for (int i = 0; i < ret.Length; i++)
+            {
+                ret[i] = this.GetData(index); //equivalent to this[index]
+                iter.Next();
+            }
+
+            return ret;
+        }
+
+        /// <summary>
         ///     Gets the internal storage and converts it to <typeparamref name="T"/> if necessary.
         /// </summary>
         /// <typeparam name="T">The returned type.</typeparam>
@@ -722,9 +770,8 @@ namespace NumSharp
             Storage.ReplaceData(values);
         }
 
-
         /// <summary>
-        ///     Retrieves value of 
+        ///     Retrieves value at given linear (offset) <paramref name="index"/>.
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
