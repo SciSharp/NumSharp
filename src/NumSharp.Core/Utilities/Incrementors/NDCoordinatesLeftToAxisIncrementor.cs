@@ -1,19 +1,21 @@
 ﻿using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace NumSharp.Utilities
 {
-    public class NDCoordinatesAxisIncrementor
+    public class NDCoordinatesLeftToAxisIncrementor
     {
         public int Axis;
-        private readonly Action<NDCoordinatesAxisIncrementor> endCallback;
+        private readonly Action<NDCoordinatesLeftToAxisIncrementor> endCallback;
         private readonly int[] dimensions;
         private readonly int resetto;
+        private int ndim = 0;
         public readonly Slice[] Slices;
         public readonly int[] Index;
         private int subcursor;
 
-        public NDCoordinatesAxisIncrementor(ref Shape shape, int axis)
+        public NDCoordinatesLeftToAxisIncrementor(ref Shape shape, int axis)
         {
             if (shape.IsEmpty || shape.size == 0)
                 throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with an empty shape.");
@@ -21,72 +23,70 @@ namespace NumSharp.Utilities
             if (shape.NDim == 1)
                 throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with a vector shape.");
 
-            if (shape.IsScalar)
-                throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with a scalar shape.");
-
-            if (axis < 0 || axis >= shape.dimensions.Length)
+            if (axis <= 0 || axis+1 >= shape.dimensions.Length)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
             Axis = axis;
-
-            dimensions = shape.dimensions;
+            ndim = shape.NDim;
+            dimensions = shape.dimensions.Take(axis + 1).ToArray();
             Index = new int[dimensions.Length];
-            if (axis == dimensions.Length - 1)
+            if (axis == shape.dimensions.Length - 1)
                 resetto = subcursor = dimensions.Length - 2;
             else
                 resetto = subcursor = dimensions.Length - 1;
 
-            Slices = new Slice[dimensions.Length];
-            for (int i = 0; i <= resetto; i++)
+            Slices = new Slice[shape.NDim];
+            for (int i = 0; i <= axis; i++)
                 Slices[i] = Slice.Index(0); //it has to be new instances because we increment them individually.
-            Slices[Axis] = Slice.All;
+            for (int i = axis + 1; i < shape.NDim; i++) 
+                Slices[i] = Slice.All;
         }
 
-        public NDCoordinatesAxisIncrementor(ref Shape shape, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(ref shape, axis)
+        public NDCoordinatesLeftToAxisIncrementor(ref Shape shape, int axis, Action<NDCoordinatesLeftToAxisIncrementor> endCallback) : this(ref shape, axis)
         {
             this.endCallback = endCallback;
         }
 
-        public NDCoordinatesAxisIncrementor(int[] dims, int axis)
-        {
-            if (dims == null)
-                throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with an empty shape.");
+        //public NDCoordinatesLeftToAxisIncrementor(int[] dims, int axis)
+        //{
+        //    if (dims == null)
+        //        throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with an empty shape.");
 
-            if (dims.Length == 1)
-                throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with a vector shape.");
+        //    if (dims.Length == 1)
+        //        throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with a vector shape.");
 
-            if (axis < 0 || axis >= dims.Length)
-                throw new ArgumentOutOfRangeException(nameof(axis));
+        //    if (axis <= 0 || axis >= dims.Length)
+        //        throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (dims.Length == 0)
-                dims = new int[] {1};
+        //    if (dims.Length == 0)
+        //        dims = new int[] {1};
 
-            dimensions = dims;
-            Axis = axis;
-            Index = new int[dims.Length];
-            if (axis == dimensions.Length - 1)
-                resetto = subcursor = dimensions.Length - 2;
-            else
-                resetto = subcursor = dimensions.Length - 1;
+        //    ndim = dims.Length;
+        //    dimensions = dims;
+        //    Axis = axis;
+        //    Index = new int[dims.Length];
+        //    if (axis == dimensions.Length - 1)
+        //        resetto = subcursor = dimensions.Length - 2;
+        //    else
+        //        resetto = subcursor = dimensions.Length - 1;
 
-            Slices = new Slice[dims.Length];
-            for (int i = 0; i <= resetto; i++)
-                Slices[i] = Slice.Index(0); //it has to be new instances because we increment them individually.
-            Slices[Axis] = Slice.All;
-        }
+        //    Slices = new Slice[dims.Length];
+        //    for (int i = 0; i <= resetto; i++)
+        //        Slices[i] = Slice.Index(0); //it has to be new instances because we increment them individually.
+        //    Slices[Axis] = Slice.All;
+        //}
 
-        public NDCoordinatesAxisIncrementor(int[] dims, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(dims, axis)
-        {
-            this.endCallback = endCallback;
-        }
+        //public NDCoordinatesLeftToAxisIncrementor(int[] dims, int axis, Action<NDCoordinatesLeftToAxisIncrementor> endCallback) : this(dims, axis)
+        //{
+        //    this.endCallback = endCallback;
+        //}
 
         public void Reset()
         {
             Array.Clear(Index, 0, Index.Length);
-            for (int i = 0; i <= resetto; i++)
+            for (int i = 0; i <= Axis; i++)
                 Slices[i] = Slice.Index(0); //it has to be new instances because we increment them individually.
 
-            Slices[Axis] = Slice.All;
             subcursor = resetto;
         }
 
