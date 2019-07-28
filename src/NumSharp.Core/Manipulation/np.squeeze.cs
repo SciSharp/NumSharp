@@ -32,7 +32,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
-            if (axis < 0)
+            while (axis < 0)
                 axis = a.ndim + axis; //handle negative axis
 
             if (axis >= a.ndim)

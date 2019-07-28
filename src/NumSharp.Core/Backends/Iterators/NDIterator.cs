@@ -51,7 +51,7 @@ namespace NumSharp.Backends
 
         public NDIterator(UnmanagedStorage storage, bool autoReset = false) : this((IMemoryBlock)storage?.InternalArray, storage?.Shape ?? default, null, autoReset) { }
 
-        public NDIterator(NDArray arr, bool autoReset = false) : this(arr?.Storage, autoReset) { }
+        public NDIterator(NDArray arr, bool autoReset = false) : this(arr?.Storage.InternalArray, arr?.Shape ?? default, null, autoReset) { }
 
         /// <summary>
         ///     Set the mode according to given parameters

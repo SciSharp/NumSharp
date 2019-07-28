@@ -26,7 +26,7 @@ namespace NumSharp.Backends
             if (shape.NDim == 1 || shape.IsScalar)
                 return arr;
 
-            if (axis < 0)
+            while (axis < 0)
                 axis = arr.ndim + axis; //handle negative axis
 
             if (axis >= arr.ndim)
