@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 
 namespace NumSharp.Backends
 {
@@ -34,7 +35,7 @@ namespace NumSharp.Backends
                 k = i + leftShape.NDim - nd;
                 if (k >= 0)
                 {
-                    tmp = leftShape.Dimensions[k];
+                    tmp = leftShape.dimensions[k];
                     if (tmp == 1)
                     {
                         goto _continue;
@@ -46,7 +47,7 @@ namespace NumSharp.Backends
                     }
                     else if (mit[i] != tmp)
                     {
-                        throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape"); //TODO mismatch
+                        throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                     }
                 }
 
@@ -55,7 +56,7 @@ namespace NumSharp.Backends
                 k = i + rightShape.NDim - nd;
                 if (k >= 0)
                 {
-                    tmp = rightShape.Dimensions[k];
+                    tmp = rightShape.dimensions[k];
                     if (tmp == 1)
                     {
                         continue;
@@ -67,12 +68,122 @@ namespace NumSharp.Backends
                     }
                     else if (mit[i] != tmp)
                     {
-                        throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape"); //TODO mismatch
+                        throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                     }
                 }
             }
 
             return mit; //implicit cast
+        }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public static Shape ResolveReturnShape(params Shape[] shapes)
+        {
+            if (shapes.Length == 0)
+                return default;
+
+            if (shapes.Length == 1)
+                return shapes[0].Clean();
+
+            Shape mit;
+            int i, nd, k, tmp;
+
+            int len = shapes.Length;
+
+            /* Discover the broadcast number of dimensions */
+            //Gets the largest ndim of all iterators
+            nd = 0;
+            for (i = 0; i < len; i++)
+                nd = Math.Max(nd, shapes[i].NDim);
+
+            //this is the shared shape aka the target broadcast
+            mit = Shape.Empty(nd);
+
+            /* Discover the broadcast shape in each dimension */
+            for (i = 0; i < nd; i++)
+            {
+                mit.dimensions[i] = 1;
+                for (int targetIndex = 0; targetIndex < len; targetIndex++)
+                {
+                    Shape target = shapes[targetIndex];
+                    /* This prepends 1 to shapes not already equal to nd */
+                    k = i + target.NDim - nd;
+                    if (k >= 0)
+                    {
+                        tmp = target.dimensions[k];
+                        if (tmp == 1)
+                        {
+                            continue;
+                        }
+
+                        if (mit.dimensions[i] == 1)
+                        {
+                            mit.dimensions[i] = tmp;
+                        }
+                        else if (mit.dimensions[i] != tmp)
+                        {
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
+                        }
+                    }
+                }
+            }
+
+            return mit.Clean();
+        }
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public static Shape ResolveReturnShape(params NDArray[] shapes)
+        {
+            if (shapes.Length == 0)
+                return default;
+
+            if (shapes.Length == 1)
+                return shapes[0].Shape.Clean();
+
+            Shape mit;
+            int i, nd, k, tmp;
+
+            int len = shapes.Length;
+
+            /* Discover the broadcast number of dimensions */
+            //Gets the largest ndim of all iterators
+            nd = 0;
+            for (i = 0; i < len; i++)
+                nd = Math.Max(nd, shapes[i].ndim);
+
+
+            //this is the shared shape aka the target broadcast
+            mit = Shape.Empty(nd);
+
+            /* Discover the broadcast shape in each dimension */
+            for (i = 0; i < nd; i++)
+            {
+                mit.dimensions[i] = 1;
+                for (int targetIndex = 0; targetIndex < len; targetIndex++)
+                {
+                    Shape target = shapes[targetIndex].Shape;
+                    /* This prepends 1 to shapes not already equal to nd */
+                    k = i + target.NDim - nd;
+                    if (k >= 0)
+                    {
+                        tmp = target.dimensions[k];
+                        if (tmp == 1)
+                        {
+                            continue;
+                        }
+
+                        if (mit.dimensions[i] == 1)
+                        {
+                            mit.dimensions[i] = tmp;
+                        }
+                        else if (mit.dimensions[i] != tmp)
+                        {
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
+                        }
+                    }
+                }
+            }
+
+            return mit.Clean();
         }
 
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
@@ -82,7 +193,7 @@ namespace NumSharp.Backends
                 return Array.Empty<Shape>();
 
             if (shapes.Length == 1)
-                return new Shape[] {new Shape(shapes[0].dimensions),};
+                return new Shape[] {shapes[0].Clean()};
 
             Shape mit;
             int i, nd, k, j, tmp;
@@ -104,7 +215,7 @@ namespace NumSharp.Backends
             /* Discover the broadcast shape in each dimension */
             for (i = 0; i < nd; i++)
             {
-                mit.Dimensions[i] = 1;
+                mit.dimensions[i] = 1;
                 for (int targetIndex = 0; targetIndex < len; targetIndex++)
                 {
                     Shape target = shapes[targetIndex];
@@ -112,17 +223,17 @@ namespace NumSharp.Backends
                     k = i + target.NDim - nd;
                     if (k >= 0)
                     {
-                        tmp = target.Dimensions[k];
+                        tmp = target.dimensions[k];
                         if (tmp == 1)
                         {
                             continue;
                         }
 
-                        if (mit.Dimensions[i] == 1)
+                        if (mit.dimensions[i] == 1)
                         {
-                            mit.Dimensions[i] = tmp;
+                            mit.dimensions[i] = tmp;
                         }
-                        else if (mit.Dimensions[i] != tmp)
+                        else if (mit.dimensions[i] != tmp)
                         {
                             throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
@@ -133,7 +244,7 @@ namespace NumSharp.Backends
             for (i = 0; i < len; i++)
             {
                 Shape ogiter = shapes[i];
-                ret[i] = new Shape(mit);
+                ret[i] = mit.Clean();
                 ref Shape it = ref ret[i];
                 nd = ogiter.NDim;
                 it.size = tmp;
@@ -207,23 +318,23 @@ namespace NumSharp.Backends
                 /* Discover the broadcast shape in each dimension */
                 for (i = 0; i < nd; i++)
                 {
-                    mit.Dimensions[i] = 1;
+                    mit.dimensions[i] = 1;
 
                     /* This prepends 1 to shapes not already equal to nd */
                     k = i + leftShape.NDim - nd;
                     if (k >= 0)
                     {
-                        tmp = leftShape.Dimensions[k];
+                        tmp = leftShape.dimensions[k];
                         if (tmp == 1)
                         {
                             goto _continue;
                         }
 
-                        if (mit.Dimensions[i] == 1)
+                        if (mit.dimensions[i] == 1)
                         {
-                            mit.Dimensions[i] = tmp;
+                            mit.dimensions[i] = tmp;
                         }
-                        else if (mit.Dimensions[i] != tmp)
+                        else if (mit.dimensions[i] != tmp)
                         {
                             throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
@@ -234,17 +345,17 @@ namespace NumSharp.Backends
                     k = i + rightShape.NDim - nd;
                     if (k >= 0)
                     {
-                        tmp = rightShape.Dimensions[k];
+                        tmp = rightShape.dimensions[k];
                         if (tmp == 1)
                         {
                             continue;
                         }
 
-                        if (mit.Dimensions[i] == 1)
+                        if (mit.dimensions[i] == 1)
                         {
-                            mit.Dimensions[i] = tmp;
+                            mit.dimensions[i] = tmp;
                         }
-                        else if (mit.Dimensions[i] != tmp)
+                        else if (mit.dimensions[i] != tmp)
                         {
                             throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
                         }
