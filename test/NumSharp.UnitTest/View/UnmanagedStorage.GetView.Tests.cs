@@ -350,7 +350,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(new Shape(10), data.Shape);
             // return scalar
             var view = data.GetView("7");
-            Assert.AreEqual(new Shape(), view.Shape);
+            Assert.AreEqual(Shape.Scalar, view.Shape);
             AssertAreEqual(new int[] { 7 }, view.ToArray<int>());
         }
 
@@ -381,11 +381,11 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 1, 4, 7 }, view.ToArray<int>());
 
             view = data.GetView("2,2");
-            Assert.AreEqual(new Shape(), view.Shape);
+            Assert.AreEqual(Shape.Scalar, view.Shape);
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
             // recursive dimensionality reduction
             view = data.GetView("2").GetView("2");
-            Assert.AreEqual(new Shape(), view.Shape);
+            Assert.AreEqual(Shape.Scalar, view.Shape);
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
         }
 
@@ -399,7 +399,7 @@ namespace NumSharp.UnitTest.View
             //Assert.AreEqual(new Shape(3), view.Shape);
             //AssertAreEqual(new int[] { 6, 7, 8 }, view.ToArray<int>());
             var view1 = view.GetView("2");
-            Assert.AreEqual(new Shape(), view1.Shape);
+            Assert.AreEqual(Shape.Scalar, view1.Shape);
             AssertAreEqual(new int[] { 8 }, view1.ToArray<int>());
             var view2 = view.GetView("1::-1");
             Assert.AreEqual(new Shape(2), view2.Shape);

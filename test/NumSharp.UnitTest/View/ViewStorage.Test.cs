@@ -309,7 +309,7 @@
 //            Assert.AreEqual(new Shape(10), data.Shape);
 //            // return scalar
 //            var view = new ViewStorage(data, "7");
-//            Assert.AreEqual(new Shape(), view.Shape);
+//            Assert.AreEqual(Shape.Scalar, view.Shape);
 //            AssertAreEqual(new int[] { 7 }, view.GetData());
 //        }
 
@@ -339,11 +339,11 @@
 //            Assert.AreEqual(new Shape(3), view.Shape);
 //            AssertAreEqual(new int[] { 1, 4, 7 }, view.GetData());
 //            view = new ViewStorage(data, "2,2");
-//            Assert.AreEqual(new Shape(), view.Shape);
+//            Assert.AreEqual(Shape.Scalar, view.Shape);
 //            AssertAreEqual(new int[] { 8 }, view.GetData());
 //            // recursive dimensionality reduction
 //            view = new ViewStorage(new ViewStorage(data, "2"), "2");
-//            Assert.AreEqual(new Shape(), view.Shape);
+//            Assert.AreEqual(Shape.Scalar, view.Shape);
 //            AssertAreEqual(new int[] { 8 }, view.GetData());
 //        }
 
@@ -357,7 +357,7 @@
 //            Assert.AreEqual(new Shape(3), view.Shape);
 //            //AssertAreEqual(new int[] { 6, 7, 8 }, view.GetData());
 //            var view1 = new ViewStorage(view, "2");
-//            Assert.AreEqual(new Shape(), view1.Shape);
+//            Assert.AreEqual(Shape.Scalar, view1.Shape);
 //            AssertAreEqual(new int[] { 8 }, view1.GetData());
 //            var view2 = new ViewStorage(view, ":2:-1");
 //            Assert.AreEqual(new Shape(2), view2.Shape);

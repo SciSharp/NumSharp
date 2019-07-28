@@ -31,20 +31,13 @@ namespace NumSharp.UnitTest.Creation
             np1.Array.GetIndex(0).GetType().Should().Be<double>();
         }
 
-        [TestMethod]
-        public void SimpleInt2D()
-        {
-            var np1 = np.empty(new Shape(5, 5));
-
-            Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 25);
-        }
 
         [TestMethod]
         public void SimpleDouble3D()
         {
             var np1 = np.empty(new Shape(5, 5, 5));
-
-            Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 125);
+            np1.size.Should().Be(5 * 5 * 5);
+            np1.dtype.Should().Be<double>();
         }
 
         [DataTestMethod]

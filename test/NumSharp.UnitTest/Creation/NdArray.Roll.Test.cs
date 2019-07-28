@@ -5,6 +5,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -21,8 +22,8 @@ namespace NumSharp.UnitTest.Creation
             double[] expNd1 = new double[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
             double[] expNd2 = new double[] {9, 10, 1, 2, 3, 4, 5, 6, 7, 8};
 
-            double[] nd1_ = (Array)nd1 as double[];
-            double[] nd2_ = (Array)nd2 as double[];
+            ArraySlice<double> nd1_ = nd1.GetData<double>();
+            ArraySlice<double> nd2_ = nd2.GetData<double>();
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1_, expNd1));
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_, expNd2));
@@ -34,8 +35,8 @@ namespace NumSharp.UnitTest.Creation
             expNd1 = new double[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
             expNd2 = new double[] {3, 4, 5, 6, 7, 8, 9, 10, 1, 2};
 
-            nd1_ = (Array)nd1 as double[];
-            nd2_ = (Array)nd2 as double[];
+            nd1_ = nd1.GetData<double>();
+            nd2_ = nd2.GetData<double>(); 
 
             Assert.IsTrue(Enumerable.SequenceEqual(nd1_, expNd1));
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_, expNd2));
