@@ -1,6 +1,4 @@
-﻿
-
-using NumSharp.Extensions;
+﻿using NumSharp.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -53,15 +51,38 @@ namespace NumSharp
         /// </summary>
         /// <param name="fill_value">Fill value.</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
+        public static NDArray full(ValueType fill_value, Shape shape)
+        {
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), shape.size, fill_value), shape));
+        }
+
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with fill_value.
+        /// </summary>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <param name="dtype">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
+        /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
+        public static NDArray full(Shape shape, ValueType fill_value, Type dtype)
+        {
+            return full(fill_value, shape, dtype);
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with fill_value.
+        /// </summary>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="typeCode">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, Shape shape, NPTypeCode typeCode)
+        public static NDArray full(Shape shape, ValueType fill_value, NPTypeCode typeCode)
         {
-            if (typeCode == NPTypeCode.Empty)
-                throw new ArgumentNullException(nameof(typeCode));
-
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Convert.ChangeType(fill_value, (TypeCode)typeCode)), shape));
+            return full(fill_value, shape, typeCode);
         }
 
         /// <summary>
@@ -71,9 +92,25 @@ namespace NumSharp
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, Shape shape)
+        public static NDArray full(Shape shape, ValueType fill_value)
         {
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), shape.size, fill_value), shape));
+            return full(fill_value, shape);
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with fill_value.
+        /// </summary>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <param name="typeCode">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
+        /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
+        public static NDArray full(ValueType fill_value, Shape shape, NPTypeCode typeCode)
+        {
+            if (typeCode == NPTypeCode.Empty)
+                throw new ArgumentNullException(nameof(typeCode));
+
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Convert.ChangeType(fill_value, (TypeCode)typeCode)), shape));
         }
     }
 }
