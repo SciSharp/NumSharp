@@ -109,23 +109,15 @@ namespace NumSharp
         public NDArray this[string slice]
         {
             get => this[Slice.ParseSlices(slice)];
-
             set => Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
         }
 
         public NDArray this[params Slice[] slices]
         {
-            get
-            {
-                if (slices.Length == 0)
-                    throw new ArgumentException("At least one slice definition expected");
-                return new NDArray(Storage.GetView(slices));
-            }
-            set
-            {
-                throw new NotImplementedException("slice data set is not implemented.");
-            }
+            get => new NDArray(Storage.GetView(slices));
+            set => Storage.GetView(slices).SetData(value);
         }
+
         //TODO! masking with boolean array
         // example:
         //
@@ -216,9 +208,7 @@ namespace NumSharp
             if (this_shape.IsSliced)
             {
                 // in this case we can not get a slice of contiguous memory, so we slice
-                var view = Storage.GetView(indices.Select(i => Slice.Index(i)).ToArray());
-                var nd= new NDArray(view);
-                return nd;
+                return new NDArray(Storage.GetView(indices.Select(Slice.Index).ToArray()));
             }
             var (shape, offset) = Storage.Shape.GetSubshape(indices);
             return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));
