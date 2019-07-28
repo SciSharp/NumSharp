@@ -11,7 +11,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
-    public unsafe struct UnmanagedMemoryBlock<T> : IMemoryBlock<T>, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
+    public unsafe struct UnmanagedMemoryBlock<T> : IUnmanagedMemoryBlock, IMemoryBlock<T>, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
         private readonly IDisposable _disposer;
         public readonly int Count;
