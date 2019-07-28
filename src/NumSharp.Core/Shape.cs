@@ -550,6 +550,9 @@ namespace NumSharp
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
 
+            if (input_slices.Length == 0)
+                throw new ArgumentException("At least one slice definition expected");
+
             var slices = new List<SliceDef>(16);
             var sliced_axes_unreduced = new List<int>();
             for (int i = 0; i < NDim; i++)
