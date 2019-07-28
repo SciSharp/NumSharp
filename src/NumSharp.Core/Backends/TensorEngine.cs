@@ -26,7 +26,9 @@ namespace NumSharp
         #region Math
 
         #region Reduction
-        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false);
+
+        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion
 
@@ -36,7 +38,8 @@ namespace NumSharp
         public abstract NDArray Log(in NDArray nd, Type dtype = null);
         public abstract NDArray Log(in NDArray nd, NPTypeCode typeCode);
         public abstract NDArray MatMul(NDArray x, NDArray y);
-        public abstract NDArray Mean(NDArray x, int axis = -1);
+        public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type = null);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode);
@@ -45,10 +48,10 @@ namespace NumSharp
         public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
 
-
         #endregion
 
         #region Logic
+
         public abstract NDArray<bool> Compare(in NDArray lhs, in NDArray rhs);
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
@@ -74,6 +77,5 @@ namespace NumSharp
         public abstract NDArray ArgMax(NDArray nd, int axis = -1);
 
         #endregion
-
     }
 }

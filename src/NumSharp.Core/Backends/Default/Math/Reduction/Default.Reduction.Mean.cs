@@ -5,7 +5,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
         {
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
@@ -14,7 +14,7 @@ namespace NumSharp.Backends
 
             if (axis_ == null)
             {
-                var r = NDArray.Scalar(sum_elementwise(arr, typeCode));
+                var r = NDArray.Scalar(mean_elementwise(arr, typeCode));
                 return keepdims ? r.reshape(np.broadcast_to(r.Shape, arr.Shape)) : r;
             }
 
@@ -37,13 +37,16 @@ namespace NumSharp.Backends
 
             //handle keepdims
             Shape axisedShape = Shape.GetAxis(shape, axis);
+            var retType = typeCode ?? (arr.GetTypeCode.GetComputingType());
 
             //prepare ret
-            var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), axisedShape, false);
+            var ret = new NDArray(retType, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var iterRet = new NDCoordinatesIncrementor(ref axisedShape);
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
+
+            //resolve the accumulator type
 
 #if _REGEN
             #region Compute
@@ -52,21 +55,22 @@ namespace NumSharp.Backends
 			    %foreach supported_numericals,supported_numericals_lowercase%
 			    case NPTypeCode.#1: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_accumulatingType_defaultvals,supported_numericals_accumulatingType%
 			            case NPTypeCode.#101: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<#2>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<#2>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 |#104 sum = #103;
                                 while (hasNext())
                                     sum += (#104) moveNext();
 
-                                ret.Set#1(Convert.To#1(sum), iterIndex);
+                                ret.Set#1(Convert.To#1(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -83,25 +87,26 @@ namespace NumSharp.Backends
             #endregion
 #else
 
-            #region Compute
+#region Compute
             switch (arr.GetTypeCode)
 		    {
 			    case NPTypeCode.Byte: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -109,14 +114,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -124,14 +130,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -139,14 +146,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -154,14 +162,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -169,14 +178,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -184,14 +194,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -199,14 +210,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -214,14 +226,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -229,14 +242,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -244,14 +258,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Convert.ToByte(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -262,20 +277,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Int16: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -283,14 +299,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -298,14 +315,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -313,14 +331,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -328,14 +347,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -343,14 +363,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -358,14 +379,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -373,14 +395,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -388,14 +411,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -403,14 +427,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -418,14 +443,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Convert.ToInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -436,20 +462,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.UInt16: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -457,14 +484,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -472,14 +500,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -487,14 +516,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -502,14 +532,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -517,14 +548,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -532,14 +564,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -547,14 +580,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -562,14 +596,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -577,14 +612,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -592,14 +628,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Convert.ToUInt16(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -610,20 +647,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Int32: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -631,14 +669,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -646,14 +685,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -661,14 +701,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -676,14 +717,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -691,14 +733,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -706,14 +749,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/(ulong) slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -721,14 +765,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -736,14 +781,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -751,14 +797,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -766,14 +813,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Convert.ToInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -784,20 +832,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.UInt32: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -805,14 +854,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -820,14 +870,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -835,14 +886,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -850,14 +902,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -865,14 +918,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -880,14 +934,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/(ulong) slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -895,14 +950,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -910,14 +966,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -925,14 +982,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -940,14 +998,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Convert.ToUInt32(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -958,20 +1017,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Int64: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -979,14 +1039,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -994,14 +1055,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1009,14 +1071,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1024,14 +1087,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1039,14 +1103,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1054,14 +1119,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1069,14 +1135,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1084,14 +1151,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1099,14 +1167,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1114,14 +1183,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Convert.ToInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1132,20 +1202,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.UInt64: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1153,14 +1224,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1168,14 +1240,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1183,14 +1256,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1198,14 +1272,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1213,14 +1288,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1228,14 +1304,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1243,14 +1320,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1258,14 +1336,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1273,14 +1352,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1288,14 +1368,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Convert.ToUInt64(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1306,20 +1387,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Char: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1327,14 +1409,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1342,14 +1425,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1357,14 +1441,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1372,14 +1457,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1387,14 +1473,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1402,14 +1489,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1417,14 +1505,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1432,14 +1521,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1447,14 +1537,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1462,14 +1553,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Convert.ToChar(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1480,20 +1572,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Double: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1501,14 +1594,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1516,14 +1610,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1531,14 +1626,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1546,14 +1642,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1561,14 +1658,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1576,14 +1674,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1591,14 +1690,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1606,14 +1706,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1621,14 +1722,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1636,14 +1738,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Convert.ToDouble(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1654,20 +1757,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Single: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1675,14 +1779,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1690,14 +1795,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1705,14 +1811,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1720,14 +1827,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1735,14 +1843,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1750,14 +1859,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1765,14 +1875,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1780,14 +1891,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1795,14 +1907,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1810,14 +1923,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Convert.ToSingle(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1828,20 +1942,21 @@ namespace NumSharp.Backends
                 }
 			    case NPTypeCode.Decimal: 
                 {
-                    switch (ret.GetTypeCode)
+                    switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1849,14 +1964,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1864,14 +1980,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1879,14 +1996,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int32 sum = 0;
                                 while (hasNext())
                                     sum += (Int32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1894,14 +2012,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = 0u;
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1909,14 +2028,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Int64 sum = 0L;
                                 while (hasNext())
                                     sum += (Int64) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1924,14 +2044,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt64 sum = 0UL;
                                 while (hasNext())
                                     sum += (UInt64) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/ (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1939,14 +2060,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 UInt32 sum = '\0';
                                 while (hasNext())
                                     sum += (UInt32) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1954,14 +2076,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Double sum = 0d;
                                 while (hasNext())
                                     sum += (Double) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1969,14 +2092,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Single sum = 0f;
                                 while (hasNext())
                                     sum += (Single) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1984,14 +2108,15 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var slice = arr[slices];
+                                var iter = slice.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 Decimal sum = 0m;
                                 while (hasNext())
                                     sum += (Decimal) moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Convert.ToDecimal(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -2003,9 +2128,7 @@ namespace NumSharp.Backends
 			    default:
 				    throw new NotSupportedException();
 		    }
-
-		    
-            #endregion
+#endregion
 #endif
 
             if (keepdims)
@@ -2014,9 +2137,9 @@ namespace NumSharp.Backends
             return ret;
         }
 
-        protected object sum_elementwise(NDArray arr, NPTypeCode? typeCode)
+        protected object mean_elementwise(NDArray arr, NPTypeCode? typeCode)
         {
-            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
+            var retType = typeCode ?? (arr.GetTypeCode.GetComputingType());
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)
@@ -2029,14 +2152,15 @@ namespace NumSharp.Backends
 			            %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_accumulatingType_defaultvals,supported_numericals_accumulatingType%
 			            case NPTypeCode.#101: 
                         {
-                            var iter = arr.AsIterator<#2>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            |#104 sum = #103;
-                            while (hasNext())
-                                sum += (#104) moveNext();
+                                var iter = arr.AsIterator<#2>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                |#104 sum = #103;
+                                while (hasNext())
+                                    sum += (#104) moveNext();
 
-                            return sum;
+                                return Convert.To#1(sum/arr.size);
+                            break;
                         }
 			            %
 			            default:
@@ -2060,124 +2184,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/(ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<byte>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToByte(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2190,124 +2325,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<short>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToInt16(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2320,124 +2466,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<ushort>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt16(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2450,124 +2607,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<int>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToInt32(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2580,124 +2748,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<uint>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt32(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2710,124 +2889,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<long>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToInt64(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2840,124 +3030,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<ulong>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToUInt64(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2970,124 +3171,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<char>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToChar(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3100,124 +3312,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<double>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToDouble(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3230,124 +3453,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<float>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToSingle(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3360,124 +3594,135 @@ namespace NumSharp.Backends
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int16: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt16: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int32 sum = 0;
-                            while (hasNext())
-                                sum += (Int32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int32 sum = 0;
+                                while (hasNext())
+                                    sum += (Int32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt32: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = 0u;
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = 0u;
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Int64 sum = 0L;
-                            while (hasNext())
-                                sum += (Int64) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Int64 sum = 0L;
+                                while (hasNext())
+                                    sum += (Int64) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.UInt64: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt64 sum = 0UL;
-                            while (hasNext())
-                                sum += (UInt64) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt64 sum = 0UL;
+                                while (hasNext())
+                                    sum += (UInt64) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/ (ulong)arr.size);
+                            break;
                         }
 			            case NPTypeCode.Char: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            UInt32 sum = '\0';
-                            while (hasNext())
-                                sum += (UInt32) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                UInt32 sum = '\0';
+                                while (hasNext())
+                                    sum += (UInt32) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Double sum = 0d;
-                            while (hasNext())
-                                sum += (Double) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Double sum = 0d;
+                                while (hasNext())
+                                    sum += (Double) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Single sum = 0f;
-                            while (hasNext())
-                                sum += (Single) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Single sum = 0f;
+                                while (hasNext())
+                                    sum += (Single) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            case NPTypeCode.Decimal: 
                         {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            Decimal sum = 0m;
-                            while (hasNext())
-                                sum += (Decimal) moveNext();
+                                var iter = arr.AsIterator<decimal>();
+                                var moveNext = iter.MoveNext;
+                                var hasNext = iter.HasNext;
+                                Decimal sum = 0m;
+                                while (hasNext())
+                                    sum += (Decimal) moveNext();
 
-                            return sum;
+                                return Convert.ToDecimal(sum/arr.size);
+                            break;
                         }
 			            default:
 				            throw new NotSupportedException();

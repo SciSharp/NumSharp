@@ -1,10 +1,17 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
     public static class NDIteratorExtensions
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static NDIterator<T> AsIterator<T>(this NDArray nd, bool autoreset = false) where T : unmanaged
+        {
+            return new NDIterator<T>(nd, autoreset);
+        }
+
         public static NDIterator AsIterator(this NDArray nd, bool autoreset = false)
         {
 #if _REGEN

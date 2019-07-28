@@ -9,6 +9,18 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
     [TestClass]
     public class ReduceAddTests
     {
+
+        [TestMethod]
+        public void Case1_Elementwise_keepdims()
+        {
+            var np1 = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2);
+            var mean = np.sum(np1, keepdims: true);
+            mean.Shape.Should().Be(new Shape(3, 2));
+            mean.GetValue(0).Should().BeEquivalentTo(21);
+            mean.GetValue(2,0).Should().BeEquivalentTo(21);
+        }
+
+
         [TestMethod]
         public void Case0_Scalar()
         {
@@ -44,6 +56,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             ret.Shape.Should().Be(new Shape(3, 3));
+            ret.GetTypeCode.Should().Be(a.GetTypeCode);
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 

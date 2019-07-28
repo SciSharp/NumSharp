@@ -25,10 +25,7 @@ namespace NumSharp.Backends
 
         public override NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false)
         {
-            NDArray ret = nd;
-            if (typeCode != null)
-                ret = nd.astype(typeCode.Value);
-            return ReduceAdd(ret, axis, keepdims);
+            return ReduceAdd(nd, axis, keepdims, typeCode);
         }
     }
 }
