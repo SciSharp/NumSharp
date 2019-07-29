@@ -180,12 +180,12 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, -8 }, view3.ToArray<int>());
             // modify views
-            view1.SetData(88, 7);
+            view1.SetValue(88, 7);
             AssertAreEqual(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9 }, data.ToArray<int>());
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, }, view1.ToArray<int>());
             AssertAreEqual(new int[] { 88, -6, -4, -2, }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, 88 }, view3.ToArray<int>());
-            view3.SetData(22, 0);
+            view3.SetValue(22, 0);
             AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9 }, data.ToArray<int>());
             AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, }, view1.ToArray<int>());
             AssertAreEqual(new int[] { 88, -6, -4, 22, }, view2.ToArray<int>());
@@ -325,16 +325,16 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, -8, -2, -8 }, view3.ToArray<int>());
             // modify views
-            view1.SetData(88, 0, 7);
-            view1.SetData(888, 1, 7);
+            view1.SetValue(88, 0, 7);
+            view1.SetValue(888, 1, 7);
             AssertAreEqual(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9, 0, -1, -2, -3, -4, -5, -6, -7, 888, -9 },
                 data.ToArray<int>());
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, 88, -1, -2, -3, -4, -5, -6, -7, 888 },
                 view1.ToArray<int>());
             AssertAreEqual(new int[] { 88, -6, -4, -2, 888, -6, -4, -2 }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, 88, -2, 888 }, view3.ToArray<int>());
-            view3.SetData(22, 0, 0);
-            view3.SetData(222, 1, 0);
+            view3.SetValue(22, 0, 0);
+            view3.SetValue(222, 1, 0);
             AssertAreEqual(new int[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9, 0, -1, 222, -3, -4, -5, -6, -7, 888, -9 },
                 data.ToArray<int>());
             AssertAreEqual(new int[] { -1, 22, -3, -4, -5, -6, -7, 88, -1, 222, -3, -4, -5, -6, -7, 888 },

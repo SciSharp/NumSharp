@@ -679,7 +679,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
+        ///      Set a <see cref="NDArray"/>, <see cref="IArraySlice"/>, <see cref="Array"/> or a scalar value at given <see cref="indices"/>.
         /// </summary>
         /// <param name="value">The value to set</param>
         /// <param name="indices">The </param>
@@ -687,7 +687,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(ValueType value, params int[] indices)
+        public void SetData(object value, params int[] indices)
         {
             Storage.SetData(value, indices);
         }
@@ -701,9 +701,37 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData<T>(T value, params int[] indices) where T : unmanaged
+        public void SetValue(ValueType value, params int[] indices)
         {
-            Storage.SetData<T>(value, indices);
+            Storage.SetValue(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetValue(object value, params int[] indices)
+        {
+            Storage.SetValue(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetValue<T>(T value, params int[] indices) where T : unmanaged
+        {
+            Storage.SetValue<T>(value, indices);
         }
 
         /// <summary>

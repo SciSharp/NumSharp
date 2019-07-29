@@ -397,6 +397,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="offset"></param>
         /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
         public int[] GetCoordinates(int offset)
         {
             int[] coords = null;
@@ -486,6 +487,7 @@ namespace NumSharp
         ///     Extracts the shape of given <paramref name="array"/>.
         /// </summary>
         /// <remarks>Supports both jagged and multi-dim.</remarks>
+        [MethodImpl((MethodImplOptions)512)]
         public static int[] ExtractShape(Array array)
         {
             if (array == null)
@@ -549,9 +551,6 @@ namespace NumSharp
         {
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
-
-            if (input_slices.Length == 0)
-                throw new ArgumentException("At least one slice definition expected");
 
             var slices = new List<SliceDef>(16);
             var sliced_axes_unreduced = new List<int>();

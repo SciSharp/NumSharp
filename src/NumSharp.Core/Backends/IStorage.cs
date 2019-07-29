@@ -146,7 +146,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged;
+        unsafe void SetValue<T>(T value, params int[] indices) where T : unmanaged;
 
         /// <summary>
         ///     Set a <see cref="IArraySlice"/> at given <see cref="indices"/>.

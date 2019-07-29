@@ -216,7 +216,7 @@ namespace NumSharp.UnitTest.Creation
             var ret = new NDArray(typeof(int), x.LeftShape);
             foreach ((int i1, int i2) in indexes2(5, 5))
             {
-                ret.SetData(left.GetInt32(i1, i2) + right.GetInt32(i1, i2), i1, i2);
+                ret.SetValue(left.GetInt32(i1, i2) + right.GetInt32(i1, i2), i1, i2);
                 Console.WriteLine($"{ret.GetInt32(i1, i2)} = {left.GetInt32(i1, i2)} {right.GetInt32(i1, i2)}");
             }
 
@@ -230,7 +230,7 @@ namespace NumSharp.UnitTest.Creation
             ret = new NDArray(typeof(int), x.LeftShape);
             foreach ((int i1, int i2, int i3) in indexes3(2, 5, 5))
             {
-                ret.SetData(left.GetInt32(i1, i2, i3) + right.GetInt32(i1, i2, i3), i1, i2, i3);
+                ret.SetValue(left.GetInt32(i1, i2, i3) + right.GetInt32(i1, i2, i3), i1, i2, i3);
                 Console.WriteLine($"{ret.GetInt32(i1, i2, i3)} = {left.GetInt32(i1, i2)} {right.GetInt32(i1, i2, i3)}");
             }
 

@@ -167,7 +167,7 @@ namespace NumSharp.Generic
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.GetValue<T>(select);
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => Storage.SetData(value, select);
+            set => Storage.SetValue<T>(value, select);
         }
 
         /// <summary>

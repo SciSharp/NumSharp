@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
@@ -1233,13 +1234,13 @@ namespace NumSharp.Backends
         {
             unsafe
             {
-                *((T*)this.Address + index) = value;
+                *((T*)Address + index) = value;
             }
         }
 
         public unsafe void SetAtIndex<T>(T value, int index) where T : unmanaged
         {
-            *((T*)this.Address + _shape.TransformOffset(index)) = value;
+            *((T*)Address + _shape.TransformOffset(index)) = value;
         }
 
         public unsafe void SetAtIndex(object value, int index)
@@ -1309,8 +1310,75 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public unsafe void SetData<T>(T value, params int[] indices) where T : unmanaged
-            => *((T*)this.Address + _shape.GetOffset(indices)) = value;
+        public unsafe void SetValue<T>(T value, params int[] indices) where T : unmanaged
+            => *((T*)Address + _shape.GetOffset(indices)) = value;
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The </param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public unsafe void SetValue(object value, params int[] indices)
+        {
+            switch (_typecode)
+            {
+#if _REGEN
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                case NPTypeCode.#1:
+                    *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
+                    return;
+                %
+                default:
+                    throw new NotSupportedException();
+#else
+
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                case NPTypeCode.Boolean:
+                    *((bool*)Address + _shape.GetOffset(indices)) = (bool) value;
+                    return;
+                case NPTypeCode.Byte:
+                    *((byte*)Address + _shape.GetOffset(indices)) = (byte) value;
+                    return;
+                case NPTypeCode.Int16:
+                    *((short*)Address + _shape.GetOffset(indices)) = (short) value;
+                    return;
+                case NPTypeCode.UInt16:
+                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort) value;
+                    return;
+                case NPTypeCode.Int32:
+                    *((int*)Address + _shape.GetOffset(indices)) = (int) value;
+                    return;
+                case NPTypeCode.UInt32:
+                    *((uint*)Address + _shape.GetOffset(indices)) = (uint) value;
+                    return;
+                case NPTypeCode.Int64:
+                    *((long*)Address + _shape.GetOffset(indices)) = (long) value;
+                    return;
+                case NPTypeCode.UInt64:
+                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong) value;
+                    return;
+                case NPTypeCode.Char:
+                    *((char*)Address + _shape.GetOffset(indices)) = (char) value;
+                    return;
+                case NPTypeCode.Double:
+                    *((double*)Address + _shape.GetOffset(indices)) = (double) value;
+                    return;
+                case NPTypeCode.Single:
+                    *((float*)Address + _shape.GetOffset(indices)) = (float) value;
+                    return;
+                case NPTypeCode.Decimal:
+                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal) value;
+                    return;
+                default:
+                    throw new NotSupportedException();
+#endif
+            }
+        }
 
         /// <summary>
         ///     Set a single value at given <see cref="indices"/>.
