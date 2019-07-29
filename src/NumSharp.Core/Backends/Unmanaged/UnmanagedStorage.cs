@@ -2202,7 +2202,9 @@ namespace NumSharp.Backends
 
         #endregion
 
-
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address.
+        /// </summary>
         public void CopyTo(IntPtr ptr)
         {
             unsafe
@@ -2212,7 +2214,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        ///     Copies the entire contents of this storage to given address.
         /// </summary>
         /// <param name="address">The address to copy to.</param>
         public unsafe void CopyTo(void* address)
@@ -2324,14 +2326,14 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
-        /// <param name="slice">The slice to copy to.</param>
-        public unsafe void CopyTo(IMemoryBlock slice)
+        /// <param name="block">The block to copy to.</param>
+        public unsafe void CopyTo(IMemoryBlock block)
         {
-            if (slice.TypeCode != _typecode)
+            if (block.TypeCode != _typecode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (Count > slice.Count)
-                throw new ArgumentOutOfRangeException(nameof(slice), $"Unable to copy from this storage to given memory block because this storage count is larger than the given memory block's length.");
+            if (Count > block.Count)
+                throw new ArgumentOutOfRangeException(nameof(block), $"Unable to copy from this storage to given memory block because this storage count is larger than the given memory block's length.");
 
 #if _REGEN
             #region Compute
@@ -2359,73 +2361,73 @@ namespace NumSharp.Backends
 		    {
 			    case NPTypeCode.Boolean:
 			    {
-				    CopyTo<bool>((bool*)slice.Address);
+				    CopyTo<bool>((bool*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Byte:
 			    {
-				    CopyTo<byte>((byte*)slice.Address);
+				    CopyTo<byte>((byte*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Int16:
 			    {
-				    CopyTo<short>((short*)slice.Address);
+				    CopyTo<short>((short*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.UInt16:
 			    {
-				    CopyTo<ushort>((ushort*)slice.Address);
+				    CopyTo<ushort>((ushort*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Int32:
 			    {
-				    CopyTo<int>((int*)slice.Address);
+				    CopyTo<int>((int*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.UInt32:
 			    {
-				    CopyTo<uint>((uint*)slice.Address);
+				    CopyTo<uint>((uint*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Int64:
 			    {
-				    CopyTo<long>((long*)slice.Address);
+				    CopyTo<long>((long*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.UInt64:
 			    {
-				    CopyTo<ulong>((ulong*)slice.Address);
+				    CopyTo<ulong>((ulong*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Char:
 			    {
-				    CopyTo<char>((char*)slice.Address);
+				    CopyTo<char>((char*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Double:
 			    {
-				    CopyTo<double>((double*)slice.Address);
+				    CopyTo<double>((double*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Single:
 			    {
-				    CopyTo<float>((float*)slice.Address);
+				    CopyTo<float>((float*)block.Address);
                     break;
 			    }
 
 			    case NPTypeCode.Decimal:
 			    {
-				    CopyTo<decimal>((decimal*)slice.Address);
+				    CopyTo<decimal>((decimal*)block.Address);
                     break;
 			    }
 
@@ -2440,16 +2442,16 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
-        /// <param name="slice">The slice to copy to.</param>
-        public unsafe void CopyTo<T>(IMemoryBlock<T> slice) where T : unmanaged
+        /// <param name="block">The block to copy to.</param>
+        public unsafe void CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged
         {
-            if (slice.TypeCode != _typecode)
+            if (block.TypeCode != _typecode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (Count > slice.Count)
-                throw new ArgumentOutOfRangeException(nameof(slice), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
+            if (Count > block.Count)
+                throw new ArgumentOutOfRangeException(nameof(block), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
 			
-            CopyTo<T>(slice.Address);
+            CopyTo<T>(block.Address);
         }
 
         /// <summary>
