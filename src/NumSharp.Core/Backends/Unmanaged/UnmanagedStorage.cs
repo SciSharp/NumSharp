@@ -1339,40 +1339,40 @@ namespace NumSharp.Backends
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                    *((bool*)Address + _shape.GetOffset(indices)) = (bool) value;
+                    *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
                     return;
                 case NPTypeCode.Byte:
-                    *((byte*)Address + _shape.GetOffset(indices)) = (byte) value;
+                    *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
                     return;
                 case NPTypeCode.Int16:
-                    *((short*)Address + _shape.GetOffset(indices)) = (short) value;
+                    *((short*)Address + _shape.GetOffset(indices)) = (short)value;
                     return;
                 case NPTypeCode.UInt16:
-                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort) value;
+                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort)value;
                     return;
                 case NPTypeCode.Int32:
-                    *((int*)Address + _shape.GetOffset(indices)) = (int) value;
+                    *((int*)Address + _shape.GetOffset(indices)) = (int)value;
                     return;
                 case NPTypeCode.UInt32:
-                    *((uint*)Address + _shape.GetOffset(indices)) = (uint) value;
+                    *((uint*)Address + _shape.GetOffset(indices)) = (uint)value;
                     return;
                 case NPTypeCode.Int64:
-                    *((long*)Address + _shape.GetOffset(indices)) = (long) value;
+                    *((long*)Address + _shape.GetOffset(indices)) = (long)value;
                     return;
                 case NPTypeCode.UInt64:
-                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong) value;
+                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong)value;
                     return;
                 case NPTypeCode.Char:
-                    *((char*)Address + _shape.GetOffset(indices)) = (char) value;
+                    *((char*)Address + _shape.GetOffset(indices)) = (char)value;
                     return;
                 case NPTypeCode.Double:
-                    *((double*)Address + _shape.GetOffset(indices)) = (double) value;
+                    *((double*)Address + _shape.GetOffset(indices)) = (double)value;
                     return;
                 case NPTypeCode.Single:
-                    *((float*)Address + _shape.GetOffset(indices)) = (float) value;
+                    *((float*)Address + _shape.GetOffset(indices)) = (float)value;
                     return;
                 case NPTypeCode.Decimal:
-                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal) value;
+                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -1403,7 +1403,14 @@ namespace NumSharp.Backends
                 return;
             }
 
-            SetAtIndex(value, _shape.GetOffset(indices));
+            if (value is Array array)
+            {
+                SetData((NDArray)array, indices);
+                return;
+            }
+
+            //we assume this is a scalar.
+            SetValue(value, _shape.GetOffset(indices));
         }
 
         /// <summary>
