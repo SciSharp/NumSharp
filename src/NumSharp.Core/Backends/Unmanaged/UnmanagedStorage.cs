@@ -1461,10 +1461,10 @@ namespace NumSharp.Backends
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
 
-            //if (value.TypeCode != TypeCode)
-            //    value = (IArraySlice)value.CastTo(TypeCode);
-
-            MultiIterator.Assign(GetData(indices), new UnmanagedStorage(value, Shape.Vector(value.Count)));
+            //casting is resolved inside
+            var lhs = GetData(indices);
+            Debug.Assert(lhs.Count == value.Count);
+            MultiIterator.Assign(lhs, new UnmanagedStorage(value, lhs.Shape.Clean()));
         }
 
         #region Typed Setters
@@ -2066,19 +2066,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public IArraySlice GetData()
-        {
-            return InternalArray;
-        }
+        public IArraySlice GetData() => InternalArray;
 
-        //TODO! because this is not typed, I think it should be removed:
-        //public object this[params int[] indices]
-        //{
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    get => GetValue(indices);
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    set => SetAtIndex(value, _shape.GetOffset(indices));
-        //}
 
 #if _REGEN
 #region Direct Getters
