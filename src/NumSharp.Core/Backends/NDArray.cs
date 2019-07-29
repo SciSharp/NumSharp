@@ -466,7 +466,7 @@ namespace NumSharp
         ///     Assert.IsTrue(ret.Length == 3);<br></br>
         /// </code>
         /// </example>
-        [SuppressMessage<T>("ReSharper", "LoopCanBeConvertedToQuery")]
+        [SuppressMessage("ReSharper", "LoopCanBeConvertedToQuery")]
         public NDArray[] GetNDArrays(int axis = 0)
         {
             axis += 1; //axis is 0-based, we need 1 based (aka count)

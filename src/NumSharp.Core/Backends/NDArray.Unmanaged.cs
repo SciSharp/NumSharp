@@ -111,7 +111,7 @@ namespace NumSharp
             ///     Provides the ability to return a pin to the memory address of NDArray.
             /// </summary>
             /// <remarks>Possible only when the ndarray is not sliced.</remarks>
-            public unsafe _Pinning Pin => new _Pinning(this);
+            public unsafe _Pinning Pin => new _Pinning(_this);
 
             public struct _Pinning
             {
