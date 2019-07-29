@@ -15,6 +15,7 @@ namespace NumSharp
             //test if the ndarray is empty.
             if (a.size == 0)
                 return a;
+            //TODO! this can be done by a simple insert to a list or copy from two arrays.
 
             //we create an nd-array of the shape and then slice/split it on axis index.
             var shape = np.array(a.shape);
