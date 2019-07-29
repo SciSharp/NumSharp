@@ -1,4 +1,4 @@
-﻿namespace NumSharp.Backends {
+﻿namespace NumSharp {
     public enum IteratorType
     {
         Scalar,

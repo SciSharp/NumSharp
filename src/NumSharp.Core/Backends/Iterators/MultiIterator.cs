@@ -1,7 +1,8 @@
 ﻿using System;
+using NumSharp.Backends;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public static class MultiIterator
     {

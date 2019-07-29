@@ -3,10 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable where TOut : unmanaged
     {

@@ -2,7 +2,7 @@
 using System.Collections;
 using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public delegate ref T MoveNextReferencedDelegate<T>() where T : unmanaged;
 

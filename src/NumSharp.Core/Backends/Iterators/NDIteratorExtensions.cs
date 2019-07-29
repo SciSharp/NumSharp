@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public static class NDIteratorExtensions
     {
