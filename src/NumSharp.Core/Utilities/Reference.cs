@@ -6,11 +6,11 @@
     {
         public T Value;
 
-        public Reference(T value)
-        {
-            Value = value;
-        }
-
         public Reference() { }
+
+        public Reference(T value) => Value = value;
+
+        public ref T GetPinnableReference() => ref Value;
+
     }
 }
