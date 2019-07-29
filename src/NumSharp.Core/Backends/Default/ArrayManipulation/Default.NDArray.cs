@@ -19,7 +19,7 @@ namespace NumSharp.Backends
             switch (dtype.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase,supported_currently_supported_defaultvals%
+	            %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
 	            case NPTypeCode.#1:
 	            {
                     slice = new ArraySlice<#2>(buffer == null ? new UnmanagedMemoryBlock<#2>(shape.size, #3) : UnmanagedMemoryBlock<#2>.FromArray((#2[])buffer));
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
                 switch (dtype.GetTypeCode())
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase,supported_currently_supported_defaultvals%
+	                %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
 	                case NPTypeCode.#1:
 	                {
                         buffer = new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(shape.size, #3));

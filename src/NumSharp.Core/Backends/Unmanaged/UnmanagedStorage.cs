@@ -30,7 +30,7 @@ namespace NumSharp.Backends
     public partial class UnmanagedStorage : IStorage, ICloneable
     {
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         protected ArraySlice<#2> _array#1;
 #else
         protected ArraySlice<bool> _arrayBoolean;
@@ -342,7 +342,7 @@ namespace NumSharp.Backends
         }
 
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         public UnmanagedStorage(#2 scalar)
         {            
             _dtype = typeof(#1);
@@ -515,7 +515,7 @@ namespace NumSharp.Backends
         }
 #endif
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         public UnmanagedStorage(#1[] values)
         {            
             if (values == null)
@@ -726,7 +726,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
@@ -852,7 +852,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     InternalArray = _array#1 = (ArraySlice<#2>)array;
@@ -1249,7 +1249,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                     *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
                     return;
@@ -1328,7 +1328,7 @@ namespace NumSharp.Backends
             {
 #if _REGEN
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+                %foreach supported_dtypes,supported_dtypes_lowercase%
                 case NPTypeCode.#1:
                     *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
                     return;
@@ -1470,7 +1470,7 @@ namespace NumSharp.Backends
         #region Typed Setters
 
 #if _REGEN
-	%foreach supported_currently_supported,supported_currently_supported_lowercase%
+	%foreach supported_dtypes,supported_dtypes_lowercase%
         /// <summary>
         ///     Sets a #2 at specific coordinates.
         /// </summary>
@@ -1947,7 +1947,7 @@ namespace NumSharp.Backends
             switch (TypeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(indices));
 	            %
 	            default:
@@ -1976,7 +1976,7 @@ namespace NumSharp.Backends
 #if _REGEN
             switch (TypeCode)
             {
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
 	            %
 	            default:
@@ -2072,7 +2072,7 @@ namespace NumSharp.Backends
 #if _REGEN
 #region Direct Getters
      
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         /// <summary>
         ///     Retrieves value of type <see cref="#2"/> from internal storage.
         /// </summary>
@@ -2224,7 +2224,7 @@ namespace NumSharp.Backends
 
 		    switch (TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1:
 			    {
 				    CopyTo<#2>((#2*)address);
@@ -2340,7 +2340,7 @@ namespace NumSharp.Backends
 
 		    switch (TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1:
 			    {
 				    CopyTo<#2>((#2*)slice.Address);

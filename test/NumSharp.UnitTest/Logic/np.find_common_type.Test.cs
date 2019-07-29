@@ -317,8 +317,8 @@ namespace NumSharp.UnitTest.Logic
         public void gen_all_possible_combinations()
         {
 #if _REGEN
-            %a = supported_currently_supported
-            %b = supported_currently_supported_lowercase
+            %a = supported_dtypes
+            %b = supported_dtypes_lowercase
 
             %foreach forevery(b,b,false), forevery(a,a, false)%
             Console.WriteLine($"#3 <> #4  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.#3, NPTypeCode.#4}, Array.Empty<NPTypeCode>()));

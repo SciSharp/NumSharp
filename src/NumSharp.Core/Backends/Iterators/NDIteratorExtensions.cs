@@ -18,7 +18,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (nd.GetTypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(nd, autoreset);
 			    %
 			    default:
@@ -58,7 +58,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (us.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(us, autoreset);
 			    %
 			    default:
@@ -98,7 +98,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (arr.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(arr, shape, null);
 			    %
 			    default:
@@ -138,7 +138,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (arr.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(arr, shape, null, autoreset);
 			    %
 			    default:
@@ -178,7 +178,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (arr.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(arr, shape, broadcastShape, autoReset);
 			    %
 			    default:

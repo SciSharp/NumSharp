@@ -392,7 +392,7 @@ namespace NumSharp
             #region Compute
 		    switch (GetTypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
 			    %
 			    default:
@@ -820,7 +820,7 @@ namespace NumSharp
         public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
 #if _REGEN
-	%foreach supported_currently_supported,supported_currently_supported_lowercase%
+	%foreach supported_dtypes,supported_dtypes_lowercase%
         /// <summary>
         ///     Sets a #2 at specific coordinates.
         /// </summary>

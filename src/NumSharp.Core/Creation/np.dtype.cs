@@ -189,7 +189,7 @@ namespace NumSharp
                 {
                     case NPTypeCode.NDArray: return new DType(typeof(IntPtr)); //todo! ??
 #if _REGEN
-	                %foreach supported_dtypes%
+	                %foreach all_dtypes%
 	                case NPTypeCode.#1: return new DType(typeof(#1));
 	                %
 	                default:

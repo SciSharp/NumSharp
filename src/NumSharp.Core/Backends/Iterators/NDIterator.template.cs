@@ -1,5 +1,5 @@
 ﻿#if _REGEN_TEMPLATE
-%template "./NDIteratorCasts/NDIterator.Cast.#1.cs" for every supported_currently_supported, supported_currently_supported_lowercase
+%template "./NDIteratorCasts/NDIterator.Cast.#1.cs" for every supported_dtypes, supported_dtypes_lowercase
 #endif
 
 using System;

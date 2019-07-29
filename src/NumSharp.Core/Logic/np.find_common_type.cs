@@ -33,7 +33,7 @@ namespace NumSharp
         private static readonly char[] _kind_list = {'b', 'u', 'i', 'f', 'c', 'S', 'U', 'V', 'O', 'M', 'm'};
 
 #if __REGEN
-	        %foreach supported_dtypes%
+	        %foreach all_dtypes%
                 {NPTypeCode.#1, 10000 },
 	        %
 #else

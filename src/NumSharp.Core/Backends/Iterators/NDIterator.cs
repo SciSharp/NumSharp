@@ -74,7 +74,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (Block.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: setDefaults_#1(); break;
 			    %
 			    default:

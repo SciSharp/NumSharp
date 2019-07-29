@@ -40,7 +40,7 @@ namespace NumSharp
 
 
 #if __REGEN //DO NOT REGENERATE
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
 
             //#2 operators
             public static implicit operator NDArray(#2 d) => NDArray.Scalar<#2>(d);

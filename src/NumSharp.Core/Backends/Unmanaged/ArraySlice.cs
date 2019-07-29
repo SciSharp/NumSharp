@@ -24,7 +24,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (val.GetType().GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(1, _buffer)) {[0] = (#2)val};
 	            %
 	            default:
@@ -90,7 +90,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(copy ? (#2[])arr.Clone() : (#2[])arr));
 	            %
 	            default:
@@ -127,7 +127,7 @@ namespace NumSharp.Backends.Unmanaged
                 switch (type.GetGenericArguments()[0].GetTypeCode())
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1: return new ArraySlice<#2>(copy ? ((UnmanagedMemoryBlock<#2>)block).Clone() : (UnmanagedMemoryBlock<#2>)block);
 	                %
 	                default:
@@ -155,7 +155,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         public static ArraySlice<#2> FromArray(#2[] #2s, bool copy = false) => new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(#2s, copy));
         %
 #else
@@ -178,7 +178,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count, (#2)fill));
 	            %
 	            default:
@@ -210,7 +210,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count, default));
 	            %
 	            default:
@@ -239,7 +239,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count));
 	            %
 	            default:
@@ -268,7 +268,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (typeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count, (#2)fill));
 	            %
 	            default:
@@ -300,7 +300,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (typeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count, default));
 	            %
 	            default:
@@ -329,7 +329,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (typeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(count));
 	            %
 	            default:
