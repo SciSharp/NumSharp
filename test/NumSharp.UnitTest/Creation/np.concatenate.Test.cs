@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
             var b = np.full(2, (3, 2, 3), NPTypeCode.Int32);
-            var c = np.concatenate(1, a, b);
+            var c = np.concatenate((a, b), 1);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
             c.size.Should().Be(27);
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
             var b = np.full(2, (3, 2, 3), NPTypeCode.Double);
-            var c = np.concatenate(1, a, b);
+            var c = np.concatenate((a, b), 1);
 
             c.dtype.Should().Be<double>();
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.full(1, (1, 3, 3), NPTypeCode.Int32);
             var b = np.full(2, (2, 3, 3), NPTypeCode.Int32);
-            var c = np.concatenate(0, a, b);
+            var c = np.concatenate((a, b), 0);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
             c.size.Should().Be(27);
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
             var b = np.full(2, (3, 3, 2), NPTypeCode.Int32);
-            var c = np.concatenate(2, a, b);
+            var c = np.concatenate((a, b), 2);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
             c.size.Should().Be(27);
@@ -74,7 +74,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
             var b = np.full(2, (3, 3, 2), NPTypeCode.Int32);
-            var c = np.concatenate(-1, a, b);
+            var c = np.concatenate((a, b), -1);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
             c.size.Should().Be(27);
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
             var b = np.full(2, (3, 2, 3), NPTypeCode.Decimal);
             var c = np.full(2, (3, 1, 3), NPTypeCode.Byte);
-            var d = np.concatenate(1, a, b, c);
+            var d = np.concatenate((a, b, c), 1);
             d.dtype.Should().Be<decimal>();
             d.shape.Should().HaveCount(3).And.ContainInOrder(3, 4, 3);
             d.size.Should().Be(36);
