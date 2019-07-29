@@ -23,7 +23,9 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using NumSharp;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -38,23 +40,25 @@ namespace NumSharp
 
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
-            Array dotNetArray = Arrays.Create(typeof(T), this.shape);
+            var ret = Arrays.Create(typeof(T), shape);
 
-            var pufferShape = new Shape(shape);
+            var iter = this.AsIterator<T>();
+            var hasNext = iter.HasNext;
+            var next = iter.MoveNext;
+            var coorditer = new NDCoordinatesIncrementor(shape);
+            var indices = coorditer.Index;
 
-            int[] indexes = null;
-            object idxValue = null;
-
-            ArraySlice<T> array = Storage.GetData<T>();
-
-            for (int idx = 0; idx < this.size; idx++)
+            while (hasNext())
             {
-                indexes = pufferShape.GetCoordinates(idx);
-                idxValue = array[Storage.Shape.GetOffset(indexes)];
-                dotNetArray.SetValue(idxValue, indexes);
+                ret.SetValue(next(), indices);
+                if (coorditer.Next() == null)
+                    break;
             }
 
-            return dotNetArray;
+            return ret;
         }
+
+
     }
+    
 }
