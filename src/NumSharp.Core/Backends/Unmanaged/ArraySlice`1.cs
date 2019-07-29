@@ -198,7 +198,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>
         ///     Gets pinnable reference of the first item in the memory block storage.
         /// </summary>
-        ref T1 IArraySlice.GetPinnableReference<T1>() => ref (*(T1*)VoidAddress);
+        ref T1 IArraySlice.GetPinnableReference<T1>() => ref Unsafe.AsRef<T1>(VoidAddress);
 
         /// <param name="start"></param>
         /// <returns></returns>
