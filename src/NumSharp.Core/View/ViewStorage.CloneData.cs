@@ -22,7 +22,7 @@
 //            switch (returnTypeCode)
 //            {
 //#if _REGEN
-//                %foreach supported_dtypes%
+//                %foreach all_dtypes%
 //                case NPTypeCode.#1:
 //                {
 //                    var arr = (#1[])allocated;

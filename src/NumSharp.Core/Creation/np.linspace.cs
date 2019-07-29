@@ -73,7 +73,7 @@ namespace NumSharp
 
                     return ret;
 	            }
-	            %foreach except(supported_currently_supported, "Boolean"),except(supported_currently_supported_lowercase, "bool")%
+	            %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
 	            case NPTypeCode.#1:
 	            {
                     unsafe
@@ -272,7 +272,7 @@ namespace NumSharp
 
                     return ret;
 	            }
-	            %foreach except(supported_currently_supported, "Boolean"),except(supported_currently_supported_lowercase, "bool")%
+	            %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
 	            case NPTypeCode.#1:
 	            {
                     unsafe

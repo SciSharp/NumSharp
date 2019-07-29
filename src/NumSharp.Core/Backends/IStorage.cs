@@ -218,7 +218,7 @@ namespace NumSharp
         #region Get Methods
 
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
 
         /// <summary>
         ///     Retrieves value of type <see cref="#2"/> from internal storage..

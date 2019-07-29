@@ -3,7 +3,7 @@
 namespace NumSharp.Backends.Unmanaged
 {
 #if _REGEN
-        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+        %foreach supported_dtypes,supported_dtypes_lowercase%
         public class Unmanaged#1Storage : UnmanagedByteStorage<#2> {
             /// <inheritdoc />
             public Unmanaged#1Storage(Shape shape, bool assignZeros) : base(shape, assignZeros) { }

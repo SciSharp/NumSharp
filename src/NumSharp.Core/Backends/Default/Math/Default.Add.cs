@@ -1,5 +1,5 @@
 ﻿#if _REGEN_TEMPLATE
-%template "./Add/Default.Add.#1.cs" for every supported_currently_supported, supported_currently_supported_lowercase
+%template "./Add/Default.Add.#1.cs" for every supported_dtypes, supported_dtypes_lowercase
 #endif
 
 using System;
@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             switch (lhs.GetTypeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return Add#1(lhs, rhs);
 	            %
 	            default:

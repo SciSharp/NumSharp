@@ -39,7 +39,7 @@ namespace NumSharp
                 switch (dtype.GetTypeCode())
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1:
 	                {
                         return new NDArray(new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromBuffer(bytes, false)));

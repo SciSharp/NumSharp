@@ -37,7 +37,7 @@ namespace NumSharp
 
 
 #if _REGEN
-	%foreach except(supported_currently_supported,"Boolean", "Byte"), except(supported_currently_supported_lowercase, "bool", "byte")%
+	%foreach except(supported_dtypes,"Boolean", "Byte"), except(supported_dtypes_lowercase, "bool", "byte")%
         //#2
         public static NDArray operator +(#2 left, NDArray right) => np.add((NDArray)left, right);
         public static NDArray operator +(NDArray left, #2 right) => np.add(left, (NDArray) right);

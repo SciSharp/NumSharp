@@ -5,7 +5,7 @@ using System;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut>
     {

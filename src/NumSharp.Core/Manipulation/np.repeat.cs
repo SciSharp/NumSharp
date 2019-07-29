@@ -25,7 +25,7 @@ namespace NumSharp
             switch (a.GetTypeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
 	            {
 		            var ret = new NDArray(NPTypeCode.#1, Shape.Vector(size));

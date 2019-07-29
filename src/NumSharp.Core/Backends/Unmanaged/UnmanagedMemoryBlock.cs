@@ -21,7 +21,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
                     return UnmanagedMemoryBlock<#2>.FromArray((#2[])arr);
 	            %
@@ -63,7 +63,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
                     return new UnmanagedMemoryBlock<#2>(count);
 	            %
@@ -103,7 +103,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (elementType.GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
                     return new UnmanagedMemoryBlock<#2>(count, (#2)fill);
 	            %

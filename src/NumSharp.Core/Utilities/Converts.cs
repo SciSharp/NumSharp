@@ -20,12 +20,12 @@ namespace NumSharp.Utilities
             //#n is input, #10n is output
 		    switch (InfoOf<TIn>.NPTypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1:
 			    {
 				    switch (InfoOf<TOut>.NPTypeCode)
 		            {
-			            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			            %foreach supported_dtypes,supported_dtypes_lowercase%
 			            case NPTypeCode.#101:
 			            {
 				            Func<#2, #102> ret = Convert.To#101;

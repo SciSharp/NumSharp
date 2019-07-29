@@ -127,7 +127,7 @@ namespace NumSharp
 
 #if _REGEN
                 #region Compute
-		        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+		        %foreach supported_dtypes,supported_dtypes_lowercase%
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref #2 #1
                 {

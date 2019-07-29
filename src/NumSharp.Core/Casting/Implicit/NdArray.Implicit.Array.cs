@@ -43,7 +43,7 @@ namespace NumSharp
                 switch (nd.GetTypeCode)
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1: return nd.FromJaggedArray<#2>(array);
 	                %
 	                default:
@@ -73,7 +73,7 @@ namespace NumSharp
                 switch (nd.GetTypeCode)
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1: return nd.FromMultiDimArray<#2>(array);
 	                %
 	                default:
@@ -105,7 +105,7 @@ namespace NumSharp
             switch (nd.GetTypeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
 	            %
 	            default:

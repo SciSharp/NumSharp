@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 #if _REGEN
-        %a = except(supported_currently_supported, "NDArray", "Boolean")
+        %a = except(supported_dtypes, "NDArray", "Boolean")
         %foreach a
         [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
 #else
@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
 
 #if _REGEN
-        %a = except(supported_currently_supported, "NDArray")
+        %a = except(supported_dtypes, "NDArray")
         %b = [true,"1","1","1","1","1u","1L","1UL","1","1d","1f","1m"]
         %foreach forevery(a,a,true), forevery(b,b,true)%
         [TestMethod]

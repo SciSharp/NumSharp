@@ -31,7 +31,7 @@ namespace NumSharp
             switch (typeof(T).GetTypeCode())
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
 	            %
 	            default:

@@ -20,7 +20,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (to)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
 	                return Cast<#2>(source);
 	            %
@@ -69,7 +69,7 @@ namespace NumSharp.Backends.Unmanaged
             switch (source.TypeCode)
             {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1: return Cast<#2, TOut>(source);
 	                %
 	                default:
@@ -137,13 +137,13 @@ namespace NumSharp.Backends.Unmanaged
 #if _REGEN
                     #region Compute
                     //#n is in, #10n is out
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1:
                     {
                         var src = (#2*)source.Address;
                         switch (InfoOf<TOut>.NPTypeCode)
                         {
-	                        %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                        %foreach supported_dtypes,supported_dtypes_lowercase%
 	                        case NPTypeCode.#101:
                             {
                                 var dst = (#102*)ret.Address;
@@ -1338,7 +1338,7 @@ namespace NumSharp.Backends.Unmanaged
             //TODO* Nested regen code:
             switch (ret.TypeCode)
             {
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
                 {
                     var src = (#2*)source.Address;
@@ -1356,7 +1356,7 @@ namespace NumSharp.Backends.Unmanaged
                 switch (ret.TypeCode)
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1:
                     {
                         var dst = (#2*)ret.Address;
@@ -2749,7 +2749,7 @@ namespace NumSharp.Backends.Unmanaged
                 //TODO* Nested regen code:
                 switch (ret.TypeCode)
                 {
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1:
                     {
                         var src = (#2*)source.Address;
@@ -2767,7 +2767,7 @@ namespace NumSharp.Backends.Unmanaged
                 switch (ret.TypeCode)
                 {
 #if _REGEN
-	                %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	                %foreach supported_dtypes,supported_dtypes_lowercase%
 	                case NPTypeCode.#1:
                     {
                         var dst = (#2*)ret.Address;

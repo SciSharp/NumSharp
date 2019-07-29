@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             switch (lhs.GetTypeCode)
             {
 #if _REGEN
-	            %foreach supported_currently_supported,supported_currently_supported_lowercase%
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1: return Multiply#1(lhs, rhs);
 	            %
 	            default:

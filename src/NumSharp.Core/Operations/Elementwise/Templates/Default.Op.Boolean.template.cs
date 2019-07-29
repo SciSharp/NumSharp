@@ -1,5 +1,5 @@
 ﻿#if _REGEN_TEMPLATE
-%arr = supported_currently_supported
+%arr = supported_dtypes
 %template "../Equals/Default.Equals.#1.cs" for every ["Boolean"], ["bool"]
 #endif
 
@@ -55,7 +55,7 @@ namespace NumSharp.Backends
                     return ret;
                 }
 
-	            %foreach except(supported_currently_supported, "Boolean"), except(supported_currently_supported_lowercase, "bool")%
+	            %foreach except(supported_dtypes, "Boolean"), except(supported_dtypes_lowercase, "bool")%
                 case NPTypeCode.#1:
                 {
                     //if return type is scalar

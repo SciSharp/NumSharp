@@ -145,7 +145,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
+	            %foreach all_dtypes,all_dtypes_lowercase%
 	            case NPTypeCode.#1: return typeof(#2);
 	            %
 	            default:
@@ -195,7 +195,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
+	            %foreach all_dtypes,all_dtypes_lowercase%
 	            case NPTypeCode.#1: return InfoOf<#2>.Size;
 	            %
 	            default:
@@ -232,7 +232,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN //true was done manually.
-	            %foreach supported_dtypes%
+	            %foreach all_dtypes%
 	            case NPTypeCode.#1: return false;
 	            %
 	            default:
@@ -269,7 +269,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN //true was done manually.
-	            %foreach supported_dtypes%
+	            %foreach all_dtypes%
 	            case NPTypeCode.#1: return false;
 	            %
 	            default:
@@ -306,7 +306,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN //true was done manually.
-	            %foreach supported_dtypes%
+	            %foreach all_dtypes%
 	            case NPTypeCode.#1: return false;
 	            %
 	            default:
@@ -343,7 +343,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN //true was done manually.
-	            %foreach supported_dtypes%
+	            %foreach all_dtypes%
 	            case NPTypeCode.#1: return false;
 	            %
 	            default:
@@ -386,7 +386,7 @@ namespace NumSharp.Backends
             switch (typeCode)
             {
 #if __REGEN //true was done manually.
-	            %foreach supported_dtypes%
+	            %foreach all_dtypes%
 	            case NPTypeCode.#1: return false;
 	            %
 	            default:
@@ -622,7 +622,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (typeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_accumulatingType%
+			    %foreach supported_dtypes,supported_dtypes_accumulatingType%
 			    case NPTypeCode.#1: return NPTypeCode.#2;
 			    %
 			    default:

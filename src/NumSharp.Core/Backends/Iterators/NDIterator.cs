@@ -3,10 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable where TOut : unmanaged
     {
@@ -16,7 +17,7 @@ namespace NumSharp.Backends
         public Shape Shape; //TODO! is there a performance difference if this shape is readonly or not?
         public Shape? BroadcastedShape; //TODO! is there a performance difference if this shape is readonly or not?
         public bool AutoReset;
-
+        public int size;
         public Func<TOut> MoveNext;
         public MoveNextReferencedDelegate<TOut> MoveNextReference;
         public Func<bool> HasNext;
@@ -34,6 +35,9 @@ namespace NumSharp.Backends
                 AutoReset = true;
             else
                 AutoReset = autoReset;
+
+            // ReSharper disable once MergeConditionalExpression
+            size = broadcastedShape.HasValue ? broadcastedShape.Value.size : shape.size;
 
             if (shape.IsScalar)
                 Type = IteratorType.Scalar;
@@ -74,7 +78,7 @@ namespace NumSharp.Backends
             #region Compute
 		    switch (Block.TypeCode)
 		    {
-			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
 			    case NPTypeCode.#1: setDefaults_#1(); break;
 			    %
 			    default:

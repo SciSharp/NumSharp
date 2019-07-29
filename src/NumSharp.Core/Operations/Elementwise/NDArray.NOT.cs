@@ -26,7 +26,7 @@ namespace NumSharp
 
                     return result.MakeGeneric<bool>();
                 }
-	            %foreach except(supported_currently_supported, "Boolean"),except(supported_currently_supported_lowercase, "bool")%
+	            %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
 	            case NPTypeCode.#1: 
                 {
                     var from = (#2*)self.Address;

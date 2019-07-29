@@ -1,12 +1,12 @@
 ﻿#if _REGEN_TEMPLATE
-%template "./NDIteratorCasts/NDIterator.Cast.#1.cs" for every supported_currently_supported, supported_currently_supported_lowercase
+%template "./NDIteratorCasts/NDIterator.Cast.#1.cs" for every supported_dtypes, supported_dtypes_lowercase
 #endif
 
 using System;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut>
     {

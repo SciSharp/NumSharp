@@ -296,7 +296,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supported_dtypes,supported_dtypes_lowercase%
+                %foreach all_dtypes,all_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     return new #2[length];
@@ -398,7 +398,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supported_dtypes,supported_dtypes_lowercase%
+                %foreach all_dtypes,all_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
                     return new #2[1] {(#1)value};
