@@ -17,7 +17,7 @@ namespace NumSharp
         public Shape Shape; //TODO! is there a performance difference if this shape is readonly or not?
         public Shape? BroadcastedShape; //TODO! is there a performance difference if this shape is readonly or not?
         public bool AutoReset;
-
+        public int size;
         public Func<TOut> MoveNext;
         public MoveNextReferencedDelegate<TOut> MoveNextReference;
         public Func<bool> HasNext;
@@ -35,6 +35,9 @@ namespace NumSharp
                 AutoReset = true;
             else
                 AutoReset = autoReset;
+
+            // ReSharper disable once MergeConditionalExpression
+            size = broadcastedShape.HasValue ? broadcastedShape.Value.size : shape.size;
 
             if (shape.IsScalar)
                 Type = IteratorType.Scalar;
