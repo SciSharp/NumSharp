@@ -9,25 +9,26 @@ namespace NumSharp
     {
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.add.html</remarks>
         public static NDArray add(in NDArray x1, in NDArray x2)
-            => BackendFactory.GetEngine().Add(x1, x2);
+            => x1.TensorEngine.Add(x1, x2);
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.divide.html</remarks>
         public static NDArray divide(in NDArray x1, in NDArray x2)
-            => BackendFactory.GetEngine().Divide(x1, x2);
+            => x1.TensorEngine.Divide(x1, x2);
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.true_divide.html</remarks>
         public static NDArray true_divide(in NDArray x1, in NDArray x2)
         {
-            return BackendFactory.GetEngine().Divide(x1, x2);
+            return x1.TensorEngine.Divide(x1, x2);
         }
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
         public static NDArray multiply(in NDArray x1, in NDArray x2)
-            => BackendFactory.GetEngine().Multiply(x1, x2);
+            => x1.TensorEngine.Multiply(x1, x2);
+
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.subtract.html</remarks>
         public static NDArray subtract(in NDArray x1, in NDArray x2)
-            => BackendFactory.GetEngine().Subtract(x1, x2);
+            => x1.TensorEngine.Subtract(x1, x2);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -39,7 +40,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a)
-            => BackendFactory.GetEngine().Sum(a, axis: null, typeCode: null, keepdims: false);
+            => a.TensorEngine.Sum(a, axis: null, typeCode: null, keepdims: false);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -51,7 +52,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int axis)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: null, keepdims: false);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: null, keepdims: false);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -63,7 +64,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, bool keepdims)
-            => BackendFactory.GetEngine().Sum(a, axis: null, typeCode: null, keepdims: keepdims);
+            => a.TensorEngine.Sum(a, axis: null, typeCode: null, keepdims: keepdims);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -75,7 +76,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int? axis, bool keepdims)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: null, keepdims: keepdims);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: null, keepdims: keepdims);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -87,7 +88,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int? axis, bool keepdims, Type dtype)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: dtype?.GetTypeCode(), keepdims: keepdims);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: dtype?.GetTypeCode(), keepdims: keepdims);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -99,7 +100,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int? axis, bool keepdims, NPTypeCode? typeCode)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: typeCode, keepdims: keepdims);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: typeCode, keepdims: keepdims);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -111,7 +112,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int? axis, Type dtype)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: dtype?.GetTypeCode(), keepdims: false);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: dtype?.GetTypeCode(), keepdims: false);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -122,7 +123,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, int? axis, NPTypeCode? typeCode)
-            => BackendFactory.GetEngine().Sum(a, axis: axis, typeCode: typeCode, keepdims: false);
+            => a.TensorEngine.Sum(a, axis: axis, typeCode: typeCode, keepdims: false);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -134,7 +135,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, Type dtype)
-            => BackendFactory.GetEngine().Sum(a, axis: null, typeCode: dtype?.GetTypeCode(), keepdims: false);
+            => a.TensorEngine.Sum(a, axis: null, typeCode: dtype?.GetTypeCode(), keepdims: false);
 
         /// <summary>
         ///     Sum of array elements over a given axis.
@@ -146,7 +147,7 @@ namespace NumSharp
         /// <returns>An array with the same shape as a, with the specified axis removed. If a is a 0-d array, or if axis is None, a scalar is returned. If an output array is specified, a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sum.html</remarks>
         public static NDArray sum(in NDArray a, NPTypeCode? typeCode)
-            => BackendFactory.GetEngine().Sum(a, axis: null, typeCode: typeCode, keepdims: false);
+            => a.TensorEngine.Sum(a, axis: null, typeCode: typeCode, keepdims: false);
 
         /// <summary>
         /// Calculate the absolute value element-wise.
@@ -194,7 +195,7 @@ namespace NumSharp
         /// Array elements raised to given powers, element-wise.
         /// </summary>
         public static NDArray power(NDArray x, ValueType y)
-            => BackendFactory.GetEngine().Power(x, y);
+            => x.TensorEngine.Power(x, y);
 
         //public static NDArray power<T>(NDArray nd, T exponent)
         //    => nd.power<T>(exponent);

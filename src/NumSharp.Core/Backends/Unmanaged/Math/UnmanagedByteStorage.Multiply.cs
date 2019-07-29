@@ -646,7 +646,6 @@ namespace NumSharp.Backends.Unmanaged
                     {
                         for (int column = 0; column < othercolumns; ++column)
                         {
-                            ;
                             byte sumProduct = default;
                             for (int index = 0; index < columns; ++index)
                                 sumProduct += (byte)((byte)(ValueType)left.GetScalar(row, index) * (byte)(ValueType)right.GetScalar(index, column));
@@ -1532,6 +1531,7 @@ namespace NumSharp.Backends.Unmanaged
             var rightshape = right._shape;
             if (leftshape.IsScalar || rightshape.IsScalar)
                 throw new InvalidOperationException("Matmul can't handle scalar multiplication, use `*` or `np.dot(..)` instead");
+
             var ndimLeft = leftshape.NDim;
             var ndimright = rightshape.NDim;
 

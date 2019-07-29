@@ -71,6 +71,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
     <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
@@ -97,6 +99,8 @@
   </Target>
 
   <ItemGroup>
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
