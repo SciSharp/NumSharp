@@ -232,9 +232,14 @@ namespace NumSharp
         #endregion
 
         /// <summary>
-        /// Data type of NDArray
+        ///     The dtype of this array.
         /// </summary>
         public Type dtype => Storage.DType;
+
+        /// <summary>
+        ///     The <see cref="NPTypeCode"/> of this array.
+        /// </summary>
+        public NPTypeCode typecode => Storage.TypeCode;
 
         /// <summary>
         ///     Gets the precomputed <see cref="NPTypeCode"/> of <see cref="dtype"/>.
