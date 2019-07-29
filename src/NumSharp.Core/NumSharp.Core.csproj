@@ -114,9 +114,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArrayFire" Version="0.0.2" />
     <PackageReference Include="System.Memory" Version="4.5.3" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.6.0-preview7.19362.9" />
   </ItemGroup>
 
