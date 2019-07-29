@@ -10,10 +10,6 @@ namespace NumSharp
 {
     public static partial class np
     {
-
-        
-        //TODO! overloads that accept tuple of NDArrays.
-
         /// <summary>
         ///     Join a sequence of arrays along an existing axis.
         /// </summary>
@@ -21,14 +17,14 @@ namespace NumSharp
         /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
         /// <returns>The concatenated array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
-        public static NDArray concatenate(int axis = 0, params NDArray[] arrays)
+        public static NDArray concatenate(NDArray[] arrays, int axis = 0)
         {
             //What we do is we have the axis which is the only dimension that is allowed to be different
             //We need to perform a check if the dimensions actually match.
             //After we have the axis ax=1 where shape is (3,ax,3) - ax is the only dimension that can vary.
             //So if we got input of (3,5,3) and (3,1,3), we create a return shape of (3,6,3).
             //We perform the assignment by iterating a slice: (:,n,:) on src and dst where dst while n of dst grows as we iterate all arrays.
-            
+
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 
@@ -43,7 +39,7 @@ namespace NumSharp
 
             while (axis < 0)
                 axis = first.ndim + axis; //translate negative axis
-
+            int i, j;
             int axisSize = 0; //accumulated shape[axis] size for return shape.
             NPTypeCode retType = first.GetTypeCode;
             foreach (var src in arrays)
@@ -70,7 +66,7 @@ namespace NumSharp
                     throw new IncorrectShapeException("all the input arrays must have same number of dimensions.");
 
                 //verify the shapes are equal
-                for (int j = 0; j < shape.Length; j++)
+                for (j = 0; j < shape.Length; j++)
                 {
                     if (axis == j)
                         continue;
@@ -88,7 +84,7 @@ namespace NumSharp
             var accessorDst = new Slice[retShape.NDim];
             var accessorSrc = new Slice[retShape.NDim];
 
-            for (int i = 0; i < accessorDst.Length; i++) 
+            for (i = 0; i < accessorDst.Length; i++)
                 accessorSrc[i] = accessorDst[i] = Slice.All;
 
             accessorSrc[axis] = Slice.Index(0);
@@ -96,7 +92,7 @@ namespace NumSharp
 
             foreach (var src in arrays)
             {
-                for (int axisIndex = 0; axisIndex < src.shape[axis]; axisIndex++)
+                for (i = 0; i < src.shape[axis]; i++)
                 {
                     var writeTo = dst[accessorDst];
                     var writeFrom = src[accessorSrc];
@@ -110,5 +106,121 @@ namespace NumSharp
 
             return dst;
         }
+
+
+#if _REGEN
+        %pre = "arrays.Item"
+        %foreach range(2,8)%
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate(#(repeat("NDArray", #1 ,  ", "  ,  "("  ,  ""  ,  ""  ,  ")"  )) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {#(repeat("^pre+(n+1)", #1 ,  ", " ))}, axis);
+        }
+
+        %
+#else
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8}, axis);
+        }
+
+        /// <summary>
+        ///     Join a sequence of arrays along an existing axis.
+        /// </summary>
+        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
+        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <returns>The concatenated array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.concatenate.html</remarks>
+        public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
+        {
+            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8, arrays.Item9}, axis);
+        }
+#endif
+
     }
 }
