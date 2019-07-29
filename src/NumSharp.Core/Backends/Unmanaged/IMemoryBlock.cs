@@ -7,6 +7,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>
         ///     The size of a single item stored in <see cref="Address"/>.
         /// </summary>
+        /// <remarks>Equivalent to <see cref="NPTypeCode.SizeOf"/> extension.</remarks>
         int ItemLength { get; }
 
         /// <summary>
@@ -21,7 +22,7 @@ namespace NumSharp.Backends.Unmanaged
         int Count { get; }
 
         /// <summary>
-        ///     The items with length of <see cref="TypeCode"/> are present in <see cref="Address"/>.
+        ///     How many bytes are stored in this memory block.
         /// </summary>
         /// <remarks>Calculated by <see cref="Count"/>*<see cref="ItemLength"/></remarks>
         int BytesLength { get; }

@@ -169,29 +169,20 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="value"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public void Fill(T value)
-        {
-            AsSpan.Fill(value);
-        }
+        public void Fill(T value) => AsSpan.Fill(value);
 
         /// <summary>
         ///     Fills all indexes with <paramref name="value"/>.
         /// </summary>
         /// <param name="value"></param>
-        void IArraySlice.Fill(object value)
-        {
-            Fill((T)value);
-        }
+        void IArraySlice.Fill(object value) => Fill((T)value);
 
         /// <summary>
         ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
         /// </summary>
         /// <param name="start">The index to start from</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start)
-        {
-            return Slice(start);
-        }
+        IArraySlice IArraySlice.Slice(int start) => Slice(start);
 
         /// <summary>
         ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
@@ -199,48 +190,38 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start">The index to start from</param>
         /// <param name="count">The number of items to slice (not bytes)</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start, int count)
-        {
-            return Slice(start, count);
-        }
+        IArraySlice IArraySlice.Slice(int start, int count) => Slice(start, count);
 
         /// <param name="destination"></param>
-        void IArraySlice.CopyTo<T1>(Span<T1> destination)
-        {
-            new Span<T1>(Address, Count).CopyTo(destination);
-        }
+        void IArraySlice.CopyTo<T1>(Span<T1> destination) => new Span<T1>(Address, Count).CopyTo(destination);
 
         /// <summary>
         ///     Gets pinnable reference of the first item in the memory block storage.
         /// </summary>
-        ref T1 IArraySlice.GetPinnableReference<T1>()
-        {
-            return ref (*(T1*)VoidAddress);
-        }
+        ref T1 IArraySlice.GetPinnableReference<T1>() => ref (*(T1*)VoidAddress);
 
         /// <param name="start"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Slice(int start)
-        {
-            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start));
-        }
+        public ArraySlice<T> Slice(int start) => new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start));
 
         /// <param name="start"></param>
         /// <param name="length"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Slice(int start, int length)
-        {
-            return new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start, length));
-        }
+        public ArraySlice<T> Slice(int start, int length) => new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start, length));
 
         /// <param name="destination"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public void CopyTo(Span<T> destination)
-        {
-            AsSpan.CopyTo(destination);
-        }
+        public void CopyTo(Span<T> destination) => AsSpan.CopyTo(destination);
+
+        /// <summary>
+        ///     Copies the entire array to address.
+        /// </summary>
+        /// <param name="dst">The address to copy to</param>
+        /// <remarks>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        public void CopyTo(IntPtr dst) => AsSpan.CopyTo(new Span<T>(dst.ToPointer(), Count * InfoOf<T>.Size));
 
         /// <param name="destination"></param>
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
@@ -263,34 +244,19 @@ namespace NumSharp.Backends.Unmanaged
 
         [EditorBrowsable(EditorBrowsableState.Never)]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref T GetPinnableReference()
-        {
-            return ref Unsafe.AsRef<T>(Address);
-        }
+        public ref T GetPinnableReference() => ref Unsafe.AsRef<T>(Address);
 
-        ArraySlice<T1> IArraySlice.Clone<T1>()
-        {
-            return new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(Address, Count));
-        }
+        ArraySlice<T1> IArraySlice.Clone<T1>() => new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(Address, Count));
 
         [MethodImpl((MethodImplOptions)768)]
-        public ArraySlice<T> Clone()
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
-        }
+        public ArraySlice<T> Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
         [MethodImpl((MethodImplOptions)768)]
-        IArraySlice IArraySlice.Clone()
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
-        }
+        IArraySlice IArraySlice.Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
         #region Explicit Interfaces
 
-        object ICloneable.Clone()
-        {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
-        }
+        object ICloneable.Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
         /// <summary>
         ///     The start address of this memory block.

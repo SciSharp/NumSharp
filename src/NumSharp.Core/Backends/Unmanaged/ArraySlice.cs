@@ -378,5 +378,21 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns>A newly allocated array.</returns>
         public static ArraySlice<T> Allocate<T>(int count) where T : unmanaged
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count));
+
+        /// <summary>
+        ///     Wrap around a <paramref name="address"/> with given <paramref name="count"/> without claiming ownership of the address.
+        /// </summary>
+        /// <param name="address">The address at which the memory block starts</param>
+        /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count)</param>
+        /// <returns>A wrapped memory block as <see cref="ArraySlice{T}"/></returns>
+        public static unsafe ArraySlice<T> Wrap<T>(T* address, int count) where T : unmanaged => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(address, count));
+
+        /// <summary>
+        ///     Wrap around a <paramref name="address"/> with given <paramref name="count"/> without claiming ownership of the address.
+        /// </summary>
+        /// <param name="address">The address at which the memory block starts</param>
+        /// <param name="count">The count of items of type <typeparamref name="T"/> (not bytes count)</param>
+        /// <returns>A wrapped memory block as <see cref="ArraySlice{T}"/></returns>
+        public static unsafe ArraySlice<T> Wrap<T>(void* address, int count) where T : unmanaged => new ArraySlice<T>(new UnmanagedMemoryBlock<T>((T*)address, count));
     }
 }

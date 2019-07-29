@@ -2202,6 +2202,301 @@ namespace NumSharp.Backends
 
         #endregion
 
+
+        public void CopyTo(IntPtr ptr)
+        {
+            unsafe
+            {
+                CopyTo(ptr.ToPointer());
+            }
+        }
+
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        /// </summary>
+        /// <param name="address">The address to copy to.</param>
+        public unsafe void CopyTo(void* address)
+        {
+#if _REGEN
+            #region Compute
+
+		    switch (TypeCode)
+		    {
+			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    case NPTypeCode.#1:
+			    {
+				    CopyTo<#2>((#2*)address);
+                    break;
+			    }
+
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
+
+            #endregion
+#else
+
+            #region Compute
+
+		    switch (TypeCode)
+		    {
+			    case NPTypeCode.Boolean:
+			    {
+				    CopyTo<bool>((bool*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Byte:
+			    {
+				    CopyTo<byte>((byte*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int16:
+			    {
+				    CopyTo<short>((short*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt16:
+			    {
+				    CopyTo<ushort>((ushort*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int32:
+			    {
+				    CopyTo<int>((int*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt32:
+			    {
+				    CopyTo<uint>((uint*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int64:
+			    {
+				    CopyTo<long>((long*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt64:
+			    {
+				    CopyTo<ulong>((ulong*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Char:
+			    {
+				    CopyTo<char>((char*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Double:
+			    {
+				    CopyTo<double>((double*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Single:
+			    {
+				    CopyTo<float>((float*)address);
+                    break;
+			    }
+
+			    case NPTypeCode.Decimal:
+			    {
+				    CopyTo<decimal>((decimal*)address);
+                    break;
+			    }
+
+			    default:
+				    throw new NotSupportedException();
+		    }
+
+            #endregion
+#endif
+        }
+
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        /// </summary>
+        /// <param name="slice">The slice to copy to.</param>
+        public unsafe void CopyTo(IMemoryBlock slice)
+        {
+            if (slice.TypeCode != _typecode)
+                throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
+
+            if (Count > slice.Count)
+                throw new ArgumentOutOfRangeException(nameof(slice), $"Unable to copy from this storage to given memory block because this storage count is larger than the given memory block's length.");
+
+#if _REGEN
+            #region Compute
+
+		    switch (TypeCode)
+		    {
+			    %foreach supported_currently_supported,supported_currently_supported_lowercase%
+			    case NPTypeCode.#1:
+			    {
+				    CopyTo<#2>((#2*)slice.Address);
+                    break;
+			    }
+
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
+
+            #endregion
+#else
+
+            #region Compute
+
+		    switch (TypeCode)
+		    {
+			    case NPTypeCode.Boolean:
+			    {
+				    CopyTo<bool>((bool*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Byte:
+			    {
+				    CopyTo<byte>((byte*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int16:
+			    {
+				    CopyTo<short>((short*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt16:
+			    {
+				    CopyTo<ushort>((ushort*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int32:
+			    {
+				    CopyTo<int>((int*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt32:
+			    {
+				    CopyTo<uint>((uint*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Int64:
+			    {
+				    CopyTo<long>((long*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.UInt64:
+			    {
+				    CopyTo<ulong>((ulong*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Char:
+			    {
+				    CopyTo<char>((char*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Double:
+			    {
+				    CopyTo<double>((double*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Single:
+			    {
+				    CopyTo<float>((float*)slice.Address);
+                    break;
+			    }
+
+			    case NPTypeCode.Decimal:
+			    {
+				    CopyTo<decimal>((decimal*)slice.Address);
+                    break;
+			    }
+
+			    default:
+				    throw new NotSupportedException();
+		    }
+
+            #endregion
+#endif
+        }
+
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        /// </summary>
+        /// <param name="slice">The slice to copy to.</param>
+        public unsafe void CopyTo<T>(IMemoryBlock<T> slice) where T : unmanaged
+        {
+            if (slice.TypeCode != _typecode)
+                throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
+
+            if (Count > slice.Count)
+                throw new ArgumentOutOfRangeException(nameof(slice), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
+			
+            CopyTo<T>(slice.Address);
+        }
+
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address.
+        /// </summary>
+        /// <param name="address">The address to copy to.</param>
+        public unsafe void CopyTo<T>(T* address) where T : unmanaged
+        {
+            if (address == (T*)0)
+                throw new ArgumentNullException(nameof(address));
+
+            if (typeof(T) != _dtype)
+                throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
+
+            if (Shape.IsSliced)
+            {
+                var dst = ArraySlice.Wrap<T>(address, Count);
+                MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
+                return;
+            }
+
+            var bytesCount = Count * InfoOf<T>.Size;
+            Buffer.MemoryCopy(Address, address, bytesCount, bytesCount);
+        }
+
+        /// <summary>
+        ///     Copies the entire contents of this storage to given array.
+        /// </summary>
+        /// <param name="array">The array to copy to.</param>
+        public unsafe void CopyTo<T>(T[] array) where T : unmanaged
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+
+            if (typeof(T) != _dtype)
+                throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
+
+            if (Count > array.Length)
+                throw new ArgumentOutOfRangeException(nameof(array), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
+
+            fixed (T* dst = array)
+            {
+                var bytesCount = Count * InfoOf<T>.Size;
+                Buffer.MemoryCopy(Address, dst, bytesCount, bytesCount);
+            }
+        }
+
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
