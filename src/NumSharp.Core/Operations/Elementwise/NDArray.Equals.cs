@@ -17,7 +17,19 @@ namespace NumSharp
         /// <returns>if reference is same</returns>
         public override bool Equals(object obj)
         {
-            return this == obj;
+            // Using this comparison allows less restrictive semantics,
+            // like comparing a scalar to an array
+            var arrayResult = this == obj;
+            var comparisons = arrayResult.Storage.GetData<bool>();
+            foreach(bool match in comparisons)
+            {
+                if (!match)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         public static NDArray<bool> operator ==(NDArray left, object right)
