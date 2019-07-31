@@ -251,7 +251,7 @@ namespace NumSharp.UnitTest.Selection
             var y = x["1:"]; // slice a row as 1D array
             Assert.AreEqual(new Shape(1, 2), new Shape(y.shape));
             AssertAreEqual(y.ToArray<int>(), new int[] {2, 3});
-            var z=y* 2;
+            var z = y * 2;
             AssertAreEqual(y.ToArray<int>(), new int[] {4, 6});
         }
 
@@ -750,6 +750,143 @@ namespace NumSharp.UnitTest.Selection
             output[3] = newValDouble; // This works fine
             new Action(() => output[4] = newValInt).Should().NotThrow<NullReferenceException>(); // throws System.NullReferenceException
             output.Array.GetIndex(4).Should().Be(newValInt);
+        }
+
+        private static NDArray x = np.arange(10, 1, -1);
+        private static NDArray y = np.arange(35).reshape(5, 7);
+
+        [TestMethod]
+        public void IndexNDArray_Case1()
+        {
+            x[np.array(new int[] {3, 3, 1, 8})].Array.Should().ContainInOrder(7, 7, 9, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case2_NegativeIndex()
+        {
+            x[np.array(new int[] {3, 3, -3, 8})].Array.Should().ContainInOrder(7, 7, 4, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case3()
+        {
+            new Action(() =>
+            {
+                var a = x[np.array(new int[] {3, 3, 20, 8})];
+            }).Should().Throw<IndexOutOfRangeException>();
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case4_Shaped()
+        {
+            var ret = x[np.array(new int[][] {new int[] {1, 1}, new int[] {2, 3},})];
+            ret.Array.Should().ContainInOrder(9, 9, 8, 7);
+            ret.shape.Should().ContainInOrder(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case5_Shaped()
+        {
+            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] {new int[] {0, 1}, new int[] {1, 3},})];
+            Console.WriteLine((string)ret);
+            ret.Array.Cast<int>().Should().ContainInOrder(0, 1, 1, 3);
+            ret.shape.Should().ContainInOrder(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case6_Shaped()
+        {
+            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[] {0, 1, 1})];
+            Console.WriteLine((string)ret);
+            ret.shape.Should().ContainInOrder(3, 5);
+            ret[1, 0].GetValue(0).Should().Be(5);
+            ret[1, 4].GetValue(0).Should().Be(9);
+            ret[2, 0].GetValue(0).Should().Be(5);
+            ret[2, 4].GetValue(0).Should().Be(9);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case7_Multi()
+        {
+            var ret = y[np.array(new int[] {0, 2, 4}), np.array(new int[] {0, 1, 2})];
+            ret.Array.Should().ContainInOrder(0, 15, 30);
+            ret.shape.Should().ContainInOrder(3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case8_Multi()
+        {
+            var a = np.arange(27).reshape(3, 3, 3) + 1;
+            var x = np.repeat(np.arange(3), 3);
+            var ret = a[x, x, x];
+            ret.Array.Should().ContainInOrder(1, 14, 27);
+            ret.shape.Should().ContainInOrder(9);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case14_Multi_Slice()
+        {
+            var a = np.arange(27*2).reshape(2, 3, 3, 3) + 1;
+            var x = np.repeat(np.arange(3), 3);
+            var ret = a["0,:"][x, x, x];
+            ret.Array.Should().ContainInOrder(1, 14, 27);
+            ret.shape.Should().ContainInOrder(9);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case9_Multi()
+        {
+            var a = np.arange(27).reshape(3, 3, 3) + 1;
+            var x = np.repeat(np.arange(3), 3 * 2).reshape(3, 3, 2);
+            var ret = a[x, x, x];
+            Console.WriteLine((string)ret);
+            Console.WriteLine(ret.Shape);
+            ret.Array.Should().ContainInOrder(np.repeat(np.array(1, 14, 27), 6).flat.ToArray<int>());
+            ret.shape.Should().ContainInOrder(3, 3, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case10_Multi()
+        {
+            new Action(() =>
+            {
+                var ret = y[np.array(new int[] {0, 2, 4}), np.array(new int[] {0, 1})];
+            }).Should().Throw<IncorrectShapeException>();
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_Case11_Multi()
+        {
+            var ret = y[np.array(new int[] {0, 2, 4})];
+            ret.shape.Should().ContainInOrder(3, 7);
+            ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case12_Multi()
+        {
+            var a = np.arange(27).reshape(1, 3, 3, 1, 3);
+            Console.WriteLine((string)a);
+            Console.WriteLine(a.Shape);
+            var ret = a[new int[] {0, 0, 0}, new int[] {0, 1, 2}];
+            ret.shape.Should().ContainInOrder(3, 3, 1, 3);
+            ret.GetValue(2, 0, 0, 2).Should().Be(20);
+            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Case13_Multi()
+        {
+            var ret = y[np.array(new int[] {0, 2, 4})];
+            ret.shape.Should().ContainInOrder(3, 7);
+            ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
     }
 }

@@ -1,13 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
-using NumSharp;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Maths
 {
     [TestClass]
     public class SinTest
@@ -15,7 +8,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var nd = np.array(new double[] {0, 30, 45, 60, 90}) * (Math.PI / 180);
+            var nd = np.array(new double[] {0, 30, 45, 60, 90}) * (System.Math.PI / 180);
 
             var nd2 = np.sin(nd);
 
