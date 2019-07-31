@@ -18,6 +18,5 @@ namespace NumSharp.Backends
         {
             return ReduceMean(nd, axis, keepdims, typeCode);
         }
-
     }
 }

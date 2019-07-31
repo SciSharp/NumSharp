@@ -74,7 +74,19 @@ namespace NumSharp
 
         #region Sorting, searching, counting
 
+        #region Reduction
+
+        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+
+        #endregion
+
         public abstract NDArray ArgMax(NDArray nd, int axis = -1);
+        public abstract NDArray AMax(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray AMax(in NDArray nd, int axis, Type dtype, bool keepdims = false);
+
+        public abstract NDArray AMin(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray AMin(in NDArray nd, int axis, Type dtype, bool keepdims = false);
 
         #endregion
     }

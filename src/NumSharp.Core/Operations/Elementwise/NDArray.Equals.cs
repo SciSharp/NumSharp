@@ -4,6 +4,8 @@ using System.Text;
 using System.Numerics;
 using NumSharp.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -17,7 +19,21 @@ namespace NumSharp
         /// <returns>if reference is same</returns>
         public override bool Equals(object obj)
         {
-            return this == obj;
+            unsafe
+            {
+                // Using this comparison allows less restrictive semantics,
+                // like comparing a scalar to an array
+                // we can use unmanaged access because the result of == op is never a slice.
+                var results = (this == obj).Array;
+                var len = results.Count;
+                var addr = results.Address;
+
+                for (int i = 0; i < len; i++)
+                    if (!*(addr + i))
+                        return false;
+
+                return true;
+            }
         }
 
         public static NDArray<bool> operator ==(NDArray left, object right)

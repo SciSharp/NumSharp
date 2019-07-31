@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using FluentAssertions;
 using NumSharp;
 using NumSharp.Generic;
 
@@ -55,36 +56,33 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void ReshapeNegative()
         {
-            NDArray<int> nd;
-            nd = np.arange(12).MakeGeneric<int>();
-            nd.reshape(-1, 2);
+            NDArray nd;
+            nd = np.arange(12).reshape(-1, 2);
+            Assert.IsTrue(nd.shape[0] == 6);
+            Assert.IsTrue(nd.shape[1] == 2);
+            
+            nd = np.arange(12).reshape(new Shape(-1, 2));
             Assert.IsTrue(nd.shape[0] == 6);
             Assert.IsTrue(nd.shape[1] == 2);
 
-            nd = np.arange(12).MakeGeneric<int>();
-            ;
-            nd.reshape(2, -1);
+            nd = np.arange(12).reshape(2, -1);
             Assert.IsTrue(nd.shape[0] == 2);
             Assert.IsTrue(nd.shape[1] == 6);
 
-            nd = np.arange(12).MakeGeneric<int>();
-            ;
-            nd.reshape(1, 3, 4);
-            nd.reshape(-1, 3);
+            nd = np.arange(12).reshape(1, 3, 4);
+            nd = nd.reshape(-1, 3);
             Assert.IsTrue(nd.shape[0] == 4);
             Assert.IsTrue(nd.shape[1] == 3);
 
             nd = np.arange(12).MakeGeneric<int>();
-            ;
-            nd.reshape(1, 3, 4);
-            nd.reshape(3, -1);
+            nd = nd.reshape(1, 3, 4);
+            nd = nd.reshape(3, -1);
             Assert.IsTrue(nd.shape[0] == 3);
             Assert.IsTrue(nd.shape[1] == 4);
 
             nd = np.arange(100 * 100 * 3).MakeGeneric<int>();
-            ;
-            nd.reshape(100, 100, 3);
-            nd.reshape(-1, 3);
+            nd = nd.reshape(100, 100, 3);
+            nd = nd.reshape(-1, 3);
             Assert.IsTrue(nd.shape[0] == 10000);
             Assert.IsTrue(nd.shape[1] == 3);
 
@@ -102,6 +100,20 @@ namespace NumSharp.UnitTest.Extensions
             var y = x.reshape(2, 2).MakeGeneric<int>();
             y[0, 1] = 8;
             Assert.AreEqual(x[1], y[0, 1]);
+        }
+
+        [TestMethod]
+        public void TwoNegativeMinusOne()
+        {
+            var x = np.arange(9).reshape(3, 1, 1, 3);
+            new Action(() => x.reshape(-1, 3, -1)).Should().Throw<ArgumentException>();
+        }
+
+        [TestMethod]
+        public void Case1_negativeone()
+        {
+            var x = np.full(2, (3, 3, 1, 1, 3));
+            x.reshape((-1, 3)).shape.Should().BeEquivalentTo(9, 3);
         }
     }
 }
