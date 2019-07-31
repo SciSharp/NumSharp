@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Linq;
 using NumSharp.Backends;
@@ -15,16 +16,9 @@ namespace NumSharp
         /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
-        public NDArray reshape(ref Shape newshape)
+        public NDArray reshape(Shape newshape)
         {
-            if (newshape.size == 0 && size != 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(newshape));
-
-            if (Shape.IsSliced)
-                Console.WriteLine("reshaping a sliced NDArray performs performs a copy.");
-
-            var storage = newshape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), newshape) : Storage.Alias(newshape);
-            return new NDArray(storage) { TensorEngine = TensorEngine };
+            return reshape(ref newshape);
         }
 
         /// <summary>
@@ -33,10 +27,20 @@ namespace NumSharp
         /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
-        public NDArray reshape(Shape newshape)
+        public NDArray reshape(ref Shape newshape)
         {
-            return reshape(ref newshape);
-        }
+            if (newshape.size == 0 && size != 0)
+                throw new ArgumentException("Value cannot be an empty collection.", nameof(newshape));
+
+            if (Shape.IsSliced)
+                Console.WriteLine("reshaping a sliced NDArray performs performs a copy.");
+
+            int[] inferedShape = InferMissingDimension(newshape.dimensions);
+
+            var retShape = new Shape(inferedShape);
+            var storage = retShape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), retShape) : Storage.Alias(retShape);
+            return new NDArray(storage) { TensorEngine = TensorEngine };
+;        }
 
         /// <summary>
         ///     Gives a new shape to an array without changing its data.
@@ -47,17 +51,20 @@ namespace NumSharp
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
-        public NDArray reshape(params int[] shapeIn)
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray reshape(params int[] shape)
         {
-            int[] shape = InferMissingDimension(shapeIn);
-
             if (shape.Length == 0 && size != 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(shape));
 
-            return reshape(new Shape(shape));
+            int[] inferedShape = InferMissingDimension(shape);
+
+            var newshape = new Shape(inferedShape);
+            var storage = newshape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), newshape) : Storage.Alias(newshape);
+            return new NDArray(storage) { TensorEngine = TensorEngine };
         }
 
-        // TODO: Unit test reshape with missing dimension
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
         int[] InferMissingDimension(int[] shape)
         {
             var indexOfNegOne = -1;
