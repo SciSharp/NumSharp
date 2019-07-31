@@ -1,138 +1,52 @@
 ﻿using NumSharp.Backends;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// Return the maximum of an array or minimum along an axis
+        ///     Return the maximum of an array or maximum along an axis.
         /// </summary>
-        /// <returns></returns>
-        public T amax<T>()
+        /// <typeparam name="T">The expected return type, cast will be performed if necessary.</typeparam>
+        /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amax.html</remarks>
+        public T amax<T>() where T : unmanaged
         {
-            switch (dtype.Name)
-            {
-                case "Int32":
-                {
-                    var npArr = Data<int>();
-                    int max = npArr[0];
-                    for (int i = 0; i < npArr.Count; i++)
-                        max = Math.Max(max, npArr[i]);
-                    return (T)(object)max;
-                }
-
-                case "Double":
-                {
-                    var npArr = Data<double>();
-                    double max = npArr[0];
-                    for (int i = 0; i < npArr.Count; i++)
-                        max = Math.Max(max, npArr[i]);
-                    return (T)(object)max;
-                }
-
-                default:
-                    throw new NotImplementedException($"Data type not supported yet {dtype.Name}");
-            }
+            return np.asscalar<T>(TensorEngine.AMax(this, null, typeof(T).GetTypeCode(), false));
         }
 
         /// <summary>
-        /// Return the maximum of an array or minimum along an axis
+        ///     Return the maximum of an array or maximum along an axis.
         /// </summary>
-        /// <param name="axis"></param>
-        /// <returns></returns>
-        public NDArray amax(int axis)
+        /// <param name="axis">Axis or axes along which to operate.</param>
+        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
+        /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
+        /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amax.html</remarks>
+        [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray amax(int axis, bool keepdims = false, Type dtype = null)
         {
-            if (axis < 0 || axis >= ndim)
-                throw new Exception("Invalid input: axis");
+            return TensorEngine.AMax(this, axis, dtype, keepdims);
+        }
 
-            int[] resShapes = new int[shape.Length - 1];
-            int index = 0; //index for result shape set
-                           //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
-            int prev = 1;
-            int cur = 1;
-            int post = 1;
-            int size = 1; //total number of the elements for result
-                          //Calculate new Shape
-
-            var res = new NDArray(dtype, resShapes);
-            for (int i = 0; i < shape.Length; i++)
-            {
-                if (i == axis)
-                    cur = shape[i];
-                else
-                {
-                    resShapes[index++] = shape[i];
-                    size *= shape[i];
-                    if (i < axis)
-                        prev *= shape[i];
-                    else
-                        post *= shape[i];
-                }
-            }
-
-            //Fill in data
-            index = 0; //index for result data set
-            int sameSetOffset = Storage.Shape.Strides[axis];
-            int increments = cur * post;
-
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    {
-                        int[] resData = new int[size];
-                        int start = 0;
-                        int min = 0;
-                        var npArr = Data<int>();
-                        for (int i = 0; i < this.size; i += increments)
-                        {
-                            for (int j = i; j < i + post; j++)
-                            {
-                                start = j;
-                                min = npArr[start];
-                                for (int k = 0; k < cur; k++)
-                                {
-                                    min = Math.Max(min, npArr[start]);
-                                    start += sameSetOffset;
-                                }
-                                resData[index++] = min;
-                            }
-                        }
-                        res.ReplaceData(resData);
-                        //res.Array = resData;
-                    }
-                    break;
-
-                case "Single":
-                    {
-                        var resData = new float[size];
-                        int start = 0;
-                        float min = 0;
-                        var npArr = Data<float>();
-                        for (int i = 0; i < size; i += increments)
-                        {
-                            for (int j = i; j < i + post; j++)
-                            {
-                                start = j;
-                                min = npArr[start];
-                                for (int k = 0; k < cur; k++)
-                                {
-                                    min = Math.Max(min, npArr[start]);
-                                    start += sameSetOffset;
-                                }
-                                resData[index++] = min;
-                            }
-                        }
-                        res.ReplaceData(resData);
-                        //res.Array = resData;
-                    }
-                    break;
-            }
-
-            return res;
+        /// <summary>
+        ///     Return the maximum of an array or maximum along an axis.
+        /// </summary>
+        /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
+        /// <returns>Maximum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amax.html</remarks>
+        [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray amax(Type dtype = null)
+        {
+            return TensorEngine.AMax(this, null, dtype?.GetTypeCode(), false);
         }
     }
 }

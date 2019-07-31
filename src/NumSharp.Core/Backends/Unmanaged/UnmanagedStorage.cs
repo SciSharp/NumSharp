@@ -2033,8 +2033,6 @@ namespace NumSharp.Backends
             if (!typeof(T).IsValidNPType())
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
 
-            //TODO! this should clone based on the slice!
-
             if (Shape.IsSliced)
                 return CloneData<T>();
 

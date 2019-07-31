@@ -9,7 +9,6 @@ namespace NumSharp
         public NDArray max(int axis)
             => amax(axis);
 
-        public T max<T>()
-            => amax<T>();
+        public T max<T>() where T : unmanaged => amax<T>();
     }
 }
