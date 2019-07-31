@@ -104,17 +104,45 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(float start, float stop, float step = 1)
         {
+            if (Math.Abs(step) < 0.000001)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
+            {
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
+            }
+
             if (start > stop)
                 throw new Exception("parameters invalid, start is greater than stop.");
+
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
 
-            unsafe
+            if (negativeStep)
             {
-                var addr = (float*)nd.Array.Address;
-                for (int i = 0; i < length; i++)
-                    *(addr + i) = start + i * step;
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (float*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (float*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
             }
 
             return nd;
@@ -156,17 +184,45 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(double start, double stop, double step = 1)
         {
+            if (Math.Abs(step) < 0.000001)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
+            {
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
+            }
+
             if (start > stop)
                 throw new Exception("parameters invalid, start is greater than stop.");
+
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(double), Shape.Vector(length), false); //do not fill, we are about to
 
-            unsafe
+            if (negativeStep)
             {
-                var addr = (double*)nd.Array.Address;
-                for (int i = 0; i < length; i++)
-                    *(addr + i) = start + i * step;
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (double*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (double*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
             }
 
             return nd;
@@ -237,17 +293,45 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(int start, int stop, int step = 1)
         {
+            if (step == 0)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
+            {
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
+            }
+
             if (start > stop)
                 throw new Exception("parameters invalid, start is greater than stop.");
+
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(int), Shape.Vector(length), false); //do not fill, we are about to
 
-            unsafe
+            if (negativeStep)
             {
-                var addr = (int*)nd.Array.Address;
-                for (int i = 0; i < length; i++)
-                    *(addr + i) = start + i * step;
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (int*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++) 
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (int*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
             }
 
             return nd;
