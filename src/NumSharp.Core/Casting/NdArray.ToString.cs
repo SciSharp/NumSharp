@@ -50,14 +50,22 @@ namespace NumSharp
             if (shape.Length == 1)
             {
                 s.Append("[");
-                s.Append(string.Join(", ", this.AsIterator().Cast<object>().Select(v=>v.ToString())));
+                if (typecode == NPTypeCode.Char)
+                {
+                    s.Append("\"");
+                    s.Append(string.Join("", this.AsIterator().Cast<char>()));
+                    s.Append("\"");
+                }
+                else
+                    s.Append(string.Join(", ", this.AsIterator().Cast<object>().Select(v => v.ToString())));
+
                 s.Append("]");
                 return;
             }
 
             var size = shape[0];
             s.Append("[");
-            
+
             for (int i = 0; i < size; i++)
             {
                 var n_minus_one_dim_slice = this[i];
