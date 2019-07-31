@@ -376,7 +376,7 @@ namespace NumSharp
 
             var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
-                throw new IndexOutOfRangeException($"The offset ${offset} is out of range in Shape {orig_shape.Size}");
+                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {orig_shape.Size}");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);

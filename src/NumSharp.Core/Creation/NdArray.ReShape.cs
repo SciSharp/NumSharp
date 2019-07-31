@@ -35,9 +35,14 @@ namespace NumSharp
             if (Shape.IsSliced)
                 Console.WriteLine("reshaping a sliced NDArray performs performs a copy.");
 
+            if (size != newshape.size)
+                throw new IncorrectShapeException($"Given shape size ({newshape.size}) does not match the size of the given storage size ({size})");
+
             int[] inferedShape = InferMissingDimension(newshape.dimensions);
 
             var retShape = new Shape(inferedShape);
+
+
             var storage = retShape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), retShape) : Storage.Alias(retShape);
             return new NDArray(storage) { TensorEngine = TensorEngine };
 ;        }
@@ -60,6 +65,10 @@ namespace NumSharp
             int[] inferedShape = InferMissingDimension(shape);
 
             var newshape = new Shape(inferedShape);
+
+            if (size != newshape.size)
+                throw new IncorrectShapeException($"Given shape size ({newshape.size}) does not match the size of the given storage size ({size})");
+
             var storage = newshape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), newshape) : Storage.Alias(newshape);
             return new NDArray(storage) { TensorEngine = TensorEngine };
         }
