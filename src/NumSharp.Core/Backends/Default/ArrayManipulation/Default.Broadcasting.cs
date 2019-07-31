@@ -434,5 +434,23 @@ namespace NumSharp.Backends
 
             return (left, right);
         }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public static NDArray[] Broadcast(params NDArray[] arrays)
+        {
+            if (arrays.Length == 0)
+                return Array.Empty<NDArray>();
+
+            if (arrays.Length == 1)
+                return arrays;
+
+            var shapes = Broadcast(arrays.Select(r => r.Shape).ToArray());
+
+            for (int i = 0; i < arrays.Length; i++) 
+                arrays[i] = new NDArray(arrays[i].Storage, shapes[i]);
+
+            return arrays;
+        }
+
     }
 }
