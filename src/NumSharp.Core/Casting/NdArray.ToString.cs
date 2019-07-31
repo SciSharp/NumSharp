@@ -23,6 +23,10 @@ namespace NumSharp
             {
                 s.Append($"{Storage.GetAtIndex(0)}");
             }
+            else if (shape.Length == 1 && Type.GetTypeCode(dtype) == TypeCode.Char)
+            {
+                s.Append(string.Join("", GetData<char>()));
+            }
             else
             {
                 if (flat)

@@ -183,9 +183,8 @@ namespace NumSharp
             }
             else
             {
-                var nd = new NDArray(typeof(string), new int[0]);
-                nd.Storage.ReplaceData((Array)new string[] {str});
-
+                // UTF8Encoding.UTF8.GetBytes(str)
+                var nd = new NDArray(str.ToArray());
                 return nd;
             }
         }
