@@ -12,6 +12,16 @@ namespace DecimalMath
     /// </summary>
     public static partial class DecimalEx
     {
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)]
+        public static decimal Abs(decimal a)
+        {
+            if (a >= 0)
+                return a;
+
+            return -a;
+        }
+
         /// <summary>
         /// Returns the square root of a given number. 
         /// </summary>
