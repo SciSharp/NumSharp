@@ -97,9 +97,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
+                                byte max = moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -112,9 +112,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
+                                short max = moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -127,9 +127,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
+                                ushort max = moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -142,9 +142,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
+                                int max = moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -157,9 +157,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
+                                uint max = moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -172,9 +172,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -187,9 +187,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
+                                ulong max = moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -217,9 +217,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -232,9 +232,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -247,9 +247,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetByte(Convert.ToByte(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -273,7 +273,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -286,9 +286,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
+                                short max = moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -303,7 +303,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -316,9 +316,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
+                                int max = moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -333,7 +333,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -346,9 +346,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -363,7 +363,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -391,9 +391,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -406,9 +406,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -421,9 +421,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt16(Convert.ToInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -447,7 +447,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -462,7 +462,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -475,9 +475,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
+                                ushort max = moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -490,9 +490,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
+                                int max = moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -505,9 +505,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
+                                uint max = moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -520,9 +520,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -535,9 +535,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
+                                ulong max = moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -565,9 +565,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -580,9 +580,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -595,9 +595,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt16(Convert.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -621,7 +621,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -636,7 +636,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -651,7 +651,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -664,9 +664,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
+                                int max = moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -681,7 +681,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -694,9 +694,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -711,7 +711,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -739,9 +739,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -754,9 +754,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -769,9 +769,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt32(Convert.ToInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -795,7 +795,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -810,7 +810,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -825,7 +825,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -840,7 +840,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -853,9 +853,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
+                                uint max = moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -868,9 +868,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -883,9 +883,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
+                                ulong max = moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -913,9 +913,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -928,9 +928,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -943,9 +943,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt32(Convert.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -969,7 +969,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -984,7 +984,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -999,7 +999,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1014,7 +1014,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1029,7 +1029,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1042,9 +1042,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1059,7 +1059,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1087,9 +1087,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1102,9 +1102,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1117,9 +1117,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetInt64(Convert.ToInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1143,7 +1143,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1158,7 +1158,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1173,7 +1173,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1188,7 +1188,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1203,7 +1203,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1218,7 +1218,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max((long)moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1231,9 +1231,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
+                                ulong max = moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1261,9 +1261,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1276,9 +1276,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1291,9 +1291,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetUInt64(Convert.ToUInt64(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1317,7 +1317,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1332,7 +1332,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1345,9 +1345,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
+                                ushort max = moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1360,9 +1360,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
+                                int max = moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1375,9 +1375,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
+                                uint max = moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1390,9 +1390,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
+                                long max = moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1405,9 +1405,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
+                                ulong max = moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1420,9 +1420,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
+                                char max = moveNext();
                                 while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
+                                    max = (char) Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1435,9 +1435,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1450,9 +1450,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1465,9 +1465,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetChar(Convert.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1491,7 +1491,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1506,7 +1506,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1521,7 +1521,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1536,7 +1536,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1551,7 +1551,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1566,7 +1566,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max((long)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1581,7 +1581,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1609,9 +1609,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1626,7 +1626,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 float max = (float)moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max((float)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1641,7 +1641,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 decimal max = (decimal)moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max((decimal)moveNext(), max);
 
                                 ret.SetDouble(Convert.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1665,7 +1665,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1680,7 +1680,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1695,7 +1695,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1710,7 +1710,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1725,7 +1725,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1740,7 +1740,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max((long)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1755,7 +1755,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1783,9 +1783,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
+                                double max = moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1798,9 +1798,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = (float)moveNext();
+                                float max = moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1815,7 +1815,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 decimal max = (decimal)moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max((decimal)moveNext(), max);
 
                                 ret.SetSingle(Convert.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1839,7 +1839,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = (byte) Math.Max((byte)moveNext(), max);
+                                    max = Math.Max((byte)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1854,7 +1854,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short max = (short)moveNext();
                                 while (hasNext())
-                                    max = (short) Math.Max((short)moveNext(), max);
+                                    max = Math.Max((short)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1869,7 +1869,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort max = (ushort)moveNext();
                                 while (hasNext())
-                                    max = (ushort) Math.Max((ushort)moveNext(), max);
+                                    max = Math.Max((ushort)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1884,7 +1884,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = (int) Math.Max((int)moveNext(), max);
+                                    max = Math.Max((int)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1899,7 +1899,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint max = (uint)moveNext();
                                 while (hasNext())
-                                    max = (uint) Math.Max((uint)moveNext(), max);
+                                    max = Math.Max((uint)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1914,7 +1914,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = (long) Math.Max((long)moveNext(), max);
+                                    max = Math.Max((long)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1929,7 +1929,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong max = (ulong)moveNext();
                                 while (hasNext())
-                                    max = (ulong) Math.Max((ulong)moveNext(), max);
+                                    max = Math.Max((ulong)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1959,7 +1959,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 double max = (double)moveNext();
                                 while (hasNext())
-                                    max = (double) Math.Max((double)moveNext(), max);
+                                    max = Math.Max((double)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1974,7 +1974,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 float max = (float)moveNext();
                                 while (hasNext())
-                                    max = (float) Math.Max((float)moveNext(), max);
+                                    max = Math.Max((float)moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1987,9 +1987,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                decimal max = moveNext();
                                 while (hasNext())
-                                    max = (decimal) Math.Max((decimal)moveNext(), max);
+                                    max = Math.Max(moveNext(), max);
 
                                 ret.SetDecimal(Convert.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -2061,9 +2061,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
+                            byte max = moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2072,9 +2072,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
+                            short max = moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2083,9 +2083,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
+                            ushort max = moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2094,9 +2094,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
+                            int max = moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2105,9 +2105,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
+                            uint max = moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2116,9 +2116,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2127,9 +2127,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
+                            ulong max = moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2149,9 +2149,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2160,9 +2160,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2171,9 +2171,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToByte(max);
                         }
@@ -2193,7 +2193,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2202,9 +2202,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
+                            short max = moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2215,7 +2215,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2224,9 +2224,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
+                            int max = moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2237,7 +2237,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2246,9 +2246,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2259,7 +2259,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2279,9 +2279,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2290,9 +2290,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2301,9 +2301,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt16(max);
                         }
@@ -2323,7 +2323,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2334,7 +2334,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2343,9 +2343,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
+                            ushort max = moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2354,9 +2354,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
+                            int max = moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2365,9 +2365,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
+                            uint max = moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2376,9 +2376,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2387,9 +2387,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
+                            ulong max = moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2409,9 +2409,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2420,9 +2420,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2431,9 +2431,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt16(max);
                         }
@@ -2453,7 +2453,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2464,7 +2464,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2475,7 +2475,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2484,9 +2484,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
+                            int max = moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2497,7 +2497,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2506,9 +2506,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2519,7 +2519,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2539,9 +2539,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2550,9 +2550,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2561,9 +2561,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt32(max);
                         }
@@ -2583,7 +2583,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2594,7 +2594,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2605,7 +2605,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2616,7 +2616,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2625,9 +2625,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
+                            uint max = moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2636,9 +2636,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2647,9 +2647,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
+                            ulong max = moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2669,9 +2669,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2680,9 +2680,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2691,9 +2691,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt32(max);
                         }
@@ -2713,7 +2713,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2724,7 +2724,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2735,7 +2735,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2746,7 +2746,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2757,7 +2757,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2766,9 +2766,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2779,7 +2779,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2799,9 +2799,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2810,9 +2810,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2821,9 +2821,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToInt64(max);
                         }
@@ -2843,7 +2843,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2854,7 +2854,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2865,7 +2865,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2876,7 +2876,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2887,7 +2887,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2898,7 +2898,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max((long)moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2907,9 +2907,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
+                            ulong max = moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2929,9 +2929,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2940,9 +2940,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2951,9 +2951,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToUInt64(max);
                         }
@@ -2973,7 +2973,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -2984,7 +2984,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -2993,9 +2993,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
+                            ushort max = moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3004,9 +3004,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
+                            int max = moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3015,9 +3015,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
+                            uint max = moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3026,9 +3026,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
+                            long max = moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3037,9 +3037,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
+                            ulong max = moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3048,9 +3048,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
+                            char max = moveNext();
                             while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
+                                max = (char) Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3059,9 +3059,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3070,9 +3070,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3081,9 +3081,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToChar(max);
                         }
@@ -3103,7 +3103,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3114,7 +3114,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3125,7 +3125,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3136,7 +3136,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3147,7 +3147,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3158,7 +3158,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max((long)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3169,7 +3169,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3189,9 +3189,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3202,7 +3202,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             float max = (float)moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max((float)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3213,7 +3213,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             decimal max = (decimal)moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max((decimal)moveNext(), max);
 
                             return Convert.ToDouble(max);
                         }
@@ -3233,7 +3233,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3244,7 +3244,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3255,7 +3255,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3266,7 +3266,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3277,7 +3277,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3288,7 +3288,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max((long)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3299,7 +3299,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3319,9 +3319,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
+                            double max = moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3330,9 +3330,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = (float)moveNext();
+                            float max = moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3343,7 +3343,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             decimal max = (decimal)moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max((decimal)moveNext(), max);
 
                             return Convert.ToSingle(max);
                         }
@@ -3363,7 +3363,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = (byte) Math.Max((byte)moveNext(), max);
+                                max = Math.Max((byte)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3374,7 +3374,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short max = (short)moveNext();
                             while (hasNext())
-                                max = (short) Math.Max((short)moveNext(), max);
+                                max = Math.Max((short)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3385,7 +3385,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort max = (ushort)moveNext();
                             while (hasNext())
-                                max = (ushort) Math.Max((ushort)moveNext(), max);
+                                max = Math.Max((ushort)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3396,7 +3396,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = (int) Math.Max((int)moveNext(), max);
+                                max = Math.Max((int)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3407,7 +3407,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint max = (uint)moveNext();
                             while (hasNext())
-                                max = (uint) Math.Max((uint)moveNext(), max);
+                                max = Math.Max((uint)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3418,7 +3418,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = (long) Math.Max((long)moveNext(), max);
+                                max = Math.Max((long)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3429,7 +3429,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong max = (ulong)moveNext();
                             while (hasNext())
-                                max = (ulong) Math.Max((ulong)moveNext(), max);
+                                max = Math.Max((ulong)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3451,7 +3451,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             double max = (double)moveNext();
                             while (hasNext())
-                                max = (double) Math.Max((double)moveNext(), max);
+                                max = Math.Max((double)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3462,7 +3462,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             float max = (float)moveNext();
                             while (hasNext())
-                                max = (float) Math.Max((float)moveNext(), max);
+                                max = Math.Max((float)moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }
@@ -3471,9 +3471,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<decimal>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            decimal max = moveNext();
                             while (hasNext())
-                                max = (decimal) Math.Max((decimal)moveNext(), max);
+                                max = Math.Max(moveNext(), max);
 
                             return Convert.ToDecimal(max);
                         }

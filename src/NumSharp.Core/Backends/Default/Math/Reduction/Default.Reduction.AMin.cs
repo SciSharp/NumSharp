@@ -97,9 +97,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                byte min = (byte)moveNext();
+                                byte min = moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -112,9 +112,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                short min = (short)moveNext();
+                                short min = moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -127,9 +127,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort min = (ushort)moveNext();
+                                ushort min = moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -142,9 +142,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int min = (int)moveNext();
+                                int min = moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -157,9 +157,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint min = (uint)moveNext();
+                                uint min = moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -172,9 +172,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -187,9 +187,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong min = (ulong)moveNext();
+                                ulong min = moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -217,9 +217,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -232,9 +232,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -247,9 +247,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetByte(Convert.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -273,7 +273,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -286,9 +286,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                short min = (short)moveNext();
+                                short min = moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -303,7 +303,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -316,9 +316,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int min = (int)moveNext();
+                                int min = moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -333,7 +333,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -346,9 +346,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -363,7 +363,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -391,9 +391,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -406,9 +406,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -421,9 +421,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt16(Convert.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -447,7 +447,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -462,7 +462,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -475,9 +475,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort min = (ushort)moveNext();
+                                ushort min = moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -490,9 +490,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int min = (int)moveNext();
+                                int min = moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -505,9 +505,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint min = (uint)moveNext();
+                                uint min = moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -520,9 +520,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -535,9 +535,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong min = (ulong)moveNext();
+                                ulong min = moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -565,9 +565,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -580,9 +580,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -595,9 +595,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -621,7 +621,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -636,7 +636,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -651,7 +651,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -664,9 +664,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int min = (int)moveNext();
+                                int min = moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -681,7 +681,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -694,9 +694,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -711,7 +711,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -739,9 +739,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -754,9 +754,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -769,9 +769,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt32(Convert.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -795,7 +795,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -810,7 +810,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -825,7 +825,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -840,7 +840,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -853,9 +853,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint min = (uint)moveNext();
+                                uint min = moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -868,9 +868,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -883,9 +883,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong min = (ulong)moveNext();
+                                ulong min = moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -913,9 +913,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -928,9 +928,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -943,9 +943,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -969,7 +969,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -984,7 +984,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -999,7 +999,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1014,7 +1014,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1029,7 +1029,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1042,9 +1042,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1059,7 +1059,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1087,9 +1087,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1102,9 +1102,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1117,9 +1117,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetInt64(Convert.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1143,7 +1143,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1158,7 +1158,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1173,7 +1173,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1188,7 +1188,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1203,7 +1203,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1218,7 +1218,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long min = (long)moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min((long)moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1231,9 +1231,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong min = (ulong)moveNext();
+                                ulong min = moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1261,9 +1261,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1276,9 +1276,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1291,9 +1291,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1317,7 +1317,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1332,7 +1332,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1345,9 +1345,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ushort min = (ushort)moveNext();
+                                ushort min = moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1360,9 +1360,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int min = (int)moveNext();
+                                int min = moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1375,9 +1375,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                uint min = (uint)moveNext();
+                                uint min = moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1390,9 +1390,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long min = (long)moveNext();
+                                long min = moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1405,9 +1405,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                ulong min = (ulong)moveNext();
+                                ulong min = moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1420,9 +1420,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                char min = (char)moveNext();
+                                char min = moveNext();
                                 while (hasNext())
-                                    min = (char) Math.Min((char)moveNext(), min);
+                                    min = (char) Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1435,9 +1435,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1450,9 +1450,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1465,9 +1465,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetChar(Convert.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1491,7 +1491,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1506,7 +1506,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1521,7 +1521,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1536,7 +1536,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1551,7 +1551,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1566,7 +1566,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long min = (long)moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min((long)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1581,7 +1581,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1609,9 +1609,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1626,7 +1626,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 float min = (float)moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min((float)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1641,7 +1641,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 decimal min = (decimal)moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min((decimal)moveNext(), min);
 
                                 ret.SetDouble(Convert.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1665,7 +1665,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1680,7 +1680,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1695,7 +1695,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1710,7 +1710,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1725,7 +1725,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1740,7 +1740,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long min = (long)moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min((long)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1755,7 +1755,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1783,9 +1783,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double min = (double)moveNext();
+                                double min = moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1798,9 +1798,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float min = (float)moveNext();
+                                float min = moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1815,7 +1815,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 decimal min = (decimal)moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min((decimal)moveNext(), min);
 
                                 ret.SetSingle(Convert.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1839,7 +1839,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte min = (byte)moveNext();
                                 while (hasNext())
-                                    min = (byte) Math.Min((byte)moveNext(), min);
+                                    min = Math.Min((byte)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1854,7 +1854,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 short min = (short)moveNext();
                                 while (hasNext())
-                                    min = (short) Math.Min((short)moveNext(), min);
+                                    min = Math.Min((short)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1869,7 +1869,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ushort min = (ushort)moveNext();
                                 while (hasNext())
-                                    min = (ushort) Math.Min((ushort)moveNext(), min);
+                                    min = Math.Min((ushort)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1884,7 +1884,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int min = (int)moveNext();
                                 while (hasNext())
-                                    min = (int) Math.Min((int)moveNext(), min);
+                                    min = Math.Min((int)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1899,7 +1899,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 uint min = (uint)moveNext();
                                 while (hasNext())
-                                    min = (uint) Math.Min((uint)moveNext(), min);
+                                    min = Math.Min((uint)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1914,7 +1914,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long min = (long)moveNext();
                                 while (hasNext())
-                                    min = (long) Math.Min((long)moveNext(), min);
+                                    min = Math.Min((long)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1929,7 +1929,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 ulong min = (ulong)moveNext();
                                 while (hasNext())
-                                    min = (ulong) Math.Min((ulong)moveNext(), min);
+                                    min = Math.Min((ulong)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1959,7 +1959,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 double min = (double)moveNext();
                                 while (hasNext())
-                                    min = (double) Math.Min((double)moveNext(), min);
+                                    min = Math.Min((double)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1974,7 +1974,7 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 float min = (float)moveNext();
                                 while (hasNext())
-                                    min = (float) Math.Min((float)moveNext(), min);
+                                    min = Math.Min((float)moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -1987,9 +1987,9 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal min = (decimal)moveNext();
+                                decimal min = moveNext();
                                 while (hasNext())
-                                    min = (decimal) Math.Min((decimal)moveNext(), min);
+                                    min = Math.Min(moveNext(), min);
 
                                 ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
@@ -2061,9 +2061,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            byte min = (byte)moveNext();
+                            byte min = moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2072,9 +2072,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            short min = (short)moveNext();
+                            short min = moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2083,9 +2083,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort min = (ushort)moveNext();
+                            ushort min = moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2094,9 +2094,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int min = (int)moveNext();
+                            int min = moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2105,9 +2105,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint min = (uint)moveNext();
+                            uint min = moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2116,9 +2116,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2127,9 +2127,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong min = (ulong)moveNext();
+                            ulong min = moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2149,9 +2149,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2160,9 +2160,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2171,9 +2171,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToByte(min);
                         }
@@ -2193,7 +2193,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2202,9 +2202,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            short min = (short)moveNext();
+                            short min = moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2215,7 +2215,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2224,9 +2224,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int min = (int)moveNext();
+                            int min = moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2237,7 +2237,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2246,9 +2246,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2259,7 +2259,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2279,9 +2279,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2290,9 +2290,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2301,9 +2301,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<short>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt16(min);
                         }
@@ -2323,7 +2323,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2334,7 +2334,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2343,9 +2343,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort min = (ushort)moveNext();
+                            ushort min = moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2354,9 +2354,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int min = (int)moveNext();
+                            int min = moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2365,9 +2365,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint min = (uint)moveNext();
+                            uint min = moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2376,9 +2376,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2387,9 +2387,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong min = (ulong)moveNext();
+                            ulong min = moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2409,9 +2409,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2420,9 +2420,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2431,9 +2431,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ushort>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt16(min);
                         }
@@ -2453,7 +2453,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2464,7 +2464,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2475,7 +2475,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2484,9 +2484,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int min = (int)moveNext();
+                            int min = moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2497,7 +2497,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2506,9 +2506,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2519,7 +2519,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2539,9 +2539,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2550,9 +2550,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2561,9 +2561,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt32(min);
                         }
@@ -2583,7 +2583,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2594,7 +2594,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2605,7 +2605,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2616,7 +2616,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2625,9 +2625,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint min = (uint)moveNext();
+                            uint min = moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2636,9 +2636,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2647,9 +2647,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong min = (ulong)moveNext();
+                            ulong min = moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2669,9 +2669,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2680,9 +2680,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2691,9 +2691,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt32(min);
                         }
@@ -2713,7 +2713,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2724,7 +2724,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2735,7 +2735,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2746,7 +2746,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2757,7 +2757,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2766,9 +2766,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2779,7 +2779,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2799,9 +2799,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2810,9 +2810,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2821,9 +2821,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToInt64(min);
                         }
@@ -2843,7 +2843,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2854,7 +2854,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2865,7 +2865,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2876,7 +2876,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2887,7 +2887,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2898,7 +2898,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long min = (long)moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min((long)moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2907,9 +2907,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong min = (ulong)moveNext();
+                            ulong min = moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2929,9 +2929,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2940,9 +2940,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2951,9 +2951,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToUInt64(min);
                         }
@@ -2973,7 +2973,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -2984,7 +2984,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -2993,9 +2993,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ushort min = (ushort)moveNext();
+                            ushort min = moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3004,9 +3004,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int min = (int)moveNext();
+                            int min = moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3015,9 +3015,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            uint min = (uint)moveNext();
+                            uint min = moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3026,9 +3026,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long min = (long)moveNext();
+                            long min = moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3037,9 +3037,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            ulong min = (ulong)moveNext();
+                            ulong min = moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3048,9 +3048,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            char min = (char)moveNext();
+                            char min = moveNext();
                             while (hasNext())
-                                min = (char) Math.Min((char)moveNext(), min);
+                                min = (char) Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3059,9 +3059,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3070,9 +3070,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3081,9 +3081,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<char>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToChar(min);
                         }
@@ -3103,7 +3103,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3114,7 +3114,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3125,7 +3125,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3136,7 +3136,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3147,7 +3147,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3158,7 +3158,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long min = (long)moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min((long)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3169,7 +3169,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3189,9 +3189,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3202,7 +3202,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             float min = (float)moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min((float)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3213,7 +3213,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             decimal min = (decimal)moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min((decimal)moveNext(), min);
 
                             return Convert.ToDouble(min);
                         }
@@ -3233,7 +3233,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3244,7 +3244,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3255,7 +3255,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3266,7 +3266,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3277,7 +3277,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3288,7 +3288,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long min = (long)moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min((long)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3299,7 +3299,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3319,9 +3319,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double min = (double)moveNext();
+                            double min = moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3330,9 +3330,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float min = (float)moveNext();
+                            float min = moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3343,7 +3343,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             decimal min = (decimal)moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min((decimal)moveNext(), min);
 
                             return Convert.ToSingle(min);
                         }
@@ -3363,7 +3363,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte min = (byte)moveNext();
                             while (hasNext())
-                                min = (byte) Math.Min((byte)moveNext(), min);
+                                min = Math.Min((byte)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3374,7 +3374,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             short min = (short)moveNext();
                             while (hasNext())
-                                min = (short) Math.Min((short)moveNext(), min);
+                                min = Math.Min((short)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3385,7 +3385,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ushort min = (ushort)moveNext();
                             while (hasNext())
-                                min = (ushort) Math.Min((ushort)moveNext(), min);
+                                min = Math.Min((ushort)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3396,7 +3396,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int min = (int)moveNext();
                             while (hasNext())
-                                min = (int) Math.Min((int)moveNext(), min);
+                                min = Math.Min((int)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3407,7 +3407,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             uint min = (uint)moveNext();
                             while (hasNext())
-                                min = (uint) Math.Min((uint)moveNext(), min);
+                                min = Math.Min((uint)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3418,7 +3418,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long min = (long)moveNext();
                             while (hasNext())
-                                min = (long) Math.Min((long)moveNext(), min);
+                                min = Math.Min((long)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3429,7 +3429,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             ulong min = (ulong)moveNext();
                             while (hasNext())
-                                min = (ulong) Math.Min((ulong)moveNext(), min);
+                                min = Math.Min((ulong)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3451,7 +3451,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             double min = (double)moveNext();
                             while (hasNext())
-                                min = (double) Math.Min((double)moveNext(), min);
+                                min = Math.Min((double)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3462,7 +3462,7 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             float min = (float)moveNext();
                             while (hasNext())
-                                min = (float) Math.Min((float)moveNext(), min);
+                                min = Math.Min((float)moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
@@ -3471,9 +3471,9 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<decimal>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal min = (decimal)moveNext();
+                            decimal min = moveNext();
                             while (hasNext())
-                                min = (decimal) Math.Min((decimal)moveNext(), min);
+                                min = Math.Min(moveNext(), min);
 
                             return Convert.ToDecimal(min);
                         }
