@@ -37,7 +37,7 @@ namespace NumSharp.Backends
 
             //handle keepdims
             Shape axisedShape = Shape.GetAxis(shape, axis);
-            var retType = (typeCode ?? arr.GetTypeCode).GetAccumulatingType();
+            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
             //prepare ret
             var ret = new NDArray(retType, axisedShape, false);
@@ -2406,7 +2406,7 @@ namespace NumSharp.Backends
 
         protected object product_elementwise(NDArray arr, NPTypeCode? typeCode)
         {
-            var retType = (typeCode ?? arr.GetTypeCode).GetAccumulatingType();
+            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)
