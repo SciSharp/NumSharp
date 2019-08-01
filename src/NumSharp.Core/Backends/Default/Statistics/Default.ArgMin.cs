@@ -9,14 +9,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ArgMax(in NDArray a, int axis)
+        public override NDArray ArgMin(in NDArray a, int axis)
         {
-            return ReduceArgMax(a, axis);
+            return ReduceArgMin(a, axis);
         }        
         
-        public override NDArray ArgMax(in NDArray a)
+        public override NDArray ArgMin(in NDArray a)
         {
-            return ReduceArgMax(a, null);
+            return ReduceArgMin(a, null);
         }
     }
 }

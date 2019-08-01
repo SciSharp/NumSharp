@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FluentAssertions;
 
 namespace NumSharp.UnitTest.Selection
 {
@@ -12,9 +13,109 @@ namespace NumSharp.UnitTest.Selection
         public void argmax12()
         {
             NDArray x = DataSample.Int32D12;
-
+            Console.WriteLine(x.ToString(false));
             int y0 = np.argmax(x);
             Assert.AreEqual(y0, 3);
+        }
+
+        [TestMethod]
+        public void argmax_case1()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmax(a).Should().Be(26);
+        }
+
+        [TestMethod]
+        public void argmax_case2()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmax(a, axis: 1).Cast<int>().Should().AllBeEquivalentTo(2);
+        }
+
+        [TestMethod]
+        public void argmax_case3()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmax(a, axis: 0).Cast<int>().Should().AllBeEquivalentTo(2);
+        }
+
+        [TestMethod]
+        public void argmax_case4()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmax(a, axis: 2).Cast<int>().Should().AllBeEquivalentTo(2);
+        }
+
+        [TestMethod]
+        public void argmax_case5()
+        {
+            var a = np.arange(6).reshape(2, 3) + 10;
+            np.argmax(a).Should().Be(5);
+            var ret = np.argmax(a, axis: 0);
+            ret.Cast<int>().Should().AllBeEquivalentTo(1);
+            ret.size.Should().Be(3);
+            ret.shape.Should().HaveCount(1).And.ContainInOrder(3);
+        }
+
+        [TestMethod]
+        public void argmax_case6()
+        {
+            var a = np.arange(6).reshape(2, 3) + 10;
+            np.argmax(a).Should().Be(5);
+            var ret = np.argmax(a, axis: 1);
+            ret.Cast<int>().Should().AllBeEquivalentTo(2);
+            ret.size.Should().Be(2);
+            ret.shape.Should().HaveCount(1).And.ContainInOrder(2);
+        }
+
+        [TestMethod]
+        public void argmin_case5()
+        {
+            var a = np.arange(6).reshape(2, 3) + 10;
+            np.argmin(a).Should().Be(0);
+            var ret = np.argmin(a, axis: 0);
+            ret.Cast<int>().Should().AllBeEquivalentTo(0);
+            ret.size.Should().Be(3);
+            ret.shape.Should().HaveCount(1).And.ContainInOrder(3);
+        }
+
+        [TestMethod]
+        public void argmin_case6()
+        {
+            var a = np.arange(6).reshape(2, 3) + 10;
+            np.argmin(a).Should().Be(0);
+            var ret = np.argmin(a, axis: 1);
+            ret.Cast<int>().Should().AllBeEquivalentTo(0);
+            ret.size.Should().Be(2);
+            ret.shape.Should().HaveCount(1).And.ContainInOrder(2);
+        }
+
+        [TestMethod]
+        public void argmin_case2()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmin(a, axis: 1).Cast<int>().Should().AllBeEquivalentTo(0);
+        }
+
+        [TestMethod]
+        public void argmin_case3()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmin(a, axis: 0).Cast<int>().Should().AllBeEquivalentTo(0);
+        }
+
+        [TestMethod]
+        public void argmin_case4()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmin(a, axis: 2).Cast<int>().Should().AllBeEquivalentTo(0);
+        }
+
+        [TestMethod]
+        public void argmin_case1()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            np.argmin(a).Should().Be(0);
         }
 
         [TestMethod]
