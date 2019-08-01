@@ -365,6 +365,8 @@ namespace NumSharp.Backends
 
                 left = new Shape(mit.dimensions);
                 right = new Shape(mit.dimensions);
+                left.ViewInfo = leftShape.ViewInfo;
+                right.ViewInfo = rightShape.ViewInfo;
             }
 
             //if (nd != 0)
