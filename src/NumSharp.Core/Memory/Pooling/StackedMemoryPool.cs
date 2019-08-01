@@ -30,8 +30,7 @@ namespace NumSharp.Memory.Pooling
             }
         }
 
-        public StackedMemoryPool(int totalSize) : this(DefaultSingleSize, totalSize / (int)Math.Ceiling(totalSize / (double)DefaultSingleSize))
-        { }
+        public StackedMemoryPool(int totalSize) : this(DefaultSingleSize, totalSize / (int)Math.Ceiling(totalSize / (double)DefaultSingleSize)) { }
 
         public StackedMemoryPool(int singleSize, int count)
         {
