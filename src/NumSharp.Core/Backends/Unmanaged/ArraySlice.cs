@@ -12,7 +12,7 @@ namespace NumSharp.Backends.Unmanaged
 {
     public static class ArraySlice
     {
-        private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
+        private static readonly StackedMemoryPool _buffer = ScalarMemoryPool.Instance;
 
         /// <summary>
         ///     Wrap a <see cref="T"/> inside <see cref="UnmanagedByteStorage{T}"/>.
@@ -25,26 +25,26 @@ namespace NumSharp.Backends.Unmanaged
             {
 #if _REGEN
 	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(1, _buffer)) {[0] = (#2)val};
+	            case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(_buffer)) {[0] = (#2)val};
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
 
-                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(1, _buffer)) {[0] = (bool)val};
-                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(1, _buffer)) {[0] = (byte)val};
-                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(1, _buffer)) {[0] = (short)val};
-                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(1, _buffer)) {[0] = (ushort)val};
-                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(1, _buffer)) {[0] = (int)val};
-                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(1, _buffer)) {[0] = (uint)val};
-                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(1, _buffer)) {[0] = (long)val};
-                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(1, _buffer)) {[0] = (ulong)val};
-                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(1, _buffer)) {[0] = (char)val};
-                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(1, _buffer)) {[0] = (double)val};
-                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(1, _buffer)) {[0] = (float)val};
-                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(1, _buffer)) {[0] = (decimal)val};
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = (bool)val};
+	            case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = (byte)val};
+	            case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = (short)val};
+	            case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = (ushort)val};
+	            case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = (int)val};
+	            case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = (uint)val};
+	            case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = (long)val};
+	            case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = (ulong)val};
+	            case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = (char)val};
+	            case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = (double)val};
+	            case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = (float)val};
+	            case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = (decimal)val};
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns></returns>
         public static ArraySlice<T> Scalar<T>(T val) where T : unmanaged
         {
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(1, _buffer)) {[0] = val};
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(_buffer)) {[0] = val};
         }
 
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
@@ -73,10 +73,10 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         [MethodImpl((MethodImplOptions)768)]
-        public static ArraySlice<T> FromPool<T>(int count, InternalBufferManager pool) where T : unmanaged
+        public static ArraySlice<T> FromPool<T>(StackedMemoryPool pool) where T : unmanaged
         {
             //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(count, pool));
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(pool));
         }
 
         public static IArraySlice FromArray(Array arr, bool copy = false)

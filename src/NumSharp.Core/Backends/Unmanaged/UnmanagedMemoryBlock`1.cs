@@ -145,11 +145,11 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="manager"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedMemoryBlock<T> FromPool(int length, InternalBufferManager manager)
+        public static UnmanagedMemoryBlock<T> FromPool(StackedMemoryPool manager)
         {
-            //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            var buffer = manager.TakeBuffer(length * InfoOf<T>.Size);
-            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
+            Debug.Assert(manager.SingleSize / InfoOf<T>.Size > 0);
+            var buffer = manager.Take();
+            return new UnmanagedMemoryBlock<T>((T*)buffer, manager.SingleSize / InfoOf<T>.Size, () => manager.Return(buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]

@@ -39,7 +39,7 @@ namespace NumSharp.Benchmark.Unmanaged
         private UnmanagedMemoryBlock<int> tosimple;
 
         IDisposable[] memoryTrash;
-        private static InternalBufferManager.PooledBufferManager pool = default;
+        private static StackedMemoryPool pool = default;
 
         NDArray nd;
 
@@ -54,7 +54,7 @@ namespace NumSharp.Benchmark.Unmanaged
 
             fromsimple = new UnmanagedMemoryBlock<int>(length);
             tosimple = new UnmanagedMemoryBlock<int>(length);
-            pool = new InternalBufferManager.PooledBufferManager(32_777_216, 1_677_721);
+            pool = new StackedMemoryPool(1_677_721, 19);
         }
 
         [BenchmarkDotNet.Attributes.IterationCleanup()]

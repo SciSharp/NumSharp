@@ -15,7 +15,7 @@ namespace NumSharp.Backends.Unmanaged
     public partial class UnmanagedByteStorage<T> : IEnumerable<T>, ICloneable where T : unmanaged
     {
         public static readonly NPTypeCode TypeCode = typeof(T).GetTypeCode();
-        private static readonly InternalBufferManager.PooledBufferManager _scalarPool = ScalarMemoryPool.Instance;
+        private static readonly StackedMemoryPool _scalarPool = ScalarMemoryPool.Instance;
 
         public const int ParallelLimit = 84999;
 
@@ -92,7 +92,7 @@ namespace NumSharp.Backends.Unmanaged
         public unsafe UnmanagedByteStorage(T scalar)
         {
             _shape = Shape.Scalar;
-            var mem = UnmanagedMemoryBlock<T>.FromPool(1, _scalarPool);
+            var mem = UnmanagedMemoryBlock<T>.FromPool(_scalarPool);
             _array = new ArraySlice<T>(mem);
             *(Address = _array.Address) = scalar;
         }
@@ -250,7 +250,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public static unsafe UnmanagedByteStorage<T> Scalar(T val)
         {
-            var ret = new UnmanagedByteStorage<T>(UnmanagedMemoryBlock<T>.FromPool(1, _scalarPool), Shape.Scalar);
+            var ret = new UnmanagedByteStorage<T>(UnmanagedMemoryBlock<T>.FromPool(_scalarPool), Shape.Scalar);
             *(ret.Address) = val;
 
             return ret;

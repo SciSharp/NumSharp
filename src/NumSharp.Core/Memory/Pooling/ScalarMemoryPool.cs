@@ -5,6 +5,6 @@ namespace NumSharp.Memory.Pooling
 {
     public class ScalarMemoryPool
     {
-        public static readonly InternalBufferManager.PooledBufferManager Instance = new InternalBufferManager.PooledBufferManager(131072, Marshal.SizeOf<Complex>());
+        public static readonly StackedMemoryPool Instance = new StackedMemoryPool(131072);
     }
 }
