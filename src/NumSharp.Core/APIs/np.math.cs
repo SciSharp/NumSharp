@@ -206,11 +206,16 @@ namespace NumSharp
             => nd.sin();
 
         /// <summary>
-        /// Return the product of array elements over a given axis.
+        ///     Return the product of array elements over a given axis.
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.1/reference/generated/numpy.prod.html</remarks>
-        public static NDArray prod(NDArray nd, int axis = -1, Type dtype = null) //todo impl a version with keepdims
-            => nd.prod(axis, dtype);
+        /// <param name="a">Input data.</param>
+        /// <param name="axis">Axis or axes along which a product is performed. The default, axis=None, will calculate the product of all the elements in the input array. If axis is negative it counts from the last to the first axis.</param>
+        /// <param name="dtype">The type of the returned array, as well as of the accumulator in which the elements are multiplied. The dtype of a is used by default unless a has an integer dtype of less precision than the default platform integer. In that case, if a is signed then the platform integer is used while if a is unsigned then an unsigned integer of the same precision as the platform integer is used.</param>
+        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
+        /// <returns>An array shaped as a but with the specified axis removed.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.prod.html</remarks>
+        public static NDArray prod(in NDArray a, int? axis = null, Type dtype = null, bool keepdims = false) //todo impl a version with keepdims
+            => a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype != null ? dtype.GetTypeCode() : (NPTypeCode?)null);
 
         /// <summary>
         /// Numerical positive, element-wise.

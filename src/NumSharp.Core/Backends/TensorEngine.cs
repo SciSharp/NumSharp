@@ -80,6 +80,7 @@ namespace NumSharp
         public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceArgMax(NDArray arr, int? axis_);
         public abstract NDArray ReduceArgMin(NDArray arr, int? axis_);
+        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion
 
