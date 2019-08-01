@@ -37,6 +37,8 @@ namespace NumSharp
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Log(in NDArray nd, Type dtype = null);
         public abstract NDArray Log(in NDArray nd, NPTypeCode typeCode);
+        public abstract NDArray Exp(in NDArray nd, Type dtype = null);
+        public abstract NDArray Exp(in NDArray nd, NPTypeCode typeCode);
         public abstract NDArray MatMul(NDArray x, NDArray y);
         public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
