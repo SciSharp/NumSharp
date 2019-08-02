@@ -274,6 +274,8 @@ namespace NumSharp
             {
                 var coords = new List<int>(indices);
                 var vi = ViewInfo;
+                if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0)
+                    return 0;
                 if (indices.Length > vi.UnreducedShape.dimensions.Length)
                     throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
                 var orig_ndim = vi.OriginalShape.NDim;

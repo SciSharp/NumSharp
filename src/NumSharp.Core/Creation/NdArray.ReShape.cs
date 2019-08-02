@@ -32,10 +32,11 @@ namespace NumSharp
             if (retShape.size == 0 && size != 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(retShape));
 
+            InferMissingDimension(ref retShape);
+
             if (size != retShape.size)
                 throw new IncorrectShapeException($"Given shape size ({retShape.size}) does not match the size of the given storage size ({size})");
 
-            InferMissingDimension(ref retShape);
 
             var storage = Shape.IsSliced ? new UnmanagedStorage(Storage.CloneData(), retShape) : Storage.Alias(retShape);
             return new NDArray(storage) {TensorEngine = TensorEngine};
@@ -54,8 +55,8 @@ namespace NumSharp
         public NDArray reshape(params int[] shape)
         {
             var retShape = new Shape(shape);
-            InferMissingDimension(ref retShape);
 
+            InferMissingDimension(ref retShape);
 
             if (size != retShape.size)
                 throw new IncorrectShapeException($"Given shape size ({retShape.size}) does not match the size of the given storage size ({size})");
@@ -136,6 +137,7 @@ namespace NumSharp
                 }
 
                 shape.dimensions[indexOfNegOne] = missingValue;
+                shape.ComputeHashcode();
             }
         }
     }
