@@ -11,20 +11,17 @@ namespace NumSharp.Backends
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
-
-            if (axis_ == null)
-            {
-                return NDArray.Scalar(argmax_elementwise(arr));
-            }
-
-            var axis = axis_.Value;
             var shape = arr.Shape;
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.NDim == 1 || shape.IsScalar)
-                return arr;
+            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+                return NDArray.Scalar(0);
 
+            if (axis_ == null)
+                return NDArray.Scalar(argmax_elementwise(arr));
+
+            var axis = axis_.Value;
             while (axis < 0)
                 axis = arr.ndim + axis; //handle negative axis
 
@@ -380,8 +377,16 @@ namespace NumSharp.Backends
             return ret;
         }
 
+        public int ArgMaxElementwise(NDArray arr)
+        {
+            return Convert.ToInt32(argmax_elementwise(arr));
+        }
+
         protected object argmax_elementwise(NDArray arr)
         {
+            if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
+                return NDArray.Scalar(0);
+
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)

@@ -149,7 +149,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             Debug.Assert(manager.SingleSize / InfoOf<T>.Size > 0);
             var buffer = manager.Take();
-            return new UnmanagedMemoryBlock<T>((T*)buffer, manager.SingleSize / InfoOf<T>.Size, () => manager.Return(buffer));
+            return new UnmanagedMemoryBlock<T>((T*)buffer, 1, () => manager.Return(buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]

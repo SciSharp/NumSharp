@@ -92,7 +92,7 @@ namespace NumSharp
                     one = '1';
                     break;
                 default:
-                    one = Convert.ChangeType((byte)1, typeCode.AsType());
+                    one = Converts.ChangeType((byte)1, typeCode);
                     break;
             }
 

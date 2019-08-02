@@ -48,7 +48,7 @@ namespace NumSharp
         ///</returns>
         public static NDArray<bool> isclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => BackendFactory.GetEngine().IsClose(a, b, rtol, atol, equal_nan);
+            => a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
 
         /// <summary>
         /// Test element-wise for finiteness (not infinity or not Not a Number).
@@ -56,7 +56,7 @@ namespace NumSharp
         /// <param name="a"></param>
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isfinite(NDArray a)
-            => BackendFactory.GetEngine().IsFinite(a);
+            => a.TensorEngine.IsFinite(a);
 
         /// <summary>
         /// Test element-wise for Not a Number.
@@ -64,7 +64,7 @@ namespace NumSharp
         /// <param name="a"></param>
         /// <returns>The result is returned as a boolean array.</returns>
         public static NDArray<bool> isnan(NDArray a)
-            => BackendFactory.GetEngine().IsNan(a);
+            => a.TensorEngine.IsNan(a);
 
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.

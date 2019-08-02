@@ -8,33 +8,13 @@ namespace NumSharp
 {
     public static partial class np
     {
-        private static readonly int[] __one = new int[] {1};
-
         public static NDArray expand_dims(NDArray a, int axis)
         {
             //test if the ndarray is empty.
-            if (a.size == 0)
+            if (a.size == 0 || a.Shape.IsEmpty)
                 return a;
-            //TODO! this can be done by a simple insert to a list or copy from two arrays.
 
-            //we create an nd-array of the shape and then slice/split it on axis index.
-            var shape = np.array(a.shape);
-            var left = shape[$":{axis}"].Cast<int>();
-            var right = shape[$"{axis}:"].Cast<int>();
-
-            //then we append a 1 dim between the slice/split.
-            return new NDArray(a.Storage.Alias(new Shape(_combineEnumerables(left, __one, right).ToArray())));
-
-            IEnumerable<T> _combineEnumerables<T>(params IEnumerable<T>[] arrays)
-            {
-                foreach (var arr in arrays)
-                {
-                    foreach (var val in arr)
-                    {
-                        yield return val;
-                    }
-                }
-            }
+            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis)));
         }
     }
 }

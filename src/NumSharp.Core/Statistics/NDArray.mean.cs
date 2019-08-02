@@ -24,7 +24,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
         public NDArray mean()
-            => BackendFactory.GetEngine().Mean(this);
+            => TensorEngine.Mean(this);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -42,7 +42,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
         public NDArray mean(int axis)
-            => BackendFactory.GetEngine().Mean(this, axis);
+            => TensorEngine.Mean(this, axis);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -60,7 +60,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
         public NDArray mean(int axis, Type type, bool keepdims = false)
-            => BackendFactory.GetEngine().Mean(this, axis, dtype, keepdims);
+            => TensorEngine.Mean(this, axis, dtype, keepdims);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -78,7 +78,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
         public NDArray mean(int axis, NPTypeCode type, bool keepdims = false)
-            => BackendFactory.GetEngine().Mean(this, axis, type, keepdims);
+            => TensorEngine.Mean(this, axis, type, keepdims);
 
         /// <summary>
         ///     Compute the arithmetic mean along the specified axis.
@@ -95,7 +95,7 @@ namespace NumSharp
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
         public NDArray mean(int axis, bool keepdims)
-            => BackendFactory.GetEngine().Mean(this, axis, null, keepdims);
+            => TensorEngine.Mean(this, axis, null, keepdims);
         
     }
 }

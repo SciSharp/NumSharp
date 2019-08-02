@@ -1,13 +1,8 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
+﻿using System.Linq;
 using FluentAssertions;
-using NumSharp;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Statistics
 {
     [TestClass]
     public class NdArrayMeanTest
@@ -18,8 +13,8 @@ namespace NumSharp.UnitTest.Extensions
         {
             var np1 = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2);
             var mean = np.mean(np1, keepdims: true);
-            mean.Shape.Should().Be(new Shape(3, 2));
-            mean.GetValue(0).Should().BeEquivalentTo(3.5);
+            mean.Shape.Should().Be(new Shape(1, 1));
+            mean.GetValue(0, 0).Should().BeEquivalentTo(3.5);
         }
 
         [TestMethod]

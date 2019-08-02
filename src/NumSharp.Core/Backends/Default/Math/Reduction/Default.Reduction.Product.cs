@@ -11,21 +11,27 @@ namespace NumSharp.Backends
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
-
-            if (axis_ == null)
-            {
-                var r = NDArray.Scalar(product_elementwise(arr, typeCode));
-                return keepdims ? r.reshape(np.broadcast_to(r.Shape, arr.Shape)) : r;
-            }
-
-            var axis = axis_.Value;
             var shape = arr.Shape;
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.NDim == 1 || shape.IsScalar)
-                return arr;
+            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+            {
+                var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
+                if (keepdims)
+                    r.Storage.ExpandDimension(0);
+                return r;
+            }
 
+            if (axis_ == null)
+            {
+                var r = NDArray.Scalar(product_elementwise(arr, typeCode));
+                if (keepdims)
+                    r.Storage.ExpandDimension(0);
+                return r;
+            }
+
+            var axis = axis_.Value;
             while (axis < 0)
                 axis = arr.ndim + axis; //handle negative axis
 
@@ -37,7 +43,7 @@ namespace NumSharp.Backends
 
             //handle keepdims
             Shape axisedShape = Shape.GetAxis(shape, axis);
-            var retType = (typeCode ?? arr.GetTypeCode).GetAccumulatingType();
+            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
             //prepare ret
             var ret = new NDArray(retType, axisedShape, false);
@@ -2399,14 +2405,22 @@ namespace NumSharp.Backends
 #endif
 
             if (keepdims)
-                ret.reshape(np.broadcast_to(ret.Shape, arr.Shape));
+                ret.Shape.ExpandDimension(axis);
 
             return ret;
         }
 
+        public T ProductElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
+        {
+            return (T)Convert.ChangeType(product_elementwise(arr, typeCode), typeof(T));
+        }
+
         protected object product_elementwise(NDArray arr, NPTypeCode? typeCode)
         {
-            var retType = (typeCode ?? arr.GetTypeCode).GetAccumulatingType();
+            if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
+                return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
+
+            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)

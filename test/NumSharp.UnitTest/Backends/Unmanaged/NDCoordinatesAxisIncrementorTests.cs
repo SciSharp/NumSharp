@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case6_Scalar()
         {
             var shape = Shape.Scalar;
-            new Action(() => new NDCoordinatesAxisIncrementor(ref shape, 0)).Should().Throw<ArgumentOutOfRangeException>();
+            new Action(() => new NDCoordinatesAxisIncrementor(ref shape, 0)).Should().Throw<InvalidOperationException>();
         }
     }
 }

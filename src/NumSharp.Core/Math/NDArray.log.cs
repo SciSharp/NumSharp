@@ -14,7 +14,7 @@ namespace NumSharp
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.log.html</remarks>
         public NDArray log(Type dtype = null)
-            => BackendFactory.GetEngine().Log(this, dtype);
+            => TensorEngine.Log(this, dtype);
 
         /// <summary>
         ///     Natural logarithm, element-wise.
@@ -23,6 +23,6 @@ namespace NumSharp
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.log.html</remarks>
         public NDArray log(NPTypeCode typeCode)
-            => BackendFactory.GetEngine().Log(this, typeCode);
+            => TensorEngine.Log(this, typeCode);
     }
 }

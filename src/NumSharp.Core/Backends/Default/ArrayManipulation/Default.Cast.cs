@@ -17,12 +17,23 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(dtype));
 
             NDArray clone() => new NDArray(nd.Storage.Clone());
+
             if (nd.Shape.IsEmpty)
             {
                 if (copy)
                     return new NDArray(dtype);
 
                 nd.Storage = new UnmanagedStorage(dtype);
+                return nd;
+            }
+
+            if (nd.Shape.IsScalar || (nd.Shape.size == 1 && nd.Shape.NDim == 1))
+            {
+                var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
+                if (copy)
+                    return ret;
+
+                nd.Storage = ret.Storage;
                 return nd;
             }
 

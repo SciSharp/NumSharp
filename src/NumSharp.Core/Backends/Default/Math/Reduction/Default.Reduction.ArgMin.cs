@@ -11,20 +11,17 @@ namespace NumSharp.Backends
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
-
-            if (axis_ == null)
-            {
-                return NDArray.Scalar(argmin_elementwise(arr));
-            }
-
-            var axis = axis_.Value;
             var shape = arr.Shape;
             if (shape.IsEmpty)
                 return arr;
 
-            if (shape.NDim == 1 || shape.IsScalar)
-                return arr;
+            if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
+                return NDArray.Scalar(0);
 
+            if (axis_ == null)
+                return NDArray.Scalar(argmin_elementwise(arr));
+
+            var axis = axis_.Value;
             while (axis < 0)
                 axis = arr.ndim + axis; //handle negative axis
 
@@ -83,9 +80,10 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
+
             switch (arr.GetTypeCode)
-		    {
-			    case NPTypeCode.Byte: 
+            {
+                case NPTypeCode.Byte:
                 {
                     int at;
                     do
@@ -109,9 +107,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Int16: 
+
+                case NPTypeCode.Int16:
                 {
                     int at;
                     do
@@ -135,9 +135,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.UInt16: 
+
+                case NPTypeCode.UInt16:
                 {
                     int at;
                     do
@@ -161,9 +163,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Int32: 
+
+                case NPTypeCode.Int32:
                 {
                     int at;
                     do
@@ -187,9 +191,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.UInt32: 
+
+                case NPTypeCode.UInt32:
                 {
                     int at;
                     do
@@ -213,9 +219,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Int64: 
+
+                case NPTypeCode.Int64:
                 {
                     int at;
                     do
@@ -239,9 +247,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.UInt64: 
+
+                case NPTypeCode.UInt64:
                 {
                     int at;
                     do
@@ -265,9 +275,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Char: 
+
+                case NPTypeCode.Char:
                 {
                     int at;
                     do
@@ -291,9 +303,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Double: 
+
+                case NPTypeCode.Double:
                 {
                     int at;
                     do
@@ -317,9 +331,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Single: 
+
+                case NPTypeCode.Single:
                 {
                     int at;
                     do
@@ -343,9 +359,11 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    case NPTypeCode.Decimal: 
+
+                case NPTypeCode.Decimal:
                 {
                     int at;
                     do
@@ -369,19 +387,30 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
+
                     break;
                 }
-			    default:
-				    throw new NotSupportedException();
-		    }
+
+                default:
+                    throw new NotSupportedException();
+            }
+
             #endregion
+
 #endif
 
             return ret;
         }
 
+        public int ArgMinElementwise(NDArray arr)
+        {
+            return Convert.ToInt32(argmin_elementwise(arr));
+        }
+
         protected object argmin_elementwise(NDArray arr)
         {
+            if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
+                return NDArray.Scalar(0);
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)
@@ -416,9 +445,10 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
+
             switch (arr.GetTypeCode)
-		    {
-			    case NPTypeCode.Byte: 
+            {
+                case NPTypeCode.Byte:
                 {
                     var iter = arr.AsIterator<byte>();
                     var moveNext = iter.MoveNext;
@@ -439,7 +469,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Int16: 
+
+                case NPTypeCode.Int16:
                 {
                     var iter = arr.AsIterator<short>();
                     var moveNext = iter.MoveNext;
@@ -460,7 +491,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.UInt16: 
+
+                case NPTypeCode.UInt16:
                 {
                     var iter = arr.AsIterator<ushort>();
                     var moveNext = iter.MoveNext;
@@ -481,7 +513,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Int32: 
+
+                case NPTypeCode.Int32:
                 {
                     var iter = arr.AsIterator<int>();
                     var moveNext = iter.MoveNext;
@@ -502,7 +535,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.UInt32: 
+
+                case NPTypeCode.UInt32:
                 {
                     var iter = arr.AsIterator<uint>();
                     var moveNext = iter.MoveNext;
@@ -523,7 +557,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Int64: 
+
+                case NPTypeCode.Int64:
                 {
                     var iter = arr.AsIterator<long>();
                     var moveNext = iter.MoveNext;
@@ -544,7 +579,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.UInt64: 
+
+                case NPTypeCode.UInt64:
                 {
                     var iter = arr.AsIterator<ulong>();
                     var moveNext = iter.MoveNext;
@@ -565,7 +601,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Char: 
+
+                case NPTypeCode.Char:
                 {
                     var iter = arr.AsIterator<char>();
                     var moveNext = iter.MoveNext;
@@ -586,7 +623,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Double: 
+
+                case NPTypeCode.Double:
                 {
                     var iter = arr.AsIterator<double>();
                     var moveNext = iter.MoveNext;
@@ -607,7 +645,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Single: 
+
+                case NPTypeCode.Single:
                 {
                     var iter = arr.AsIterator<float>();
                     var moveNext = iter.MoveNext;
@@ -628,7 +667,8 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Decimal: 
+
+                case NPTypeCode.Decimal:
                 {
                     var iter = arr.AsIterator<decimal>();
                     var moveNext = iter.MoveNext;
@@ -649,10 +689,13 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    default:
-				    throw new NotSupportedException();
-		    }
+
+                default:
+                    throw new NotSupportedException();
+            }
+
             #endregion
+
 #endif
         }
     }
