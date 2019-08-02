@@ -22,7 +22,7 @@ namespace NeuralNetwork.NumSharp.Activations
 
         public override void Backward(NDArray grad)
         {
-            InputGrad = grad * (Input > 0);
+            InputGrad = grad * (NDArray)(Input > 0);
         }
     }
 }

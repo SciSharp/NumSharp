@@ -533,6 +533,7 @@ namespace NumSharp
             {
                 unchecked
                 {
+                    size = 1;
                     int hash = (layout * 397);
                     foreach (var v in dimensions)
                         hash ^= (size *= v) * 397;
@@ -801,6 +802,31 @@ namespace NumSharp
         }
 
         #endregion
+
+        /// <summary>
+        ///     Expands a specific <paramref name="axis"/> with 1 dimension.
+        /// </summary>
+        /// <param name="axis"></param>
+        /// <returns></returns>
+        internal Shape ExpandDimension(int axis)
+        {
+            if (IsSliced)
+                throw new NotSupportedException("Unable to expand dimensions of a sliced shape.");
+            //TODO! support slices when slice reshape is done.
+
+            if (IsScalar)
+            {
+                this = Vector(1);
+                strides[0] = 0;
+            }
+
+            dimensions = (int[])dimensions.Clone();
+            strides = (int[])strides.Clone();
+            Arrays.Insert(ref dimensions, axis, 1);
+            Arrays.Insert(ref strides, axis, 0);
+
+            return this;
+        }
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 

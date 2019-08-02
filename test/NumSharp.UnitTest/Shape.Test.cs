@@ -32,10 +32,10 @@ namespace NumSharp.UnitTest
 
             int index = shape0.GetOffset(1, 2, 1);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetCoordinates(index), new int[] { 1, 2, 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetCoordinates(index), new int[] {1, 2, 1}));
 
             var rnd = new Randomizer();
-            var randomIndex = new int[] { rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1) };
+            var randomIndex = new int[] {rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1)};
 
             int index1 = shape0.GetOffset(randomIndex);
             Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetCoordinates(index1), randomIndex));
@@ -43,17 +43,17 @@ namespace NumSharp.UnitTest
             var shape1 = new Shape(2, 3, 4);
 
             index = shape1.GetOffset(1, 2, 1);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.GetCoordinates(index), new int[] { 1, 2, 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape1.GetCoordinates(index), new int[] {1, 2, 1}));
 
-            randomIndex = new int[] { rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3) };
+            randomIndex = new int[] {rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3)};
             index = shape1.GetOffset(randomIndex);
             Assert.IsTrue(Enumerable.SequenceEqual(shape1.GetCoordinates(index), randomIndex));
 
-            randomIndex = new int[] { rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10) };
+            randomIndex = new int[] {rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10)};
 
             var shape2 = new Shape(randomIndex);
 
-            randomIndex = new int[] { rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2]) };
+            randomIndex = new int[] {rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2])};
 
             index = shape2.GetOffset(randomIndex);
             Assert.IsTrue(Enumerable.SequenceEqual(shape2.GetCoordinates(index), randomIndex));
@@ -63,22 +63,22 @@ namespace NumSharp.UnitTest
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] { 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] {1}));
 
             shape1.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] { 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] {1}));
 
             var shape2 = new Shape(4, 3);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] { 1, 4 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] {1, 4}));
 
             shape2.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] { 3, 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] {3, 1}));
 
             var shape3 = new Shape(2, 3, 4);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] { 1, 2, 6 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] {1, 2, 6}));
 
             shape3.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] { 12, 4, 1 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] {12, 4, 1}));
         }
 
         /// <summary>
@@ -128,7 +128,7 @@ namespace NumSharp.UnitTest
             v.Should().ContainInOrder(2, 2, 2);
             v.Sum().Should().Be(6);
 
-            v = Shape.ExtractShape(new int[][] { new int[] { 1, 2, 3, 4 }, new int[] { 5, 6, 7, 8 } });
+            v = Shape.ExtractShape(new int[][] {new int[] {1, 2, 3, 4}, new int[] {5, 6, 7, 8}});
 
             v.Should().ContainInOrder(2, 4);
             v.Sum().Should().Be(6);
@@ -316,32 +316,32 @@ namespace NumSharp.UnitTest
         {
             // slice sanitation (prerequisite for shape slicing and correct merging!)
 
-            new Slice("0:10").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 1, Count = 10 });
-            new Slice(":").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 1, Count = 10 });
-            new Slice("1:9").ToSliceDef(10).Should().Be(new SliceDef { Start = 1, Step = 1, Count = 8 });
-            new Slice("2:3").ToSliceDef(10).Should().Be(new SliceDef { Start = 2, Step = 1, Count = 1 });
-            new Slice("3:2").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 0, Count = 0 });
-            new Slice("2:2").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 0, Count = 0 });
-            new Slice("2:2:-1").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 0, Count = 0 });
-            new Slice("-77:77").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 1, Count = 10 });
-            new Slice("77:-77").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 0, Count = 0 });
-            new Slice("77:-77:-1").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -1, Count = 10 });
-            new Slice("::77").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 77, Count = 1 });
-            new Slice("::-77").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -77, Count = 1 });
-            new Slice("::7").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 7, Count = 2 });
-            new Slice("::-7").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -7, Count = 2 });
-            new Slice("::2").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 2, Count = 5 });
-            new Slice("::-2").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -2, Count = 5 });
-            new Slice("::3").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 3, Count = 4 });
-            new Slice("::-3").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -3, Count = 4 });
-            new Slice("10:2:-7").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -7, Count = 1 });
-            new Slice("10:1:-7").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -7, Count = 2 });
-            new Slice("-7::- 1").ToSliceDef(10).Should().Be(new SliceDef { Start = 3, Step = -1, Count = 4 });
-            new Slice("9:2:-2").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -2, Count = 4 });
+            new Slice("0:10").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 1, Count = 10});
+            new Slice(":").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 1, Count = 10});
+            new Slice("1:9").ToSliceDef(10).Should().Be(new SliceDef {Start = 1, Step = 1, Count = 8});
+            new Slice("2:3").ToSliceDef(10).Should().Be(new SliceDef {Start = 2, Step = 1, Count = 1});
+            new Slice("3:2").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 0, Count = 0});
+            new Slice("2:2").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 0, Count = 0});
+            new Slice("2:2:-1").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 0, Count = 0});
+            new Slice("-77:77").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 1, Count = 10});
+            new Slice("77:-77").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 0, Count = 0});
+            new Slice("77:-77:-1").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -1, Count = 10});
+            new Slice("::77").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 77, Count = 1});
+            new Slice("::-77").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -77, Count = 1});
+            new Slice("::7").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 7, Count = 2});
+            new Slice("::-7").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -7, Count = 2});
+            new Slice("::2").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 2, Count = 5});
+            new Slice("::-2").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -2, Count = 5});
+            new Slice("::3").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 3, Count = 4});
+            new Slice("::-3").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -3, Count = 4});
+            new Slice("10:2:-7").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -7, Count = 1});
+            new Slice("10:1:-7").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -7, Count = 2});
+            new Slice("-7::- 1").ToSliceDef(10).Should().Be(new SliceDef {Start = 3, Step = -1, Count = 4});
+            new Slice("9:2:-2").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -2, Count = 4});
             new Slice("9:2:-2").ToSliceDef(10).Should().Be(new SliceDef(9, -2, 4));
             new Slice("9:2:-2").ToSliceDef(10).Should().Be(new SliceDef("(9>>-2*4)"));
-            new Slice("-77:77:-77").ToSliceDef(10).Should().Be(new SliceDef { Start = 0, Step = 0, Count = 0 });
-            new Slice("77:-77:-77").ToSliceDef(10).Should().Be(new SliceDef { Start = 9, Step = -77, Count = 1 });
+            new Slice("-77:77:-77").ToSliceDef(10).Should().Be(new SliceDef {Start = 0, Step = 0, Count = 0});
+            new Slice("77:-77:-77").ToSliceDef(10).Should().Be(new SliceDef {Start = 9, Step = -77, Count = 1});
             new Slice(":-5:-1").ToSliceDef(10).Should().Be(new SliceDef("(9>>-1*4)"));
             new Slice(":-6:-1").ToSliceDef(10).Should().Be(new SliceDef("(9>>-1*5)"));
         }
@@ -381,7 +381,7 @@ namespace NumSharp.UnitTest
         public void ShapeSlicing_2D()
         {
             new Shape(3, 3).Slice(":,1:").Should().Be(new Shape(3, 2));
-            new Shape(3,3).Slice(":,1:").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*3)"));
+            new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*3)"));
             new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[1].Should().Be(new SliceDef("(1>>1*2)"));
         }
 
@@ -389,9 +389,63 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void GetCoordsFromIndex_2D()
         {
-            var shape=new Shape(3, 3).Slice(":,1:");
+            var shape = new Shape(3, 3).Slice(":,1:");
             // todo: test get coords from index with sliced shapes
         }
 
+        [TestMethod]
+        public void ExpandDim_Case1()
+        {
+            Shape shape = (3, 3, 3);
+            shape = shape.ExpandDimension(1);
+            Console.WriteLine(shape);
+            shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
+        }
+
+        [TestMethod]
+        public void ExpandDim_Case2()
+        {
+            Shape shape = (3, 3, 3);
+            shape = shape.ExpandDimension(0);
+            shape.GetOffset(0, 2, 0, 2).Should().Be(9 * 2 + 2);
+        }
+
+        [TestMethod]
+        public void ExpandDim_Case3()
+        {
+            Shape shape = (3, 3, 3);
+            shape = shape.ExpandDimension(2);
+            Console.WriteLine(shape);
+            shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
+        }
+
+        [TestMethod]
+        public void ExpandDim_Case4()
+        {
+            Shape shape = (3, 3, 3);
+            shape = shape.ExpandDimension(3);
+            Console.WriteLine(shape);
+            shape.GetOffset(2, 0, 2, 0).Should().Be(9 * 2 + 2);
+        }
+
+
+        [TestMethod]
+        public void ExpandDim0_Slice()
+        {
+            Shape shape = (3, 3, 3);
+            shape = shape.Slice("0,:");
+            shape = shape.ExpandDimension(1);
+            Console.WriteLine(shape);
+            shape.GetOffset(2, 0, 2).Should().Be(9);
+        }
+
+        [TestMethod]
+        public void ExpandDim1_Slice()
+        {
+            Shape shape = (3, 2, 3);
+            shape = shape.Slice("1,:");
+            shape = shape.ExpandDimension(1);
+            shape.GetOffset(0, 0, 0, 2).Should().Be(9 + 2);
+        }
     }
 }

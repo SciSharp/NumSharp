@@ -15,11 +15,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         {
             var np1 = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2);
             var mean = np.sum(np1, keepdims: true);
-            mean.Shape.Should().Be(new Shape(3, 2));
+            mean.Shape.IsScalar.Should().BeFalse();
+            mean.shape.Should().HaveCount(2).And.ContainInOrder(1, 1);
             mean.GetValue(0).Should().BeEquivalentTo(21);
-            mean.GetValue(2,0).Should().BeEquivalentTo(21);
         }
-
 
         [TestMethod]
         public void Case0_Scalar()

@@ -10,7 +10,7 @@ namespace NumSharp {
         /// <param name="nd"></param>
         /// <returns></returns>
         public static bool all(NDArray nd)
-            => BackendFactory.GetEngine().All(nd);
+            => nd.TensorEngine.All(nd);
 
         /// <summary>
         /// Test whether all array elements along a given axis evaluate to True.
@@ -19,6 +19,6 @@ namespace NumSharp {
         /// <param name="axis"></param>
         /// <returns>Returns an array of bools</returns>
         public static NDArray<bool> all(NDArray nd, int axis)
-            => BackendFactory.GetEngine().All(nd, axis);
+            => nd.TensorEngine.All(nd, axis);
     }
 }

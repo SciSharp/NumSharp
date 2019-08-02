@@ -1,13 +1,8 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
+﻿using System.Linq;
 using FluentAssertions;
-using NumSharp;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Statistics
 {
     [TestClass]
     public class NdArrayMeanTest

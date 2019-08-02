@@ -113,6 +113,9 @@ namespace NumSharp.Backends
 
         public static UnmanagedStorage Scalar(object value) => new UnmanagedStorage(ArraySlice.Scalar(value));
 
+        public static UnmanagedStorage Scalar(object value, NPTypeCode typeCode) => new UnmanagedStorage(ArraySlice.Scalar(value, typeCode));
+
+
         #region Aliasing
 
         /// <summary>
@@ -1185,6 +1188,9 @@ namespace NumSharp.Backends
             if (!Shape.IsSliced)
                 return InternalArray.Clone();
 
+            if (Shape.IsScalar)
+                return ArraySlice.Scalar(GetValue(0), _typecode);
+
             //Linear copy of all the sliced items.
 
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, Shape.size, false);
@@ -1922,6 +1928,11 @@ namespace NumSharp.Backends
         {
             _shape = shape;
             Count = _shape.size;
+        }
+
+        internal void ExpandDimension(int axis)
+        {
+            _shape = _shape.ExpandDimension(axis);
         }
 
         #region Slicing

@@ -158,16 +158,24 @@ namespace NumSharp.Generic
             get => (T*)Storage.Address;
         }
 
-        /// <summary>
-        /// indexing of generic - overridden on purpose
-        /// </summary>
-        /// <value></value>
-        public new T this[params int[] select]
+        public new T this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => Storage.GetValue<T>(select);
+            get
+            {
+                if (indices.Length!=ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
+
+                return Storage.GetValue<T>(indices);
+            }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => Storage.SetValue<T>(value, select);
+            set
+            {
+                if (indices.Length != ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
+
+                Storage.SetValue<T>(value, indices);
+            }
         }
 
         /// <summary>
@@ -205,7 +213,7 @@ namespace NumSharp.Generic
         public new T GetAtIndex(int index)
         {
             unsafe {
-                return *(Address + index); //TODO! change this to Shape.offset->offset
+                return *(Address + Shape.TransformOffset(index));
             }
         }
 
