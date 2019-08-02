@@ -13,7 +13,7 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype) //todo support order
+        public static NDArray asanyarray(in object a, Type dtype = null) 
         {
             NDArray ret;
             switch (a) {
