@@ -5,6 +5,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
@@ -566,6 +567,7 @@ namespace NumSharp.UnitTest.View
             ret = b * c;
             cSharp.asCode2D("ret54", ret)
         */
+
         [TestMethod]
         public void Multiply_2DSlice_By_1D()
         {
@@ -579,6 +581,20 @@ namespace NumSharp.UnitTest.View
 
             var ret = b * c;
             Assert.AreEqual(ret54, ret);
+        }
+
+        [TestMethod]
+        public void AllSlicesAreIndexes()
+        {
+            var a = np.arange(27).reshape(3, 3, 3);
+            var ret = a[Slice.Index(0), Slice.Index(0), Slice.Index(0)];
+            ret.Should().NotBeSliced().And.BeScalar(value: 0);
+
+            ret = a[Slice.Index(0), Slice.Index(1)];
+            ret.Should().NotBeSliced().And.BeShaped(3).And.HaveValues(3,4,5);
+
+            ret = a[Slice.Index(0), Slice.Index(1), Slice.All];
+            ret.Should().BeSliced();
         }
     }
 }

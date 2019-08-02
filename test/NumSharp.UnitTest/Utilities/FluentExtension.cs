@@ -165,17 +165,7 @@ namespace NumSharp.UnitTest.Utilities
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
-        public AndConstraint<NDArrayAssertions> Be(Shape shape, string because = null, params object[] becauseArgs)
-        {
-            Execute.Assertion
-                .BecauseOf(because, becauseArgs)
-                .ForCondition(Subject.Equals(shape))
-                .FailWith($"Expected shape to be {shape.ToString()} but got {Subject.ToString()}");
-
-            return new AndConstraint<NDArrayAssertions>(this);
-        }
-
-        public AndConstraint<NDArrayAssertions> BeEquivalentTo(int? size = null, int? ndim = null, ITuple shape = null)
+        public AndConstraint<NDArrayAssertions> BeShaped(int? size = null, int? ndim = null, ITuple shape = null)
         {
             if (size.HasValue)
             {
@@ -194,7 +184,7 @@ namespace NumSharp.UnitTest.Utilities
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
-        public AndConstraint<NDArrayAssertions> NotBe(Shape shape, string because = null, params object[] becauseArgs)
+        public AndConstraint<NDArrayAssertions> NotBeShaped(Shape shape, string because = null, params object[] becauseArgs)
         {
             Execute.Assertion
                 .BecauseOf(because, becauseArgs)
@@ -266,13 +256,18 @@ namespace NumSharp.UnitTest.Utilities
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
-        public AndConstraint<NDArrayAssertions> HaveValues(NDArray other)
+        public AndConstraint<NDArrayAssertions> HaveValues(NDArray expected)
         {
             Execute.Assertion
-                .ForCondition(np.array_equal(Subject, other))
+                .ForCondition(np.array_equal(Subject, expected))
                 .FailWith($"Expected the subject and other ndarray to be equals.");
 
             return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> Be(NDArray expected)
+        {
+            return HaveValues(expected);
         }
 
         public AndConstraint<NDArrayAssertions> HaveValues(params object[] values)

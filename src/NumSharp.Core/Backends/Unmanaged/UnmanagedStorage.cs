@@ -1937,9 +1937,34 @@ namespace NumSharp.Backends
 
         #region Slicing
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
-        public UnmanagedStorage GetView(params Slice[] slices) => Alias(_shape.Slice(slices));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
+        public UnmanagedStorage GetView(params Slice[] slices)
+        {
+            if (slices == null)
+                throw new ArgumentNullException(nameof(slices));
+
+            //handle memory slice if possible
+            if (!_shape.IsSliced)
+            {
+                var indices = new int[slices.Length];
+                for (var i = 0; i < slices.Length; i++)
+                {
+                    var inputSlice = slices[i];
+                    if (!inputSlice.IsIndex)
+                        goto _perform_slice;
+                    indices[i] = inputSlice.Start.Value;
+                }
+
+                return GetData(indices);
+            }
+
+            _perform_slice:
+            return Alias(_shape.Slice(slices));
+        }
 
         #endregion
 
