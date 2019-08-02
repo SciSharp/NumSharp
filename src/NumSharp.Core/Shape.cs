@@ -14,7 +14,7 @@ namespace NumSharp
     ///     Represents a shape of an N-D array.
     /// </summary>
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
-    public struct Shape : ICloneable, IEquatable<Shape>, IComparable<Shape>, IComparable
+    public struct Shape : ICloneable, IEquatable<Shape>
     {
         internal ViewInfo ViewInfo;
 
@@ -745,61 +745,6 @@ namespace NumSharp
         {
             // ReSharper disable once NonReadonlyMemberInGetHashCode
             return _hashCode;
-        }
-
-        /// <summary>Compares the current instance with another object of the same type and returns an integer that indicates whether the current instance precedes, follows, or occurs in the same position in the sort order as the other object. </summary>
-        /// <param name="other">An object to compare with this instance. </param>
-        /// <returns>A value that indicates the relative order of the objects being compared. The return value has these meanings: Value Meaning Less than zero This instance precedes <paramref name="other" /> in the sort order.  Zero This instance occurs in the same position in the sort order as <paramref name="other" />. Greater than zero This instance follows <paramref name="other" /> in the sort order. </returns>
-        public int CompareTo(Shape other)
-        {
-            return size.CompareTo(other.size);
-        }
-
-        /// <summary>Compares the current instance with another object of the same type and returns an integer that indicates whether the current instance precedes, follows, or occurs in the same position in the sort order as the other object.</summary>
-        /// <param name="obj">An object to compare with this instance. </param>
-        /// <returns>A value that indicates the relative order of the objects being compared. The return value has these meanings: Value Meaning Less than zero This instance precedes <paramref name="obj" /> in the sort order. Zero This instance occurs in the same position in the sort order as <paramref name="obj" />. Greater than zero This instance follows <paramref name="obj" /> in the sort order. </returns>
-        /// <exception cref="T:System.ArgumentException">
-        /// <paramref name="obj" /> is not the same type as this instance. </exception>
-        public int CompareTo(object obj)
-        {
-            if (ReferenceEquals(null, obj)) return 1;
-            return obj is Shape other ? CompareTo(other) : throw new ArgumentException($"Object must be of type {nameof(Shape)}");
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is less than another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is less than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator <(Shape left, Shape right)
-        {
-            return left.CompareTo(right) < 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is greater than another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is greater than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator >(Shape left, Shape right)
-        {
-            return left.CompareTo(right) > 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is less than or equal to another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is less than or equal to <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator <=(Shape left, Shape right)
-        {
-            return left.CompareTo(right) <= 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is greater than or equal to another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is greater than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator >=(Shape left, Shape right)
-        {
-            return left.CompareTo(right) >= 0;
         }
 
         #endregion
