@@ -92,7 +92,8 @@ namespace NumSharp
 
             foreach (var src in arrays)
             {
-                for (i = 0; i < src.shape[axis]; i++)
+                var len = src.shape[axis];
+                for (i = 0; i < len; i++)
                 {
                     var writeTo = dst[accessorDst];
                     var writeFrom = src[accessorSrc];
