@@ -7,15 +7,19 @@ namespace NumSharp
 {
     public static partial class np
     {
+        /// <summary>
+        /// From https://docs.scipy.org/doc/numpy/reference/generated/numpy.hstack.html
+        /// This is equivalent to concatenation along the second axis, except for 1-D arrays where it concatenates along the first axis. 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="nps"></param>
+        /// <returns></returns>
         public static NDArray hstack<T>(params NDArray[] nps)
         {
-            var np1 = nps[0];
-
-            var npn = new NDArray[nps.Length - 1];
-            for (int idx = 1; idx < nps.Length; idx++)
-                npn[idx - 1] = nps[idx];
-
-            return np1.hstack<T>(npn);
+            if (nps[0].shape.Length == 1)
+                return np.concatenate(nps, 0);
+            else
+                return np.concatenate(nps, 1);
         }
     }
 }
