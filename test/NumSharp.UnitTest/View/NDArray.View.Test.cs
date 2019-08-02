@@ -533,12 +533,14 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void SliceSelectsAll()
+        public unsafe void SliceSelectsAll()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
             var sliced = lhs[":"];
 
-            ReferenceEquals(lhs.Storage, sliced.Storage).Should().BeTrue("When slice selects all values, it shouldn't return a view but a new wrapper for Storage");
+            (lhs.Storage.Address == sliced.Storage.Address).Should().BeTrue("When slice selects all values, it shouldn't return a view but a new wrapper for Storage");
+            sliced.Should().NotBeSliced();
+            lhs.Should().Be(sliced);
         }
 
         static NDArray b54 = new NDArray(new Int32[] {

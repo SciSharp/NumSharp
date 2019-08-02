@@ -559,7 +559,7 @@ namespace NumSharp
             for (int i = 0; i < NDim; i++)
             {
                 var dim = Dimensions[i];
-                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
+                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All; //fill missing selectors
                 var slice_def = slice.ToSliceDef(dim);
                 slices.Add(slice_def);
                 var count = Math.Abs(slices[i].Count); // for index-slices count would be -1 but we need 1.

@@ -1963,6 +1963,10 @@ namespace NumSharp.Backends
             }
 
             _perform_slice:
+            // ReSharper disable once ConvertIfStatementToReturnStatement
+            if (slices.All(s => ReferenceEquals(Slice.All, s)))
+                return Alias();
+
             return Alias(_shape.Slice(slices));
         }
 
