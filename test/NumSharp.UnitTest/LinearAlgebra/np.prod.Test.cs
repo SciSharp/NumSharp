@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.GetValue(0).Should().Be(2f);
             a.GetValue(1).Should().Be(12f);
             a.shape.Should().HaveCount(1).And.ContainInOrder(2);
-            a.dtype.Should().Be<uint>();
+            a.dtype.Should().Be<byte>();
         }
     }
 }

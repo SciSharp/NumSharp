@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Linq;
@@ -15,8 +16,6 @@ namespace NumSharp
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
     public struct Shape : ICloneable, IEquatable<Shape>, IComparable<Shape>, IComparable
     {
-        private static readonly int[] _vectorStrides = {1};
-
         internal ViewInfo ViewInfo;
 
         public bool IsSliced
@@ -65,7 +64,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length};
+            var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, layout = 'C', size = length};
 
             unchecked
             {
@@ -85,7 +84,7 @@ namespace NumSharp
             var shape = new Shape
             {
                 dimensions = new[] {length},
-                strides = _vectorStrides,
+                strides = new int[] {1},
                 layout = 'C',
                 size = length,
                 ViewInfo = viewInfo
@@ -810,24 +809,33 @@ namespace NumSharp
         /// </summary>
         /// <param name="axis"></param>
         /// <returns></returns>
+        [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
         internal Shape ExpandDimension(int axis)
         {
+            //TODO! support slices when slice reshape is done.
             if (IsSliced)
                 throw new NotSupportedException("Unable to expand dimensions of a sliced shape.");
-            //TODO! support slices when slice reshape is done.
 
+            Shape ret;
             if (IsScalar)
             {
-                this = Vector(1);
-                strides[0] = 0;
+                ret = Vector(1);
+                ret.strides[0] = 0;
+            }
+            else
+            {
+                ret = Clone(true, true);
             }
 
-            dimensions = (int[])dimensions.Clone();
-            strides = (int[])strides.Clone();
+            var dimensions = ret.dimensions;
+            var strides = ret.strides;
             Arrays.Insert(ref dimensions, axis, 1);
             Arrays.Insert(ref strides, axis, 0);
+            ret.dimensions = dimensions;
+            ret.strides = strides;
 
-            return this;
+            ret.ComputeHashcode();
+            return ret;
         }
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
