@@ -774,6 +774,15 @@ namespace NumSharp
 
             var dimensions = ret.dimensions;
             var strides = ret.strides;
+            // Allow negative axis specification
+            if (axis < 0)
+            {
+                axis = dimensions.Length + 1 + axis;
+                if (axis < 0)
+                {
+                    throw new ArgumentException($"Effective axis {axis} is less than 0");
+                }
+            }
             Arrays.Insert(ref dimensions, axis, 1);
             Arrays.Insert(ref strides, axis, 0);
             ret.dimensions = dimensions;

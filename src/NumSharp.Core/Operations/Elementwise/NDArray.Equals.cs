@@ -4,6 +4,7 @@ using System.Text;
 using System.Numerics;
 using NumSharp.Generic;
 using System.Linq;
+using System.Runtime;
 using System.Threading;
 using System.Threading.Tasks;
 using NumSharp.Backends;
@@ -21,6 +22,12 @@ namespace NumSharp
         {
             unsafe
             {
+                if (obj is null)
+                    return false;
+
+                if (ReferenceEquals(this, obj))
+                    return true;
+
                 // Using this comparison allows less restrictive semantics,
                 // like comparing a scalar to an array
                 // we can use unmanaged access because the result of == op is never a slice.
