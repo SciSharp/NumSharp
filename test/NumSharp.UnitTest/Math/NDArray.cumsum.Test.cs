@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using FluentAssertions;
+using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
@@ -44,7 +45,7 @@ namespace NumSharp.UnitTest.Maths
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
             NDArray expected = new float[] {1, 3, 6, 10, 15, 21};
 
-            np.cumsum(arr, dtype: typeof(float)).Should().Be(expected);
+            np.cumsum(arr, typeCode: NPTypeCode.Single).Should().Be(expected);
         }
 
         [TestMethod]

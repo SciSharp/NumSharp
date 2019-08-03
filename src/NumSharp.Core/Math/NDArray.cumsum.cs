@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
+    [SuppressMessage("ReSharper", "ParameterHidesMember")]
     public partial class NDArray
     {
         /// <summary>
@@ -15,7 +18,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.cumsum.html</remarks>
         public NDArray cumsum(int? axis = null, Type dtype = null)
         {
-            return np.cumsum(this, axis, dtype);
+            return np.cumsum(this, axis, dtype?.GetTypeCode());
         }
     }
 }
