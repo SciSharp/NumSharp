@@ -128,7 +128,7 @@ namespace NumSharp
                     case IteratorType.Scalar:
                     {
                         var hasNext = new Reference<bool>(true);
-                        var offset = shape.GetOffset(0);
+                        var offset = shape.TransformOffset(0);
                         if (offset != 0)
                         {
                             MoveNext = () =>
