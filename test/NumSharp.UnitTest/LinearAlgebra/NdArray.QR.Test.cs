@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var nd2 = np.dot(Q.transpose(), R);
 
             // make sure the highest difference is lower than 0.0000000001
-            Assert.IsTrue(((double)(nd1 - nd2).absolute().max<double>()) < 0.00000000001);
+            Assert.IsTrue(((double)np.abs(nd1 - nd2).max<double>() < 0.00000000001));
         }
     }
 }
