@@ -14,6 +14,12 @@ namespace NumSharp.Memory.Pooling
     /// <remarks>Used to speed up scalar allocation.</remarks>
     public class StackedMemoryPool : IDisposable
     {
+
+        //TODO! this should have a mechanism of auto-trimming via task creation.
+        //todo      We only start monitoring once we exceed the existing pool size.
+        //todo      If we surpassed 1/3 of the original size:
+        //todo      after 10 seconds, a trim should occur - a GC clean in other words.
+
         private static readonly int DefaultSingleSize = Enum.GetValues(typeof(NPTypeCode)).Cast<NPTypeCode>().Where(v => v != 0).Max(n => n.SizeOf());
         public readonly int SingleSize;
         public readonly int TotalSize;
