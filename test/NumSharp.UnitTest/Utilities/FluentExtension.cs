@@ -260,7 +260,7 @@ namespace NumSharp.UnitTest.Utilities
         {
             Execute.Assertion
                 .ForCondition(np.array_equal(Subject, expected))
-                .FailWith($"Expected the subject and other ndarray to be equals.");
+                .FailWith($"Expected the subject and other ndarray to be equals.\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{expected.ToString(false)}");
 
             return new AndConstraint<NDArrayAssertions>(this);
         }
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.Utilities
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
 
-            Subject.size.Should().Be(values.Length, "the method BeOfValuesApproximately also confirms the sizes are matching with given values.");
+            Subject.size.Should().Be(values.Length, "the method BeOfValues also confirms the sizes are matching with given values.");
 
 #if _REGEN
             #region Compute
