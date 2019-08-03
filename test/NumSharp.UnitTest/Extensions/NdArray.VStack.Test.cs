@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Extensions
             var n2 = np.array(new double[] {2, 3, 4});
             var n3 = np.array(new double[] {3, 4, 5});
 
-            var n = np.vstack<double>(n1, n2).MakeGeneric<double>();
+            var n = np.vstack(n1, n2).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Extensions
             n1 = np.array(new double[][] {new double[] {1}, new double[] {2}, new double[] {3}});
             n2 = np.array(new double[][] {new double[] {4}, new double[] {5}, new double[] {6}});
 
-            n = np.vstack<double>(n1, n2).MakeGeneric<double>();
+            n = np.vstack(n1, n2).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Extensions
             n2 = np.array(new double[][] {new double[] {4}, new double[] {5}, new double[] {6}});
             n3 = np.array(new double[][] {new double[] {7}, new double[] {8}, new double[] {9}});
 
-            n = np.vstack<double>(n1, n2, n3).MakeGeneric<double>();
+            n = np.vstack(n1, n2, n3).MakeGeneric<double>();
 
             Assert.IsTrue(n.size == (n1.size + n2.size + n3.size));
 
@@ -63,37 +63,5 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(n[7, 0] == 8);
             Assert.IsTrue(n[8, 0] == 9);
         }        
-        
-        [TestMethod]
-        public void VStackNDArrays_Typeless()
-        {
-            //1D
-            var n1 = np.array(new double[] {1, 2, 3});
-            var n2 = np.array(new int[] {2, 3, 4});
-            var n3 = np.array(new float[] {3, 4, 5});
-
-            var n = np.vstack(n1, n2).MakeGeneric<double>();
-
-            Assert.IsTrue(n.size == (n1.size + n2.size));
-
-            Assert.IsTrue(n[0, 0] == 1);
-            Assert.IsTrue(n[1, 0] == 2);
-            Assert.IsTrue(n[1, 2] == 4);
-
-            //2D
-            n1 = np.array(new double[][] {new double[] {1}, new double[] {2}, new double[] {3}});
-            n2 = np.array(new byte[][] {new byte[] {4}, new byte[] {5}, new byte[] {6}});
-
-            n = np.vstack(n1, n2).MakeGeneric<double>();
-
-            Assert.IsTrue(n.size == (n1.size + n2.size));
-
-            Assert.IsTrue(n[0, 0] == 1);
-            Assert.IsTrue(n[1, 0] == 2);
-            Assert.IsTrue(n[2, 0] == 3);
-            Assert.IsTrue(n[3, 0] == 4);
-            Assert.IsTrue(n[4, 0] == 5);
-            Assert.IsTrue(n[5, 0] == 6);
-        }
     }
 }
