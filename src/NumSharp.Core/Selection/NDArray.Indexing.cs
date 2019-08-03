@@ -222,8 +222,6 @@ namespace NumSharp
         /// <returns>NDArray</returns>
         private NDArray GetData(params int[] indices)
         {
-            // TODO: we can achive even better performance by distinguishing between stepped and non-stepped slices ...
-            // ... non-stepped slices could still use the other solution below if GetSubshape supports slicing
             var this_shape = Storage.Shape;
             if (this_shape.IsSliced)
             {

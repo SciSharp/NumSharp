@@ -1900,23 +1900,27 @@ namespace NumSharp.Backends
         public void Reshape(params int[] dimensions)
         {
             var newShape = new Shape(dimensions);
-            if (newShape.size != _shape.size)
-                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({_shape.size})");
-
-            _shape = newShape;
-            Count = _shape.size;
+            Reshape(newShape);
         }
 
         /// <summary>
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
-        public void Reshape(Shape shape)
+        [MethodImpl((MethodImplOptions)768)]
+        public void Reshape(Shape newShape)
         {
-            if (shape.size != _shape.size)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the existing storage size ({_shape.size})");
-
-            _shape = shape;
+            if (newShape.size != _shape.size)
+                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({_shape.size})");
+            if (_shape.IsSliced)
+            {
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                var slices = new SliceDef[_shape.NDim];
+                for (int i = 0; i < _shape.NDim; i++)
+                    slices[i] = new SliceDef(0, 1, _shape.Dimensions[i]);
+                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
+            }
+            _shape = newShape;
             Count = _shape.size;
         }
 
@@ -1964,7 +1968,7 @@ namespace NumSharp.Backends
 
             _perform_slice:
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (slices.All(s => ReferenceEquals(Slice.All, s)))
+            if (!_shape.IsRecursive && slices.All(s => ReferenceEquals(Slice.All, s)))
                 return Alias();
 
             return Alias(_shape.Slice(slices));
