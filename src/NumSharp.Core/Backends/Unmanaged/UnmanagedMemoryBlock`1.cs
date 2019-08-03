@@ -22,7 +22,7 @@ namespace NumSharp.Backends.Unmanaged
         /// 
         /// </summary>
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <remarks>Does claim ownership since allocation is internally.</remarks>
+        /// <remarks>Does claim ownership since allocation is publicly.</remarks>
         [MethodImpl((MethodImplOptions)512)]
         public UnmanagedMemoryBlock(int count)
         {
@@ -71,7 +71,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedMemoryBlock(GCHandle handle, int count)
+        public UnmanagedMemoryBlock(GCHandle handle, int count)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
@@ -87,7 +87,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="dispose"></param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        internal UnmanagedMemoryBlock(GCHandle handle, int count, Action dispose)
+        public UnmanagedMemoryBlock(GCHandle handle, int count, Action dispose)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
