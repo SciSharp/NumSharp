@@ -1,12 +1,8 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System;
 using FluentAssertions;
-using NumSharp;
-using NumSharp.Generic;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class NdArrayReShapeTest

@@ -1,16 +1,10 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
-using NumSharp;
+﻿using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
-    public class RepeatTest
+    public class np_repeat_tests
     {
         [TestMethod]
         public void Scalar()

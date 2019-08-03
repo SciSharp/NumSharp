@@ -1,18 +1,12 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
-using NumSharp;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Manipulation
 {
     /// <summary>
     /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.hstack.html
     /// </summary>
     [TestClass]
-    public class NdArrayHStackTest
+    public class np_hstack_tests
     {
         [TestMethod]
         public void HStackNDArrays()

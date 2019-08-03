@@ -1,18 +1,13 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
-namespace NumSharp.UnitTest.Extensions
+namespace NumSharp.UnitTest.Manipulation
 {
     /// <summary>
     /// Tests following https://docs.scipy.org/doc/numpy/reference/generated/numpy.dstack.html
     /// </summary>
     [TestClass]
-    public class NdArrayDStackTest
+    public class np_dstack_tests
     {
         [TestMethod]
         public void DStackNDArrays()
