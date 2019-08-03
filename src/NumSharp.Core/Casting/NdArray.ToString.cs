@@ -53,7 +53,7 @@ namespace NumSharp
                 if (typecode == NPTypeCode.Char)
                 {
                     s.Append("\"");
-                    s.Append(string.Join("", this.AsIterator().Cast<char>()));
+                    s.Append(string.Join("", this.AsIterator<char>()));
                     s.Append("\"");
                 }
                 else
