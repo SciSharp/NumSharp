@@ -8,7 +8,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Extensions
 {
     /// <summary>
-    /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.hstack.html
+    /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.vstack.html
     /// </summary>
     [TestClass]
     public class NdArrayVStackTest

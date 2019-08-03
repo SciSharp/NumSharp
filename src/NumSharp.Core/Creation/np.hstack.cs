@@ -24,6 +24,7 @@ namespace NumSharp
             if (tup.Length == 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(tup));
 
+            tup = np.atleast_1d(tup); //handle scalars
             if (tup[0].shape.Length == 1)
                 return np.concatenate(tup, 0);
             else
