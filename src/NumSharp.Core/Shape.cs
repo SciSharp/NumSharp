@@ -620,13 +620,15 @@ namespace NumSharp
 
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var origin = (this.IsSliced && ViewInfo.Slices!=null) ? this.ViewInfo.OriginalShape : this;
-            var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()), };
+            var viewInfo = new ViewInfo()
+            {
+                OriginalShape = origin,
+                Slices = slices.ToArray(),
+                UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),
+            };
 
             if (IsRecursive)
-            {
-                // we are dealing with an unsliced recursively reshaped slice
-                viewInfo.ParentShape = this;
-            }
+                viewInfo.ParentShape = ViewInfo.ParentShape;
 
             if (sliced_axes.Length == 0) //is it a scalar
                 return NewScalar(viewInfo);
