@@ -28,6 +28,7 @@ namespace NumSharp
         #region Reduction
 
         public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion
@@ -119,6 +120,5 @@ namespace NumSharp
         public abstract NDArray AMin(in NDArray nd, int axis, Type dtype, bool keepdims = false);
 
         #endregion
-
     }
 }
