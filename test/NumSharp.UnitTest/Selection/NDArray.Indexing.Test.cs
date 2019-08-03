@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using FluentAssertions;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Selection
 {
@@ -887,6 +888,15 @@ namespace NumSharp.UnitTest.Selection
             ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
             ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
             ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+        }
+
+        [TestMethod]
+        public void IndexNegativeCoordiantes()
+        {
+            var p = np.arange(6).reshape(2,3);
+            p[0, -1].Should().BeScalar(2);
+            p[-1, 0].Should().BeScalar(3);
+            p[-1, 1].Should().BeScalar(4);
         }
     }
 }

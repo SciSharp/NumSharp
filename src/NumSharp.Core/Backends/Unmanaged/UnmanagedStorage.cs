@@ -2060,10 +2060,14 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedStorage GetData(params int[] indices)
         {
-            if (Shape.IsSliced)
+            var this_shape = Shape;
+            if (this_shape.IsSliced)
+            {
+                // in this case we can not get a slice of contiguous memory, so we slice
                 return GetView(indices.Select(Slice.Index).ToArray());
+            }
 
-            var (shape, offset) = _shape.GetSubshape(indices);
+            var (shape, offset) = this_shape.GetSubshape(Shape.InferNegativeCoordinates(Shape.dimensions, indices));
             return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
         }
 
