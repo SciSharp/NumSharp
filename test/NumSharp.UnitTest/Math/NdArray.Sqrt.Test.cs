@@ -6,6 +6,7 @@ using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
 using NumSharp;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
@@ -13,12 +14,10 @@ namespace NumSharp.UnitTest.Maths
     public class NDArraySqrtTest
     {
         [TestMethod]
-        public void DoubleSqrtTest()
+        public void Case1()
         {
-            var nd = new NDArray(np.float64, 3);
-            nd.ReplaceData(new double[] {1, 4, 9});
-
-            Assert.IsTrue(Enumerable.SequenceEqual(nd.sqrt().Data<double>(), new double[] {1, 2, 3}));
+            var nd = np.array(new double[] {1, 4, 9});
+            np.sqrt(nd).Should().BeOfType<double>().And.BeOfValues(1, 2, 3);
         }
 
         /*[TestMethod]

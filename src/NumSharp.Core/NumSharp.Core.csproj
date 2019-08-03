@@ -69,6 +69,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Backends\Internal\**" />
+    <EmbeddedResource Remove="Backends\Internal\**" />
+    <None Remove="Backends\Internal\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
@@ -118,10 +124,6 @@
 
   <ItemGroup>
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Backends\Internal\" />
   </ItemGroup>
 
 </Project>

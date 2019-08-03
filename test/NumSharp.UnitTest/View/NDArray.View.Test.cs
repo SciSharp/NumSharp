@@ -593,7 +593,7 @@ namespace NumSharp.UnitTest.View
             ret.Should().NotBeSliced().And.BeScalar(value: 0);
 
             ret = a[Slice.Index(0), Slice.Index(1)];
-            ret.Should().NotBeSliced().And.BeShaped(3).And.HaveValues(3,4,5);
+            ret.Should().NotBeSliced().And.BeShaped(3).And.BeOfValues(3,4,5);
 
             ret = a[Slice.Index(0), Slice.Index(1), Slice.All];
             ret.Should().BeSliced();

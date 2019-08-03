@@ -17,11 +17,11 @@ namespace NumSharp.UnitTest.Manipulation
             var n2 = np.array(new double[] {2, 3, 4});
 
             var n = np.dstack(n1, n2).MakeGeneric<double>();
-            n.Should().BeOfSize(n1.size + n2.size).And.HaveValues(1, 2, 2, 3, 3, 4).And.BeShaped(1, 3, 2);
+            n.Should().BeOfSize(n1.size + n2.size).And.BeOfValues(1, 2, 2, 3, 3, 4).And.BeShaped(1, 3, 2);
 
             //2D
             n = np.dstack(n1.reshape(3, 1), n2.reshape(3, 1)).MakeGeneric<double>();
-            n.Should().BeOfSize(n1.size + n2.size).And.HaveValues(1, 2, 2, 3, 3, 4).And.BeShaped(3, 1, 2);
+            n.Should().BeOfSize(n1.size + n2.size).And.BeOfValues(1, 2, 2, 3, 3, 4).And.BeShaped(3, 1, 2);
         }
     }
 }
