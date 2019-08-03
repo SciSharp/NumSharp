@@ -436,7 +436,7 @@ namespace NumSharp.UnitTest
             shape = shape.Slice("0,:");
             shape = shape.ExpandDimension(1);
             Console.WriteLine(shape);
-            shape.GetOffset(2, 0, 2).Should().Be(9);
+            shape.GetOffset(2, 0, 2).Should().Be(8);
         }
 
         [TestMethod]
@@ -445,7 +445,7 @@ namespace NumSharp.UnitTest
             Shape shape = (3, 2, 3);
             shape = shape.Slice("1,:");
             shape = shape.ExpandDimension(1);
-            shape.GetOffset(0, 0, 0, 2).Should().Be(9 + 2);
+            shape.GetOffset(0, 0, 2).Should().Be(8);
         }
     }
 }

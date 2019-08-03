@@ -1915,9 +1915,6 @@ namespace NumSharp.Backends
             if (_shape.IsSliced)
             {
                 // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                var slices = new SliceDef[_shape.NDim];
-                for (int i = 0; i < _shape.NDim; i++)
-                    slices[i] = new SliceDef(0, 1, _shape.Dimensions[i]);
                 newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
             }
             _shape = newShape;

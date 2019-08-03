@@ -765,10 +765,6 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
         internal Shape ExpandDimension(int axis)
         {
-            //TODO! support slices when slice reshape is done.
-            if (IsSliced)
-                throw new NotSupportedException("Unable to expand dimensions of a sliced shape.");
-
             Shape ret;
             if (IsScalar)
             {
@@ -796,6 +792,10 @@ namespace NumSharp
             Arrays.Insert(ref strides, axis, 0);
             ret.dimensions = dimensions;
             ret.strides = strides;
+            if (IsSliced)
+            {
+                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
+            }
 
             ret.ComputeHashcode();
             return ret;
@@ -809,7 +809,7 @@ namespace NumSharp
         /// <param name="dimensions">The dimensions these coordinates are targeting</param>
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
-        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(MethodImplOptions)512]
+        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
 
         public static int[] InferNegativeCoordinates(int[] dimensions, int[] coords)
         {
