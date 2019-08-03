@@ -7,9 +7,11 @@ namespace NumSharp.Utilities
         private readonly NDCoordinatesIncrementor incr;
         private readonly int[] index;
         private bool hasNext;
+        private readonly Shape shape;
 
         public NDOffsetIncrementor(Shape shape)
         {
+            this.shape = shape;
             incr = new NDCoordinatesIncrementor(shape.dimensions);
             index = incr.Index;
             hasNext = true;
@@ -32,16 +34,21 @@ namespace NumSharp.Utilities
                 return -1;
 
             int offset = 0;
-            unchecked
+            if (shape.IsSliced)
             {
-                for (int i = 0; i < index.Length; i++)
-                    ;//offset += strides[i] * index[i];
+                offset = shape.GetOffset(index);
+            }
+            else
+            {
+                unchecked
+                {
+                    for (int i = 0; i < index.Length; i++)
+                        offset += shape.strides[i] * index[i];
+                }
             }
 
             if (incr.Next() == null)
                 hasNext = false;
-
-            //TODO! we need to support slice here!
 
             return offset;
         }
@@ -51,9 +58,11 @@ namespace NumSharp.Utilities
     {
         private readonly NDCoordinatesIncrementor incr;
         private readonly int[] index;
+        private readonly Shape shape;
 
         public NDOffsetIncrementorAutoresetting(Shape shape)
         {
+            this.shape = shape;
             incr = new NDCoordinatesIncrementor(shape.dimensions, incrementor => incrementor.Reset());
             index = incr.Index;
         }
@@ -72,15 +81,20 @@ namespace NumSharp.Utilities
         public int Next()
         {
             int offset = 0;
-            unchecked
+            if (shape.IsSliced)
             {
-                for (int i = 0; i < index.Length; i++)
-                    ;//offset += strides[i] * index[i];
+                offset = shape.GetOffset(index);
+            }
+            else
+            {
+                unchecked
+                {
+                    for (int i = 0; i < index.Length; i++)
+                        offset += shape.strides[i] * index[i];
+                }
             }
 
             incr.Next();
-
-            //TODO! we need to support slice here!
 
             return offset;
         }
