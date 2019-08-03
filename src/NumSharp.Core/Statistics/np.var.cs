@@ -21,7 +21,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
         /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(in NDArray a, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
+        public static NDArray var(NDArray a, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
         {
             return a.TensorEngine.ReduceVar(a, null, keepdims, ddof, dtype);
         }
@@ -142,7 +142,7 @@ namespace NumSharp
         /// <param name="ddof">Means Delta Degrees of Freedom. The divisor used in calculations is N - ddof, where N represents the number of elements. By default ddof is zero.</param>
         /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.var.html</remarks>
-        public static NDArray var(in NDArray a, int axis, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
+        public static NDArray var(NDArray a, int axis, bool keepdims = false, int? ddof = null, NPTypeCode? dtype = null)
         {
             return a.TensorEngine.ReduceVar(a, axis, keepdims, ddof, dtype);
         }
