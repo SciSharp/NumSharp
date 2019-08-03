@@ -107,7 +107,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
-        public TensorEngine Engine { get; internal set; }
+        public TensorEngine Engine { get; protected internal set; }
 
         public static UnmanagedStorage Scalar<T>(T value) where T : unmanaged => new UnmanagedStorage(ArraySlice.Scalar<T>(value));
 
@@ -1928,13 +1928,13 @@ namespace NumSharp.Backends
         ///     Set the shape of this storage without checking if sizes match.
         /// </summary>
         /// <remarks>Used during broadcasting</remarks>
-        internal void SetShapeUnsafe(Shape shape)
+        protected internal void SetShapeUnsafe(Shape shape)
         {
             _shape = shape;
             Count = _shape.size;
         }
 
-        internal void ExpandDimension(int axis)
+        protected internal void ExpandDimension(int axis)
         {
             _shape = _shape.ExpandDimension(axis);
         }

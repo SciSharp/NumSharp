@@ -12,7 +12,7 @@ namespace NumSharp.Utilities
     /// </summary>
     /// <typeparam name="T"></typeparam>
     [SuppressMessage("ReSharper", "StaticMemberInGenericType")]
-    internal class InfoOf<T>
+    public class InfoOf<T>
     {
         public static readonly int Size;
         public static readonly NPTypeCode NPTypeCode;

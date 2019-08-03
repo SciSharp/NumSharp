@@ -12,7 +12,7 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
     public class DType
     {
-        internal static readonly Dictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
+        protected internal static readonly Dictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
         {
             {NPTypeCode.NDArray, 'O'},
             {NPTypeCode.Complex, 'c'},

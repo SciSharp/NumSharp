@@ -38,7 +38,7 @@ namespace NumSharp.Generic
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        internal NDArray(UnmanagedStorage storage) : base(storage)
+        protected internal NDArray(UnmanagedStorage storage) : base(storage)
         {
             if (storage.DType != typeof(T))
                 throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
@@ -48,7 +48,7 @@ namespace NumSharp.Generic
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        internal NDArray(UnmanagedStorage storage, Shape shape) : base(storage, shape)
+        protected internal NDArray(UnmanagedStorage storage, Shape shape) : base(storage, shape)
         {
             if (storage.DType != typeof(T))
                 throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
@@ -58,7 +58,7 @@ namespace NumSharp.Generic
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        internal NDArray(UnmanagedStorage storage, ref Shape shape) : base(storage, ref shape)
+        protected internal NDArray(UnmanagedStorage storage, ref Shape shape) : base(storage, ref shape)
         {
             if (storage.DType != typeof(T))
                 throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
@@ -71,7 +71,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine) { }
+        protected internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -141,7 +141,7 @@ namespace NumSharp.Generic
         /// Array access to storage data - overridden on purpose
         /// </summary>
         /// <value></value>
-        internal new ArraySlice<T> Array
+        protected internal new ArraySlice<T> Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.GetData<T>();
@@ -152,7 +152,7 @@ namespace NumSharp.Generic
         /// <summary>
         ///     Gets the address that this NDArray starts from.
         /// </summary>
-        internal new unsafe T* Address
+        protected internal new unsafe T* Address
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => (T*)Storage.Address;
