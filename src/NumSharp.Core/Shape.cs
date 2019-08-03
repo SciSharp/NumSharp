@@ -30,7 +30,7 @@ namespace NumSharp
         public bool IsRecursive
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ViewInfo != null && ViewInfo.ParentShape != new Shape();
+            get => ViewInfo != null && ViewInfo.ParentShape.IsEmpty==false;
         }
 
         /// <summary>
@@ -47,7 +47,13 @@ namespace NumSharp
         internal int[] strides;
 
         public bool IsScalar;
+
+        /// <summary>
+        /// True if the shape is not initialized.
+        /// Note: A scalar shape is not empty.
+        /// </summary>
         public bool IsEmpty => _hashCode == 0;
+
         public char Order => layout;
 
         /// <summary>
