@@ -1966,9 +1966,10 @@ namespace NumSharp.Backends
                 return GetData(indices);
             }
 
+            //perform a regular slicing
             _perform_slice:
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (!_shape.IsRecursive && slices.All(s => ReferenceEquals(Slice.All, s)))
+            if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
             return Alias(_shape.Slice(slices));
