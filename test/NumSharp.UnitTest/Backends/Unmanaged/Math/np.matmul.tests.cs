@@ -3,32 +3,63 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using FluentAssertions;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
-    public class NpMatMulTest
+    public class np_prod_tests
     {
         [TestMethod]
-        public void TwoAndTwoInt()
+        public void Case1()
         {
-            var a = np.array(new int[][] {new int[] {1, 0}, new int[] {0, 1}});
+            var a = np.prod(np.array(1f, 2f));
+            a.GetValue(0).Should().Be(2);
+            a.Shape.IsScalar.Should().BeTrue();
+        }
 
-            var b = np.array(new int[][] {new int[] {4, 1}, new int[] {2, 2}});
+        [TestMethod]
+        public void Case1_double()
+        {
+            var a = np.prod(np.array(1d, 2d));
+            a.GetValue(0).Should().Be(2d);
+            a.Shape.IsScalar.Should().BeTrue();
+        }
 
-            var c = np.matmul(a, b);
+        [TestMethod]
+        public void Case2()
+        {
+            var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2));
+            a.GetValue(0).Should().Be(24f);
+            a.Shape.IsScalar.Should().BeTrue();
+        }
 
-            var p = new int[] {4, 1, 2, 2};
-            Assert.IsTrue(Enumerable.SequenceEqual(p, c.Data<int>()));
+        [TestMethod]
+        public void Case3()
+        {
+            var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1);
+            a.GetValue(0).Should().Be(2f);
+            a.GetValue(1).Should().Be(12f);
+            a.shape.Should().HaveCount(1).And.ContainInOrder(2);
+        }
 
-            a = np.array(new int[][] {new int[] {1, 2}, new int[] {3, 4}});
+        [TestMethod]
+        public void Case4()
+        {
+            var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1);
+            a.GetValue(0).Should().Be(2f);
+            a.GetValue(1).Should().Be(12f);
+            a.shape.Should().HaveCount(1).And.ContainInOrder(2);
+        }
 
-            b = np.array(new int[][] {new int[] {5, 6}, new int[] {7, 8}});
-
-            c = np.matmul(a, b);
-
-            p = new int[] {19, 22, 43, 50};
-            Assert.IsTrue(Enumerable.SequenceEqual(p, c.Data<int>()));
+        [TestMethod]
+        public void Case4_dtype()
+        {
+            var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1, dtype: np.uint8);
+            a.GetValue(0).Should().Be(2f);
+            a.GetValue(1).Should().Be(12f);
+            a.shape.Should().HaveCount(1).And.ContainInOrder(2);
+            a.dtype.Should().Be<byte>();
         }
     }
 }

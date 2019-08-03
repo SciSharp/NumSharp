@@ -29,6 +29,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
@@ -63,23 +64,22 @@ namespace NumSharp
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
-        /// <param name="storage"></param>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
         /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
         internal NDArray(UnmanagedStorage storage, Shape shape)
         {
-            Storage = storage;
-            storage.SetShapeUnsafe(shape);
+            Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine;
         }
 
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
-        /// <param name="storage"></param>
+        /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
+        /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
         internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
-            Storage = new UnmanagedStorage(storage.InternalArray, shape);
+            Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine;
         }
 

@@ -12,14 +12,14 @@ namespace NumSharp.Backends
     {
         // TODO! create an overload because np.power also allows to pass an array of exponents for every entry in the array
 
-        public override NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode) => Power(lhs, rhs, typeCode.AsType());
+        public override NDArray Power(in NDArray lhs, in ValueType rhs, Type dtype) => Power(lhs, rhs, dtype?.GetTypeCode());
 
-        public override NDArray Power(in NDArray lhs, in ValueType rhs, Type dtype = null)
+        public override NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();
 
-            var @out = Cast(lhs, dtype ?? lhs.dtype, true);
+            var @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
             var len = @out.size;
 
             unsafe

@@ -33,7 +33,7 @@ namespace NumSharp
         /// low performance due to loop element-wise
         /// </summary>
         /// <param name="dotNetArray"></param>
-        private NDArray FromJaggedArray<T>(Array dotNetArray)
+        private static NDArray FromJaggedArray<T>(Array dotNetArray)
         {
             if (!dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Multi dim arrays are not allowed here!");

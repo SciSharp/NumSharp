@@ -13,7 +13,7 @@ namespace NumSharp.Backends.Unmanaged
 {
     public unsafe struct UnmanagedMemoryBlock<T> : IUnmanagedMemoryBlock, IMemoryBlock<T>, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
-        private readonly IDisposable _disposer;
+        private readonly Disposer _disposer;
         public readonly int Count;
         public readonly T* Address;
         public readonly int BytesCount;
@@ -42,7 +42,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public UnmanagedMemoryBlock(T* ptr, int count)
         {
-            _disposer = new Disposer();
+            _disposer = Disposer.Null;
             Address = ptr;
             Count = count;
             BytesCount = count * InfoOf<T>.Size;
@@ -145,11 +145,11 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="manager"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public static UnmanagedMemoryBlock<T> FromPool(int length, InternalBufferManager manager)
+        public static UnmanagedMemoryBlock<T> FromPool(StackedMemoryPool manager)
         {
-            //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
-            var buffer = manager.TakeBuffer(length * InfoOf<T>.Size);
-            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(buffer, GCHandleType.Pinned), length, () => manager.ReturnBuffer(buffer));
+            Debug.Assert(manager.SingleSize / InfoOf<T>.Size > 0);
+            var buffer = manager.Take();
+            return new UnmanagedMemoryBlock<T>((T*)buffer, 1, () => manager.Return(buffer));
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -472,6 +472,7 @@ namespace NumSharp.Backends.Unmanaged
 
         private class Disposer : IDisposable
         {
+            public static Disposer Null = new Disposer();
             private enum AllocationType
             {
                 AllocHGlobal,
@@ -492,7 +493,6 @@ namespace NumSharp.Backends.Unmanaged
             ///     Construct a AllocationType.AllocHGlobal
             /// </summary>
             /// <param name="address"></param>
-            /// <param name="count"></param>
             public Disposer(IntPtr address)
             {
                 Address = address;
@@ -503,7 +503,6 @@ namespace NumSharp.Backends.Unmanaged
             ///     Construct a AllocationType.GCHandle
             /// </summary>
             /// <param name="gcHandle"></param>
-            /// <param name="address"></param>
             public Disposer(GCHandle gcHandle)
             {
                 _gcHandle = gcHandle;
@@ -513,7 +512,6 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             ///     Construct a AllocationType.External
             /// </summary>
-            /// <param name="address"></param>
             /// <param name="dispose"></param>
             public Disposer(Action dispose)
             {
@@ -524,8 +522,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             ///     Construct a AllocationType.Wrap
             /// </summary>
-            /// <param name="address"></param>
-            public Disposer()
+            private Disposer()
             {
                 _type = AllocationType.Wrap;
             }

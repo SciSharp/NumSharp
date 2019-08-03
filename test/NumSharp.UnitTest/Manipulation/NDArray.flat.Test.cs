@@ -4,7 +4,7 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class NDArray_flat_Test

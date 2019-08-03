@@ -19,7 +19,7 @@ namespace NumSharp.Benchmark.Unmanaged
     public class Iterators
     {
         private Shape shape;
-        private NDIterator iter;
+        private NDIterator<int> iter;
         private NDArray ndarray;
 
         [GlobalSetup]
@@ -29,7 +29,7 @@ namespace NumSharp.Benchmark.Unmanaged
             var __ = InfoOf<byte>.Size;
             shape = new Shape(2, 1, 50_000);
             ndarray = np.array(Enumerable.Range(0, 100_000).ToArray()).reshape(ref shape);
-            iter = new NDIterator((IMemoryBlock<int>)ndarray.Array, shape, null);
+            iter = new NDIterator<int>((IMemoryBlock<int>)ndarray.Array, shape, null);
         }
 
         [IterationCleanup]
@@ -41,9 +41,10 @@ namespace NumSharp.Benchmark.Unmanaged
         [Benchmark]
         public void OffsetIncrementor()
         {
+            var next = iter.MoveNext;
             for (int i = 0; i < 100_000; i++)
             {
-                iter.MoveNext();
+                next();
             }
         }
 

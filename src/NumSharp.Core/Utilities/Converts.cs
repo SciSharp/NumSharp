@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using NumSharp.Backends;
 
 namespace NumSharp.Utilities
@@ -8,6 +11,182 @@ namespace NumSharp.Utilities
     /// </summary>
     public static class Converts
     {
+        /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
+        /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
+        /// <param name="typeCode">The type of object to return.</param>
+        /// <returns>An object whose underlying type is <paramref name="typeCode">typeCode</paramref> and whose value is equivalent to <paramref name="value">value</paramref>.
+        /// -or-
+        /// A null reference (Nothing in Visual Basic), if <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> is <see cref="System.TypeCode.Empty"></see>, <see cref="System.TypeCode.String"></see>, or <see cref="System.TypeCode.Object"></see>.</returns>
+        /// <exception cref="T:System.InvalidCastException">This conversion is not supported.
+        /// -or-
+        /// <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> specifies a value type.
+        /// -or-
+        /// <paramref name="value">value</paramref> does not implement the <see cref="System.IConvertible"></see> interface.</exception>
+        /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
+        [MethodImpl((MethodImplOptions)512)]
+        public static TOut ChangeType<TOut>(Object value, NPTypeCode typeCode)
+        {
+            if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
+                return default;
+
+            // This line is invalid for things like Enums that return a NPTypeCode
+            // of Int32, but the object can't actually be cast to an Int32.
+            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+            switch (InfoOf<TOut>.NPTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return (TOut)(object)((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
+                case NPTypeCode.Char:
+                    return (TOut)(object)((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                case NPTypeCode.Byte:
+                    return (TOut)(object)((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int16:
+                    return (TOut)(object)((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt16:
+                    return (TOut)(object)((IConvertible)value).ToUInt16(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int32:
+                    return (TOut)(object)((IConvertible)value).ToInt32(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt32:
+                    return (TOut)(object)((IConvertible)value).ToUInt32(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int64:
+                    return (TOut)(object)((IConvertible)value).ToInt64(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt64:
+                    return (TOut)(object)((IConvertible)value).ToUInt64(CultureInfo.InvariantCulture);
+                case NPTypeCode.Single:
+                    return (TOut)(object)((IConvertible)value).ToSingle(CultureInfo.InvariantCulture);
+                case NPTypeCode.Double:
+                    return (TOut)(object)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                case NPTypeCode.Decimal:
+                    return (TOut)(object)((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                case NPTypeCode.String:
+                    return (TOut)(object)((IConvertible)value).ToString(CultureInfo.InvariantCulture);
+                case NPTypeCode.Empty:
+                    throw new InvalidCastException("InvalidCast_Empty");
+                default:
+                    throw new ArgumentException("Arg_UnknownNPTypeCode");
+            }
+        }
+
+
+        /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
+        /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
+        /// <param name="typeCode">The type of object to return.</param>
+        /// <returns>An object whose underlying type is <paramref name="typeCode">typeCode</paramref> and whose value is equivalent to <paramref name="value">value</paramref>.
+        /// -or-
+        /// A null reference (Nothing in Visual Basic), if <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> is <see cref="System.TypeCode.Empty"></see>, <see cref="System.TypeCode.String"></see>, or <see cref="System.TypeCode.Object"></see>.</returns>
+        /// <exception cref="T:System.InvalidCastException">This conversion is not supported.
+        /// -or-
+        /// <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> specifies a value type.
+        /// -or-
+        /// <paramref name="value">value</paramref> does not implement the <see cref="System.IConvertible"></see> interface.</exception>
+        /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
+        [MethodImpl((MethodImplOptions)512)]
+        public static Object ChangeType(Object value, NPTypeCode typeCode)
+        {
+            if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
+                return null;
+
+            // This line is invalid for things like Enums that return a NPTypeCode
+            // of Int32, but the object can't actually be cast to an Int32.
+            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return ((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
+                case NPTypeCode.Char:
+                    return ((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                case NPTypeCode.Byte:
+                    return ((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int16:
+                    return ((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt16:
+                    return ((IConvertible)value).ToUInt16(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int32:
+                    return ((IConvertible)value).ToInt32(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt32:
+                    return ((IConvertible)value).ToUInt32(CultureInfo.InvariantCulture);
+                case NPTypeCode.Int64:
+                    return ((IConvertible)value).ToInt64(CultureInfo.InvariantCulture);
+                case NPTypeCode.UInt64:
+                    return ((IConvertible)value).ToUInt64(CultureInfo.InvariantCulture);
+                case NPTypeCode.Single:
+                    return ((IConvertible)value).ToSingle(CultureInfo.InvariantCulture);
+                case NPTypeCode.Double:
+                    return ((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                case NPTypeCode.Decimal:
+                    return ((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                case NPTypeCode.String:
+                    return ((IConvertible)value).ToString(CultureInfo.InvariantCulture);
+                case NPTypeCode.Empty:
+                    throw new InvalidCastException("InvalidCast_Empty");
+                default:
+                    throw new ArgumentException("Arg_UnknownNPTypeCode");
+            }
+        }
+
+        /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
+        /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
+        /// <param name="typeCode">The type of object to return.</param>
+        /// <returns>An object whose underlying type is <paramref name="typeCode">typeCode</paramref> and whose value is equivalent to <paramref name="value">value</paramref>.
+        /// -or-
+        /// A null reference (Nothing in Visual Basic), if <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> is <see cref="System.TypeCode.Empty"></see>, <see cref="System.TypeCode.String"></see>, or <see cref="System.TypeCode.Object"></see>.</returns>
+        /// <exception cref="T:System.InvalidCastException">This conversion is not supported.
+        /// -or-
+        /// <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> specifies a value type.
+        /// -or-
+        /// <paramref name="value">value</paramref> does not implement the <see cref="System.IConvertible"></see> interface.</exception>
+        /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
+        [MethodImpl((MethodImplOptions)512)]
+        public static Object ChangeType(Object value, NPTypeCode typeCode, IFormatProvider provider)
+        {
+            if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
+                return null;
+
+            // This line is invalid for things like Enums that return a NPTypeCode
+            // of Int32, but the object can't actually be cast to an Int32.
+            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return ((IConvertible)value).ToBoolean(provider);
+                case NPTypeCode.Char:
+                    return ((IConvertible)value).ToChar(provider);
+                case NPTypeCode.Byte:
+                    return ((IConvertible)value).ToByte(provider);
+                case NPTypeCode.Int16:
+                    return ((IConvertible)value).ToInt16(provider);
+                case NPTypeCode.UInt16:
+                    return ((IConvertible)value).ToUInt16(provider);
+                case NPTypeCode.Int32:
+                    return ((IConvertible)value).ToInt32(provider);
+                case NPTypeCode.UInt32:
+                    return ((IConvertible)value).ToUInt32(provider);
+                case NPTypeCode.Int64:
+                    return ((IConvertible)value).ToInt64(provider);
+                case NPTypeCode.UInt64:
+                    return ((IConvertible)value).ToUInt64(provider);
+                case NPTypeCode.Single:
+                    return ((IConvertible)value).ToSingle(provider);
+                case NPTypeCode.Double:
+                    return ((IConvertible)value).ToDouble(provider);
+                case NPTypeCode.Decimal:
+                    return ((IConvertible)value).ToDecimal(provider);
+                case NPTypeCode.String:
+                    return ((IConvertible)value).ToString(provider);
+                case NPTypeCode.Empty:
+                    throw new InvalidCastException("InvalidCast_Empty");
+                default:
+                    throw new ArgumentException("Arg_UnknownNPTypeCode");
+            }
+        }
+
+
         /// <summary>
         ///     Finds the conversion method from <see cref="Convert"/> based on <typeparamref name="TIn"/> and <typeparamref name="TOut"/>.
         /// </summary>

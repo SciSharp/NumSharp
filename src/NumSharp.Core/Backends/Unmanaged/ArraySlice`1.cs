@@ -17,7 +17,6 @@ namespace NumSharp.Backends.Unmanaged
     public readonly unsafe struct ArraySlice<T> : IArraySlice, IMemoryBlock<T>, IEnumerable<T> where T : unmanaged
     {
         public static NPTypeCode TypeCode { get; } = InfoOf<T>.NPTypeCode;
-        private static readonly InternalBufferManager.PooledBufferManager _buffer = ScalarMemoryPool.Instance;
 
         /// <summary>
         ///     The memory block this <see cref="ArraySlice{T}"/> is stored in.

@@ -288,7 +288,7 @@ namespace NumSharp.Backends
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
-            Shape left, right, mit, it;
+            Shape left, right, mit;
             int i, nd, k, j, tmp;
 
             //is left a scalar
@@ -365,14 +365,10 @@ namespace NumSharp.Backends
 
                 left = new Shape(mit.dimensions);
                 right = new Shape(mit.dimensions);
+                left.ViewInfo = leftShape.ViewInfo;
+                right.ViewInfo = rightShape.ViewInfo;
             }
 
-            i = 1;
-            Shape ogiter = leftShape;
-            it = left;
-            it.layout = 'C';
-            nd = ogiter.NDim;
-            it.size = tmp;
             //if (nd != 0)
             //{
             //    it->factors[mit.nd - 1] = 1;
@@ -380,19 +376,19 @@ namespace NumSharp.Backends
             for (j = 0; j < mit.NDim; j++)
             {
                 //it->dims_m1[j] = mit.dimensions[j] - 1;
-                k = j + nd - mit.NDim;
+                k = j + leftShape.NDim - mit.NDim;
                 /*
                  * If this dimension was added or shape of
                  * underlying array was 1
                  */
                 if ((k < 0) ||
-                    ogiter.dimensions[k] != mit.dimensions[j])
+                    leftShape.dimensions[k] != mit.dimensions[j])
                 {
-                    it.strides[j] = 0;
+                    left.strides[j] = 0;
                 }
                 else
                 {
-                    it.strides[j] = ogiter.strides[k];
+                    left.strides[j] = leftShape.strides[k];
                 }
 
                 //it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
@@ -400,11 +396,6 @@ namespace NumSharp.Backends
                 //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
             }
 
-            ogiter = rightShape;
-            it = right;
-            nd = ogiter.NDim;
-            it.size = tmp;
-            it.layout = 'C';
             //if (nd != 0)
             //{
             //    it->factors[mit.nd - 1] = 1;
@@ -412,19 +403,19 @@ namespace NumSharp.Backends
             for (j = 0; j < mit.NDim; j++)
             {
                 //it->dims_m1[j] = mit.dimensions[j] - 1;
-                k = j + nd - mit.NDim;
+                k = j + rightShape.NDim - mit.NDim;
                 /*
                  * If this dimension was added or shape of
                  * underlying array was 1
                  */
                 if ((k < 0) ||
-                    ogiter.dimensions[k] != mit.dimensions[j])
+                    rightShape.dimensions[k] != mit.dimensions[j])
                 {
-                    it.strides[j] = 0;
+                    right.strides[j] = 0;
                 }
                 else
                 {
-                    it.strides[j] = ogiter.strides[k];
+                    right.strides[j] = rightShape.strides[k];
                 }
 
                 //it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
@@ -434,5 +425,23 @@ namespace NumSharp.Backends
 
             return (left, right);
         }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public static NDArray[] Broadcast(params NDArray[] arrays)
+        {
+            if (arrays.Length == 0)
+                return Array.Empty<NDArray>();
+
+            if (arrays.Length == 1)
+                return arrays;
+
+            var shapes = Broadcast(arrays.Select(r => r.Shape).ToArray());
+
+            for (int i = 0; i < arrays.Length; i++) 
+                arrays[i] = new NDArray(arrays[i].Storage, shapes[i]);
+
+            return arrays;
+        }
+
     }
 }

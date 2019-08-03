@@ -163,7 +163,7 @@ namespace NumSharp
             if (ReferenceEquals(a, b))
                 return true;
 
-            if (a == null || b == null)
+            if (a is null || b is null)
                 return false;
 
             return a.Start == b.Start && a.Stop == b.Stop && a.Step == b.Step;

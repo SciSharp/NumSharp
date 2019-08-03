@@ -43,8 +43,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Backends\Unmanaged\Iterators\**" />
     <Compile Remove="data\**" />
+    <EmbeddedResource Remove="Backends\Unmanaged\Iterators\**" />
     <EmbeddedResource Remove="data\**" />
+    <None Remove="Backends\Unmanaged\Iterators\**" />
     <None Remove="data\**" />
   </ItemGroup>
 
@@ -80,10 +83,5 @@
 
   <ItemGroup>
     <None Include="DataSample.cs" />
-  </ItemGroup>
-
-
-  <ItemGroup>
-    <Folder Include="Backends\Unmanaged\Iterators\" />
   </ItemGroup>
 </Project>

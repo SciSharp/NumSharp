@@ -10,14 +10,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Log(in NDArray nd, NPTypeCode typeCode) => Log(nd, typeCode.AsType());
+        public override NDArray Log(in NDArray nd, Type dtype) => Log(nd, dtype?.GetTypeCode());
 
-        public override NDArray Log(in NDArray nd, Type dtype = null)
+        public override NDArray Log(in NDArray nd, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
                 return nd.Clone(); 
 
-            var @out = Cast(nd, dtype ?? nd.dtype, true);
+            var @out = Cast(nd, ResolveUnaryReturnType(nd, typeCode), copy: true);
             var len = @out.size;
 
             unsafe

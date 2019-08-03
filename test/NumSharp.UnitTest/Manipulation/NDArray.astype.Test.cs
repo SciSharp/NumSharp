@@ -1,15 +1,9 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
+﻿using System;
 using FluentAssertions;
-using NumSharp;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class astypeTests

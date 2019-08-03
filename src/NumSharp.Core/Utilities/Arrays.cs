@@ -13,6 +13,64 @@ namespace NumSharp.Utilities
     public static class Arrays
     {
         /// <summary>
+        ///     Inserts item into a specific index.
+        /// </summary>
+        /// <param name="source">The array to insert the value to.</param>
+        /// <param name="index">The index to insert to.</param>
+        /// <param name="value"></param>
+        public static void Insert<T>(ref T[] source, int index, T value)
+        {
+            if (index < 0 || index > source.Length)
+                throw new ArgumentOutOfRangeException(nameof(index));
+
+            Array.Resize(ref source, source.Length + 1);
+            Array.Copy(source, index, source, index + 1, source.Length - index - 1);
+            source[index] = value;
+        }
+
+        /// <summary>
+        ///     Inserts item into a specific index.
+        /// </summary>
+        /// <param name="source">The array to insert the value to.</param>
+        /// <param name="index">The index to insert to.</param>
+        /// <param name="value"></param>
+        public static T[] Insert<T>(T[] source, int index, T value) where T : unmanaged
+        {
+            if (index < 0 || index > source.Length)
+                throw new ArgumentOutOfRangeException(nameof(index));
+
+            unsafe
+            {
+                var ret = new T[source.Length + 1];
+                fixed (T* src = source)
+                {
+                    fixed (T* dst = ret)
+                    {
+                        new Span<T>(src, index).CopyTo(new Span<T>(dst, index));
+                        *(dst+index) = value;
+                        var left = source.Length - index;
+                        new Span<T>(src + index, left).CopyTo(new Span<T>(dst + index + 1, left));
+                    }
+                }
+
+                return ret;
+            }
+        }
+
+        /// <summary>
+        ///     Inserts item into a specific index.
+        /// </summary>
+        /// <param name="source">The array to insert copy and insert value to.</param>
+        /// <param name="index">The index to insert to.</param>
+        /// <returns>a copy of <see cref="source"/> with the appended value.</returns>
+        public static T[] AppendAt<T>(T[] source, int index, T value)
+        {
+            var ret = (T[])source.Clone();
+            Insert(ref source, index, value);
+            return ret;
+        }
+
+        /// <summary>
         ///     Removes a specific index from given array.
         /// </summary>
         /// <param name="source">The array to remove <paramref name="index"/> from.</param>

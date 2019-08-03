@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+﻿using System;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
@@ -15,10 +16,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
             src.CopyTo(dst.Address);
 
-            for (int i = 0; i < dst.Count; i++) 
+            for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
-        }           
-        
+        }
+
         [TestMethod]
         public unsafe void CopyTo_Sliced()
         {
@@ -26,10 +27,24 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
             src.CopyTo(dst.Address);
 
-            for (int i = 0; i < dst.Count; i++) 
+            for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
-        }        
-        
+        }
+
+        [TestMethod]
+        public unsafe void CopyTo_Corruption()
+        {
+            var np1 = np.arange(1,7).reshape(3, 2).astype(NPTypeCode.Double);
+            var mean = np.mean(np1, keepdims: true);
+
+            var src = np.arange(20).astype(NPTypeCode.Int32)["0:10"].Storage;
+            var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
+            src.CopyTo(dst.Address);
+
+            for (int i = 0; i < dst.Count; i++)
+                dst[i].Should().Be(i);
+        }
+
         [TestMethod]
         public unsafe void CopyTo_Block()
         {
@@ -37,10 +52,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
             src.CopyTo(dst);
 
-            for (int i = 0; i < dst.Count; i++) 
+            for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
-        }           
-        
+        }
+
         [TestMethod]
         public unsafe void CopyTo_Block_Sliced()
         {
@@ -48,7 +63,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
             src.CopyTo(dst);
 
-            for (int i = 0; i < dst.Count; i++) 
+            for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
         }
 
@@ -70,8 +85,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             var dst = new int[10];
             src.CopyTo(dst);
 
-            for (int i = 0; i < dst.Length; i++) 
+            for (int i = 0; i < dst.Length; i++)
                 dst[i].Should().Be(i);
-        }   
+        }
     }
 }

@@ -33,7 +33,7 @@ namespace NumSharp
         ///     Creates an NDArray out of given array of type <typeparamref name="T"/>
         /// </summary>
         /// <param name="dotNetArray"></param>
-        public NDArray FromMultiDimArray<T>(Array dotNetArray)
+        public static NDArray FromMultiDimArray<T>(Array dotNetArray)
         {
             if (dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Jagged arrays are not allowed here!");

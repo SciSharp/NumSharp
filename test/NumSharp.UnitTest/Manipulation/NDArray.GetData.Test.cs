@@ -1,14 +1,9 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
+﻿using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
-using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class NDArrayGetData

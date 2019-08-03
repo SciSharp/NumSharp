@@ -17,7 +17,8 @@ namespace NumSharp
             if (this.size == 0)
                 return this.Clone();
 
-            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, true);
+            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, copy: true);
+
             var len = @out.size;
 
             unsafe
@@ -42,8 +43,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -60,9 +59,7 @@ namespace NumSharp
                         for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val > 0)
-                                *(out_addr + i) = Convert.ToInt16(-val);
-                            else
-                                *(out_addr + i) = val;
+                                *(out_addr + i) = (short) -val;
                         }
                         return @out;
 	                }
@@ -74,8 +71,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -87,8 +82,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -100,8 +93,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -113,8 +104,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -126,8 +115,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val > 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }

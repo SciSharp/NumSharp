@@ -1,13 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
-using NumSharp;
+using NumSharp.UnitTest.Utilities;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Maths
 {
     [TestClass]
     public class SinTest
@@ -15,18 +9,10 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple1DArray()
         {
-            var nd = np.array(new double[] {0, 30, 45, 60, 90}) * (Math.PI / 180);
+            var nd = np.array(new double[] {0D, 0.523598775598299D,
+                0.785398163397449D, 1.0471975511966D, 1.5707963267949D });
 
-            var nd2 = np.sin(nd);
-
-            Assert.IsTrue(nd2.GetInt32(0) == 0);
-            Assert.IsTrue(nd2.GetInt32(1) < 0.501);
-            Assert.IsTrue(nd2.GetInt32(1) > 0.498);
-            Assert.IsTrue(nd2.GetInt32(2) < 0.708);
-            Assert.IsTrue(nd2.GetInt32(2) > 0.7069);
-            Assert.IsTrue(nd2.GetInt32(3) < 0.867);
-            Assert.IsTrue(nd2.GetInt32(3) > 0.8659);
-            Assert.IsTrue(nd2.GetInt32(4) == 1);
+            np.sin(nd).Should().BeOfValuesApproximately(0.0001, 0, 0.5, 0.707106, 0.866025, 1);
         }
     }
 }

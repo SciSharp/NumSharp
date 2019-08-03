@@ -27,8 +27,9 @@ namespace NumSharp
 
         #region Reduction
 
-        public abstract NDArray ReduceAdd(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
-        public abstract NDArray ReduceMean(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion
 
@@ -41,12 +42,34 @@ namespace NumSharp
         public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
-        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type = null);
-        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
+
+        public abstract NDArray Abs(in NDArray nd, Type dtype);
+        public abstract NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sqrt(in NDArray nd, Type dtype);
+        public abstract NDArray Sqrt(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log(in NDArray nd, Type dtype);
+        public abstract NDArray Log(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Exp(in NDArray nd, Type dtype);
+        public abstract NDArray Exp(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Tan(in NDArray nd, Type dtype);
+        public abstract NDArray Tan(in NDArray nd, NPTypeCode? typeCod = null);
+        public abstract NDArray Sin(in NDArray nd, Type dtype);
+        public abstract NDArray Sin(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cos(in NDArray nd, Type dtype);
+        public abstract NDArray Cos(in NDArray nd, NPTypeCode? typeCode = null);
+
+        public abstract NDArray Tanh(in NDArray nd, Type dtype);
+        public abstract NDArray Tanh(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cosh(in NDArray nd, Type dtype);
+        public abstract NDArray Cosh(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sinh(in NDArray nd, Type dtype);
+        public abstract NDArray Sinh(in NDArray nd, NPTypeCode? typeCode = null);
 
         #endregion
 
@@ -74,7 +97,29 @@ namespace NumSharp
 
         #region Sorting, searching, counting
 
-        public abstract NDArray ArgMax(NDArray nd, int axis = -1);
+        #region Reduction
+
+        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_);
+        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_);
+        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, NPTypeCode? typeCode = null);
+
+        #endregion
+
+        public abstract NDArray ArgMax(in NDArray a);
+        public abstract NDArray ArgMax(in NDArray a, int axis);
+
+        public abstract NDArray ArgMin(in NDArray a);
+        public abstract NDArray ArgMin(in NDArray a, int axis);
+
+        public abstract NDArray AMax(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray AMax(in NDArray nd, int axis, Type dtype, bool keepdims = false);
+
+        public abstract NDArray AMin(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
+        public abstract NDArray AMin(in NDArray nd, int axis, Type dtype, bool keepdims = false);
 
         #endregion
 

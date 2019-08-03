@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Linq;
@@ -13,10 +14,8 @@ namespace NumSharp
     ///     Represents a shape of an N-D array.
     /// </summary>
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
-    public struct Shape : ICloneable, IEquatable<Shape>, IComparable<Shape>, IComparable
+    public struct Shape : ICloneable, IEquatable<Shape>
     {
-        private static readonly int[] _vectorStrides = {1};
-
         internal ViewInfo ViewInfo;
 
         public bool IsSliced
@@ -65,7 +64,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape {dimensions = new[] {length}, strides = _vectorStrides, layout = 'C', size = length};
+            var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, layout = 'C', size = length};
 
             unchecked
             {
@@ -85,7 +84,7 @@ namespace NumSharp
             var shape = new Shape
             {
                 dimensions = new[] {length},
-                strides = _vectorStrides,
+                strides = new int[] {1},
                 layout = 'C',
                 size = length,
                 ViewInfo = viewInfo
@@ -274,6 +273,8 @@ namespace NumSharp
             {
                 var coords = new List<int>(indices);
                 var vi = ViewInfo;
+                if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0)
+                    return 0;
                 if (indices.Length > vi.UnreducedShape.dimensions.Length)
                     throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
                 var orig_ndim = vi.OriginalShape.NDim;
@@ -376,7 +377,7 @@ namespace NumSharp
 
             var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
-                throw new IndexOutOfRangeException($"The offset ${offset} is out of range in Shape {orig_shape.Size}");
+                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {orig_shape.Size}");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -533,6 +534,7 @@ namespace NumSharp
             {
                 unchecked
                 {
+                    size = 1;
                     int hash = (layout * 397);
                     foreach (var v in dimensions)
                         hash ^= (size *= v) * 397;
@@ -557,7 +559,7 @@ namespace NumSharp
             for (int i = 0; i < NDim; i++)
             {
                 var dim = Dimensions[i];
-                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
+                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All; //fill missing selectors
                 var slice_def = slice.ToSliceDef(dim);
                 slices.Add(slice_def);
                 var count = Math.Abs(slices[i].Count); // for index-slices count would be -1 but we need 1.
@@ -745,62 +747,50 @@ namespace NumSharp
             return _hashCode;
         }
 
-        /// <summary>Compares the current instance with another object of the same type and returns an integer that indicates whether the current instance precedes, follows, or occurs in the same position in the sort order as the other object. </summary>
-        /// <param name="other">An object to compare with this instance. </param>
-        /// <returns>A value that indicates the relative order of the objects being compared. The return value has these meanings: Value Meaning Less than zero This instance precedes <paramref name="other" /> in the sort order.  Zero This instance occurs in the same position in the sort order as <paramref name="other" />. Greater than zero This instance follows <paramref name="other" /> in the sort order. </returns>
-        public int CompareTo(Shape other)
-        {
-            return size.CompareTo(other.size);
-        }
-
-        /// <summary>Compares the current instance with another object of the same type and returns an integer that indicates whether the current instance precedes, follows, or occurs in the same position in the sort order as the other object.</summary>
-        /// <param name="obj">An object to compare with this instance. </param>
-        /// <returns>A value that indicates the relative order of the objects being compared. The return value has these meanings: Value Meaning Less than zero This instance precedes <paramref name="obj" /> in the sort order. Zero This instance occurs in the same position in the sort order as <paramref name="obj" />. Greater than zero This instance follows <paramref name="obj" /> in the sort order. </returns>
-        /// <exception cref="T:System.ArgumentException">
-        /// <paramref name="obj" /> is not the same type as this instance. </exception>
-        public int CompareTo(object obj)
-        {
-            if (ReferenceEquals(null, obj)) return 1;
-            return obj is Shape other ? CompareTo(other) : throw new ArgumentException($"Object must be of type {nameof(Shape)}");
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is less than another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is less than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator <(Shape left, Shape right)
-        {
-            return left.CompareTo(right) < 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is greater than another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is greater than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator >(Shape left, Shape right)
-        {
-            return left.CompareTo(right) > 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is less than or equal to another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is less than or equal to <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator <=(Shape left, Shape right)
-        {
-            return left.CompareTo(right) <= 0;
-        }
-
-        /// <summary>Returns a value that indicates whether a <see cref="T:NumSharp.NewStuff.Shape" /> value is greater than or equal to another <see cref="T:NumSharp.NewStuff.Shape" /> value.</summary>
-        /// <param name="left">The first value to compare.</param>
-        /// <param name="right">The second value to compare.</param>
-        /// <returns>true if <paramref name="left" /> is greater than <paramref name="right" />; otherwise, false.</returns>
-        public static bool operator >=(Shape left, Shape right)
-        {
-            return left.CompareTo(right) >= 0;
-        }
-
         #endregion
+
+        /// <summary>
+        ///     Expands a specific <paramref name="axis"/> with 1 dimension.
+        /// </summary>
+        /// <param name="axis"></param>
+        /// <returns></returns>
+        [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
+        internal Shape ExpandDimension(int axis)
+        {
+            //TODO! support slices when slice reshape is done.
+            if (IsSliced)
+                throw new NotSupportedException("Unable to expand dimensions of a sliced shape.");
+
+            Shape ret;
+            if (IsScalar)
+            {
+                ret = Vector(1);
+                ret.strides[0] = 0;
+            }
+            else
+            {
+                ret = Clone(true, true);
+            }
+
+            var dimensions = ret.dimensions;
+            var strides = ret.strides;
+            // Allow negative axis specification
+            if (axis < 0)
+            {
+                axis = dimensions.Length + 1 + axis;
+                if (axis < 0)
+                {
+                    throw new ArgumentException($"Effective axis {axis} is less than 0");
+                }
+            }
+            Arrays.Insert(ref dimensions, axis, 1);
+            Arrays.Insert(ref strides, axis, 0);
+            ret.dimensions = dimensions;
+            ret.strides = strides;
+
+            ret.ComputeHashcode();
+            return ret;
+        }
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 

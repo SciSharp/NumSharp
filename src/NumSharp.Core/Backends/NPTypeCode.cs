@@ -277,7 +277,7 @@ namespace NumSharp.Backends
 #else
                 case NPTypeCode.NDArray: return false;
                 case NPTypeCode.Complex: return false;
-                case NPTypeCode.Boolean: return false;
+                case NPTypeCode.Boolean: return true;
                 case NPTypeCode.Byte: return true;
                 case NPTypeCode.Int16: return false;
                 case NPTypeCode.UInt16: return true;
@@ -289,7 +289,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Double: return false;
                 case NPTypeCode.Single: return false;
                 case NPTypeCode.Decimal: return false;
-                case NPTypeCode.String: return false;
+                case NPTypeCode.String: return true;
                 default:
                     throw new NotSupportedException();
 #endif
@@ -601,7 +601,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Gets the dtype that is used as return type in case when statistics are computed like <see cref="np.mean"/>
+        ///     Gets the dtype that is used as return type in case when statistics are computed with high decimal precision like <see cref="np.sin"/>
         /// </summary>
         /// <returns>dtype in case when statistics are computed like <see cref="np.mean"/></returns>
         public static NPTypeCode GetComputingType(this NPTypeCode typeCode)

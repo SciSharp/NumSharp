@@ -33,9 +33,9 @@ namespace NumSharp.Benchmark.Unmanaged
         private const int iterations = 100;
 
         private UnmanagedMemoryBlock<int> from;
-        private UnmanagedByteStorage<int> fromvec;
+        //private UnmanagedByteStorage<int> fromvec;
         private UnmanagedMemoryBlock<int> to;
-        private UnmanagedByteStorage<int> setvec;
+        //private UnmanagedByteStorage<int> setvec;
 
         private UnmanagedMemoryBlock<int> fromsimple;
         private UnmanagedMemoryBlock<int> tosimple;
@@ -46,9 +46,9 @@ namespace NumSharp.Benchmark.Unmanaged
         public void Setup()
         {
             @from = new UnmanagedMemoryBlock<int>(length);
-            fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
+            //fromvec = new UnmanagedByteStorage<int>(new int[10 * length], new Shape(10, length));
             to = new UnmanagedMemoryBlock<int>(length);
-            setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
+            //setvec = new UnmanagedByteStorage<int>(Enumerable.Range(0, length).ToArray(), new Shape(length));
             nd = np.arange(length * 10).reshape(10, length);
 
             fromsimple = new UnmanagedMemoryBlock<int>(length);
@@ -68,27 +68,27 @@ namespace NumSharp.Benchmark.Unmanaged
             //    }
         }
 
-        [Benchmark]
-        public void VectorNonCopy()
-        {
-            for (int j = 0; j < iterations; j++)
-            {
-                var _ = fromvec.Get(3);
-            }
-        }
+        //[Benchmark]
+        //public void VectorNonCopy()
+        //{
+        //    for (int j = 0; j < iterations; j++)
+        //    {
+        //        var _ = fromvec.Get(3);
+        //    }
+        //}
 
-        UnmanagedByteStorage<int>[] memoryTrash;
+        //UnmanagedByteStorage<int>[] memoryTrash;
 
-        [Benchmark]
-        public void VectorWithCopy()
-        {
-            memoryTrash = new UnmanagedByteStorage<int>[iterations];
-            for (int j = 0; j < iterations; j++)
-            {
-                //memoryTrash[j] = fromvec.Get(3).Clone();
-                fromvec.GetCopy(3).Clone();
-            }
-        }
+        //[Benchmark]
+        //public void VectorWithCopy()
+        //{
+        //    memoryTrash = new UnmanagedByteStorage<int>[iterations];
+        //    for (int j = 0; j < iterations; j++)
+        //    {
+        //        //memoryTrash[j] = fromvec.Get(3).Clone();
+        //        fromvec.GetCopy(3).Clone();
+        //    }
+        //}
 
         [Benchmark]
         public void NDArray()

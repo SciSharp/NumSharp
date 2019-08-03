@@ -18,7 +18,7 @@ namespace NumSharp
             if (this.size == 0)
                 return this.Clone();
 
-            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, true);
+            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, copy: true);
             var len = @out.size;
 
             unsafe
@@ -43,8 +43,6 @@ namespace NumSharp
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
                         return @out;
 	                }
@@ -54,109 +52,79 @@ namespace NumSharp
 	                default:
 		                throw new NotSupportedException();
 #else
-                    case NPTypeCode.Int16:
-                    {
+	                case NPTypeCode.Int16:
+	                {
                         var out_addr = (short*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
-                                *(out_addr + i) = Convert.ToInt16(-val);
-                            else
-                                *(out_addr + i) = val;
+                                *(out_addr + i) = (short) -val;
                         }
-
-                        return @out; 
-                    }
-
-                    case NPTypeCode.Int32:
-                    {
+                        return @out;
+	                }
+	                case NPTypeCode.Int32:
+	                {
                         var out_addr = (int*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
-
                         return @out;
-                    }
-
-                    case NPTypeCode.Int64:
-                    {
+	                }
+	                case NPTypeCode.Int64:
+	                {
                         var out_addr = (long*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
-
                         return @out;
-                    }
-
-                    case NPTypeCode.Double:
-                    {
+	                }
+	                case NPTypeCode.Double:
+	                {
                         var out_addr = (double*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
-
                         return @out;
-                    }
-
-                    case NPTypeCode.Single:
-                    {
+	                }
+	                case NPTypeCode.Single:
+	                {
                         var out_addr = (float*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
-
                         return @out;
-                    }
-
-                    case NPTypeCode.Decimal:
-                    {
+	                }
+	                case NPTypeCode.Decimal:
+	                {
                         var out_addr = (decimal*)@out.Address;
 
-                        for (int i = 0; i < len; i++)
-                        {
+                        for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
                             if (val < 0)
                                 *(out_addr + i) = -val;
-                            else
-                                *(out_addr + i) = val;
                         }
-
                         return @out;
-                    }
-
-                    case NPTypeCode.Byte:
-                    case NPTypeCode.UInt16:
-                    case NPTypeCode.UInt32:
-                    case NPTypeCode.UInt64:
-                    case NPTypeCode.Char:
-                    default:
-                        throw new NotSupportedException();
+	                }
+	                case NPTypeCode.Byte:
+	                case NPTypeCode.UInt16:
+	                case NPTypeCode.UInt32:
+	                case NPTypeCode.UInt64:
+	                case NPTypeCode.Char:
+	                default:
+		                throw new NotSupportedException();
 #endif
                 }
             }

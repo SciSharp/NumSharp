@@ -113,6 +113,9 @@ namespace NumSharp.Backends
 
         public static UnmanagedStorage Scalar(object value) => new UnmanagedStorage(ArraySlice.Scalar(value));
 
+        public static UnmanagedStorage Scalar(object value, NPTypeCode typeCode) => new UnmanagedStorage(ArraySlice.Scalar(value, typeCode));
+
+
         #region Aliasing
 
         /// <summary>
@@ -1185,6 +1188,9 @@ namespace NumSharp.Backends
             if (!Shape.IsSliced)
                 return InternalArray.Clone();
 
+            if (Shape.IsScalar)
+                return ArraySlice.Scalar(GetValue(0), _typecode);
+
             //Linear copy of all the sliced items.
 
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, Shape.size, false);
@@ -1924,11 +1930,45 @@ namespace NumSharp.Backends
             Count = _shape.size;
         }
 
+        internal void ExpandDimension(int axis)
+        {
+            _shape = _shape.ExpandDimension(axis);
+        }
+
         #region Slicing
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
-        public UnmanagedStorage GetView(params Slice[] slices) => Alias(_shape.Slice(slices));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
+        public UnmanagedStorage GetView(params Slice[] slices)
+        {
+            if (slices == null)
+                throw new ArgumentNullException(nameof(slices));
+
+            //handle memory slice if possible
+            if (!_shape.IsSliced)
+            {
+                var indices = new int[slices.Length];
+                for (var i = 0; i < slices.Length; i++)
+                {
+                    var inputSlice = slices[i];
+                    if (!inputSlice.IsIndex)
+                        goto _perform_slice;
+                    indices[i] = inputSlice.Start.Value;
+                }
+
+                return GetData(indices);
+            }
+
+            _perform_slice:
+            // ReSharper disable once ConvertIfStatementToReturnStatement
+            if (slices.All(s => ReferenceEquals(Slice.All, s)))
+                return Alias();
+
+            return Alias(_shape.Slice(slices));
+        }
 
         #endregion
 
@@ -2032,8 +2072,6 @@ namespace NumSharp.Backends
         {
             if (!typeof(T).IsValidNPType())
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
-
-            //TODO! this should clone based on the slice!
 
             if (Shape.IsSliced)
                 return CloneData<T>();

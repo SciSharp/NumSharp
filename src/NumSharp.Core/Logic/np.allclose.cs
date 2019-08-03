@@ -22,6 +22,6 @@ namespace NumSharp {
         ///considered equal to NaN's in `b` in the output array.</param>
         public static bool allclose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8,
             bool equal_nan = false)
-            => BackendFactory.GetEngine().AllClose(a, b, rtol, atol, equal_nan);
+            => a.TensorEngine.AllClose(a, b, rtol, atol, equal_nan);
     }
 }

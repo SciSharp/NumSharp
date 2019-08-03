@@ -30,80 +30,100 @@ namespace NumSharp
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => Storage.SetData(value, indices);
         }
-        
+
         /// <summary>
         ///     Used to perform filtering by whats true and whats false.
         /// </summary>
-        /// <param name="indices"></param>
+        /// <param name="mindices"></param>
         /// <returns></returns>
-        public NDArray this[NDArray indices]
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        public NDArray this[params NDArray[] mindices] => _extract_indices(mindices, false);
+
+        private NDArray _extract_indices(NDArray[] mindices, bool isCollapsed)
         {
-            get
+            if (mindices == null)
+                throw new ArgumentNullException(nameof(mindices));
+
+            if (mindices.Length == 1 && (mindices[0].ndim >= this.ndim || isCollapsed))
             {
-                return null;
+                //element-wise if ndims are equal or src is flat
+                return _index_elemntwise(mindices[0]);
 
-//                NDArray nd = null;
-//                switch (this.Storage.TypeCode)
-//                {
-//#if _REGEN
-//	                %foreach supported_dtypes,supported_dtypes_lowercase%
-//	                case NPTypeCode.#1:
-//	                {
-
-//	                }
-//	                %
-//	                default:
-//		                throw new NotSupportedException();
-//#else
-//#endif
-//                }
-
-//                switch (this.Storage.TypeCode)
-//                {
-//                    case TypeCode.Byte:
-//                        nd = setValue<byte>(indices);
-//                        break;
-//                    case TypeCode.Int32:
-//                        nd = setValue<int>(indices);
-//                        break;
-//                    case TypeCode.Int64:
-//                        nd = setValue<long>(indices);
-//                        break;
-//                    case TypeCode.Single:
-//                        nd = setValue<float>(indices);
-//                        break;
-//                    case TypeCode.Double:
-//                        nd = setValue<double>(indices);
-//                        break;
-//                    case TypeCode.Decimal:
-//                        nd = setValue<decimal>(indices);
-//                        break;
-//                    case TypeCode.String:
-//                        nd = setValue<string>(indices);
-//                        break;
-//                }
-
-//                return nd;
-//                NDArray setValue<T>(NDArray indexes)
-//                {
-//                    Shape newShape = new int[] { indexes.size }.Concat(shape.Skip(1)).ToArray();
-//                    var buf = Data<T>();
-//                    var idx = indexes.Data<int>();
-//                    var array = new T[newShape.Size];
-
-//                    var indice = Shape.GetShape(newShape.Dimensions, axis: 0);
-//                    var length = Shape.GetSize(indice);
-
-//                    for (var row = 0; row < newShape[0]; row++)
-//                    {
-//                        var d = buf.AsSpan(idx[row] * length, length);
-//                        d.CopyTo(array.AsSpan(row * length));
-//                    }
-
-//                    var nd = new NDArray(array, newShape);
-//                    return nd;
-//                }
+                //otherwise returns like GetNDArrays() but specific indexes so we falldown
             }
+
+            if (mindices.Length > ndim)
+                throw new ArgumentException($"There are more mindices ({mindices.Length}) than dimensions ({ndim}) in current array.");
+
+            //handle broadcasting
+            var indicesShape = mindices[0].Shape.Clean();
+            for (int i = 1; i < mindices.Length; i++)
+            {
+                if (indicesShape != mindices[i].Shape)
+                {
+                    mindices = DefaultEngine.Broadcast(mindices);
+                    break;
+                }
+            }
+
+            //case 1 multidim eq to ndim
+            if (mindices.Length == ndim)
+            {
+                //this is multidims, collapse them into singledim
+                var collapsed = new NDArray(NPTypeCode.Int32, indicesShape, false);
+                var iter = new NDCoordinatesIncrementor(ref indicesShape);
+                var ndims = mindices.Length;
+                var collapsedIndex = new int[ndims];
+                var individualIndex = iter.Index;
+                Func<int[], int> getOffset = Shape.GetOffset;
+                do
+                {
+                    for (int i = 0; i < ndims; i++)
+                    {
+                        collapsedIndex[i] = (int)mindices[i].GetValue(individualIndex);
+                    }
+
+                    collapsed[individualIndex] = getOffset(collapsedIndex);
+                } while (iter.Next() != null);
+
+                return _extract_indices(new NDArray[]{ collapsed }, true);
+            }
+
+
+
+            //case 2 return is not scalar collection but axis iteration
+            {
+                var flat_mindices = new NDArray[mindices.Length];
+                for (var i = 0; i < mindices.Length; i++) flat_mindices[i] = mindices[i];
+
+                //this is multidims, collapse them into singledim
+                var collapsed = new NDArray(NPTypeCode.Int32, indicesShape, false);
+
+                var (retShape, _) = Shape.GetSubshape(new int[collapsed.ndim]);
+                var dims = collapsed.shape.Concat(retShape.dimensions).ToArray();
+                var ret = new NDArray(typecode, dims); //retshape is already clean
+
+                //this is multidims, collapse them into singledim
+                var iter = new NDCoordinatesIncrementor(ref indicesShape);
+                var ndims = mindices.Length;
+                var collapsedIndex = new int[ndims];
+                var individualIndex = iter.Index;
+
+                do
+                {
+                    for (int i = 0; i < ndims; i++)
+                    {
+                        collapsedIndex[i] = (int)mindices[i].GetValue(individualIndex);
+                    }
+
+                    ret[individualIndex] = this[collapsedIndex];
+                } while (iter.Next() != null);
+
+                return ret;
+            }
+
         }
 
         public NDArray this[string slice]
@@ -210,8 +230,806 @@ namespace NumSharp
                 // in this case we can not get a slice of contiguous memory, so we slice
                 return new NDArray(Storage.GetView(indices.Select(Slice.Index).ToArray()));
             }
+
             var (shape, offset) = Storage.Shape.GetSubshape(indices);
             return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));
+        }
+
+        [MethodImpl((MethodImplOptions)512)]
+        private NDArray _index_elemntwise(NDArray indices)
+        {
+            //verify the indices dtype is Int.
+            var grp = indices.typecode.GetGroup();
+            if (grp != 1 && grp != 2 && indices.typecode != NPTypeCode.Byte)
+                throw new ArgumentException("indices must be of Int type.", nameof(indices));
+
+            var ret = new NDArray(dtype, indices.Shape.Clean(), false);
+
+            // ReSharper disable once LocalVariableHidesMember
+            var size = this.size;
+            var src = this.flat;
+
+            if (this.ndim == 1)
+            {
+                var dst = ret.flat;
+#if _REGEN
+                #region Compute
+		        switch (typecode)
+		        {
+			        %foreach supported_dtypes,supported_dtypes_lowercase%
+			        case NPTypeCode.#1:
+			        {
+				        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex()) {
+                            index[0] = nextIndex();
+                            dst.Set#1(src.Get#1(index), indexset);
+                            indexset[0]++;
+                        }
+                        break;
+			        }
+			        %
+			        default:
+				        throw new NotSupportedException();
+		        }
+                #endregion
+#else
+
+                #region Compute
+
+                switch (typecode)
+                {
+                    case NPTypeCode.Boolean:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetBoolean(src.GetBoolean(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Byte:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetByte(src.GetByte(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int16:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetInt16(src.GetInt16(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt16:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetUInt16(src.GetUInt16(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int32:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetInt32(src.GetInt32(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt32:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetUInt32(src.GetUInt32(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int64:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetInt64(src.GetInt64(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt64:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetUInt64(src.GetUInt64(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Char:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetChar(src.GetChar(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Double:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetDouble(src.GetDouble(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Single:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetSingle(src.GetSingle(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Decimal:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = new int[1];
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            index[0] = nextIndex();
+                            dst.SetDecimal(src.GetDecimal(index), indexset);
+                            indexset[0]++;
+                        }
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotSupportedException();
+                }
+
+                #endregion
+
+#endif
+            }
+            else
+            {
+                var retIncr = new NDCoordinatesIncrementor(ret.shape);
+#if _REGEN
+                #region Compute
+		        switch (typecode)
+		        {
+			        %foreach supported_dtypes,supported_dtypes_lowercase%
+			        case NPTypeCode.#1:
+			        {
+				        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = incr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex()) {
+                            ret.Set#1(src.Get#1(nextIndex()), index);
+                            indexset[0]++;
+                            incr.Next();
+                        }
+                        break;
+			        }
+			        %
+			        default:
+				        throw new NotSupportedException();
+		        }
+                #endregion
+#else
+
+                #region Compute
+
+                switch (typecode)
+                {
+                    case NPTypeCode.Boolean:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetBoolean(src.GetBoolean(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Byte:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetByte(src.GetByte(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int16:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetInt16(src.GetInt16(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt16:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetUInt16(src.GetUInt16(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int32:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetInt32(src.GetInt32(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt32:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetUInt32(src.GetUInt32(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Int64:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetInt64(src.GetInt64(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.UInt64:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetUInt64(src.GetUInt64(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Char:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetChar(src.GetChar(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Double:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetDouble(src.GetDouble(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Single:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetSingle(src.GetSingle(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    case NPTypeCode.Decimal:
+                    {
+                        var data = indices.AsIterator<int>(); //iterator handles cast internal if required
+                        var hasNextIndex = data.HasNext;
+                        var nextIndex = data.MoveNext;
+                        var _nextIndexClosure = nextIndex;
+                        //handle cases of negative index
+                        nextIndex = () =>
+                        {
+                            var nextIndexValue = _nextIndexClosure();
+                            if (nextIndexValue >= size)
+                                throw new IndexOutOfRangeException($"index {nextIndexValue} out of bounds 0<=index<{size}");
+
+                            return nextIndexValue < 0 ? size + nextIndexValue : nextIndexValue;
+                        };
+
+                        var index = retIncr.Index;
+                        var indexset = new int[1];
+                        while (hasNextIndex())
+                        {
+                            ret.SetDecimal(src.GetDecimal(nextIndex()), index);
+                            indexset[0]++;
+                            retIncr.Next();
+                        }
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotSupportedException();
+                }
+
+                #endregion
+
+#endif
+            }
+
+            if (indices.ndim != ret.ndim)
+                ret.Storage.SetShapeUnsafe(indices.Shape);
+
+            return ret;
         }
     }
 }
