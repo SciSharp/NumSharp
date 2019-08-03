@@ -378,38 +378,7 @@ namespace NumSharp
                 return (this, 0);
 
             //compute offset
-            int offset = 0;
-            if (dimensions.Length == 0 && indicies.Length == 1)
-                offset = indicies[0];
-            else
-            {
-                unchecked
-                {
-                    if (IsSliced)
-                    {
-                        var vi = ViewInfo;
-                        var orig_strides = ViewInfo.OriginalShape.strides;
-                        for (int i = 0; i < indicies.Length; i++)
-                        {
-                            if (vi.Slices.Length <= i)
-                            {
-                                offset += orig_strides[i] * indicies[i];
-                                continue;
-                            }
-
-                            var slice = vi.Slices[i];
-                            var start = slice.Start;
-
-                            offset += orig_strides[i] * (start + indicies[i] * slice.Step);
-                        }
-                    }
-                    else
-                    {
-                        for (int i = 0; i < indicies.Length; i++)
-                            offset += strides[i] * indicies[i];
-                    }
-                }
-            }
+            int offset = GetOffset(indicies);
 
             var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
