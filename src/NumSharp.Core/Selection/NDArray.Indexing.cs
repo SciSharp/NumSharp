@@ -26,7 +26,7 @@ namespace NumSharp
         public NDArray this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => GetData(indices);
+            get => new NDArray(Storage.GetData(indices));
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => Storage.SetData(value, indices);
         }
@@ -214,24 +214,6 @@ namespace NumSharp
 
         //    }
         //}
-
-        /// <summary>
-        /// Get n-th dimension data
-        /// </summary>
-        /// <param name="indices">indexes</param>
-        /// <returns>NDArray</returns>
-        private NDArray GetData(params int[] indices)
-        {
-            var this_shape = Storage.Shape;
-            if (this_shape.IsSliced)
-            {
-                // in this case we can not get a slice of contiguous memory, so we slice
-                return new NDArray(Storage.GetView(indices.Select(Slice.Index).ToArray()));
-            }
-
-            var (shape, offset) = Storage.Shape.GetSubshape(indices);
-            return new NDArray(new UnmanagedStorage(Storage.InternalArray.Slice(offset, shape.Size), shape));
-        }
 
         [MethodImpl((MethodImplOptions)512)]
         private NDArray _index_elemntwise(NDArray indices)
