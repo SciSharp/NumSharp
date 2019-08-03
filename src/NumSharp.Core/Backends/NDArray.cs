@@ -55,7 +55,7 @@ namespace NumSharp
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        internal NDArray(UnmanagedStorage storage)
+        protected internal NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
             tensorEngine = storage.Engine;
@@ -66,7 +66,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
         /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
-        internal NDArray(UnmanagedStorage storage, Shape shape)
+        protected internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine;
@@ -77,7 +77,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
         /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
-        internal NDArray(UnmanagedStorage storage, ref Shape shape)
+        protected internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
             Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine;
@@ -90,7 +90,7 @@ namespace NumSharp
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(Type dtype, TensorEngine engine)
+        protected internal NDArray(Type dtype, TensorEngine engine)
         {
             tensorEngine = engine;
             Storage = TensorEngine.GetStorage(dtype);
@@ -103,7 +103,7 @@ namespace NumSharp
         /// <param name="typeCode">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        internal NDArray(NPTypeCode typeCode, TensorEngine engine)
+        protected internal NDArray(NPTypeCode typeCode, TensorEngine engine)
         {
             tensorEngine = engine;
             Storage = TensorEngine.GetStorage(typeCode);
@@ -254,7 +254,7 @@ namespace NumSharp
         /// <summary>
         ///     Gets the address that this NDArray starts from.
         /// </summary>
-        internal unsafe void* Address
+        protected internal unsafe void* Address
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.Address;
@@ -304,7 +304,7 @@ namespace NumSharp
             }
         }
 
-        internal Shape Shape
+        protected internal Shape Shape
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.Shape;
@@ -315,7 +315,7 @@ namespace NumSharp
         /// <summary>
         /// The internal storage that stores data for this <see cref="NDArray"/>.
         /// </summary>
-        internal UnmanagedStorage Storage;
+        protected internal UnmanagedStorage Storage;
 
         /// <summary>
         ///     The tensor engine that handles this <see cref="NDArray"/>.
@@ -341,7 +341,7 @@ namespace NumSharp
         ///     Set: Replace internal storage by calling <see cref="IStorage.ReplaceData(System.Array)"/>
         /// </summary>
         /// <remarks>Setting does not replace internal storage array.</remarks>
-        internal IArraySlice Array
+        protected internal IArraySlice Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.InternalArray;
