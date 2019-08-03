@@ -24,8 +24,8 @@ namespace NumSharp
                 // Using this comparison allows less restrictive semantics,
                 // like comparing a scalar to an array
                 // we can use unmanaged access because the result of == op is never a slice.
-                var results = (this == obj).Array;
-                var len = results.Count;
+                var results = (this == obj);
+                var len = results.size;
                 var addr = results.Address;
 
                 for (int i = 0; i < len; i++)
@@ -44,20 +44,10 @@ namespace NumSharp
             if (left is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            //rhs is a number
-            var rhs_type = right.GetType();
-            if (rhs_type.IsPrimitive || rhs_type == typeof(decimal)) //numerical
-            {
-                if (left.Shape.IsEmpty || left.size == 0)
-                    return Scalar<bool>(false).MakeGeneric<bool>();
+            if (left.Shape.IsEmpty || left.size == 0)
+                return Scalar<bool>(false).MakeGeneric<bool>();
 
-                return left.TensorEngine.Compare(left, Scalar((ValueType)right));
-            }
-
-            if (right is NDArray rarr)
-                return left.TensorEngine.Compare(left, rarr);
-
-            throw new NotSupportedException();
+            return left.TensorEngine.Compare(left, np.asanyarray(right));
         }
 
         /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
@@ -82,8 +72,14 @@ namespace NumSharp
         {
             unsafe
             {
+                if (ReferenceEquals(this, rhs))
+                    return true;
+
+                if (ReferenceEquals(Storage, rhs.Storage))
+                    return true;
+
                 //this is the same memory block
-                if ((IntPtr)this.Address == (IntPtr)rhs.Address && this.size == rhs.size && GetTypeCode == rhs.GetTypeCode)
+                if ((IntPtr)this.Address == (IntPtr)rhs.Address && this.size == rhs.size && this.typecode == rhs.typecode)
                     return true;
 
                 //if shape is different
@@ -93,12 +89,14 @@ namespace NumSharp
                 //compare all values
                 var cmp = (this == rhs);
                 var len = cmp.size;
+                var ptr = cmp.Address; //this never a slice so we can use unmanaged memory.
                 for (int i = 0; i < len; i++)
-                    if (!cmp.GetAtIndex<bool>(i))
+                    if (!*(ptr + i))
                         return false;
 
                 return true;
             }
         }
+
     }
 }
