@@ -256,7 +256,7 @@ namespace NumSharp.UnitTest.Utilities
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
-        public AndConstraint<NDArrayAssertions> HaveValues(NDArray expected)
+        public AndConstraint<NDArrayAssertions> BeOfValues(NDArray expected)
         {
             Execute.Assertion
                 .ForCondition(np.array_equal(Subject, expected))
@@ -267,15 +267,15 @@ namespace NumSharp.UnitTest.Utilities
 
         public AndConstraint<NDArrayAssertions> Be(NDArray expected)
         {
-            return HaveValues(expected);
+            return BeOfValues(expected);
         }
 
-        public AndConstraint<NDArrayAssertions> HaveValues(params object[] values)
+        public AndConstraint<NDArrayAssertions> BeOfValues(params object[] values)
         {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
 
-            Subject.size.Should().Be(values.Length);
+            Subject.size.Should().Be(values.Length, "the method BeOfValuesApproximately also confirms the sizes are matching with given values.");
 
 #if _REGEN
             #region Compute
@@ -310,9 +310,10 @@ namespace NumSharp.UnitTest.Utilities
 #else
 
             #region Compute
-		    switch (Subject.typecode)
-		    {
-			    case NPTypeCode.Boolean: 
+
+            switch (Subject.typecode)
+            {
+                case NPTypeCode.Boolean:
                 {
                     var iter = Subject.AsIterator<bool>();
                     var next = iter.MoveNext;
@@ -322,7 +323,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToBoolean(values[i]);
                         var nextval = next();
 
@@ -330,9 +331,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Boolean).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Byte: 
+
+                case NPTypeCode.Byte:
                 {
                     var iter = Subject.AsIterator<byte>();
                     var next = iter.MoveNext;
@@ -342,7 +345,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToByte(values[i]);
                         var nextval = next();
 
@@ -350,9 +353,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Byte).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Int16: 
+
+                case NPTypeCode.Int16:
                 {
                     var iter = Subject.AsIterator<short>();
                     var next = iter.MoveNext;
@@ -362,7 +367,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToInt16(values[i]);
                         var nextval = next();
 
@@ -370,9 +375,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int16).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.UInt16: 
+
+                case NPTypeCode.UInt16:
                 {
                     var iter = Subject.AsIterator<ushort>();
                     var next = iter.MoveNext;
@@ -382,7 +389,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToUInt16(values[i]);
                         var nextval = next();
 
@@ -390,9 +397,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt16).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Int32: 
+
+                case NPTypeCode.Int32:
                 {
                     var iter = Subject.AsIterator<int>();
                     var next = iter.MoveNext;
@@ -402,7 +411,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToInt32(values[i]);
                         var nextval = next();
 
@@ -410,9 +419,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int32).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.UInt32: 
+
+                case NPTypeCode.UInt32:
                 {
                     var iter = Subject.AsIterator<uint>();
                     var next = iter.MoveNext;
@@ -422,7 +433,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToUInt32(values[i]);
                         var nextval = next();
 
@@ -430,9 +441,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt32).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Int64: 
+
+                case NPTypeCode.Int64:
                 {
                     var iter = Subject.AsIterator<long>();
                     var next = iter.MoveNext;
@@ -442,7 +455,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToInt64(values[i]);
                         var nextval = next();
 
@@ -450,9 +463,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int64).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.UInt64: 
+
+                case NPTypeCode.UInt64:
                 {
                     var iter = Subject.AsIterator<ulong>();
                     var next = iter.MoveNext;
@@ -462,7 +477,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToUInt64(values[i]);
                         var nextval = next();
 
@@ -470,9 +485,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt64).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Char: 
+
+                case NPTypeCode.Char:
                 {
                     var iter = Subject.AsIterator<char>();
                     var next = iter.MoveNext;
@@ -482,7 +499,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToChar(values[i]);
                         var nextval = next();
 
@@ -490,9 +507,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Char).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Double: 
+
+                case NPTypeCode.Double:
                 {
                     var iter = Subject.AsIterator<double>();
                     var next = iter.MoveNext;
@@ -502,7 +521,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToDouble(values[i]);
                         var nextval = next();
 
@@ -510,9 +529,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Double).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Single: 
+
+                case NPTypeCode.Single:
                 {
                     var iter = Subject.AsIterator<float>();
                     var next = iter.MoveNext;
@@ -522,7 +543,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToSingle(values[i]);
                         var nextval = next();
 
@@ -530,9 +551,11 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Single).", expected, nextval, i);
                     }
+
                     break;
                 }
-			    case NPTypeCode.Decimal: 
+
+                case NPTypeCode.Decimal:
                 {
                     var iter = Subject.AsIterator<decimal>();
                     var next = iter.MoveNext;
@@ -542,7 +565,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(hasnext())
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
-                        
+
                         var expected = Convert.ToDecimal(values[i]);
                         var nextval = next();
 
@@ -550,12 +573,335 @@ namespace NumSharp.UnitTest.Utilities
                             .ForCondition(expected == nextval)
                             .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Decimal).", expected, nextval, i);
                     }
+
                     break;
                 }
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            #endregion
+
+#endif
+
+
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> BeOfValuesApproximately(double sensitivity, params object[] values)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            Subject.size.Should().Be(values.Length, "the method BeOfValuesApproximately also confirms the sizes are matching with given values.");
+
+#if _REGEN
+            #region Compute
+		    switch (Subject.typecode)
+		    {
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
+			    case NPTypeCode.#1: 
+                {
+                    var iter = Subject.AsIterator<#2>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+                        
+                        var expected = Convert.To#1(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: #1).", expected, nextval, i);
+                    }
+                    break;
+                }
+			    %
 			    default:
 				    throw new NotSupportedException();
 		    }
             #endregion
+#else
+
+            #region Compute
+
+            switch (Subject.typecode)
+            {
+                case NPTypeCode.Boolean:
+                {
+                    var iter = Subject.AsIterator<bool>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToBoolean(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(expected == nextval)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Boolean).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Byte:
+                {
+                    var iter = Subject.AsIterator<byte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToByte(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Byte).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Int16:
+                {
+                    var iter = Subject.AsIterator<short>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToInt16(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int16).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.UInt16:
+                {
+                    var iter = Subject.AsIterator<ushort>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToUInt16(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt16).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Int32:
+                {
+                    var iter = Subject.AsIterator<int>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToInt32(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int32).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.UInt32:
+                {
+                    var iter = Subject.AsIterator<uint>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToUInt32(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt32).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Int64:
+                {
+                    var iter = Subject.AsIterator<long>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToInt64(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int64).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.UInt64:
+                {
+                    var iter = Subject.AsIterator<ulong>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToUInt64(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs((double)(expected - nextval)) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: UInt64).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Char:
+                {
+                    var iter = Subject.AsIterator<char>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToChar(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Char).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Double:
+                {
+                    var iter = Subject.AsIterator<double>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToDouble(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Double).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Single:
+                {
+                    var iter = Subject.AsIterator<float>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToSingle(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Single).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                case NPTypeCode.Decimal:
+                {
+                    var iter = Subject.AsIterator<decimal>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToDecimal(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= (decimal)sensitivity)
+                            .FailWith("Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Decimal).", expected, nextval, i);
+                    }
+
+                    break;
+                }
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            #endregion
+
 #endif
 
 

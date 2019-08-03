@@ -19,7 +19,7 @@ namespace NumSharp
             => (int) nd.roll(shift, axis);
 
         public static NDArray transpose(NDArray x, int[] axes = null)
-            => BackendFactory.GetEngine().Transpose(x, axes: axes);
+            => x.TensorEngine.Transpose(x, axes: axes);
 
         /// <summary>
         /// Find the unique elements of an array.

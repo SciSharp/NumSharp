@@ -35,20 +35,38 @@ namespace NumSharp
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Log(in NDArray nd, Type dtype = null);
-        public abstract NDArray Log(in NDArray nd, NPTypeCode typeCode);
-        public abstract NDArray Exp(in NDArray nd, Type dtype = null);
-        public abstract NDArray Exp(in NDArray nd, NPTypeCode typeCode);
         public abstract NDArray MatMul(NDArray x, NDArray y);
         public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
-        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type = null);
-        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode typeCode);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type);
+        public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
+
+        public abstract NDArray Abs(in NDArray nd, Type dtype);
+        public abstract NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sqrt(in NDArray nd, Type dtype);
+        public abstract NDArray Sqrt(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log(in NDArray nd, Type dtype);
+        public abstract NDArray Log(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Exp(in NDArray nd, Type dtype);
+        public abstract NDArray Exp(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Tan(in NDArray nd, Type dtype);
+        public abstract NDArray Tan(in NDArray nd, NPTypeCode? typeCod = null);
+        public abstract NDArray Sin(in NDArray nd, Type dtype);
+        public abstract NDArray Sin(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cos(in NDArray nd, Type dtype);
+        public abstract NDArray Cos(in NDArray nd, NPTypeCode? typeCode = null);
+
+        public abstract NDArray Tanh(in NDArray nd, Type dtype);
+        public abstract NDArray Tanh(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cosh(in NDArray nd, Type dtype);
+        public abstract NDArray Cosh(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sinh(in NDArray nd, Type dtype);
+        public abstract NDArray Sinh(in NDArray nd, NPTypeCode? typeCode = null);
 
         #endregion
 
