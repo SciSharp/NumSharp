@@ -432,20 +432,53 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void ExpandDim0_Slice()
         {
+            //>>> a = np.arange(27).reshape(3, 3, 3)[0, :]
+            //>>> a
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> a.shape
+            //(3L, 3L)
+            //>>> b=a.reshape(3,1,3)
+            //>>> b
+            //array([[[0, 1, 2]],
+            //
+            //       [[3, 4, 5]],
+            //
+            //       [[6, 7, 8]]])
+            //>>> b.shape
+            //(3L, 1L, 3L)
+            //>>> b[2, 0, 2]
+            //8
             Shape shape = (3, 3, 3);
             shape = shape.Slice("0,:");
             shape = shape.ExpandDimension(1);
             Console.WriteLine(shape);
-            shape.GetOffset(2, 0, 2).Should().Be(9);
+            shape.GetOffset(2, 0, 2).Should().Be(8);
+            shape.Should().Be(new Shape(3, 1, 3));
         }
 
         [TestMethod]
         public void ExpandDim1_Slice()
         {
+            //>>> a = np.arange(3 * 2 * 3).reshape(3, 2, 3)[1, :]
+            //>>> a
+            //array([[6, 7, 8],
+            //       [ 9, 10, 11]])
+            //>>> a.shape
+            //(2L, 3L)
+            //>>> b=a.reshape(2,1,3)
+            //>>> b
+            //array([[[ 6,  7,  8]],
+
+            //       [[ 9, 10, 11]]])
+            //>>> b[0, 0, 2]
+            //8
             Shape shape = (3, 2, 3);
             shape = shape.Slice("1,:");
             shape = shape.ExpandDimension(1);
-            shape.GetOffset(0, 0, 0, 2).Should().Be(9 + 2);
+            shape.GetOffset(0, 0, 2).Should().Be(8);
+            shape.Should().Be(new Shape(2, 1, 3));
         }
     }
 }

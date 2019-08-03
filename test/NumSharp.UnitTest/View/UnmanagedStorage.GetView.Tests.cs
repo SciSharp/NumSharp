@@ -424,21 +424,6 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
         }
 
-        [Ignore("This is not implemented yet")]
-        [TestMethod]
-        public void ReshapeSlicedArray()
-        {
-            var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
-            var view = t.GetView(":, 5:");
-            Assert.AreEqual(new Shape(2, 5), view.Shape);
-            AssertAreEqual(new int[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<int>());
-            view.Reshape(10);
-            Assert.AreEqual(new Shape(10), view.Shape);
-            AssertAreEqual(new int[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<int>());
-        }
-
-
-
         //[TestMethod]
         //public void ToStringTest()
         //{

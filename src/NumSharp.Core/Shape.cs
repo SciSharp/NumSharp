@@ -18,10 +18,19 @@ namespace NumSharp
     {
         internal ViewInfo ViewInfo;
 
+        /// <summary>
+        /// True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
+        /// </summary>
         public bool IsSliced
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => ViewInfo != null;
+        }
+
+        public bool IsRecursive
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => ViewInfo != null && ViewInfo.ParentShape.IsEmpty == false;
         }
 
         /// <summary>
@@ -38,7 +47,13 @@ namespace NumSharp
         internal int[] strides;
 
         public bool IsScalar;
+
+        /// <summary>
+        /// True if the shape is not initialized.
+        /// Note: A scalar shape is not empty.
+        /// </summary>
         public bool IsEmpty => _hashCode == 0;
+
         public char Order => layout;
 
         /// <summary>
@@ -268,58 +283,78 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public int GetOffset(params int[] indices)
         {
+            if (!IsSliced)
+                return GetOffset_IgnoreViewInfo(indices);
+
+            // we are dealing with a slice
             int offset;
-            if (IsSliced)
+            var vi = ViewInfo;
+            if (IsRecursive && vi.Slices == null)
             {
-                var coords = new List<int>(indices);
-                var vi = ViewInfo;
-                if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0)
-                    return 0;
-                if (indices.Length > vi.UnreducedShape.dimensions.Length)
-                    throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
-                var orig_ndim = vi.OriginalShape.NDim;
-                if (orig_ndim > NDim && orig_ndim > indices.Length)
-                {
-                    // fill in reduced dimensions in the provided coordinates 
-                    for (int i = 0; i < vi.OriginalShape.NDim; i++)
-                    {
-                        var slice = ViewInfo.Slices[i];
-                        if (slice.IsIndex)
-                            coords.Insert(i, 0);
-                        if (coords.Count == orig_ndim)
-                            break;
-                    }
-                }
-
-                var orig_strides = vi.OriginalShape.strides;
-                offset = 0;
-                unchecked
-                {
-                    for (int i = 0; i < coords.Count; i++)
-                    {
-                        if (vi.Slices.Length <= i)
-                        {
-                            offset += orig_strides[i] * coords[i];
-                            continue;
-                        }
-
-                        var slice = vi.Slices[i];
-                        var start = slice.Start;
-                        if (slice.IsIndex)
-                            offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
-                        else
-                            offset += orig_strides[i] * (start + coords[i] * slice.Step);
-                    }
-                }
-
-                return offset;
+                // we are dealing with an unsliced recursively reshaped slice
+                offset = GetOffset_IgnoreViewInfo(indices);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                return vi.ParentShape.GetOffset(parent_coords);
             }
 
-            // no slicing
+            var coords = new List<int>(indices);
+            if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0 && !IsRecursive)
+                return 0;
+            if (indices.Length > vi.UnreducedShape.dimensions.Length)
+                throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
+            var orig_ndim = vi.OriginalShape.NDim;
+            if (orig_ndim > NDim && orig_ndim > indices.Length)
+            {
+                // fill in reduced dimensions in the provided coordinates 
+                for (int i = 0; i < vi.OriginalShape.NDim; i++)
+                {
+                    var slice = ViewInfo.Slices[i];
+                    if (slice.IsIndex)
+                        coords.Insert(i, 0);
+                    if (coords.Count == orig_ndim)
+                        break;
+                }
+            }
+
+            var orig_strides = vi.OriginalShape.strides;
+            offset = 0;
+            unchecked
+            {
+                for (int i = 0; i < coords.Count; i++)
+                {
+                    if (vi.Slices.Length <= i)
+                    {
+                        offset += orig_strides[i] * coords[i];
+                        continue;
+                    }
+
+                    var slice = vi.Slices[i];
+                    var start = slice.Start;
+                    if (slice.IsIndex)
+                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
+                    else
+                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
+                }
+            }
+
+            if (!IsRecursive)
+                return offset;
+            // we are dealing with a sliced recursively reshaped slice
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            return vi.ParentShape.GetOffset(parent_coords1);
+        }
+
+        /// <summary>
+        /// Calculate the offset in an unsliced shape. If the shape is sliced, ignore the ViewInfo
+        /// Note: to be used only inside of GetOffset()
+        /// </summary>
+        [MethodImpl((MethodImplOptions)768)]
+        private int GetOffset_IgnoreViewInfo(params int[] indices)
+        {
             if (dimensions.Length == 0 && indices.Length == 1)
                 return indices[0];
 
-            offset = 0;
+            int offset = 0;
             unchecked
             {
                 for (int i = 0; i < indices.Length; i++)
@@ -328,6 +363,7 @@ namespace NumSharp
 
             return offset;
         }
+
 
         /// <summary>
         ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
@@ -342,38 +378,7 @@ namespace NumSharp
                 return (this, 0);
 
             //compute offset
-            int offset = 0;
-            if (dimensions.Length == 0 && indicies.Length == 1)
-                offset = indicies[0];
-            else
-            {
-                unchecked
-                {
-                    if (IsSliced)
-                    {
-                        var vi = ViewInfo;
-                        var orig_strides = ViewInfo.OriginalShape.strides;
-                        for (int i = 0; i < indicies.Length; i++)
-                        {
-                            if (vi.Slices.Length <= i)
-                            {
-                                offset += orig_strides[i] * indicies[i];
-                                continue;
-                            }
-
-                            var slice = vi.Slices[i];
-                            var start = slice.Start;
-
-                            offset += orig_strides[i] * (start + indicies[i] * slice.Step);
-                        }
-                    }
-                    else
-                    {
-                        for (int i = 0; i < indicies.Length; i++)
-                            offset += strides[i] * indicies[i];
-                    }
-                }
-            }
+            int offset = GetOffset(indicies);
 
             var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
@@ -399,7 +404,7 @@ namespace NumSharp
         /// <param name="offset"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int[] GetCoordinates(int offset)
+        public int[] GetCoordinates(int offset, bool ignore_view_info = false)
         {
             int[] coords = null;
             if (strides.Length == 1)
@@ -425,7 +430,7 @@ namespace NumSharp
                 }
             }
 
-            if (IsSliced)
+            if (IsSliced && !ignore_view_info)
             {
                 // TODO! undo dimensionality reduction
                 for (int i = 0; i < coords.Length; i++)
@@ -566,7 +571,7 @@ namespace NumSharp
                 sliced_axes_unreduced.Add(count);
             }
 
-            if (IsSliced)
+            if (IsSliced && ViewInfo.Slices != null)
             {
                 // merge new slices with existing ones and insert the indices of the parent shape that were previously reduced
                 for (int i = 0; i < ViewInfo.OriginalShape.NDim; i++)
@@ -585,8 +590,11 @@ namespace NumSharp
             }
 
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
-            var origin = this.IsSliced ? this.ViewInfo.OriginalShape : this;
+            var origin = (this.IsSliced && ViewInfo.Slices != null) ? this.ViewInfo.OriginalShape : this;
             var viewInfo = new ViewInfo() {OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),};
+
+            if (IsRecursive)
+                viewInfo.ParentShape = ViewInfo.ParentShape;
 
             if (sliced_axes.Length == 0) //is it a scalar
                 return NewScalar(viewInfo);
@@ -757,10 +765,6 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
         internal Shape ExpandDimension(int axis)
         {
-            //TODO! support slices when slice reshape is done.
-            if (IsSliced)
-                throw new NotSupportedException("Unable to expand dimensions of a sliced shape.");
-
             Shape ret;
             if (IsScalar)
             {
@@ -783,14 +787,42 @@ namespace NumSharp
                     throw new ArgumentException($"Effective axis {axis} is less than 0");
                 }
             }
+
             Arrays.Insert(ref dimensions, axis, 1);
             Arrays.Insert(ref strides, axis, 0);
             ret.dimensions = dimensions;
             ret.strides = strides;
+            if (IsSliced)
+            {
+                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
+            }
 
             ret.ComputeHashcode();
             return ret;
         }
+
+        /// <summary>
+        ///     Translates coordinates with negative indices, e.g:<br></br>
+        ///     np.arange(9)[-1] == np.arange(9)[8]<br></br>
+        ///     np.arange(9)[-2] == np.arange(9)[7]<br></br>
+        /// </summary>
+        /// <param name="dimensions">The dimensions these coordinates are targeting</param>
+        /// <param name="coords">The coordinates.</param>
+        /// <returns>Coordinates without negative indices.</returns>
+        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
+
+        public static int[] InferNegativeCoordinates(int[] dimensions, int[] coords)
+        {
+            for (int i = 0; i < coords.Length; i++)
+            {
+                var curr = coords[i];
+                if (curr < 0)
+                    coords[i] = dimensions[i] + curr;
+            }
+
+            return coords;
+        }
+
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 
@@ -806,7 +838,7 @@ namespace NumSharp
         {
             if (IsScalar)
             {
-                if (unview || ViewInfo==null)
+                if (unview || ViewInfo == null)
                     return Scalar;
 
                 return NewScalar(ViewInfo.Clone());
@@ -832,7 +864,7 @@ namespace NumSharp
             if (IsScalar)
                 return NewScalar();
 
-            return new Shape((int[]) this.dimensions.Clone());
+            return new Shape((int[])this.dimensions.Clone());
         }
     }
 }
