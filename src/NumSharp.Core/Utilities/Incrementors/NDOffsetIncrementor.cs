@@ -5,21 +5,17 @@ namespace NumSharp.Utilities
     public class NDOffsetIncrementor
     {
         private readonly NDCoordinatesIncrementor incr;
-        private readonly int[] strides;
         private readonly int[] index;
         private bool hasNext;
 
-        public NDOffsetIncrementor(ref Shape shape) : this(shape.dimensions, shape.strides) { }
-
-        public NDOffsetIncrementor(Shape shape) : this(shape.dimensions, shape.strides) { }
-
-        public NDOffsetIncrementor(int[] dims, int[] strides)
+        public NDOffsetIncrementor(Shape shape)
         {
-            this.strides = strides;
-            incr = new NDCoordinatesIncrementor(dims);
+            incr = new NDCoordinatesIncrementor(shape.dimensions);
             index = incr.Index;
             hasNext = true;
         }
+
+        public NDOffsetIncrementor(int[] dims) : this(new Shape(dims)) {}
 
         public bool HasNext => hasNext;
 
@@ -39,7 +35,7 @@ namespace NumSharp.Utilities
             unchecked
             {
                 for (int i = 0; i < index.Length; i++)
-                    offset += strides[i] * index[i];
+                    ;//offset += strides[i] * index[i];
             }
 
             if (incr.Next() == null)
@@ -54,19 +50,16 @@ namespace NumSharp.Utilities
     public class NDOffsetIncrementorAutoresetting
     {
         private readonly NDCoordinatesIncrementor incr;
-        private readonly int[] strides;
         private readonly int[] index;
 
-        public NDOffsetIncrementorAutoresetting(ref Shape shape) : this(shape.dimensions, shape.strides) { }
-
-        public NDOffsetIncrementorAutoresetting(Shape shape) : this(shape.dimensions, shape.strides) { }
-
-        public NDOffsetIncrementorAutoresetting(int[] dims, int[] strides)
+        public NDOffsetIncrementorAutoresetting(Shape shape)
         {
-            this.strides = strides;
-            incr = new NDCoordinatesIncrementor(dims, incrementor => incrementor.Reset());
+            incr = new NDCoordinatesIncrementor(shape.dimensions, incrementor => incrementor.Reset());
             index = incr.Index;
         }
+
+        public NDOffsetIncrementorAutoresetting(int[] dims) : this(new Shape(dims)) { }
+
 
         public bool HasNext => true;
 
@@ -82,7 +75,7 @@ namespace NumSharp.Utilities
             unchecked
             {
                 for (int i = 0; i < index.Length; i++)
-                    offset += strides[i] * index[i];
+                    ;//offset += strides[i] * index[i];
             }
 
             incr.Next();
