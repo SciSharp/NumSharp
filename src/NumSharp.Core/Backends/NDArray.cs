@@ -490,7 +490,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (int i = 0; i < ret.Length; i++)
             {
-                ret[i] = this.GetData(index); //equivalent to this[index]
+                ret[i] = this[index];
                 iter.Next();
             }
 
