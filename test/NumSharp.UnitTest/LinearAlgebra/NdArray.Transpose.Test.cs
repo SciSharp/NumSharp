@@ -57,5 +57,11 @@ namespace NumSharp.UnitTest.LinearAlgebra
                 }
             }).Should().NotThrow("It has to run completely.");
         }
+
+        [TestMethod, Ignore("No actual asserts inside")] //todo!
+        public void Transpose4x6Sliced()
+        {
+            // Make sure this works with sliced arrays
+        }
     }
 }
