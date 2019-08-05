@@ -652,20 +652,38 @@ namespace NumSharp
             {
                 int counter = offset;
                 coords = new int[strides.Length];
+                int stride;
                 for (int i = 0; i < strides.Length; i++)
                 {
-                    coords[i] = counter / strides[i];
-                    counter -= coords[i] * strides[i];
+                    stride = strides[i];
+                    if (stride == 0)
+                    {
+                        coords[i] = 0;
+                    }
+                    else
+                    {
+                        coords[i] = counter / stride;
+                        counter -= coords[i] * stride;
+                    }
                 }
             }
             else
             {
                 int counter = offset;
                 coords = new int[strides.Length];
+                int stride;
                 for (int i = strides.Length - 1; i >= 0; i--)
                 {
-                    coords[i] = counter / strides[i];
-                    counter -= coords[i] * strides[i];
+                    stride = strides[i];
+                    if (stride == 0)
+                    {
+                        coords[i] = 0;
+                    }
+                    else
+                    {
+                        coords[i] = counter / stride;
+                        counter -= coords[i] * stride;
+                    }
                 }
             }
 

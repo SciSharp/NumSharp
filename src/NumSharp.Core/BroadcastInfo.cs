@@ -22,7 +22,7 @@ namespace NumSharp
 
         public BroadcastInfo Clone()
         {
-            return new BroadcastInfo() {OriginalShape = OriginalShape.Clone(true, false)};
+            return new BroadcastInfo() {OriginalShape = OriginalShape.Clone(true, false, false)};
         }
 
         object ICloneable.Clone() => Clone();
