@@ -1900,16 +1900,42 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         public void Reshape(params int[] dimensions)
         {
-            Reshape(new Shape(dimensions), false);
-        }      
-        
+            Reshape(dimensions, false);
+        }
+
         /// <summary>
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         public void Reshape(int[] dimensions, bool @unsafe)
         {
-            Reshape(new Shape(dimensions), @unsafe);
+            if (dimensions == null)
+                throw new ArgumentNullException(nameof(dimensions));
+
+            Shape newShape = new Shape(dimensions);
+
+            if (!@unsafe)
+            {
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            }
+
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
+
+            if (_shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
+
+            if (_shape.IsBroadcasted)
+                newShape.BroadcastInfo = Shape.BroadcastInfo.Clone();
+
+            //todo! should we check here if its a broadcast?
+
+            SetShapeUnsafe(ref newShape);
         }
 
         /// <summary>
@@ -1929,11 +1955,15 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         public void Reshape(ref Shape newShape, bool @unsafe = false)
         {
-            if (newShape.size == 0 && _shape.size != 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
 
-            if (_shape.size != newShape.size)
-                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            if (!@unsafe)
+            {
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            }
 
             //handle -1 in reshape
             InferMissingDimension(ref newShape);
