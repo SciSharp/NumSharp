@@ -210,6 +210,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public ArraySlice<T> Slice(int start, int length) => new ArraySlice<T>(MemoryBlock, AsSpan.Slice(start, length));
 
+
         /// <param name="destination"></param>
         [MethodImpl((MethodImplOptions)768)]
         public void CopyTo(Span<T> destination) => AsSpan.CopyTo(destination);

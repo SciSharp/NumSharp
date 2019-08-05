@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 {
 
     [TestClass]
-    public class NdArrayDotTest
+    public class np_dot_test
     {
         [TestMethod]
         public void Dot0X0()

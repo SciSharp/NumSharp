@@ -1,57 +1,60 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
-        public override NDArray Matmul(in NDArray lhs, in NDArray rhs)
+        public override NDArray Matmul(NDArray lhs, NDArray rhs)
         {
-            var leftshape = lhs.Shape;
-            var rightshape = rhs.Shape;
-            if (leftshape.IsScalar || rightshape.IsScalar)
+            if (lhs.Shape.IsScalar || rhs.Shape.IsScalar)
                 throw new InvalidOperationException("Matmul can't handle scalar multiplication, use `*` or `np.dot(..)` instead");
 
-            var ndimLeft = leftshape.NDim;
-            var ndimright = rightshape.NDim;
+            //If the first argument is 1-D, it is promoted to a matrix by prepending a 1 to its dimensions. After matrix multiplication the prepended 1 is removed.
+            if (lhs.ndim == 1 && rhs.ndim == 2)
+                throw new NotSupportedException("Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?)");
+
+            if (rhs.ndim == 1)
+                rhs = np.expand_dims(rhs, 0);
+
+            //var broadcast = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+            //var ndimLeft = broadcast.LeftShape.NDim;
+            //var ndimright = broadcast.RightShape.NDim;
+            //var left = new NDArray(lhs.Storage, broadcast.LeftShape);
+            //var right = new NDArray(rhs.Storage, broadcast.RightShape);
 
             //If both arguments are 2-D they are multiplied like conventional matrices.
-            if (ndimLeft == 2 && ndimright == 2)
-            {
-                return MultiplyMatrix(lhs, rhs);
-            }
+            //Can't happen: If the second argument is 1-D, it is promoted to a matrix by appending a 1 to its dimensions. After matrix multiplication the appended 1 is removed.
 
             //todo If either argument is N-D, N > 2, it is treated as a stack of matrices residing in the last two indexes and broadcast accordingly.
+            if (lhs.ndim == 2 || rhs.ndim == 2)
+                return MultiplyMatrix(lhs, rhs);
 
-            //If the second argument is 1-D, it is promoted to a matrix by appending a 1 to its dimensions. After matrix multiplication the appended 1 is removed.
-            if ((ndimLeft == 2 && ndimright == 1))
+            //TODO READ ME! we have  aproblem with broadcasting AND reducing left shape of the matrix.
+            NDArray l = lhs;
+            NDArray r = rhs;
+            (l, r) = np.broadcast_arrays(l, r);
+            var retShape = l.Shape.Clean();
+            Console.WriteLine(retShape);
+            Debug.Assert(l.shape[0] == r.shape[0]);
+            var len = l.shape[0]; //Math.Max(l.shape[0], r.shape[0]);
+            var ret = new NDArray(np._FindCommonArrayType(l.typecode, r.typecode), retShape);
+            var iterShape = new Shape(retShape.dimensions.Take(retShape.dimensions.Length-2).ToArray());
+            var incr = new NDCoordinatesIncrementor(ref iterShape);
+            var index = incr.Index;
+
+            //Parallel.For(0, len, i => MultiplyMatrix(l[i], r[i], ret[i]));
+            for (int i = 0; i < len; i++, incr.Next())
             {
-                rhs.Shape = ExpandEndDim(rightshape);
-                NDArray ret = null;
-                try
-                {
-                    ret = MultiplyMatrix(lhs, rhs);
-                    return ret;
-                }
-                finally
-                {
-                    rhs.Shape = rightshape;
-                    // ReSharper disable once PossibleNullReferenceException
-                    ret.Shape = rightshape;
-                }
+                MultiplyMatrix(l[index], r[index], ret[index]);
             }
 
-            //If the first argument is 1-D, it is promoted to a matrix by prepending a 1 to its dimensions. After matrix multiplication the prepended 1 is removed.
-            if (ndimLeft == 1 && ndimright == 2)
-            {
-                throw new NotSupportedException("Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?)");
-            }
-
-
-            return null;
+            return ret;
         }
     }
 }

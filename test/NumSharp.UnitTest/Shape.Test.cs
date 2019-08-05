@@ -7,6 +7,7 @@ using System.Linq;
 using FluentAssertions;
 using NumSharp;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
@@ -32,22 +33,22 @@ namespace NumSharp.UnitTest
 
             int index = shape0.GetOffset(1, 2, 1);
 
-            Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetCoordinates(index), new int[] {1, 2, 1}));
+            Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new int[] {1, 2, 1}));
 
             var rnd = new Randomizer();
             var randomIndex = new int[] {rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1)};
 
             int index1 = shape0.GetOffset(randomIndex);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape0.GetCoordinates(index1), randomIndex));
+            Assert.IsTrue(shape0.GetCoordinates(index1).SequenceEqual(randomIndex));
 
             var shape1 = new Shape(2, 3, 4);
 
             index = shape1.GetOffset(1, 2, 1);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.GetCoordinates(index), new int[] {1, 2, 1}));
+            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(new int[] {1, 2, 1}));
 
             randomIndex = new int[] {rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3)};
             index = shape1.GetOffset(randomIndex);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.GetCoordinates(index), randomIndex));
+            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(randomIndex));
 
             randomIndex = new int[] {rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10)};
 
@@ -56,29 +57,29 @@ namespace NumSharp.UnitTest
             randomIndex = new int[] {rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2])};
 
             index = shape2.GetOffset(randomIndex);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.GetCoordinates(index), randomIndex));
+            Assert.IsTrue(shape2.GetCoordinates(index).SequenceEqual(randomIndex));
         }
 
-        [TestMethod]
+        [TestMethod, Ignore]
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] {1}));
+            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] {1}));
 
             shape1.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape1.Strides, new int[] {1}));
+            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] {1}));
 
             var shape2 = new Shape(4, 3);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] {1, 4}));
+            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] {1, 4}));
 
             shape2.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape2.Strides, new int[] {3, 1}));
+            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] {3, 1}));
 
             var shape3 = new Shape(2, 3, 4);
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] {1, 2, 6}));
+            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] {1, 2, 6}));
 
             shape3.ChangeTensorLayout();
-            Assert.IsTrue(Enumerable.SequenceEqual(shape3.Strides, new int[] {12, 4, 1}));
+            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] {12, 4, 1}));
         }
 
         /// <summary>
@@ -480,5 +481,14 @@ namespace NumSharp.UnitTest
             shape.GetOffset(0, 0, 2).Should().Be(8);
             shape.Should().Be(new Shape(2, 1, 3));
         }
+
+        //[TestMethod]
+        //public void Strides_Case1()
+        //{
+        //    var a = np.arange(3 * 2 * 2).reshape((3, 2, 2));
+
+        //    Console.WriteLine(a.strides.ToString(false));
+        //    a.Shape.Strides.Should().BeEquivalentTo(new int[] {16, 8, 4});
+        //}
     }
 }

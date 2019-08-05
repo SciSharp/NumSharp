@@ -88,9 +88,8 @@ namespace NumSharp
                     collapsed[individualIndex] = getOffset(collapsedIndex);
                 } while (iter.Next() != null);
 
-                return _extract_indices(new NDArray[]{ collapsed }, true);
+                return _extract_indices(new NDArray[] {collapsed}, true);
             }
-
 
 
             //case 2 return is not scalar collection but axis iteration
@@ -123,7 +122,6 @@ namespace NumSharp
 
                 return ret;
             }
-
         }
 
         public NDArray this[string slice]

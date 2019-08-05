@@ -27,18 +27,16 @@ namespace NumSharp
 
         #region Reduction
 
-        public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
-        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, NPTypeCode? typeCode = null);
-        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceAdd(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceCumAdd(in NDArray arr, int? axis_, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceMean(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion
 
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Dot(in NDArray x, in NDArray y);
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Log(in NDArray nd, Type dtype = null);
-        public abstract NDArray Log(in NDArray nd, NPTypeCode typeCode);
-        public abstract NDArray Matmul(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
         public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Multiply(NDArray lhs, NDArray rhs);

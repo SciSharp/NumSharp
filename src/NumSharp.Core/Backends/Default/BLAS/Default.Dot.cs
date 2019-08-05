@@ -12,18 +12,19 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
-
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [MethodImpl((MethodImplOptions)768)]
-        internal static NDArray MultiplyMatrix(NDArray left, NDArray right)
+        internal static NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
         {
             Debug.Assert(left.Shape.NDim == 2);
             Debug.Assert(right.Shape.NDim == 2);
+            Debug.Assert(@out is null || @out.shape[0] == left.Shape[0] && right.Shape[1] == 2);
             var shape = left.Shape;
             var rows = shape[0];
             var columns = shape[1];
             var othercolumns = right.Shape[1];
-            NDArray result = new NDArray(np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode), Shape.Matrix(rows, othercolumns));
+
+            NDArray result = @out ?? new NDArray(np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode), Shape.Matrix(rows, othercolumns));
             switch (result.GetTypeCode)
             {
                 //todo! we can speed this up by somehow having a mapped int[,] of [int row, int column] that'll give us the offset so we dont have to go through all the complex math internally at GetScalar.
@@ -44,133 +45,176 @@ namespace NumSharp.Backends
                 %
 #else
 
-                case NPTypeCode.Byte: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+                case NPTypeCode.Byte:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             byte sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (byte)((byte) (ValueType) left.GetValue(row, index) * (byte) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (byte)((byte)(ValueType)left.GetValue(row, index) * (byte)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Int16: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Int16:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             short sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (short)((short) (ValueType) left.GetValue(row, index) * (short) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (short)((short)(ValueType)left.GetValue(row, index) * (short)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.UInt16: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.UInt16:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             ushort sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (ushort)((ushort) (ValueType) left.GetValue(row, index) * (ushort) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (ushort)((ushort)(ValueType)left.GetValue(row, index) * (ushort)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Int32: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Int32:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             int sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (int)((int) (ValueType) left.GetValue(row, index) * (int) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (int)((int)(ValueType)left.GetValue(row, index) * (int)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.UInt32: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.UInt32:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             uint sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (uint)((uint) (ValueType) left.GetValue(row, index) * (uint) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (uint)((uint)(ValueType)left.GetValue(row, index) * (uint)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Int64: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Int64:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             long sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (long)((long) (ValueType) left.GetValue(row, index) * (long) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (long)((long)(ValueType)left.GetValue(row, index) * (long)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.UInt64: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.UInt64:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             ulong sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (ulong)((ulong) (ValueType) left.GetValue(row, index) * (ulong) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (ulong)((ulong)(ValueType)left.GetValue(row, index) * (ulong)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Char: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Char:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             char sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (char)((char) (ValueType) left.GetValue(row, index) * (char) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (char)((char)(ValueType)left.GetValue(row, index) * (char)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Double: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Double:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             double sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (double)((double) (ValueType) left.GetValue(row, index) * (double) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (double)((double)(ValueType)left.GetValue(row, index) * (double)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Single: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Single:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             float sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (float)((float) (ValueType) left.GetValue(row, index) * (float) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (float)((float)(ValueType)left.GetValue(row, index) * (float)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
                     break;
                 }
-                case NPTypeCode.Decimal: {
-                    for (int row = 0; row < rows; ++row) {
-                        for (int column = 0; column < othercolumns; ++column) {
+
+                case NPTypeCode.Decimal:
+                {
+                    for (int row = 0; row < rows; ++row)
+                    {
+                        for (int column = 0; column < othercolumns; ++column)
+                        {
                             decimal sumProduct = default;
                             for (int index = 0; index < columns; ++index)
-                                sumProduct += (decimal)((decimal) (ValueType) left.GetValue(row, index) * (decimal) (ValueType) right.GetValue(index, column));
-                            result.SetValue((object) sumProduct, row, column);
+                                sumProduct += (decimal)((decimal)(ValueType)left.GetValue(row, index) * (decimal)(ValueType)right.GetValue(index, column));
+                            result.SetValue((object)sumProduct, row, column);
                         }
                     }
 
@@ -243,224 +287,224 @@ namespace NumSharp.Backends
 #else
 
                 case NPTypeCode.Byte:
+                {
+                    var resAddr = (byte*)results.Address;
+                    var leftAddr = (byte*)left.Address;
+                    var rightAddr = (byte*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (byte*)results.Address;
-                        var leftAddr = (byte*)left.Address;
-                        var rightAddr = (byte*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (byte)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (byte)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (byte)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (byte)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int16:
+                {
+                    var resAddr = (short*)results.Address;
+                    var leftAddr = (short*)left.Address;
+                    var rightAddr = (short*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (short*)results.Address;
-                        var leftAddr = (short*)left.Address;
-                        var rightAddr = (short*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (short)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (short)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (short)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (short)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt16:
+                {
+                    var resAddr = (ushort*)results.Address;
+                    var leftAddr = (ushort*)left.Address;
+                    var rightAddr = (ushort*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (ushort*)results.Address;
-                        var leftAddr = (ushort*)left.Address;
-                        var rightAddr = (ushort*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (ushort)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (ushort)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (ushort)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (ushort)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int32:
+                {
+                    var resAddr = (int*)results.Address;
+                    var leftAddr = (int*)left.Address;
+                    var rightAddr = (int*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (int*)results.Address;
-                        var leftAddr = (int*)left.Address;
-                        var rightAddr = (int*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (int)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (int)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (int)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (int)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt32:
+                {
+                    var resAddr = (uint*)results.Address;
+                    var leftAddr = (uint*)left.Address;
+                    var rightAddr = (uint*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (uint*)results.Address;
-                        var leftAddr = (uint*)left.Address;
-                        var rightAddr = (uint*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (uint)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (uint)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (uint)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (uint)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int64:
+                {
+                    var resAddr = (long*)results.Address;
+                    var leftAddr = (long*)left.Address;
+                    var rightAddr = (long*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (long*)results.Address;
-                        var leftAddr = (long*)left.Address;
-                        var rightAddr = (long*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (long)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (long)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (long)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (long)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt64:
+                {
+                    var resAddr = (ulong*)results.Address;
+                    var leftAddr = (ulong*)left.Address;
+                    var rightAddr = (ulong*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (ulong*)results.Address;
-                        var leftAddr = (ulong*)left.Address;
-                        var rightAddr = (ulong*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (ulong)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (ulong)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (ulong)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (ulong)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Char:
+                {
+                    var resAddr = (char*)results.Address;
+                    var leftAddr = (char*)left.Address;
+                    var rightAddr = (char*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (char*)results.Address;
-                        var leftAddr = (char*)left.Address;
-                        var rightAddr = (char*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (char)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (char)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (char)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (char)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Double:
+                {
+                    var resAddr = (double*)results.Address;
+                    var leftAddr = (double*)left.Address;
+                    var rightAddr = (double*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (double*)results.Address;
-                        var leftAddr = (double*)left.Address;
-                        var rightAddr = (double*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (double)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (double)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (double)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (double)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Single:
+                {
+                    var resAddr = (float*)results.Address;
+                    var leftAddr = (float*)left.Address;
+                    var rightAddr = (float*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (float*)results.Address;
-                        var leftAddr = (float*)left.Address;
-                        var rightAddr = (float*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (float)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (float)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (float)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (float)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Decimal:
+                {
+                    var resAddr = (decimal*)results.Address;
+                    var leftAddr = (decimal*)left.Address;
+                    var rightAddr = (decimal*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (decimal*)results.Address;
-                        var leftAddr = (decimal*)left.Address;
-                        var rightAddr = (decimal*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (decimal)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (decimal)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (decimal)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (decimal)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 default:
                     throw new NotSupportedException();
@@ -502,224 +546,224 @@ namespace NumSharp.Backends
 #else
 
                 case NPTypeCode.Byte:
+                {
+                    var resAddr = (byte*)results.Address;
+                    var leftAddr = (byte*)left.Address;
+                    var rightAddr = (byte*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (byte*)results.Address;
-                        var leftAddr = (byte*)left.Address;
-                        var rightAddr = (byte*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (byte)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (byte)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (byte)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (byte)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int16:
+                {
+                    var resAddr = (short*)results.Address;
+                    var leftAddr = (short*)left.Address;
+                    var rightAddr = (short*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (short*)results.Address;
-                        var leftAddr = (short*)left.Address;
-                        var rightAddr = (short*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (short)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (short)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (short)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (short)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt16:
+                {
+                    var resAddr = (ushort*)results.Address;
+                    var leftAddr = (ushort*)left.Address;
+                    var rightAddr = (ushort*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (ushort*)results.Address;
-                        var leftAddr = (ushort*)left.Address;
-                        var rightAddr = (ushort*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (ushort)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (ushort)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (ushort)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (ushort)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int32:
+                {
+                    var resAddr = (int*)results.Address;
+                    var leftAddr = (int*)left.Address;
+                    var rightAddr = (int*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (int*)results.Address;
-                        var leftAddr = (int*)left.Address;
-                        var rightAddr = (int*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (int)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (int)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (int)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (int)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt32:
+                {
+                    var resAddr = (uint*)results.Address;
+                    var leftAddr = (uint*)left.Address;
+                    var rightAddr = (uint*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (uint*)results.Address;
-                        var leftAddr = (uint*)left.Address;
-                        var rightAddr = (uint*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (uint)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (uint)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (uint)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (uint)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Int64:
+                {
+                    var resAddr = (long*)results.Address;
+                    var leftAddr = (long*)left.Address;
+                    var rightAddr = (long*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (long*)results.Address;
-                        var leftAddr = (long*)left.Address;
-                        var rightAddr = (long*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (long)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (long)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (long)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (long)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.UInt64:
+                {
+                    var resAddr = (ulong*)results.Address;
+                    var leftAddr = (ulong*)left.Address;
+                    var rightAddr = (ulong*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (ulong*)results.Address;
-                        var leftAddr = (ulong*)left.Address;
-                        var rightAddr = (ulong*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (ulong)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (ulong)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (ulong)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (ulong)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Char:
+                {
+                    var resAddr = (char*)results.Address;
+                    var leftAddr = (char*)left.Address;
+                    var rightAddr = (char*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (char*)results.Address;
-                        var leftAddr = (char*)left.Address;
-                        var rightAddr = (char*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (char)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (char)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (char)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (char)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Double:
+                {
+                    var resAddr = (double*)results.Address;
+                    var leftAddr = (double*)left.Address;
+                    var rightAddr = (double*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (double*)results.Address;
-                        var leftAddr = (double*)left.Address;
-                        var rightAddr = (double*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (double)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (double)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (double)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (double)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Single:
+                {
+                    var resAddr = (float*)results.Address;
+                    var leftAddr = (float*)left.Address;
+                    var rightAddr = (float*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (float*)results.Address;
-                        var leftAddr = (float*)left.Address;
-                        var rightAddr = (float*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (float)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (float)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (float)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (float)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 case NPTypeCode.Decimal:
+                {
+                    var resAddr = (decimal*)results.Address;
+                    var leftAddr = (decimal*)left.Address;
+                    var rightAddr = (decimal*)right.Address;
+                    if (size > ParallelAbove)
                     {
-                        var resAddr = (decimal*)results.Address;
-                        var leftAddr = (decimal*)left.Address;
-                        var rightAddr = (decimal*)right.Address;
-                        if (size > ParallelAbove)
-                        {
-                            Parallel.For(0, size, i => { *(resAddr + i) = (decimal)(*(leftAddr + i) * *(rightAddr + i)); });
-                        }
-                        else
-                        {
-                            for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
-                            {
-                                *(resAddr) = (decimal)(*(leftAddr) * *(rightAddr));
-                            }
-                        }
-
-                        return results;
+                        Parallel.For(0, size, i => { *(resAddr + i) = (decimal)(*(leftAddr + i) * *(rightAddr + i)); });
                     }
+                    else
+                    {
+                        for (int i = 0; i < size; i++, resAddr++, leftAddr++, rightAddr++)
+                        {
+                            *(resAddr) = (decimal)(*(leftAddr) * *(rightAddr));
+                        }
+                    }
+
+                    return results;
+                }
 
                 default:
                     throw new NotSupportedException();
@@ -751,7 +795,7 @@ namespace NumSharp.Backends
             if (isLeftScalar || isRightScalar)
             {
                 return Multiply(left, right);
-            } 
+            }
 
             //If both a and b are 2-D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.
             if (leftshape.NDim == 2 && rightshape.NDim == 2)

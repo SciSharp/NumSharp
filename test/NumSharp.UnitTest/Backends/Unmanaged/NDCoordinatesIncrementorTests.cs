@@ -129,7 +129,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case1_Extended()
         {
             var shape = new Shape(3, 3, 1, 2);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index[5] = 55;
             sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 55);
             sh.Next().Should().ContainInOrder(0, 0, 0, 1, 0, 55);
@@ -157,7 +157,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case2_Extended()
         {
             var shape = new Shape(1, 1, 1, 3);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 0, 1, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 0, 2, 0, 0);
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case3_Extended()
         {
             var shape = new Shape(3, 1, 1, 1);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(1, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(2, 0, 0, 0, 0, 0);
@@ -181,7 +181,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case4_Extended()
         {
             var shape = new Shape(1, 1, 3, 1);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 1, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 2, 0, 0, 0);
@@ -193,7 +193,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case5_Extended()
         {
             var shape = new Shape(2, 1, 3, 1);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 1, 0, 0, 0);
             sh.Next().Should().ContainInOrder(0, 0, 2, 0, 0, 0);
@@ -208,7 +208,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case6_Extended()
         {
             var shape = new Shape(1);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0);
 
             sh.Next().Should().BeNull();
@@ -218,7 +218,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case7_Extended()
         {
             var shape = new Shape(2);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0);
             sh.Next().Should().ContainInOrder(1);
 
@@ -229,7 +229,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case8_Extended()
         {
             var shape = new Shape(100);
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0);
             sh.Next().Should().ContainInOrder(1, 0, 0);
             sh.Index[2] = 1;
@@ -240,7 +240,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case9_Extended()
         {
             var shape = new Shape(0);
-            new Action(() => new NDExtendedIndexArrayIncrementor(ref shape, 2)).Should().Throw<InvalidOperationException>();
+            new Action(() => new NDExtendedCoordinatesIncrementor(shape, 2)).Should().Throw<InvalidOperationException>();
         }
 
         [TestMethod]
@@ -271,7 +271,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void Case10_Scalar_Extended()
         {
             var shape = Shape.Scalar;
-            var sh = new NDExtendedIndexArrayIncrementor(ref shape, 2);
+            var sh = new NDExtendedCoordinatesIncrementor(shape, 2);
             sh.Index.Should().ContainInOrder(0, 0, 0);
             sh.Next().Should().BeNull();
         }
@@ -279,9 +279,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [TestMethod]
         public void Case11_Scalar_Extended()
         {
-            var sh = new NDExtendedIndexArrayIncrementor(new int[0], 2);
-            sh.Index.Should().ContainInOrder(0, 0, 0);
-            sh.Next().Should().BeNull();
+            new Action(() => new NDExtendedCoordinatesIncrementor(new int[0], 2)).Should().Throw<InvalidOperationException>();
         }
     }
 }

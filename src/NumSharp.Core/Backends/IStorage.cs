@@ -209,12 +209,6 @@ namespace NumSharp
         /// <remarks>Does not copy values and does change shape and dtype.</remarks>
         void ReplaceData(NDArray nd);
 
-        /// <summary>
-        ///     Reshapes current internal storage.
-        /// </summary>
-        /// <param name="dimensions"></param>
-        void Reshape(params int[] dimensions);
-
         #region Get Methods
 
 #if _REGEN

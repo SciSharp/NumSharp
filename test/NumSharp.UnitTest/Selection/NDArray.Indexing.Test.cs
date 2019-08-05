@@ -3,7 +3,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Generic;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using FluentAssertions;
 using NumSharp.UnitTest.Utilities;
@@ -827,7 +829,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case14_Multi_Slice()
         {
-            var a = np.arange(27*2).reshape(2, 3, 3, 3) + 1;
+            var a = np.arange(27 * 2).reshape(2, 3, 3, 3) + 1;
             var x = np.repeat(np.arange(3), 3);
             var ret = a["0,:"][x, x, x];
             ret.Array.Should().ContainInOrder(1, 14, 27);
@@ -891,12 +893,204 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void Slice_TwoMinusOne()
+        {
+            var a = np.arange(1 * 1 * 3).reshape((1, 1, 3)); //0, 1
+            var b = np.arange(1 * 3 * 1).reshape((1, 3, 1)); //0, 1
+            b = b["-1, -1"]; //2, 0
+            a = a["-1, -1"]; //0, 0
+
+            a.Should().BeOfValues(0, 1, 2).And.BeShaped(3);
+            b.Should().BeOfValues(2).And.BeShaped(1);
+        }
+
+        [TestMethod]
         public void IndexNegativeCoordiantes()
         {
-            var p = np.arange(6).reshape(2,3);
+            var p = np.arange(6).reshape(2, 3);
             p[0, -1].Should().BeScalar(2);
             p[-1, 0].Should().BeScalar(3);
             p[-1, 1].Should().BeScalar(4);
+        }
+
+        [TestMethod]
+        public void MinusOne_Case1()
+        {
+            var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))[-1];
+            a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
+        }
+
+        [TestMethod]
+        public void MinusOne_Case2()
+        {
+            var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))["-1"];
+            a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
+        }
+
+        [TestMethod]
+        public void MinusOne_Case3()
+        {
+            var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))[-1][-1];
+            a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
+        }
+
+        [TestMethod]
+        public void MinusOne_Case4()
+        {
+            var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))["-1"]["-1"];
+            a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case1()
+        {
+            var a = np.arange(1 * 1 * 3).reshape((1, 1, 3)); //0, 1
+            var b = np.arange(1 * 3 * 1).reshape((1, 3, 1)); //0, 1
+            var (c, d) = np.broadcast_arrays(a, b);
+            c.Should().BeOfValues(0, 1, 2, 0, 1, 2, 0, 1, 2);
+            d.Should().BeOfValues(0, 0, 0, 1, 1, 1, 2, 2, 2);
+            d = d["-1, -1"]; //2, 0
+            c = c["-1, -1"]; //0, 0
+            c.Should().BeOfValues(0, 1, 2).And.BeShaped(3);
+            d.Should().BeOfValues(2, 2, 2).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case2()
+        {
+            var a = np.arange(1 * 1 * 3).reshape((1, 1, 3));
+            var b = np.arange(1 * 3 * 3).reshape((1, 3, 3));
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeOfValues(0, 1, 2, 0, 1, 2, 0, 1, 2).And.BeShaped(1, 3, 3);
+            b.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8).And.BeShaped(1, 3, 3);
+            b = b["-1, -1"];
+            a = a["-1, -1"];
+            a.Should().BeOfValues(0, 1, 2).And.BeShaped(3);
+            b.Should().BeOfValues(6, 7, 8).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case3()
+        {
+            var a = np.arange(2 * 1 * 3).reshape((2, 1, 3));
+            var b = np.arange(2 * 3 * 3).reshape((2, 3, 3));
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeOfValues(0, 1, 2, 0, 1, 2, 0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(2, 3, 3);
+            b.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(2, 3, 3);
+            a = a["-1"];
+            b = b["-1"];
+            a.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3, 3);
+            b.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3, 3);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case4()
+        {
+            var a = np.arange(2 * 10 * 3).reshape((2, 10, 3));
+            var b = np.arange(2 * 1 * 3).reshape((2, 1, 3));
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 10, 3);
+            b.Should().BeShaped(2, 10, 3);
+            Console.WriteLine(a.Shape);
+            a = a["-1"];
+            b = b["-1"];
+            a.Should().BeShaped(10, 3);
+            b.Should().BeShaped(10, 3);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case5()
+        {
+            var a = np.arange(2 * 1 * 3).reshape((2, 1, 3)); //0, 1
+            var b = np.arange(2 * 3 * 3).reshape((2, 3, 3)); //0, 1
+
+            a = a["-1"];
+            b = b["-1"];
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3, 3);
+            b.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3, 3);
+            Console.WriteLine(a.Shape);
+            Console.WriteLine(a.ToString());
+            Console.WriteLine(b.ToString());
+        }
+
+
+        [TestMethod]
+        public void Broadcasted_Case6_GetData()
+        {
+            var a = np.arange(3 * 1 * 2 * 2).reshape((3, 1, 2, 2));
+            var b = np.arange(3 * 2 * 2).reshape((3, 2, 2));
+
+            Console.WriteLine(b.Shape.strides.ToString(false));
+            (a, b) = np.broadcast_arrays(a, b);
+            Console.WriteLine(b.Shape.strides.ToString(false));
+            a.Should().BeShaped(3, 3, 2, 2);
+            b.Should().BeShaped(3, 3, 2, 2);
+
+            var ret = b[0, 1];
+            ret.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case7_GetData()
+        {
+            var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
+            var b = np.arange(2 * 1 * 2 * 2).reshape((2, 1, 2, 2))[0, Slice.All];
+
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 3, 2, 2);
+            b.Should().BeShaped(2, 3, 2, 2);
+
+            var ret = b[1, 2];
+            ret.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case8_GetData()
+        {
+            var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
+            var b = np.arange(2 * 2 * 1 * 2 * 2).reshape((2, 2, 1, 2, 2))[0, 1, Slice.All];
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 3, 2, 2);
+            b.Should().BeShaped(2, 3, 2, 2);
+
+            var ret = b[1, 2];
+            ret.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void Slice_MinusOne()
+        {
+            var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1);
+            a["-1, :"].Should().Be(a["3, :"]);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case9_Sliced()
+        {
+            var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];
+            var b = np.arange(4 * 1 * 10 * 1).reshape(4, 1, 10, 1)["3, :"];
+
+            (a, b) = np.broadcast_arrays(a, b);
+
+            a.Should().BeBroadcasted().And.BeShaped(1, 10, 1);
+            b.Should().BeBroadcasted().And.BeShaped(1, 10, 1);
+            a.Should().AllValuesBe(3);
+            b.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case10_Sliced()
+        {
+            var a = np.arange(2 * 2 * 1 * 3).reshape((2, 2, 1, 3))["0, -1"]; //0, 1
+            var b = np.arange(2 * 2 * 3 * 3).reshape((2, 2, 3, 3))["0, -1"]; //0, 1
+
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3, 3);
+            b.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3, 3);
+            Console.WriteLine(a.Shape);
+            Console.WriteLine(a.ToString());
+            Console.WriteLine(b.ToString());
         }
     }
 }

@@ -17,9 +17,10 @@ namespace NumSharp
     public struct Shape : ICloneable, IEquatable<Shape>
     {
         internal ViewInfo ViewInfo;
+        internal BroadcastInfo BroadcastInfo;
 
         /// <summary>
-        /// True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
+        ///     True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
         /// </summary>
         public bool IsSliced
         {
@@ -27,6 +28,9 @@ namespace NumSharp
             get => ViewInfo != null;
         }
 
+        /// <summary>
+        ///     Is this Shape a recusive view? (deeper than 1 view)
+        /// </summary>
         public bool IsRecursive
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -46,6 +50,14 @@ namespace NumSharp
         internal int[] dimensions;
         internal int[] strides;
 
+        /// <summary>
+        ///     Is this shape a broadcast and/or has modified strides?
+        /// </summary>
+        internal bool IsBroadcasted => BroadcastInfo != null;
+
+        /// <summary>
+        ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
+        /// </summary>
         public bool IsScalar;
 
         /// <summary>
@@ -74,6 +86,12 @@ namespace NumSharp
         internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo};
 
         /// <summary>
+        ///     Create a new scalar shape
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
+
+        /// <summary>
         ///     Create a shape that represents a vector.
         /// </summary>
         /// <remarks>Faster than calling Shape's constructor</remarks>
@@ -83,7 +101,7 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = 26599 ^ length * 397;
+                shape._hashCode = 26599 ^ length * 397 ^ length * 397;
             }
 
             shape.IsScalar = false;
@@ -107,7 +125,7 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = 26599 ^ length * 397;
+                shape._hashCode = 26599 ^ length * 397 ^ length * 397;
             }
 
             shape.IsScalar = false;
@@ -124,7 +142,7 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = (26599 ^ rows * 397) ^ cols * 397; //('C' * 397)
+                shape._hashCode = (26599 ^ rows * 397 ^ rows * 397) ^ cols * 397 ^ cols * 397; //('C' * 397)
             }
 
             shape.IsScalar = false;
@@ -160,6 +178,12 @@ namespace NumSharp
 
         public Shape(Shape other)
         {
+            if (other.IsEmpty)
+            {
+                this = default;
+                return;
+            }
+
             this.layout = other.layout;
             this._hashCode = other._hashCode;
             this.size = other.size;
@@ -167,6 +191,75 @@ namespace NumSharp
             this.strides = (int[])other.strides.Clone();
             this.IsScalar = other.IsScalar;
             this.ViewInfo = other.ViewInfo?.Clone();
+            this.BroadcastInfo = other.BroadcastInfo;
+        }
+
+        public Shape(int[] dims, int[] strides)
+        {
+            if (dims == null)
+                throw new ArgumentNullException(nameof(dims));
+
+            if (strides == null)
+                throw new ArgumentNullException(nameof(strides));
+
+            if (dims.Length != strides.Length)
+                throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
+
+            layout = 'C';
+            size = 1;
+            unchecked
+            {
+                //calculate hash and size
+                if (dims.Length > 0)
+                {
+                    int hash = (layout * 397);
+                    foreach (var v in dims)
+                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    _hashCode = hash;
+                }
+                else
+                    _hashCode = 0;
+            }
+
+            this.strides = strides;
+            this.dimensions = dims;
+            IsScalar = size == 1 && dims.Length == 0;
+            ViewInfo = null;
+            BroadcastInfo = null;
+        }
+
+        public Shape(int[] dims, int[] strides, Shape originalShape)
+        {
+            if (dims == null)
+                throw new ArgumentNullException(nameof(dims));
+
+            if (strides == null)
+                throw new ArgumentNullException(nameof(strides));
+
+            if (dims.Length != strides.Length)
+                throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
+
+            layout = 'C';
+            size = 1;
+            unchecked
+            {
+                //calculate hash and size
+                if (dims.Length > 0)
+                {
+                    int hash = (layout * 397);
+                    foreach (var v in dims)
+                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    _hashCode = hash;
+                }
+                else
+                    _hashCode = 0;
+            }
+
+            this.strides = strides;
+            this.dimensions = dims;
+            IsScalar = size == 1 && dims.Length == 0;
+            ViewInfo = null;
+            BroadcastInfo = new BroadcastInfo() {OriginalShape = originalShape};
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -190,7 +283,7 @@ namespace NumSharp
                 {
                     int hash = (layout * 397);
                     foreach (var v in dims)
-                        hash ^= (size *= v) * 397;
+                        hash ^= ((size *= v) * 397) ^ (v * 397);
                     _hashCode = hash;
                 }
                 else
@@ -200,8 +293,8 @@ namespace NumSharp
                     if (layout == 'C')
                     {
                         strides[strides.Length - 1] = 1;
-                        for (int idx = strides.Length - 1; idx >= 1; idx--)
-                            strides[idx - 1] = strides[idx] * dims[idx];
+                        for (int i = strides.Length - 1; i >= 1; i--)
+                            strides[i - 1] = strides[i] * dims[i];
                     }
                     else
                     {
@@ -213,6 +306,7 @@ namespace NumSharp
 
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
+            BroadcastInfo = null;
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -285,6 +379,10 @@ namespace NumSharp
         {
             if (!IsSliced)
                 return GetOffset_IgnoreViewInfo(indices);
+
+            //if both sliced and broadcasted
+            if (IsBroadcasted)
+                return GetOffset_broadcasted(indices);
 
             // we are dealing with a slice
             int offset;
@@ -361,7 +459,96 @@ namespace NumSharp
                     offset += strides[i] * indices[i];
             }
 
+            if (IsBroadcasted)
+                return offset % BroadcastInfo.OriginalShape.size;
+
             return offset;
+        }
+
+        /// <summary>
+        ///     Get offset index out of coordinate indices.
+        /// </summary>
+        /// <param name="indices">The coordinates to turn into linear offset</param>
+        /// <returns>The index in the memory block that refers to a specific value.</returns>
+        /// <remarks>Handles sliced indices and broadcasting</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        private int GetOffset_broadcasted(params int[] indices)
+        {
+            int offset;
+            var vi = ViewInfo;
+            var bi = BroadcastInfo;
+            if (IsRecursive && vi.Slices == null)
+            {
+                // we are dealing with an unsliced recursively reshaped slice
+                offset = GetOffset_IgnoreViewInfo(indices);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                return vi.ParentShape.GetOffset(parent_coords);
+            }
+
+            var coords = new List<int>(indices);
+            if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0 && !IsRecursive)
+                return 0;
+            if (indices.Length > vi.UnreducedShape.dimensions.Length)
+                throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
+            var orig_ndim = vi.OriginalShape.NDim;
+            if (orig_ndim > NDim && orig_ndim > indices.Length)
+            {
+                // fill in reduced dimensions in the provided coordinates 
+                for (int i = 0; i < vi.OriginalShape.NDim; i++)
+                {
+                    var slice = ViewInfo.Slices[i];
+                    if (slice.IsIndex)
+                        coords.Insert(i, 0);
+                    if (coords.Count == orig_ndim)
+                        break;
+                }
+            }
+
+            var orig_strides = vi.OriginalShape.strides;
+            Shape unreducedBroadcasted;
+            if (!bi.UnbroadcastShape.HasValue)
+            {
+                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                for (int i = Math.Abs(vi.OriginalShape.NDim-NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
+                {
+                    if (strides[j] == 0)
+                    {
+                        unreducedBroadcasted.dimensions[i] = 1;
+                        unreducedBroadcasted.strides[i] = 0;
+                    }
+                }
+
+                BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+            }
+            else
+                unreducedBroadcasted = bi.UnbroadcastShape.Value;
+
+            orig_strides = unreducedBroadcasted.strides;
+            offset = 0;
+            unchecked
+            {
+                for (int i = 0; i < coords.Count; i++)
+                {
+                    if (vi.Slices.Length <= i)
+                    {
+                        offset += orig_strides[i] * coords[i];
+                        continue;
+                    }
+
+                    var slice = vi.Slices[i];
+                    var start = slice.Start;
+                    if (slice.IsIndex)
+                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
+                    else
+                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
+                }
+            }
+
+            if (!IsRecursive)
+                return offset;
+            // we are dealing with a sliced recursively reshaped slice
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            return vi.ParentShape.GetOffset(parent_coords1);
         }
 
 
@@ -377,8 +564,49 @@ namespace NumSharp
             if (indicies.Length == 0)
                 return (this, 0);
 
+            int offset;
+            var dim = indicies.Length;
+            var newNDim = dimensions.Length - dim;
+            if (IsBroadcasted)
+            {
+                Shape unreducedBroadcasted;
+                if (!BroadcastInfo.UnbroadcastShape.HasValue)
+                {
+                    unreducedBroadcasted = this.Clone(true, false, false);
+                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
+                    {
+                        if (unreducedBroadcasted.strides[i] == 0)
+                            unreducedBroadcasted.dimensions[i] = 1;
+                    }
+
+                    BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                }
+                else
+                    unreducedBroadcasted = BroadcastInfo.UnbroadcastShape.Value;
+
+                //unbroadcast indices
+                for (int i = 0; i < dim; i++)
+                    indicies[i] = indicies[i] % unreducedBroadcasted[i];
+
+                offset = unreducedBroadcasted.GetOffset(indicies);
+
+                var retShape = new int[newNDim];
+                var strides = new int[newNDim];
+                var original = new int[newNDim];
+                var original_strides = new int[newNDim];
+                for (int i = 0; i < newNDim; i++)
+                {
+                    retShape[i] = this.dimensions[dim + i];
+                    strides[i] = this.strides[dim + i];
+                    original[i] = unreducedBroadcasted[dim + i];
+                    original_strides[i] = unreducedBroadcasted.strides[dim + i];
+                }
+
+                return (new Shape(retShape, strides, new Shape(original, original_strides)), offset);
+            }
+
             //compute offset
-            int offset = GetOffset(indicies);
+            offset = GetOffset(indicies);
 
             var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
             if (offset >= orig_shape.Size)
@@ -388,14 +616,11 @@ namespace NumSharp
                 return (Scalar, offset);
 
             //compute subshape
-            var dim = indicies.Length;
-            var innerShape = new int[dimensions.Length - dim];
+            var innerShape = new int[newNDim];
             for (int i = 0; i < innerShape.Length; i++)
-            {
-                innerShape[i] = dimensions[dim + i];
-            }
+                innerShape[i] = this.dimensions[dim + i];
 
-            return (innerShape, offset);
+            return (new Shape(innerShape), offset);
         }
 
         /// <summary>
@@ -542,7 +767,7 @@ namespace NumSharp
                     size = 1;
                     int hash = (layout * 397);
                     foreach (var v in dimensions)
-                        hash ^= (size *= v) * 397;
+                        hash ^= ((size *= v) * 397) ^ (v * 397);
                     _hashCode = hash;
                 }
             }
@@ -558,6 +783,9 @@ namespace NumSharp
         {
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
+
+            if (IsBroadcasted)
+                throw new NotSupportedException("Unable to slice a shape that is broadcasted.");
 
             var slices = new List<SliceDef>(16);
             var sliced_axes_unreduced = new List<int>();
@@ -794,7 +1022,7 @@ namespace NumSharp
             ret.strides = strides;
             if (IsSliced)
             {
-                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
+                ret.ViewInfo = new ViewInfo() {ParentShape = this, Slices = null};
             }
 
             ret.ComputeHashcode();
@@ -810,7 +1038,6 @@ namespace NumSharp
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
-
         public static int[] InferNegativeCoordinates(int[] dimensions, int[] coords)
         {
             for (int i = 0; i < coords.Length; i++)
@@ -828,20 +1055,23 @@ namespace NumSharp
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>
-        object ICloneable.Clone() => Clone(true, false);
+        object ICloneable.Clone() => Clone(true, false, false);
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
-        public Shape Clone(bool deep = true, bool unview = false)
+        public Shape Clone(bool deep = true, bool unview = false, bool unbroadcast = false)
         {
+            if (IsEmpty)
+                return default;
+
             if (IsScalar)
             {
-                if (unview || ViewInfo == null)
+                if (unview || ViewInfo == null && BroadcastInfo == null)
                     return Scalar;
 
-                return NewScalar(ViewInfo.Clone());
+                return NewScalar(ViewInfo?.Clone(), BroadcastInfo?.Clone());
             }
 
             if (!deep && !unview)
@@ -850,6 +1080,8 @@ namespace NumSharp
             var ret = deep ? new Shape(this) : (Shape)MemberwiseClone();
             if (unview)
                 ret.ViewInfo = null;
+            if (unbroadcast)
+                ret.BroadcastInfo = null;
 
             return ret;
         }
