@@ -9,11 +9,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
     [TestClass]
     public class ReduceAddTests
     {
-
         [TestMethod]
         public void Case1_Elementwise_keepdims()
         {
-            var np1 = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2);
+            var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);
             var mean = np.sum(np1, keepdims: true);
             mean.Shape.IsScalar.Should().BeFalse();
             mean.shape.Should().HaveCount(2).And.ContainInOrder(1, 1);
@@ -27,8 +26,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum();
             ret.Shape.IsScalar.Should().BeTrue();
             ret.GetInt32(0).Should().Be(1);
-        }               
-        
+        }
+
         [TestMethod]
         public void Case0_Scalar_Axis0()
         {
@@ -36,8 +35,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(0);
             ret.Shape.IsScalar.Should().BeTrue();
             ret.GetInt32(0).Should().Be(1);
-        }        
-        
+        }
+
         [TestMethod]
         public void Case1_Elementwise()
         {
@@ -176,7 +175,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(4);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 3, 5, 1));
+            ret.Shape.Should().Be(new Shape(2, 1, 3, 5));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -184,10 +183,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         public void Case2_Axis_minus1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
-            var ret = a.sum(4);
+            var ret = a.sum(-1);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 3, 5, 1));
+            ret.Shape.Should().Be(new Shape(2, 1, 3, 5));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 

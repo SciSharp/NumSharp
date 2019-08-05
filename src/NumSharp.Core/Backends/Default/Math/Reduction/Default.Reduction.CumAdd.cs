@@ -34,8 +34,11 @@ namespace NumSharp.Backends
             if (axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (shape[axis] == 1) //if the given div axis is 1 and can be squeezed out.
+            if (shape[axis] == 1)
+            {
+                //if the given div axis is 1 and can be squeezed out.
                 return np.squeeze_fast(arr, axis);
+            }
 
             //prepare ret
             var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), shape, false);
