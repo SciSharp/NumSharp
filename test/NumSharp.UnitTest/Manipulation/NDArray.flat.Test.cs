@@ -43,8 +43,7 @@ namespace NumSharp.UnitTest.Manipulation
             var flat = sliced.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(1);
-            flat.ndim.Should().Be(1);
-            flat.shape[0].Should().Be(1);
+            flat.ndim.Should().Be(0);
             flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -92,8 +91,8 @@ namespace NumSharp.UnitTest.Manipulation
             var flat = nd.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(1);
-            flat.ndim.Should().Be(1);
-            flat.shape[0].Should().Be(1);
+            flat.ndim.Should().Be(0);
+            flat.Shape.Should().BeScalar();
             flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -119,11 +118,15 @@ namespace NumSharp.UnitTest.Manipulation
 
             a = a["-1"];
             b = b["-1"];
+
             (a, b) = np.broadcast_arrays(a, b);
+
             a.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3, 3);
             b.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3, 3);
-            a.flat.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3 * 3);
-            b.flat.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3 * 3);
+            var aflat = a.flat;
+            var bflat = b.flat;
+            aflat.Should().BeOfValues(3, 4, 5, 3, 4, 5, 3, 4, 5).And.BeShaped(3 * 3);
+            bflat.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3 * 3);
         }
 
         [TestMethod]

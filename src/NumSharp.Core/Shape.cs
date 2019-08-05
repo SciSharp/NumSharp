@@ -101,7 +101,7 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = 26599 ^ length * 397 ^ length * 397;
+                shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 327);
             }
 
             shape.IsScalar = false;
@@ -125,7 +125,7 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = 26599 ^ length * 397 ^ length * 397;
+                shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 327);
             }
 
             shape.IsScalar = false;
@@ -142,7 +142,14 @@ namespace NumSharp
 
             unchecked
             {
-                shape._hashCode = (26599 ^ rows * 397 ^ rows * 397) ^ cols * 397 ^ cols * 397; //('C' * 397)
+                int hash = (shape.layout * 397);
+                int size = 1;
+                foreach (var v in shape.dimensions)
+                {
+                    size *= v;
+                    hash ^= (size * 397) * (v * 397);
+                }
+                shape._hashCode = hash;
             }
 
             shape.IsScalar = false;
@@ -214,7 +221,10 @@ namespace NumSharp
                 {
                     int hash = (layout * 397);
                     foreach (var v in dims)
-                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    {
+                        size *= v;
+                        hash ^= (size * 397) * (v * 397);
+                    }
                     _hashCode = hash;
                 }
                 else
@@ -248,7 +258,10 @@ namespace NumSharp
                 {
                     int hash = (layout * 397);
                     foreach (var v in dims)
-                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    {
+                        size *= v;
+                        hash ^= (size * 397) * (v * 397);
+                    }
                     _hashCode = hash;
                 }
                 else
@@ -283,7 +296,10 @@ namespace NumSharp
                 {
                     int hash = (layout * 397);
                     foreach (var v in dims)
-                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    {
+                        size *= v;
+                        hash ^= (size * 397) * (v * 397);
+                    }
                     _hashCode = hash;
                 }
                 else
@@ -722,8 +738,8 @@ namespace NumSharp
             int size = 1;
             unchecked
             {
-                for (int idx = 0; idx < dims.Length; idx++)
-                    size *= dims[idx];
+                for (int i = 0; i < dims.Length; i++)
+                    size *= dims[i];
             }
 
             return size;
@@ -807,7 +823,10 @@ namespace NumSharp
                     size = 1;
                     int hash = (layout * 397);
                     foreach (var v in dimensions)
-                        hash ^= ((size *= v) * 397) ^ (v * 397);
+                    {
+                        size *= v;
+                        hash ^= (size * 397) * (v * 397);
+                    }
                     _hashCode = hash;
                 }
             }
@@ -824,8 +843,8 @@ namespace NumSharp
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
 
-            if (IsBroadcasted)
-                throw new NotSupportedException("Unable to slice a shape that is broadcasted.");
+            //if (IsBroadcasted)
+            //    throw new NotSupportedException("Unable to slice a shape that is broadcasted.");
 
             var slices = new List<SliceDef>(16);
             var sliced_axes_unreduced = new List<int>();

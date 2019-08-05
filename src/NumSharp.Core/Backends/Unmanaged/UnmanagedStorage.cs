@@ -1907,12 +1907,16 @@ namespace NumSharp.Backends
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="dimensions"/>'s size == 0</exception>
         public void Reshape(int[] dimensions, bool @unsafe)
         {
             if (dimensions == null)
                 throw new ArgumentNullException(nameof(dimensions));
 
             Shape newShape = new Shape(dimensions);
+
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
 
             if (!@unsafe)
             {
@@ -1923,17 +1927,12 @@ namespace NumSharp.Backends
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
             }
 
-            //handle -1 in reshape
-            InferMissingDimension(ref newShape);
+            if (_shape.IsBroadcasted)
+                throw new NotSupportedException("Reshaping an already broadcasted shape is not supported.");
 
             if (_shape.IsSliced)
                 // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
                 newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
-
-            if (_shape.IsBroadcasted)
-                newShape.BroadcastInfo = Shape.BroadcastInfo.Clone();
-
-            //todo! should we check here if its a broadcast?
 
             SetShapeUnsafe(ref newShape);
         }
@@ -1942,6 +1941,7 @@ namespace NumSharp.Backends
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         [MethodImpl((MethodImplOptions)768)]
         public void Reshape(Shape newShape, bool @unsafe = false)
         {
@@ -1952,9 +1952,12 @@ namespace NumSharp.Backends
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         [MethodImpl((MethodImplOptions)768)]
         public void Reshape(ref Shape newShape, bool @unsafe = false)
         {
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
 
             if (!@unsafe)
             {
@@ -1965,14 +1968,43 @@ namespace NumSharp.Backends
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
             }
 
-            //handle -1 in reshape
-            InferMissingDimension(ref newShape);
+            if (_shape.IsBroadcasted)
+                throw new NotSupportedException("Reshaping an already broadcasted shape is not supported.");
 
             if (_shape.IsSliced)
                 // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
+                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
 
-            //todo! should we check here if its a broadcast?
+            SetShapeUnsafe(ref newShape);
+        }
+
+
+        /// <summary>
+        ///     Changes the shape representing this storage.
+        /// </summary>
+        /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
+        [MethodImpl((MethodImplOptions)768)]
+        public void ReshapeBroadcastedUnsafe(ref Shape newShape, bool guards = false, Shape? original = null)
+        {
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
+
+            if (guards)
+            {
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            }
+
+            if (_shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
+
+            if (original.HasValue)
+                newShape.BroadcastInfo = new BroadcastInfo(original.Value);
 
             SetShapeUnsafe(ref newShape);
         }
@@ -2016,20 +2048,16 @@ namespace NumSharp.Backends
             }
 
             if (indexOfNegOne == -1)
-            {
                 return;
-            }
-            else
-            {
-                int missingValue = _shape.size / product;
-                if (missingValue * product != _shape.size)
-                {
-                    throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
-                }
 
-                shape.dimensions[indexOfNegOne] = missingValue;
-                shape.ComputeHashcode();
+            int missingValue = _shape.size / product;
+            if (missingValue * product != _shape.size)
+            {
+                throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
             }
+
+            shape.dimensions[indexOfNegOne] = missingValue;
+            shape.ComputeHashcode();
         }
 
 

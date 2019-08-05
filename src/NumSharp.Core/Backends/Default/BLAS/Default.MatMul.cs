@@ -20,7 +20,7 @@ namespace NumSharp.Backends
                 throw new NotSupportedException("Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?)");
 
             if (rhs.ndim == 1)
-                rhs = np.expand_dims(rhs, 0);
+                rhs = np.expand_dims(rhs, 1);
 
             //var broadcast = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
             //var ndimLeft = broadcast.LeftShape.NDim;
