@@ -380,7 +380,6 @@ namespace NumSharp
             if (!IsSliced)
                 return GetOffset_IgnoreViewInfo(indices);
 
-            //if both sliced and broadcasted
             if (IsBroadcasted)
                 return GetOffset_broadcasted(indices);
 
@@ -508,17 +507,29 @@ namespace NumSharp
             Shape unreducedBroadcasted;
             if (!bi.UnbroadcastShape.HasValue)
             {
-                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                for (int i = Math.Abs(vi.OriginalShape.NDim-NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
+                if (bi.OriginalShape.IsScalar)
                 {
-                    if (strides[j] == 0)
+                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
                     {
                         unreducedBroadcasted.dimensions[i] = 1;
                         unreducedBroadcasted.strides[i] = 0;
                     }
                 }
+                else
+                {
+                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                    for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
+                    {
+                        if (strides[j] == 0)
+                        {
+                            unreducedBroadcasted.dimensions[i] = 1;
+                            unreducedBroadcasted.strides[i] = 0;
+                        }
+                    }
+                }
 
-                BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                bi.UnbroadcastShape = unreducedBroadcasted;
             }
             else
                 unreducedBroadcasted = bi.UnbroadcastShape.Value;
@@ -569,6 +580,7 @@ namespace NumSharp
             var newNDim = dimensions.Length - dim;
             if (IsBroadcasted)
             {
+                indicies = (int[])indicies.Clone(); //we must copy because we make changes to it.
                 Shape unreducedBroadcasted;
                 if (!BroadcastInfo.UnbroadcastShape.HasValue)
                 {
@@ -620,6 +632,8 @@ namespace NumSharp
             for (int i = 0; i < innerShape.Length; i++)
                 innerShape[i] = this.dimensions[dim + i];
 
+            //TODO! This is not full support of sliced,
+            //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
             return (new Shape(innerShape), offset);
         }
 

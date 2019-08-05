@@ -1054,7 +1054,7 @@ namespace NumSharp.Backends
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (int*)lhs.Address;
                     var rhs_address = (int*)rhs.Address;
-                    var ret = new NDArray(ret_type, new Shape(BroadcastedLeftShape.dimensions), false);
+                    var ret = new NDArray(ret_type, BroadcastedLeftShape.Clean(), false);
                     Shape retShape = ret.Shape;
                     
                     switch (ret_type)
@@ -1114,7 +1114,9 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetOffset(current)) = Convert.ToInt32(*(lhs_address + BroadcastedLeftShape.GetOffset(current)) * (int) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                                var a = *(lhs_address + BroadcastedLeftShape.GetOffset(current));
+                                var b = (int)*(rhs_address + BroadcastedRightShape.GetOffset(current));
+                                *(ret_address + retShape.GetOffset(current)) = Convert.ToInt32(a * b);
                             } while (incr.Next() != null);
 
                             return ret;

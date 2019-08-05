@@ -41,7 +41,7 @@ namespace NumSharp.Backends
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (__2__*)lhs.Address;
                     var rhs_address = (bool*)rhs.Address;
-                    var ret = new NDArray(ret_type, new Shape(BroadcastedLeftShape.dimensions), false);
+                    var ret = new NDArray(ret_type, BroadcastedLeftShape.Clean(), false);
                     Shape retShape = ret.Shape;
                     
                     switch (ret_type)

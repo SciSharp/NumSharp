@@ -42,13 +42,14 @@ namespace NumSharp.Backends
             var retShape = l.Shape.Clean();
             Console.WriteLine(retShape);
             Debug.Assert(l.shape[0] == r.shape[0]);
-            var len = l.shape[0]; //Math.Max(l.shape[0], r.shape[0]);
+            var len = l.size;
             var ret = new NDArray(np._FindCommonArrayType(l.typecode, r.typecode), retShape);
             var iterShape = new Shape(retShape.dimensions.Take(retShape.dimensions.Length-2).ToArray());
             var incr = new NDCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
 
-            //Parallel.For(0, len, i => MultiplyMatrix(l[i], r[i], ret[i]));
+            //TODO! we need to create IEnumeable<int> on NDCoordinatesIncrementor so we can do something like this:
+            //TODO! Parallel.ForEach(incr, i => MultiplyMatrix(l[index], r[index], ret[index]));
             for (int i = 0; i < len; i++, incr.Next())
             {
                 MultiplyMatrix(l[index], r[index], ret[index]);

@@ -435,6 +435,7 @@ namespace NumSharp.UnitTest.Utilities
                         Execute.Assertion
                             .ForCondition(expected == nextval)
                             .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: Int32).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+
                     }
                     break;
                 }

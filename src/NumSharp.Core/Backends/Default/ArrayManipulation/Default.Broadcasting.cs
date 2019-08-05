@@ -306,6 +306,7 @@ namespace NumSharp.Backends
             {
                 left = rightShape; //copy right
                 left.strides = _zeros[left.strides.Length]; //zero strides
+                left.BroadcastInfo = new BroadcastInfo(leftShape);
                 return (left, rightShape);
             }
             //is right a scalar
@@ -313,6 +314,7 @@ namespace NumSharp.Backends
             {
                 right = leftShape; //copy left
                 right.strides = _zeros[right.strides.Length]; //zero strides
+                right.BroadcastInfo = new BroadcastInfo(rightShape);
                 return (leftShape, right);
             }
             else

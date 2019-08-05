@@ -252,10 +252,9 @@ namespace NumSharp.UnitTest.Selection
             //array([[4, 6]])
             var x = np.arange(4).reshape(2, 2);
             var y = x["1:"]; // slice a row as 1D array
-            Assert.AreEqual(new Shape(1, 2), new Shape(y.shape));
-            AssertAreEqual(y.ToArray<int>(), new int[] {2, 3});
+            y.Should().BeShaped(1, 2).And.BeOfValues(2, 3);
             var z = y * 2;
-            AssertAreEqual(y.ToArray<int>(), new int[] {4, 6});
+            z.Should().BeShaped(1, 2).And.BeOfValues(4, 6);
         }
 
         [TestMethod]
@@ -286,10 +285,38 @@ namespace NumSharp.UnitTest.Selection
         {
             var x = np.arange(4).reshape(2, 2);
             var y = x[":,1"]; // slice a column as 1D array (shape 2)
-            Assert.AreEqual(new Shape(2), new Shape(y.shape));
-            AssertAreEqual(y.ToArray<int>(), new int[] {1, 3});
-            y *= 2;
-            AssertAreEqual(y.ToArray<int>(), new int[] {2, 6});
+            y.Should().BeShaped(2).And.BeOfValues(1, 3);
+            var z = y * 2;
+            z.Should().BeShaped(2).And.BeOfValues(2, 6);
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_4()
+        {
+            var x = np.arange(4).reshape(2, 2);
+            var y = x[":,1"]; // slice a column as 1D array (shape 2)
+            y.Should().BeShaped(2).And.BeOfValues(1, 3);
+            var z = 2 * y;
+            z.Should().BeShaped(2).And.BeOfValues(2, 6);
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_5()
+        {
+            var x = np.arange(4).reshape(2, 2);
+            var y = x[":,1"]; // slice a column as 1D array (shape 2)
+            y.Should().BeShaped(2).And.BeOfValues(1, 3);
+            var z = y * y;
+            z.Should().BeShaped(2).And.BeOfValues(1, 9);
+        }
+
+        [TestMethod]
+        public void Slice2x2Mul_6()
+        {
+            var x = np.arange(4).reshape(2, 2);
+            x.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+            var z = x * x;
+            z.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 4, 9);
         }
 
         [Ignore("This can never work because C# doesn't allow overloading of the assignment operator")]
@@ -1056,6 +1083,21 @@ namespace NumSharp.UnitTest.Selection
 
             var ret = b[1, 2];
             ret.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void Broadcasted_Case9()
+        {
+            var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
+            var b = np.arange(2 * 2 * 1 * 2 * 2).reshape((2, 2, 1, 2, 2))[0, 1, Slice.All];
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 3, 2, 2);
+            b.Should().BeShaped(2, 3, 2, 2);
+
+            var ret = b[1, 2];
+            var str = ret.ToString(true);
+            Console.WriteLine(str);
+            str.Should().Be(np.array(4, 5, 6, 7).reshape(2, 2).ToString(true));
         }
 
         [TestMethod]
