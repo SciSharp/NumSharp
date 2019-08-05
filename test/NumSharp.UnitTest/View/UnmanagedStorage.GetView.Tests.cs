@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
@@ -424,48 +426,27 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
         }
 
-        //[TestMethod]
-        //public void ToStringTest()
-        //{
-        //    var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
-        //    var view = new UnmanagedStorage(data);
-        //    Console.WriteLine(view.ToString(flat: true));
-        //    Assert.AreEqual("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", view.ToString(flat: true));
-        //    data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
-        //    data.Reshape(3, 3);
-        //    view = new UnmanagedStorage(data);
-        //    Console.WriteLine(view.ToString(flat: true));
-        //    Assert.AreEqual("[[0, 1, 2], [3, 4, 5], [6, 7, 8]]", view.ToString(flat: true));
-        //    data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
-        //    data.Reshape(2, 2, 2);
-        //    view = new UnmanagedStorage(data);
-        //    Console.WriteLine(view.ToString(flat: true));
-        //    Assert.AreEqual("[[[0, 1], [2, 3]], [[4, 5], [6, 7]]]", view.ToString(flat: true));
-        //}
+        [TestMethod]
+        public void SlicingWithNegativeIndex1()
+        {
+            var a = new UnmanagedStorage(np.arange(10).GetData(), new Shape(10));
+            a.GetView("-1").ToArray<int>().Should().BeEquivalentTo(new int[] { 9 });
+            a.GetView("-2").GetValue<int>(0).Should().Be( 8 );
+            a = new UnmanagedStorage(np.arange(10).GetData(), new Shape(1, 10));
+            a.GetView(":, -1").ToArray<int>().Should().BeEquivalentTo(new int[] { 9 });
+            a.GetView(":, 1:").GetView("-1, -2").ToArray<int>().Should().BeEquivalentTo(new int[] { 8 });
+            a.GetView(":, 1:").GetView("-1, -2").GetValue(0,0).Should().BeEquivalentTo( 8 );
+        }
 
-        //        [TestMethod]
-        //        public void ToString_NonFlatTest()
-        //        {
-        //            var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
-        //            var view = new UnmanagedStorage(data);
-        //            Console.WriteLine(view);
-        //            Assert.AreEqual("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]", view.ToString(flat: false));
-        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
-        //            data.Reshape(3, 3);
-        //            view = new UnmanagedStorage(data);
-        //            Console.WriteLine(view);
-        //            Assert.AreEqual("[[0, 1, 2], \r\n" +
-        //                            "[3, 4, 5], \r\n" +
-        //                            "[6, 7, 8]]", view.ToString(flat: false));
-        //            data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7 });
-        //            data.Reshape(2, 2, 2);
-        //            view = new UnmanagedStorage(data);
-        //            Console.WriteLine(view);
-        //            Assert.AreEqual("[[[0, 1], \r\n" +
-        //                            "[2, 3]], \r\n" +
-        //                            "[[4, 5], \r\n" +
-        //                            "[6, 7]]]", view.ToString(flat: false));
-        //        }
+        [TestMethod]
+        public void SlicingWithNegativeIndex()
+        {
+            var a = new UnmanagedStorage(np.arange(3 * 1 * 3 * 3).GetData(), (3, 1, 3, 3));
+            var b = a.GetView("-1, :, 1, :");
+            b.ToArray<int>().Should().BeEquivalentTo(new int[] {21, 22, 23});
+            new NDArray(b).ToString(flat: true).Should().Be("array([[21, 22, 23]])");
+            b.GetValue(0, 0).Should().Be(21);
+        }
 
     }
 }
