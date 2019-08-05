@@ -213,44 +213,6 @@ namespace NumSharp
             return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
         }
 
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //public int GetAbsStart(int dim)
-        //{
-        //    var start = Step < 0 ? Stop : Start;
-        //    var astart = start < 0 ? dim + start + (Step < 0 ? 1 : 0) : start;
-        //    if (astart.HasValue && astart < 0)
-        //        astart = 0;
-        //    return astart ?? 0;
-        //}
-
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //public int GetAbsStop(int dim)
-        //{
-        //    var stop = Step < 0 ? Start : Stop;
-        //    var astop = stop < 0 ? dim + stop + (Step < 0 ? 1 : 0) : stop;
-        //    if (astop.HasValue && astop < 0)
-        //        astop = dim;
-        //    return Math.Min(dim, astop ?? dim);
-        //}
-
-        ///// <summary>
-        ///// Transforms a user-defined slice values with missing info into a fully defined slice
-        ///// </summary>
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //public Slice Sanitize(int dim)
-        //{
-        //    var start = GetAbsStart(dim);
-        //    var stop = GetAbsStop(dim);
-        //    if (start > stop)
-        //        (start, stop) = (stop, start);
-        //    // check start/stop alignment with Step
-        //    if (Step > 1)
-        //        stop -= ((stop - 1) - start) % Step;
-        //    else if (Step < -1)
-        //        start += ((stop - 1) - start) % Step;
-        //    return new Slice(start, stop, Step);
-        //}
-
         /// <summary>
         /// Converts the user Slice into an internal SliceDef which is easier to calculate with
         /// </summary>
@@ -260,7 +222,18 @@ namespace NumSharp
         public SliceDef ToSliceDef(int dim)
         {
             if (IsIndex)
-                return new SliceDef(Start ?? 0);
+            {
+                var index = Start ?? 0;
+                if (index < 0)
+                {
+                    if (Math.Abs(index)>dim)
+                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                    return new SliceDef(dim+index);
+                }
+                if (index > 0 && index >= dim)
+                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                return new SliceDef(index);
+            }
             if (Step == 0)
                 return new SliceDef() {Count = 0, Start = 0, Step = 0};
             var astep = Math.Abs(Step);

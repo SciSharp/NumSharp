@@ -414,11 +414,19 @@ namespace NumSharp
             }
 
             var orig_strides = vi.OriginalShape.strides;
+            var orig_dims = vi.OriginalShape.dimensions;
             offset = 0;
             unchecked
             {
                 for (int i = 0; i < coords.Count; i++)
                 {
+                    // note: we can refrain from bounds checking here, because we should not allow negative indices at all, this should be checked higher up though.
+                    //var coord = coords[i];
+                    //var dim = orig_dims[i];
+                    //if (coord < -dim || coord >= dim)
+                    //    throw new ArgumentException($"index {coord} is out of bounds for axis {i} with a size of {dim}");
+                    //if (coord < 0)
+                    //    coord = dim + coord;
                     if (vi.Slices.Length <= i)
                     {
                         offset += orig_strides[i] * coords[i];
