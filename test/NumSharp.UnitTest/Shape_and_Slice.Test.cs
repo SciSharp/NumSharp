@@ -578,19 +578,11 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void SliceNegativeIndex()
         {
+            new Slice("-10").ToSliceDef(10).Start.Should().Be(0);
+            new Slice("-9").ToSliceDef(10).Start.Should().Be(1);
+            new Slice("-1").ToSliceDef(10).Start.Should().Be(9);
             new Slice("-2").ToSliceDef(10).ToString().Should().Be("[8]");
         }
-
-        [TestMethod]
-        public void SliceWithNegativeIndex()
-        {
-            Shape shape = new Shape(10);
-            shape = shape.Slice("1,:");
-            shape = shape.ExpandDimension(1);
-            shape.GetOffset(0, 0, 2).Should().Be(8);
-            shape.Should().Be(new Shape(2, 1, 3));
-        }
-
 
     }
 }
