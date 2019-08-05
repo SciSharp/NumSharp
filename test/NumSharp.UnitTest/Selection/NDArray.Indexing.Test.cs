@@ -1039,5 +1039,15 @@ namespace NumSharp.UnitTest.Selection
             Console.WriteLine(a.ToString());
             Console.WriteLine(b.ToString());
         }
+
+        [TestMethod]
+        public void SliceEndingWithAll()
+        {
+            var a = np.arange(9).reshape(3, 3);
+            
+            //its supposed to be a memory slice because 
+            var sliced = a[-1, Slice.All];
+            sliced.Should().BeShaped(3).And.NotBeSliced();
+        }
     }
 }

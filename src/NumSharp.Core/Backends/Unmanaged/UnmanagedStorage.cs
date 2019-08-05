@@ -1973,7 +1973,7 @@ namespace NumSharp.Backends
 
             if (_shape.IsSliced)
                 // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
 
             SetShapeUnsafe(ref newShape);
         }
@@ -2001,7 +2001,7 @@ namespace NumSharp.Backends
 
             if (_shape.IsSliced)
                 // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
 
             if (original.HasValue)
                 newShape.BroadcastInfo = new BroadcastInfo(original.Value);
@@ -2078,9 +2078,6 @@ namespace NumSharp.Backends
             if (slices == null)
                 throw new ArgumentNullException(nameof(slices));
 
-            //if (_shape.IsBroadcasted)
-            //    return GetView_broadcasted(slices);
-
             //handle memory slice if possible
             if (!_shape.IsSliced)
             {
@@ -2089,29 +2086,34 @@ namespace NumSharp.Backends
                 {
                     var inputSlice = slices[i];
                     if (!inputSlice.IsIndex)
+                    {
+                        //incase it is a trailing :, e.g. [2,2, :] in a shape (3,3,5,5) -> (5,5)
+                        if (i == slices.Length - 1 && inputSlice == Slice.All) 
+                        {
+                            Array.Resize(ref indices, indices.Length - 1);
+                            goto _getdata;
+                        }
+
                         goto _perform_slice;
+                    }
+
                     indices[i] = inputSlice.Start.Value;
                 }
 
+                _getdata:
                 return GetData(indices);
             }
 
             //perform a regular slicing
             _perform_slice:
+
+            // In case the slices selected are all ":"
             // ReSharper disable once ConvertIfStatementToReturnStatement
             if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
             return Alias(_shape.Slice(slices));
         }
-
-        //todo remove? [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //todo remove? [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
-        //todo remove? private UnmanagedStorage GetView_broadcasted(params Slice[] slices)
-        //todo remove? {
-        //todo remove?     //TODO! handle slices broadcasting.
-        //todo remove?     return null;
-        //todo remove? }
 
         #endregion
 
@@ -2136,20 +2138,20 @@ namespace NumSharp.Backends
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
