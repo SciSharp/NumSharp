@@ -321,6 +321,8 @@ namespace NumSharp
             return a;
         }
 
+        public static implicit operator Slice(int index) => new Slice(index, index + 1) { IsIndex = true };
+
         #endregion
     }
 
