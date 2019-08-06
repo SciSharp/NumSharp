@@ -490,5 +490,29 @@ namespace NumSharp.UnitTest
         //    Console.WriteLine(a.strides.ToString(false));
         //    a.Shape.Strides.Should().BeEquivalentTo(new int[] {16, 8, 4});
         //}
+
+        [TestMethod]
+        public void HashcodeComputation()
+        {
+            var a = Shape.Vector(5);
+            var b = new Shape(5);
+            a._hashCode.Should().Be(b._hashCode);
+            a.ComputeHashcode();
+            a._hashCode.Should().Be(b._hashCode);
+
+            a = Shape.Matrix(5, 10);
+            b = new Shape(5,10);
+            a._hashCode.Should().Be(b._hashCode);
+            a.ComputeHashcode();
+            a._hashCode.Should().Be(b._hashCode);
+
+            a = new Shape(3, 3, 3);
+            b = new Shape(3, 3, 3);
+            a._hashCode.Should().Be(b._hashCode);
+            b.ComputeHashcode();
+            a._hashCode.Should().Be(b._hashCode);
+            a.ComputeHashcode();
+            a._hashCode.Should().Be(b._hashCode);
+        }
     }
 }

@@ -99,10 +99,7 @@ namespace NumSharp
         {
             var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, layout = 'C', size = length};
 
-            unchecked
-            {
-                shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 327);
-            }
+            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
 
             shape.IsScalar = false;
             return shape;
@@ -123,10 +120,7 @@ namespace NumSharp
                 ViewInfo = viewInfo
             };
 
-            unchecked
-            {
-                shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 327);
-            }
+            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
 
             shape.IsScalar = false;
             return shape;
