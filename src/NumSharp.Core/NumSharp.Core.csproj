@@ -26,7 +26,7 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.11.0-alpha</Version>
+    <Version>0.11.0-alpha2</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SignAssembly>false</SignAssembly>
@@ -54,7 +54,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DocumentationFile>D:\SciSharp\NumSharp\src\NumSharp.Core\NumSharp.Core.xml</DocumentationFile>
+    <DocumentationFile></DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
