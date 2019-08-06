@@ -390,6 +390,7 @@ namespace NumSharp
             if (!IsSliced)
                 return GetOffset_IgnoreViewInfo(indices);
 
+            //if both sliced and broadcasted
             if (IsBroadcasted)
                 return GetOffset_broadcasted(indices);
 
