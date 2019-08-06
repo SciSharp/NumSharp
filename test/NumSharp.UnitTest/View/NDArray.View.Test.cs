@@ -591,7 +591,10 @@ namespace NumSharp.UnitTest.View
             ret.Should().NotBeSliced().And.BeShaped(3).And.BeOfValues(3,4,5);
 
             ret = a[Slice.Index(0), Slice.Index(1), Slice.All];
-            ret.Should().BeSliced();
+            ret.Should().NotBeSliced(); //its a a memory slice
+            
+            ret = a[Slice.Index(0), Slice.All, Slice.Index(1)];
+            ret.Should().BeSliced(); //its a a memory slice
         }
 
         [TestMethod]

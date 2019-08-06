@@ -155,7 +155,7 @@ namespace NumSharp.UnitTest.Manipulation
             b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
 
             //reshape
-            var resh = a.reshape(1, 4);
+            var resh = a.reshape_unsafe(1, 4);
             resh.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
             b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
 
-            var resh = a.reshape(1, 4);
+            var resh = a.reshape_unsafe(1, 4);
             resh.Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
         }
 
@@ -199,7 +199,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
             b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
 
-            var resh = b.reshape(1, 4);
+            var resh = b.reshape_unsafe(1, 4);
             resh.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
