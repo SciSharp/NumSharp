@@ -22,20 +22,9 @@ namespace NumSharp.Backends
             if (rhs.ndim == 1)
                 rhs = np.expand_dims(rhs, 1);
 
-            //var broadcast = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-            //var ndimLeft = broadcast.LeftShape.NDim;
-            //var ndimright = broadcast.RightShape.NDim;
-            //var left = new NDArray(lhs.Storage, broadcast.LeftShape);
-            //var right = new NDArray(rhs.Storage, broadcast.RightShape);
-
-            //If both arguments are 2-D they are multiplied like conventional matrices.
-            //Can't happen: If the second argument is 1-D, it is promoted to a matrix by appending a 1 to its dimensions. After matrix multiplication the appended 1 is removed.
-
-            //todo If either argument is N-D, N > 2, it is treated as a stack of matrices residing in the last two indexes and broadcast accordingly.
             if (lhs.ndim == 2 || rhs.ndim == 2)
                 return MultiplyMatrix(lhs, rhs);
 
-            //TODO READ ME! we have  aproblem with broadcasting AND reducing left shape of the matrix.
             NDArray l = lhs;
             NDArray r = rhs;
             (l, r) = np.broadcast_arrays(l, r);

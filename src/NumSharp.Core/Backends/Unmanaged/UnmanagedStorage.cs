@@ -1186,7 +1186,7 @@ namespace NumSharp.Backends
         public IArraySlice CloneData()
         {
             //Incase shape is not sliced, we can copy the internal buffer.
-            if (!Shape.IsSliced)
+            if (!Shape.IsSliced && !Shape.IsBroadcasted)
                 return InternalArray.Clone();
 
             if (Shape.IsScalar)
@@ -2232,7 +2232,7 @@ namespace NumSharp.Backends
             if (!typeof(T).IsValidNPType())
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
 
-            if (Shape.IsSliced)
+            if (Shape.IsSliced || Shape.IsBroadcasted)
                 return CloneData<T>();
 
             var internalArray = InternalArray;

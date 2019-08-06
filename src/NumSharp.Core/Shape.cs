@@ -1060,7 +1060,7 @@ namespace NumSharp
             }
             else
             {
-                ret = Clone(true, true, true);
+                ret = Clone(true, true, false);
             }
 
             var dimensions = ret.dimensions;
