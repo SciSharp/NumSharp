@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
 
-namespace NumSharp.Memory.Pooling
+namespace NumSharp.Unmanaged.Memory
 {
     public class ScalarMemoryPool
     {

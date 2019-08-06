@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.IO.Compression;
 using System.Data;
 
+// ReSharper disable once CheckNamespace
 namespace NumSharp
 {
     public class NpzDictionary<T> : IDisposable, IReadOnlyDictionary<string, T>, ICollection<T>

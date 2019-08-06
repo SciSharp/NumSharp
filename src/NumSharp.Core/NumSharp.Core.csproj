@@ -92,6 +92,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="NumSharp.Core.csproj.DotSettings" />
     <None Remove="Operations\NdArray.ElementsWise.tt" />
   </ItemGroup>
 

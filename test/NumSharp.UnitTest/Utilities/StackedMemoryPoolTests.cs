@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Memory.Pooling;
+using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Utilities
 {

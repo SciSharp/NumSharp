@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using NumSharp.Backends;
 using NumSharp.Utilities.Linq;
 
-namespace NumSharp.Memory.Pooling
+namespace NumSharp.Unmanaged.Memory
 {
     /// <summary>
     ///     Pool of allocated buffers.
