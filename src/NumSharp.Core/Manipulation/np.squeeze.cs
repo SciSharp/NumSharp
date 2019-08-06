@@ -53,7 +53,7 @@ namespace NumSharp
         public static Shape squeeze(Shape shape)
         {
             //TODO! what will happen if its a slice?
-            return new Shape(shape.dimensions.Where(d=>d!=1).ToArray());
+            return new Shape(shape.dimensions.Where(d => d != 1).ToArray());
         }
 
         /// <summary>
@@ -81,7 +81,11 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static Shape squeeze_fast(Shape a, int axis)
         {
-            return new Shape(((int[])a.dimensions.Clone()).RemoveAt(axis));
+            var r = a.dimensions.RemoveAt(axis);
+            if (r.Length == 0 || r.Length == 1 && r[0] == 1)
+                return Shape.Scalar;
+
+            return new Shape(r);
         }
     }
 }

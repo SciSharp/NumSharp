@@ -3,6 +3,7 @@ using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
 {
@@ -53,7 +54,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(0);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
             ret.GetTypeCode.Should().Be(a.GetTypeCode);
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
@@ -65,7 +66,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(1);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -76,7 +77,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(2);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -87,7 +88,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(-1);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -98,7 +99,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(2, keepdims: true);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -109,7 +110,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(-1, keepdims: true);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 3, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 3, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -120,7 +121,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(1, keepdims: true);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
-            ret.Shape.Should().Be(new Shape(3, 1, 3));
+            FluentExtension.Should(ret.Shape).Be(new Shape(3, 1, 3));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -142,7 +143,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(0);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(15);
-            ret.Shape.Should().Be(new Shape(1, 3, 5, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(1, 3, 5, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
@@ -153,7 +154,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(1);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 3, 5, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 3, 5, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -164,7 +165,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(2);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(10);
-            ret.Shape.Should().Be(new Shape(2, 1, 5, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 5, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -175,7 +176,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(4);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 1, 3, 5));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -186,7 +187,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(-1);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 1, 3, 5));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
@@ -197,7 +198,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(2, keepdims: true);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(10);
-            ret.Shape.Should().Be(new Shape(2, 1, 1, 5, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 1, 5, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
@@ -208,8 +209,27 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             var ret = a.sum(-1, keepdims: true);
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
-            ret.Shape.Should().Be(new Shape(2, 1, 3, 5, 1));
+            FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5, 1));
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
+        }
+
+        [TestMethod]
+        public void Case3_TurnIntoScalar()
+        {
+            NDArray a;
+            NDArray ret;
+            // >>> a = np.array(5)
+            // >>> print(np.prod(a))
+            // >>> print(np.prod(a).shape)
+            // 5
+            // ()
+
+            a = np.array(5);
+            ret = np.prod(a);
+            FluentExtension.Should(ret).BeScalar(5);
+            
+            ret = np.sum(a);
+            FluentExtension.Should(ret).BeScalar(5);
         }
     }
 }

@@ -20,6 +20,9 @@ namespace NumSharp.Backends
                 var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
                 if (keepdims)
                     r.Storage.ExpandDimension(0);
+                else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
+                    r.Storage.Reshape(Shape.Scalar);
+
                 return r;
             }
 
@@ -28,6 +31,8 @@ namespace NumSharp.Backends
                 var r = NDArray.Scalar(product_elementwise(arr, typeCode));
                 if (keepdims)
                     r.Storage.ExpandDimension(0);
+                else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
+                    r.Storage.Reshape(Shape.Scalar);
                 return r;
             }
 
@@ -2411,6 +2416,8 @@ namespace NumSharp.Backends
 
             if (keepdims)
                 ret.Storage.ExpandDimension(axis);
+            else if (ret.Shape.size == 1 && ret.ndim == 1)
+                ret.Storage.Reshape(Shape.Scalar);
 
             return ret;
         }

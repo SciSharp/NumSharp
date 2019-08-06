@@ -18,12 +18,16 @@ namespace NumSharp.Backends
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
             {
                 var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
+                if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
+                    r.Storage.Reshape(Shape.Scalar);
                 return r;
             }
 
             if (axis_ == null)
             {
                 var r = cumsum_elementwise(arr, typeCode);
+                if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
+                    r.Storage.Reshape(Shape.Scalar);
                 return r;
             }
 
