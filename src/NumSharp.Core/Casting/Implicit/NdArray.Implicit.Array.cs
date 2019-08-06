@@ -17,13 +17,7 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Collections;
-using NumSharp;
 using System.Text.RegularExpressions;
 using NumSharp.Backends;
 using NumSharp.Utilities;

@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp

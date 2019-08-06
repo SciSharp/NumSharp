@@ -1,7 +1,4 @@
-﻿using System;
-using NumSharp.Backends.Unmanaged;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public partial class NDArray
     {

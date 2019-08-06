@@ -1,12 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
-using System.Text;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {

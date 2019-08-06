@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public class IncorrectShapeException : System.Exception
     {

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using NumSharp.LAPACKProvider;
-using NumSharp;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public static partial class LAPACK
     {

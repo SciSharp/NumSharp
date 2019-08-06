@@ -1,9 +1,4 @@
-﻿using NumSharp.Extensions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using NumSharp.Backends.Unmanaged;
+﻿using System;
 
 namespace NumSharp
 {

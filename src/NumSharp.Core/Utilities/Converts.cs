@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using NumSharp.Backends;
 
 namespace NumSharp.Utilities

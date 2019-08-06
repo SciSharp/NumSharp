@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Diagnostics.Contracts;
 using System.IO;
-using System.Runtime.ConstrainedExecution;
 
 namespace NumSharp
 {

@@ -1,5 +1,4 @@
-﻿using NumSharp.Backends;
-using System;
+﻿using System;
 
 namespace NumSharp
 {

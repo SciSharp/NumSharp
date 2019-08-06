@@ -16,13 +16,6 @@
  * along with this program.  If not, see <http://www.apache.org/licenses/LICENSE-2.0/>.
  */
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Collections;
 using System.Numerics;
 
 namespace NumSharp

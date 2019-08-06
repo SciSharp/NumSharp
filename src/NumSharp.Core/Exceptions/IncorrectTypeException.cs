@@ -1,7 +1,4 @@
-﻿using System;
-using NumSharp;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public class IncorrectTypeException : System.Exception
     {

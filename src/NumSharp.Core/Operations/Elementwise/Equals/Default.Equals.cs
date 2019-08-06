@@ -3,18 +3,7 @@
 #endif
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
-using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
-using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {

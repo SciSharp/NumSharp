@@ -1,13 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Numerics;
 using NumSharp.Generic;
-using System.Linq;
-using System.Runtime;
-using System.Threading;
-using System.Threading.Tasks;
-using NumSharp.Backends;
 
 namespace NumSharp
 {

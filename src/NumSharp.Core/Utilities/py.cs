@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NumSharp.Utilities
+﻿namespace NumSharp.Utilities
 {
     /// <summary>
     /// Implements Python utility functions that are often used in connection with numpy

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Diagnostics.CodeAnalysis;
-using NumSharp;
-using NumSharp.Backends.Unmanaged;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public partial class NDArray
     {

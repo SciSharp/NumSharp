@@ -1,11 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using NumSharp.Backends;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
 
 namespace NumSharp
 {

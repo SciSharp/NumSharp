@@ -1,8 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Runtime.InteropServices;
-
-namespace NumSharp.Backends
+﻿namespace NumSharp.Backends
 {
     /// <summary>
     ///     Default Tensor Engine implemented in pure micro-optimized C#.

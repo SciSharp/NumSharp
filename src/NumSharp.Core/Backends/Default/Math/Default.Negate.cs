@@ -1,10 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Numerics;
-using System.Threading.Tasks;
 
 namespace NumSharp.Backends
 {

@@ -19,20 +19,12 @@
 //TODO! Complete all TODOs return(?:.*;|;)[\n\r]{1,2}[\t\s]+//
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Globalization;
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
 using NumSharp.Utilities;
 
 namespace NumSharp

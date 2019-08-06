@@ -1,8 +1,5 @@
-﻿using NumSharp.Backends;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Numerics;
-using System.Text;
 
 namespace NumSharp
 {

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Generic;
-
-namespace NumSharp.Backends
+﻿namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {

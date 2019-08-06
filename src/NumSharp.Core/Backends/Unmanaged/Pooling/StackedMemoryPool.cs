@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
-using NumSharp.Utilities.Linq;
 
 namespace NumSharp.Unmanaged.Memory
 {

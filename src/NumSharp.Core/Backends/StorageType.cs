@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Backends;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public enum StorageType
     {

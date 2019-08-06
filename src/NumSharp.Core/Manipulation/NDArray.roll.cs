@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections;
-using System.Linq;
-using System.Text;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {

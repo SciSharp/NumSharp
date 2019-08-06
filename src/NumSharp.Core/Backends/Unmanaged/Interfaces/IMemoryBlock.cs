@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace NumSharp.Backends.Unmanaged
+﻿namespace NumSharp.Backends.Unmanaged
 {
     public interface IMemoryBlock
     {
@@ -31,9 +29,8 @@ namespace NumSharp.Backends.Unmanaged
         ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
         /// </summary>
         NPTypeCode TypeCode { get; }
-
     }
-    
+
     public interface IMemoryBlock<T> : IMemoryBlock where T : unmanaged
     {
         /// <summary>

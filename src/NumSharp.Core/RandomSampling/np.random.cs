@@ -1,9 +1,4 @@
-﻿using NumSharp.Extensions;
-using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     /// <summary>
     ///     A class that serves as numpy.random.RandomState in python.

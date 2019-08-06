@@ -1,13 +1,4 @@
-﻿using NumSharp.Backends;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using NumSharp.Backends.Unmanaged;
-using NumSharp.Generic;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public partial class NDArray
     {

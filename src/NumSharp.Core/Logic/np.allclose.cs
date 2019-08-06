@@ -1,6 +1,4 @@
-﻿using NumSharp.Backends;
-
-namespace NumSharp {
+﻿namespace NumSharp {
     public static partial class np
     {
         /// <summary>

@@ -1,6 +1,6 @@
 ﻿using System;
-using CompilerUnsafe = System.Runtime.CompilerServices.Unsafe;
 using NumSharp.Backends.Unmanaged;
+using CompilerUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 namespace NumSharp
 {

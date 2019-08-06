@@ -1,7 +1,4 @@
-﻿using System.Numerics;
-using System.Runtime.InteropServices;
-
-namespace NumSharp.Unmanaged.Memory
+﻿namespace NumSharp.Unmanaged.Memory
 {
     public class ScalarMemoryPool
     {

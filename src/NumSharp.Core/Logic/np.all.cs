@@ -1,5 +1,4 @@
-﻿using NumSharp.Backends;
-using NumSharp.Generic;
+﻿using NumSharp.Generic;
 
 namespace NumSharp {
     public static partial class np

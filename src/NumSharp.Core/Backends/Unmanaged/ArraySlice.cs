@@ -1,14 +1,7 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using NumSharp.Memory.Pooling;
 using NumSharp.Unmanaged.Memory;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
