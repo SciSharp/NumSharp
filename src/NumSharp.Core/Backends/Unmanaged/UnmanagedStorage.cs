@@ -27,7 +27,7 @@ namespace NumSharp.Backends
     ///      - CloneData always create a clone of storage and return this as reference object<br></br>
     ///      - CloneData{T} clone storage and cast this clone <br></br>
     /// </remarks>
-    public partial class UnmanagedStorage : IStorage, ICloneable
+    public partial class UnmanagedStorage : ICloneable
     {
 #if _REGEN
         %foreach supported_dtypes,supported_dtypes_lowercase%
