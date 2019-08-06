@@ -4,12 +4,12 @@
     <!--<TargetFramework>netcoreapp2.1</TargetFramework>-->
     <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <Authors>Haiping Chen, Christian Kahr, Meinrad Recheis</Authors>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Haiping Chen, Meinrad Recheis, Eli Belash</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
-    <Copyright>Apache 2.0</Copyright>
+    <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Main changes since v0.10
 1: Fix byte to float converting.
@@ -26,7 +26,7 @@
     <FileVersion>0.10.3.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <PackageLicenseUrl></PackageLicenseUrl>
+    <PackageLicenseUrl>https://github.com/SciSharp/NumSharp/blob/master/LICENSE</PackageLicenseUrl>
     <LangVersion>7.3</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
