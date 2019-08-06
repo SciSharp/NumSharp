@@ -29,7 +29,7 @@ namespace NumSharp
 
         public ViewInfo Clone()
         {
-            return new ViewInfo() {Slices = (SliceDef[])Slices.Clone(), OriginalShape = OriginalShape.Clone(true, false), UnreducedShape = UnreducedShape.Clone(true, false),};
+            return new ViewInfo() {Slices = Slices?.Clone() as SliceDef[], OriginalShape = OriginalShape.Clone(true, false, false), UnreducedShape = UnreducedShape.Clone(true, false, false), ParentShape = ParentShape.Clone(true, false, false)};
         }
 
         object ICloneable.Clone() => Clone();

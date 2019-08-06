@@ -27,7 +27,7 @@ namespace NumSharp.Backends
     ///      - CloneData always create a clone of storage and return this as reference object<br></br>
     ///      - CloneData{T} clone storage and cast this clone <br></br>
     /// </remarks>
-    public partial class UnmanagedStorage : IStorage, ICloneable
+    public partial class UnmanagedStorage : ICloneable
     {
 #if _REGEN
         %foreach supported_dtypes,supported_dtypes_lowercase%
@@ -140,11 +140,12 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias(Shape shape)
         {
             var r = new UnmanagedStorage();
-            r._shape = shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
+
+            r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             return r;
         }
@@ -1003,11 +1004,11 @@ namespace NumSharp.Backends
 
         protected void _Allocate(Shape shape, IArraySlice values)
         {
-            if (shape.IsSliced)
-            {
-                values = values.Clone();
-                shape = new Shape((int[])shape.dimensions.Clone());
-            }
+            //if (shape.IsSliced)
+            //{
+            //    values = values.Clone();
+            //    shape = Shape.Clean();
+            //}
 
             _shape = shape;
             _typecode = values.TypeCode;
@@ -1185,7 +1186,7 @@ namespace NumSharp.Backends
         public IArraySlice CloneData()
         {
             //Incase shape is not sliced, we can copy the internal buffer.
-            if (!Shape.IsSliced)
+            if (!Shape.IsSliced && !Shape.IsBroadcasted)
                 return InternalArray.Clone();
 
             if (Shape.IsScalar)
@@ -1899,26 +1900,113 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         public void Reshape(params int[] dimensions)
         {
-            var newShape = new Shape(dimensions);
-            Reshape(newShape);
+            Reshape(dimensions, false);
         }
 
         /// <summary>
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
-        [MethodImpl((MethodImplOptions)768)]
-        public void Reshape(Shape newShape)
+        /// <exception cref="ArgumentException">If <paramref name="dimensions"/>'s size == 0</exception>
+        public void Reshape(int[] dimensions, bool @unsafe)
         {
-            if (newShape.size != _shape.size)
-                throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the existing storage size ({_shape.size})");
-            if (_shape.IsSliced)
+            if (dimensions == null)
+                throw new ArgumentNullException(nameof(dimensions));
+
+            Shape newShape = new Shape(dimensions);
+
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
+
+            if (!@unsafe)
             {
-                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = _shape, Slices = null };
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
             }
-            _shape = newShape;
-            Count = _shape.size;
+
+            if (_shape.IsBroadcasted)
+                throw new NotSupportedException("Reshaping an already broadcasted shape is not supported.");
+
+            if (_shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
+
+            SetShapeUnsafe(ref newShape);
+        }
+
+        /// <summary>
+        ///     Changes the shape representing this storage.
+        /// </summary>
+        /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
+        [MethodImpl((MethodImplOptions)768)]
+        public void Reshape(Shape newShape, bool @unsafe = false)
+        {
+            Reshape(ref newShape, @unsafe);
+        }
+
+        /// <summary>
+        ///     Changes the shape representing this storage.
+        /// </summary>
+        /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
+        [MethodImpl((MethodImplOptions)768)]
+        public void Reshape(ref Shape newShape, bool @unsafe = false)
+        {
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
+
+            if (!@unsafe)
+            {
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            }
+
+            if (_shape.IsBroadcasted)
+                throw new NotSupportedException("Reshaping an already broadcasted shape is not supported.");
+
+            if (_shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
+
+            SetShapeUnsafe(ref newShape);
+        }
+
+
+        /// <summary>
+        ///     Changes the shape representing this storage.
+        /// </summary>
+        /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
+        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
+        [MethodImpl((MethodImplOptions)768)]
+        public void ReshapeBroadcastedUnsafe(ref Shape newShape, bool guards = false, Shape? original = null)
+        {
+            //handle -1 in reshape
+            InferMissingDimension(ref newShape);
+
+            if (guards)
+            {
+                if (newShape.size == 0 && _shape.size != 0)
+                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                if (_shape.size != newShape.size)
+                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({_shape.size})");
+            }
+
+            if (_shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() {ParentShape = _shape, Slices = null};
+
+            if (original.HasValue)
+                newShape.BroadcastInfo = new BroadcastInfo(original.Value);
+
+            SetShapeUnsafe(ref newShape);
         }
 
         /// <summary>
@@ -1927,9 +2015,51 @@ namespace NumSharp.Backends
         /// <remarks>Used during broadcasting</remarks>
         protected internal void SetShapeUnsafe(Shape shape)
         {
+            SetShapeUnsafe(ref shape);
+        }
+
+        /// <summary>
+        ///     Set the shape of this storage without checking if sizes match.
+        /// </summary>
+        /// <remarks>Used during broadcasting</remarks>
+        protected internal void SetShapeUnsafe(ref Shape shape)
+        {
             _shape = shape;
             Count = _shape.size;
         }
+
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        private void InferMissingDimension(ref Shape shape)
+        {
+            var indexOfNegOne = -1;
+            int product = 1;
+            for (int i = 0; i < shape.NDim; i++)
+            {
+                if (shape[i] == -1)
+                {
+                    if (indexOfNegOne != -1)
+                        throw new ArgumentException("Only allowed to pass one shape dimension as -1");
+                    indexOfNegOne = i;
+                }
+                else
+                {
+                    product *= shape[i];
+                }
+            }
+
+            if (indexOfNegOne == -1)
+                return;
+
+            int missingValue = _shape.size / product;
+            if (missingValue * product != _shape.size)
+            {
+                throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
+            }
+
+            shape.dimensions[indexOfNegOne] = missingValue;
+            shape.ComputeHashcode();
+        }
+
 
         protected internal void ExpandDimension(int axis)
         {
@@ -1956,15 +2086,28 @@ namespace NumSharp.Backends
                 {
                     var inputSlice = slices[i];
                     if (!inputSlice.IsIndex)
+                    {
+                        //incase it is a trailing :, e.g. [2,2, :] in a shape (3,3,5,5) -> (5,5)
+                        if (i == slices.Length - 1 && inputSlice == Slice.All) 
+                        {
+                            Array.Resize(ref indices, indices.Length - 1);
+                            goto _getdata;
+                        }
+
                         goto _perform_slice;
+                    }
+
                     indices[i] = inputSlice.Start.Value;
                 }
 
+                _getdata:
                 return GetData(indices);
             }
 
             //perform a regular slicing
             _perform_slice:
+
+            // In case the slices selected are all ":"
             // ReSharper disable once ConvertIfStatementToReturnStatement
             if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
                 return Alias();
@@ -1995,20 +2138,20 @@ namespace NumSharp.Backends
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
-                default:
-                    throw new NotSupportedException();
+	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt32: return *((uint*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
+	            case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
@@ -2058,14 +2201,24 @@ namespace NumSharp.Backends
         public UnmanagedStorage GetData(params int[] indices)
         {
             var this_shape = Shape;
-            if (this_shape.IsSliced)
+
+            // ReSharper disable once ConvertIfStatementToReturnStatement
+            indices = Shape.InferNegativeCoordinates(Shape.dimensions, indices);
+            if (this_shape.IsBroadcasted)
+            {
+                var (shape, offset) = this_shape.GetSubshape(indices);
+                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
+            }
+            else if (this_shape.IsSliced)
             {
                 // in this case we can not get a slice of contiguous memory, so we slice
                 return GetView(indices.Select(Slice.Index).ToArray());
             }
-
-            var (shape, offset) = this_shape.GetSubshape(Shape.InferNegativeCoordinates(Shape.dimensions, indices));
-            return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+            else
+            {
+                var (shape, offset) = this_shape.GetSubshape(indices);
+                return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+            }
         }
 
         /// <summary>
@@ -2079,7 +2232,7 @@ namespace NumSharp.Backends
             if (!typeof(T).IsValidNPType())
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
 
-            if (Shape.IsSliced)
+            if (Shape.IsSliced || Shape.IsBroadcasted)
                 return CloneData<T>();
 
             var internalArray = InternalArray;
@@ -2285,85 +2438,86 @@ namespace NumSharp.Backends
 
             #region Compute
 
-		    switch (TypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-			    {
-				    CopyTo<bool>((bool*)address);
+            switch (TypeCode)
+            {
+                case NPTypeCode.Boolean:
+                {
+                    CopyTo<bool>((bool*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Byte:
-			    {
-				    CopyTo<byte>((byte*)address);
+                case NPTypeCode.Byte:
+                {
+                    CopyTo<byte>((byte*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int16:
-			    {
-				    CopyTo<short>((short*)address);
+                case NPTypeCode.Int16:
+                {
+                    CopyTo<short>((short*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt16:
-			    {
-				    CopyTo<ushort>((ushort*)address);
+                case NPTypeCode.UInt16:
+                {
+                    CopyTo<ushort>((ushort*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int32:
-			    {
-				    CopyTo<int>((int*)address);
+                case NPTypeCode.Int32:
+                {
+                    CopyTo<int>((int*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt32:
-			    {
-				    CopyTo<uint>((uint*)address);
+                case NPTypeCode.UInt32:
+                {
+                    CopyTo<uint>((uint*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int64:
-			    {
-				    CopyTo<long>((long*)address);
+                case NPTypeCode.Int64:
+                {
+                    CopyTo<long>((long*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt64:
-			    {
-				    CopyTo<ulong>((ulong*)address);
+                case NPTypeCode.UInt64:
+                {
+                    CopyTo<ulong>((ulong*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Char:
-			    {
-				    CopyTo<char>((char*)address);
+                case NPTypeCode.Char:
+                {
+                    CopyTo<char>((char*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Double:
-			    {
-				    CopyTo<double>((double*)address);
+                case NPTypeCode.Double:
+                {
+                    CopyTo<double>((double*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Single:
-			    {
-				    CopyTo<float>((float*)address);
+                case NPTypeCode.Single:
+                {
+                    CopyTo<float>((float*)address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Decimal:
-			    {
-				    CopyTo<decimal>((decimal*)address);
+                case NPTypeCode.Decimal:
+                {
+                    CopyTo<decimal>((decimal*)address);
                     break;
-			    }
+                }
 
-			    default:
-				    throw new NotSupportedException();
-		    }
+                default:
+                    throw new NotSupportedException();
+            }
 
             #endregion
+
 #endif
         }
 
@@ -2401,85 +2555,86 @@ namespace NumSharp.Backends
 
             #region Compute
 
-		    switch (TypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-			    {
-				    CopyTo<bool>((bool*)block.Address);
+            switch (TypeCode)
+            {
+                case NPTypeCode.Boolean:
+                {
+                    CopyTo<bool>((bool*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Byte:
-			    {
-				    CopyTo<byte>((byte*)block.Address);
+                case NPTypeCode.Byte:
+                {
+                    CopyTo<byte>((byte*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int16:
-			    {
-				    CopyTo<short>((short*)block.Address);
+                case NPTypeCode.Int16:
+                {
+                    CopyTo<short>((short*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt16:
-			    {
-				    CopyTo<ushort>((ushort*)block.Address);
+                case NPTypeCode.UInt16:
+                {
+                    CopyTo<ushort>((ushort*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int32:
-			    {
-				    CopyTo<int>((int*)block.Address);
+                case NPTypeCode.Int32:
+                {
+                    CopyTo<int>((int*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt32:
-			    {
-				    CopyTo<uint>((uint*)block.Address);
+                case NPTypeCode.UInt32:
+                {
+                    CopyTo<uint>((uint*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Int64:
-			    {
-				    CopyTo<long>((long*)block.Address);
+                case NPTypeCode.Int64:
+                {
+                    CopyTo<long>((long*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.UInt64:
-			    {
-				    CopyTo<ulong>((ulong*)block.Address);
+                case NPTypeCode.UInt64:
+                {
+                    CopyTo<ulong>((ulong*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Char:
-			    {
-				    CopyTo<char>((char*)block.Address);
+                case NPTypeCode.Char:
+                {
+                    CopyTo<char>((char*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Double:
-			    {
-				    CopyTo<double>((double*)block.Address);
+                case NPTypeCode.Double:
+                {
+                    CopyTo<double>((double*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Single:
-			    {
-				    CopyTo<float>((float*)block.Address);
+                case NPTypeCode.Single:
+                {
+                    CopyTo<float>((float*)block.Address);
                     break;
-			    }
+                }
 
-			    case NPTypeCode.Decimal:
-			    {
-				    CopyTo<decimal>((decimal*)block.Address);
+                case NPTypeCode.Decimal:
+                {
+                    CopyTo<decimal>((decimal*)block.Address);
                     break;
-			    }
+                }
 
-			    default:
-				    throw new NotSupportedException();
-		    }
+                default:
+                    throw new NotSupportedException();
+            }
 
             #endregion
+
 #endif
         }
 
@@ -2494,7 +2649,7 @@ namespace NumSharp.Backends
 
             if (Count > block.Count)
                 throw new ArgumentOutOfRangeException(nameof(block), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
-			
+
             CopyTo<T>(block.Address);
         }
 

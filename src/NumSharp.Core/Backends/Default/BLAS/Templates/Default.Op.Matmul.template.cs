@@ -1,5 +1,5 @@
 ﻿#if _REGEN_TEMPLATE
-%template "../Multiply/Default.Multiply.#1.cs" for every except(supported_dtypes, "Boolean"), except(supported_dtypes_lowercase, "bool")
+%template "../Divide/Default.Divide.#1.cs" for every except(supported_currently_supported, "Boolean"), except(supported_currently_supported_lowercase, "bool")
 #endif
 
 using System;
@@ -22,14 +22,15 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
-        public unsafe NDArray Multiply__1__(in NDArray lhs, in NDArray rhs)
+        public unsafe NDArray Divide__1__(in NDArray lhs, in NDArray rhs)
         {
+            
             //lhs is NDArray of __2__
             switch (rhs.GetTypeCode)
             {
 #if _REGEN
-                %op = "*"
-                %op_bool = "*"
+                %op = "/"
+                %op_bool = "&"
                 case NPTypeCode.Boolean:
                 {
                     //if return type is scalar
@@ -41,7 +42,7 @@ namespace NumSharp.Backends
                     (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (__2__*)lhs.Address;
                     var rhs_address = (bool*)rhs.Address;
-                    var ret = new NDArray(ret_type, BroadcastedLeftShape.Clean(), false);
+                    var ret = new NDArray(ret_type, new Shape(BroadcastedLeftShape.dimensions), false);
                     Shape retShape = ret.Shape;
                     
                     switch (ret_type)
@@ -161,7 +162,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetOffset(current)) = Convert.ToDouble(((__2__)*(lhs_address + BroadcastedLeftShape.GetOffset(current))) %(op) (*(rhs_address + BroadcastedRightShape.GetOffset(current)) ? (__2__) 1 : (__2__) 0));
+                                *(ret_address + retShape.GetOffset(current)) = Convert.ToDouble(((__2__)*(lhs_address + BroadcastedLeftShape.GetOffset(current))) %(op) (*(rhs_address + BroadcastedRightShape.GetOffset(current)) ? 1d : 0d));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -173,7 +174,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetOffset(current)) = Convert.ToSingle(((__2__)*(lhs_address + BroadcastedLeftShape.GetOffset(current))) %(op) (*(rhs_address + BroadcastedRightShape.GetOffset(current)) ? (__2__) 1 : (__2__) 0));
+                                *(ret_address + retShape.GetOffset(current)) = Convert.ToSingle(((__2__)*(lhs_address + BroadcastedLeftShape.GetOffset(current))) %(op) (*(rhs_address + BroadcastedRightShape.GetOffset(current)) ? 1f :  0f));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -198,7 +199,7 @@ namespace NumSharp.Backends
                     break;
                 }
 
-	            %foreach except(supported_dtypes, "Boolean"), except(supported_dtypes_lowercase, "bool")%
+	            %foreach except(supported_currently_supported, "Boolean"), except(supported_currently_supported_lowercase, "bool")%
                 case NPTypeCode.#1:
                 {
                     //if return type is scalar
@@ -330,7 +331,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetOffset(current)) = Convert.ToDouble(*(lhs_address + BroadcastedLeftShape.GetOffset(current)) #(op) (__2__) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                                *(ret_address + retShape.GetOffset(current)) = ((double)*(lhs_address + BroadcastedLeftShape.GetOffset(current)) #(op) (double) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
                             } while (incr.Next() != null);
 
                             return ret;
@@ -342,7 +343,7 @@ namespace NumSharp.Backends
                             int[] current = incr.Index;
                             do
                             {
-                                *(ret_address + retShape.GetOffset(current)) = Convert.ToSingle(*(lhs_address + BroadcastedLeftShape.GetOffset(current)) #(op) (__2__) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                                *(ret_address + retShape.GetOffset(current)) = ((float)*(lhs_address + BroadcastedLeftShape.GetOffset(current)) #(op) (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
                             } while (incr.Next() != null);
 
                             return ret;

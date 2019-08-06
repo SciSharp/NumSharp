@@ -1,6 +1,8 @@
 ﻿using System.Linq;
+using System.Runtime.InteropServices;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
@@ -206,6 +208,34 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             {
                 arr.Free();
                 cast.Free();
+            }
+        }
+
+        [TestMethod]
+        public unsafe void Wrap()
+        {
+            var mem = np.arange(100).astype(NPTypeCode.Double);
+
+            var addr = mem.Address;
+            var count = mem.size;
+            var wrapped = ArraySlice.Wrap<double>(addr, count);
+            for (int i = 0; i < 100; i++)
+            {
+                wrapped[i].Should().Be(i);
+            }
+        }
+
+        [TestMethod]
+        public unsafe void Wrap_Case2()
+        {
+            var mem = np.arange(100).astype(NPTypeCode.Double);
+
+            var addr = (double*) mem.Address;
+            var count = mem.size;
+            var wrapped = ArraySlice.Wrap(addr, count);
+            for (int i = 0; i < 100; i++)
+            {
+                wrapped[i].Should().Be(i);
             }
         }
     }

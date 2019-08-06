@@ -1,101 +1,50 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray MatMul(NDArray x, NDArray y)
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
+        public override NDArray Matmul(NDArray lhs, NDArray rhs)
         {
-            return null;
+            if (lhs.Shape.IsScalar || rhs.Shape.IsScalar)
+                throw new InvalidOperationException("Matmul can't handle scalar multiplication, use `*` or `np.dot(..)` instead");
 
-//            if (x.ndim == 2 && y.ndim == 2)
-//            {
-//                var nd = new NDArray(x.dtype, new Shape(x.shape[0], y.shape[1]));
-//                switch (nd.dtype.Name)
-//                {
-//                    case "Int32":
-//                    {
-//                        var datax = x.Data<int>();
-//                        var datay = y.Data<int>();
+            //If the first argument is 1-D, it is promoted to a matrix by prepending a 1 to its dimensions. After matrix multiplication the prepended 1 is removed.
+            if (lhs.ndim == 1 && rhs.ndim == 2)
+                throw new NotSupportedException("Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?)");
 
-//#if CPU_PARALLEL
-//                            Parallel.For(0, nd.shape[0], (row) =>
-//#else
-//                        for (int row = 0; row < nd.shape[0]; row++)
-//#endif
-//                        {
-//                            for (int col = 0; col < nd.shape[1]; col++)
-//                            {
-//                                int sum = 0;
-//                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
-//                                nd[row, col] = sum;
-//                            }
-//                        }
-//#if CPU_PARALLEL
-//                            );
-//#endif
-//                    }
+            if (rhs.ndim == 1)
+                rhs = np.expand_dims(rhs, 1);
 
-//                        break;
-//                    case "Single":
-//                    {
-//                        var datax = x.Data<float>();
-//                        var datay = y.Data<float>();
-//#if CPU_PARALLEL
-//                            Parallel.For(0, nd.shape[0], (row) =>
-//#else
-//                        for (int row = 0; row < nd.shape[0]; row++)
-//#endif
-//                        {
-//                            for (int col = 0; col < nd.shape[1]; col++)
-//                            {
-//                                float sum = 0;
-//                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
-//                                nd[row, col] = sum;
-//                            }
-//                        }
-//#if CPU_PARALLEL
-//                            );
-//#endif
-//                    }
+            if (lhs.ndim == 2 || rhs.ndim == 2)
+                return MultiplyMatrix(lhs, rhs);
 
-//                        break;
-//                    case "Double":
-//                    {
-//                        var datax = x.Data<double>();
-//                        var datay = y.Data<double>();
-//#if CPU_PARALLEL
-//                            Parallel.For(0, nd.shape[0], (row) =>
-//#else
-//                        for (int row = 0; row < nd.shape[0]; row++)
-//#endif
-//                        {
-//                            for (int col = 0; col < nd.shape[1]; col++)
-//                            {
-//                                double sum = 0;
-//                                for (int s = 0; s < x.shape[1]; s++)
-//                                    sum += datax[x.GetOffset(row, s)] * datay[y.GetOffset(s, col)];
-//                                nd[row, col] = sum;
-//                            }
-//                        }
-//#if CPU_PARALLEL
-//                            );
-//#endif
-//                    }
+            NDArray l = lhs;
+            NDArray r = rhs;
+            (l, r) = np.broadcast_arrays(l, r);
+            var retShape = l.Shape.Clean();
+            Console.WriteLine(retShape);
+            Debug.Assert(l.shape[0] == r.shape[0]);
+            var len = l.size;
+            var ret = new NDArray(np._FindCommonArrayType(l.typecode, r.typecode), retShape);
+            var iterShape = new Shape(retShape.dimensions.Take(retShape.dimensions.Length-2).ToArray());
+            var incr = new NDCoordinatesIncrementor(ref iterShape);
+            var index = incr.Index;
 
-//                        break;
-//                }
+            //TODO! we need to create IEnumeable<int> on NDCoordinatesIncrementor so we can do something like this:
+            //TODO! Parallel.ForEach(incr, i => MultiplyMatrix(l[index], r[index], ret[index]));
+            for (int i = 0; i < len; i++, incr.Next())
+            {
+                MultiplyMatrix(l[index], r[index], ret[index]);
+            }
 
-//                return nd;
-//            }
-
-//            throw new NotImplementedException("matmul");
-//        }
+            return ret;
         }
     }
 }

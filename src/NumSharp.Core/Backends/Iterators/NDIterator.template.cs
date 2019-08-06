@@ -29,7 +29,7 @@ namespace NumSharp
             //non auto-resetting.
             var localBlock = Block;
             Shape shape = Shape;
-            if (Shape.IsSliced)
+            if (Shape.IsSliced || Shape.IsBroadcasted)
             {
                 //Shape is sliced, not auto-resetting
                 switch (Type)
@@ -152,7 +152,7 @@ namespace NumSharp
             Shape shape = Shape;
             var convert = Converts.FindConverter<__1__, TOut>();
 
-            if (Shape.IsSliced)
+            if (Shape.IsSliced || Shape.IsBroadcasted)
             {
                 //Shape is sliced, auto-resetting
                 switch (Type)

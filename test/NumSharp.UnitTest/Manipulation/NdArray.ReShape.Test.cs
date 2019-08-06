@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest.Utilities;
+using static NumSharp.Slice;
 
 namespace NumSharp.UnitTest.Manipulation
 {
@@ -36,14 +39,6 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(n[1, 0] == 6);
         }
 
-        [TestMethod]
-        public void PerformaceBitmapSimulation()
-        {
-            var npRealWorldBitmap = new NDArray(typeof(byte), new Shape(2531, 2081));
-
-            Assert.IsTrue(npRealWorldBitmap.Data<byte>().Count == (2531 * 2081));
-        }
-
         /// <summary>
         /// numpy allow us to give one of new shape parameter as -1 (eg: (2,-1) or (-1,3) but not (-1, -1)). 
         /// It simply means that it is an unknown dimension and we want numpy to figure it out. 
@@ -56,7 +51,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd = np.arange(12).reshape(-1, 2);
             Assert.IsTrue(nd.shape[0] == 6);
             Assert.IsTrue(nd.shape[1] == 2);
-            
+
             nd = np.arange(12).reshape(new Shape(-1, 2));
             Assert.IsTrue(nd.shape[0] == 6);
             Assert.IsTrue(nd.shape[1] == 2);
@@ -110,6 +105,115 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x = np.full(2, (3, 3, 1, 1, 3));
             x.reshape((-1, 3)).shape.Should().BeEquivalentTo(9, 3);
+        }
+
+        [TestMethod]
+        public void Case2_Slice()
+        {
+            var a = arange((3, 2, 2));
+            a = a[0, All];
+            a.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+
+            a = a.reshape(1, 4);
+            a.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+            a[0, 2].Should().BeScalar(2);
+        }
+
+        [TestMethod]
+        public void Case2_Slice_Broadcast()
+        {
+            //alloc
+            var a = arange((3, 2, 2)); //ends up 2, 2
+            var b = arange((2, 2, 2));
+            //slice
+            a = a[0, All];
+            a.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+            //broadcast
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            b.Should().BeShaped(2, 2, 2);
+            //reshape
+            new Action(() => a.reshape(1, -1)).Should().Throw<NotSupportedException>().WithMessage("Reshaping an already broadcasted shape is not supported.");
+        }
+
+        [TestMethod]
+        public void Case3_Slice_Broadcast()
+        {
+            //alloc
+            var a = arange((2, 2, 2)); //ends up 2, 2
+            var b = arange((1, 2, 2));
+            Console.WriteLine(a.ToString(true));
+            Console.WriteLine(b.ToString(true));
+            //broadcast
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
+            b.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            //slice
+            a = a[0, All];
+            b = b[0, All];
+            a.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+            b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+
+            //reshape
+            var resh = a.reshape(1, 4);
+            resh.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void Case4_Slice_Broadcast()
+        {
+            //alloc
+            var a = arange((2, 2, 2)); //ends up 2, 2
+            var b = arange((1, 2, 2));
+            Console.WriteLine(a.ToString(true));
+            Console.WriteLine(b.ToString(true));
+            //broadcast
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
+            b.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            //slice
+            a = a[1, All];
+            b = b[0, All];
+            a.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
+            b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+
+            var resh = a.reshape(1, 4);
+            resh.Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void Case5_Slice_Broadcast()
+        {
+            //alloc
+            var a = arange((2, 2, 2)); //ends up 2, 2
+            var b = arange((1, 2, 2));
+            Console.WriteLine(a.ToString(true));
+            Console.WriteLine(b.ToString(true));
+            //broadcast
+            (a, b) = np.broadcast_arrays(a, b);
+            a.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
+            b.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            //slice
+            a = a[0, All];
+            b = b[1, All];
+            a.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+            b.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
+
+            var resh = b.reshape(1, 4);
+            resh.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        private NDArray arange(ITuple tuple)
+        {
+            var dims = new int[tuple.Length];
+            var size = 1;
+            for (int i = 0; i < tuple.Length; i++)
+            {
+                dims[i] = Convert.ToInt32(tuple[i]);
+                size *= dims[i];
+            }
+
+            return np.arange(size).reshape(dims);
         }
     }
 }

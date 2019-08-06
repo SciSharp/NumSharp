@@ -5,7 +5,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, NPTypeCode? typeCode = null)
+        public override unsafe NDArray ReduceCumAdd(in NDArray arr, int? axis_, NPTypeCode? typeCode = null)
         {
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
@@ -34,8 +34,11 @@ namespace NumSharp.Backends
             if (axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (shape[axis] == 1) //if the given div axis is 1 and can be squeezed out.
+            if (shape[axis] == 1)
+            {
+                //if the given div axis is 1 and can be squeezed out.
                 return np.squeeze_fast(arr, axis);
+            }
 
             //prepare ret
             var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), shape, false);

@@ -290,17 +290,11 @@ namespace NumSharp
         {
             get
             {
-                if (ndim == 1) //because it is already flat, there is no need to clone even if it is already sliced.
+                if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
-
-                if (Shape.IsSliced)
-                {
-                    return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size)));
-                }
-                else
-                {
-                    return new NDArray(Storage.Alias(Shape.Vector(size)));
-                }
+                if (this.Shape.IsBroadcasted)
+                    return this.reshape_broadcast(new int[] {size}, this.Shape.BroadcastInfo?.OriginalShape);
+                return this.reshape(size);
             }
         }
 
@@ -322,7 +316,7 @@ namespace NumSharp
         /// </summary>
         public TensorEngine TensorEngine
         {
-            get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
+            [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
             set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine());
         }
 
@@ -490,7 +484,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (int i = 0; i < ret.Length; i++)
             {
-                ret[i] = new NDArray( Storage.GetData(index));
+                ret[i] = new NDArray(Storage.GetData(index));
                 iter.Next();
             }
 

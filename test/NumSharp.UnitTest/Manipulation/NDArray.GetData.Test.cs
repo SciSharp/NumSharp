@@ -2,6 +2,7 @@
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {

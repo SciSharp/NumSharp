@@ -69,9 +69,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Backends\Internal\**" />
-    <EmbeddedResource Remove="Backends\Internal\**" />
-    <None Remove="Backends\Internal\**" />
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -101,6 +100,8 @@
   </Target>
 
   <ItemGroup>
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
     <None Include="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />

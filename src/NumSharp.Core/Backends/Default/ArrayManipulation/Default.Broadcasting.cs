@@ -73,6 +73,7 @@ namespace NumSharp.Backends
                 }
             }
 
+            //we dont need to mark it as IsBroadcasted because techincally, it has not broadcasted strides.
             return mit; //implicit cast
         }
 
@@ -128,8 +129,10 @@ namespace NumSharp.Backends
                 }
             }
 
+            //we dont need to mark it as IsBroadcasted because techincally, it has not broadcasted strides.
             return mit.Clean();
         }
+
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static Shape ResolveReturnShape(params NDArray[] shapes)
         {
@@ -183,6 +186,7 @@ namespace NumSharp.Backends
                 }
             }
 
+            //we dont need to mark it as IsBroadcasted because techincally, it has not broadcasted strides.
             return mit.Clean();
         }
 
@@ -247,6 +251,7 @@ namespace NumSharp.Backends
                 ret[i] = mit.Clean();
                 ref Shape it = ref ret[i];
                 nd = ogiter.NDim;
+                it.BroadcastInfo = new BroadcastInfo(ogiter);
                 it.size = tmp;
                 it.layout = 'C';
                 //if (nd != 0)
@@ -275,6 +280,8 @@ namespace NumSharp.Backends
                     //if (j > 0)
                     //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
                 }
+
+                it.ComputeHashcode();
             }
 
             return ret;
@@ -285,6 +292,9 @@ namespace NumSharp.Backends
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
+            if (leftShape.IsBroadcasted || rightShape.IsBroadcasted)
+                throw new NotSupportedException("Unable to broadcast already broadcasted shape."); //TODO!
+
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
@@ -296,6 +306,7 @@ namespace NumSharp.Backends
             {
                 left = rightShape; //copy right
                 left.strides = _zeros[left.strides.Length]; //zero strides
+                left.BroadcastInfo = new BroadcastInfo(leftShape);
                 return (left, rightShape);
             }
             //is right a scalar
@@ -303,6 +314,7 @@ namespace NumSharp.Backends
             {
                 right = leftShape; //copy left
                 right.strides = _zeros[right.strides.Length]; //zero strides
+                right.BroadcastInfo = new BroadcastInfo(rightShape);
                 return (leftShape, right);
             }
             else
@@ -363,10 +375,15 @@ namespace NumSharp.Backends
                 }
 
 
-                left = new Shape(mit.dimensions);
-                right = new Shape(mit.dimensions);
-                left.ViewInfo = leftShape.ViewInfo;
-                right.ViewInfo = rightShape.ViewInfo;
+                left = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(leftShape)};
+                right = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(rightShape)};
+                if (leftShape.IsSliced)
+                    left.ViewInfo = new ViewInfo() {ParentShape = leftShape, Slices = null};
+                if (rightShape.IsSliced)
+                    right.ViewInfo = new ViewInfo() {ParentShape = rightShape, Slices = null};
+
+                //left.ViewInfo = leftShape.ViewInfo;
+                //right.ViewInfo = rightShape.ViewInfo;
             }
 
             //if (nd != 0)
@@ -423,6 +440,9 @@ namespace NumSharp.Backends
                 //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
             }
 
+            left.ComputeHashcode();
+            right.ComputeHashcode();
+
             return (left, right);
         }
 
@@ -437,11 +457,10 @@ namespace NumSharp.Backends
 
             var shapes = Broadcast(arrays.Select(r => r.Shape).ToArray());
 
-            for (int i = 0; i < arrays.Length; i++) 
+            for (int i = 0; i < arrays.Length; i++)
                 arrays[i] = new NDArray(arrays[i].Storage, shapes[i]);
 
             return arrays;
         }
-
     }
 }

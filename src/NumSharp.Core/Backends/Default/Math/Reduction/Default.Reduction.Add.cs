@@ -5,7 +5,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceAdd(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
         {
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
@@ -38,8 +38,13 @@ namespace NumSharp.Backends
             if (axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            if (shape[axis] == 1) //if the given div axis is 1 and can be squeezed out.
+            if (shape[axis] == 1)
+            {
+                //if the given div axis is 1 and can be squeezed out.
+                if (keepdims)
+                    return new NDArray(arr.Storage.Alias());
                 return np.squeeze_fast(arr, axis);
+            }
 
             //handle keepdims
             Shape axisedShape = Shape.GetAxis(shape, axis);
@@ -2013,7 +2018,7 @@ namespace NumSharp.Backends
 #endif
 
             if (keepdims)
-                ret.Shape.ExpandDimension(axis);
+                ret.Storage.ExpandDimension(axis);
 
             return ret;
         }

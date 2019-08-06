@@ -91,14 +91,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         public void ExpDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;
-            var ret = np.exp(right, NPTypeCode.Byte);
-            ret.GetTypeCode.Should().Be(NPTypeCode.Byte);
-            ret.GetData<byte>().All(d => d == 148).Should().BeTrue();
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                Console.WriteLine(ret.GetAtIndex(i));
-            }
+            new Action(()=> np.exp(right, NPTypeCode.Byte)).Should().Throw<IncorrectTypeException>().Where(exception => exception.Message.Contains("No loop matching the specified signature and casting was found for"));
         }
     }
 }

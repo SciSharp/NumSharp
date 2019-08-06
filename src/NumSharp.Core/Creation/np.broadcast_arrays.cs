@@ -37,7 +37,7 @@ namespace NumSharp
         /// <param name="rhs">An array to broadcast.</param>
         /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
-        public static (NDArray, NDArray) broadcast_arrays(NDArray lhs, NDArray rhs)
+        public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
             var (leftShape, rightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
             return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),

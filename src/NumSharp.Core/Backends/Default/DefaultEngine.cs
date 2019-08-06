@@ -12,6 +12,6 @@ namespace NumSharp.Backends
         /// <summary>
         ///     The threshold atwhich after n-items in an array, computation will use Parallel.For
         /// </summary>
-        public const int ParallelLimit = 84999;
+        public const int ParallelAbove = 84999;
     }
 }

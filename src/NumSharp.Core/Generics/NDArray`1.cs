@@ -163,7 +163,7 @@ namespace NumSharp.Generic
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                if (indices.Length!=ndim)
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
                     throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
 
                 return Storage.GetValue<T>(indices);
@@ -171,7 +171,7 @@ namespace NumSharp.Generic
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                if (indices.Length != ndim)
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
                     throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
 
                 Storage.SetValue<T>(value, indices);
@@ -212,7 +212,8 @@ namespace NumSharp.Generic
 
         public new T GetAtIndex(int index)
         {
-            unsafe {
+            unsafe
+            {
                 return *(Address + Shape.TransformOffset(index));
             }
         }
