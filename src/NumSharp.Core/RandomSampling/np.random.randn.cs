@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using NumSharp.Generic;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -26,13 +22,30 @@ namespace NumSharp
         /// <returns></returns>
         public T randn<T>()
         {
-            var nd = stardard_normal();
-            switch (typeof(T).Name)
+            switch (typeof(T).GetTypeCode())
             {
-                case "Double":
-                    return (T)Convert.ChangeType(nd.Data<double>()[0], typeof(T));
-                default:
-                    throw new NotImplementedException("randn");
+#if _REGEN
+	            %foreach supported_dtypes,supported_dtypes_lowercase%
+	            case NPTypeCode.#1: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            %
+	            default:
+		            throw new NotSupportedException();
+#else
+	            case NPTypeCode.Boolean: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Byte: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int16: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt16: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int32: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt32: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Int64: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.UInt64: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Char: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Double: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Single: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            case NPTypeCode.Decimal: return (T)Convert.ChangeType(randomizer.NextDouble(), typeof(T));
+	            default:
+		            throw new NotSupportedException();
+#endif
             }
         }
 
@@ -47,7 +60,7 @@ namespace NumSharp
         {
             var array = new NDArray(typeof(double), new Shape(dims));
 
-            double[] arr = array.Data<double>();
+            var arr = array.Data<double>();
 
             for (int i = 0; i < array.size; i++)
             {

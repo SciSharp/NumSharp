@@ -17,7 +17,7 @@ namespace NumSharp.Utilities
         #region Cloning
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Span{T}.CopyTo"/>.
+        ///     Creates a clone of given <see cref="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         /// <remarks>If possible, for performance reasons use generic version of this method.</remarks>
@@ -54,7 +54,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        ///     Creates a clone of given <see cref="sourceArray"/> using <see cref="Span{T}.CopyTo"/>.
+        ///     Creates a clone of given <see cref="sourceArray"/>.
         /// </summary>
         /// <param name="sourceArray">The array to clone</param>
         public static T[] Clone<T>(T[] sourceArray)
@@ -152,7 +152,7 @@ namespace NumSharp.Utilities
             switch (returnType.GetTypeCode())
             {
 #if _REGEN
-                %foreach supported_dtypes %
+                %foreach all_dtypes %
                 case NPTypeCode.#1:
                 {
                     return To#1(arr);
@@ -247,7 +247,7 @@ namespace NumSharp.Utilities
             switch (typeCode)
             {
 #if _REGEN
-                %foreach supported_dtypes %
+                %foreach all_dtypes %
                 case NPTypeCode.#1:
                 {
                     return To#1(arr);
@@ -347,7 +347,7 @@ namespace NumSharp.Utilities
         #region From NonGeneric
 
 #if _REGEN
-        %foreach supported_dtypes%
+        %foreach all_dtypes%
 
         public static #1[] To#1(Array sourceArray)
         {
@@ -974,7 +974,7 @@ namespace NumSharp.Utilities
         #region To Same Type
 
 #if _REGEN
-        %foreach supported_dtypes%
+        %foreach all_dtypes%
         
         /// <summary>
         ///     Converts <see cref="#1"/> array to a <see cref="#1"/> array.

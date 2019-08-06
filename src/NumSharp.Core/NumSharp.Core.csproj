@@ -4,12 +4,12 @@
     <!--<TargetFramework>netcoreapp2.1</TargetFramework>-->
     <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <Authors>Haiping Chen, Christian Kahr, Meinrad Recheis</Authors>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Haiping Chen, Meinrad Recheis, Eli Belash</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
-    <Copyright>Apache 2.0</Copyright>
+    <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Main changes since v0.10
 1: Fix byte to float converting.
@@ -28,8 +28,8 @@
     <FileVersion>0.10.6.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <PackageLicenseUrl></PackageLicenseUrl>
-    <LangVersion>latest</LangVersion>
+    <PackageLicenseUrl>https://github.com/SciSharp/NumSharp/blob/master/LICENSE</PackageLicenseUrl>
+    <LangVersion>7.3</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
@@ -37,10 +37,11 @@
     <RootNamespace>NumSharp</RootNamespace>
     <Version>0.10.6</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SignAssembly>false</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
-
+  
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
     <DefineConstants>NETFRAMEWORK</DefineConstants>
     <RuntimeIdentifier>win-x86</RuntimeIdentifier>
@@ -56,13 +57,10 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DefineConstants>TRACE;DEBUG</DefineConstants>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>1701;1702;IDE1006</NoWarn>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'" />
 
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
     <PackageReference Include="System.Memory" Version="4.5.1" />
@@ -75,17 +73,30 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Backends\ArrayFire\**" />
-    <EmbeddedResource Remove="Backends\ArrayFire\**" />
-    <None Remove="Backends\ArrayFire\**" />
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Casting\Implicit\NDArray.Implicit.ArrayFire.cs" />
+    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
+    <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
     <Compile Remove="Operations\NdArray.ElementsWise.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="NumSharp.Core.csproj.DotSettings" />
     <None Remove="Operations\NdArray.ElementsWise.tt" />
   </ItemGroup>
 
@@ -94,8 +105,27 @@
   </Target>
 
   <ItemGroup>
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <None Include="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
+    <None Include="Backends\Iterators\NDIterator.template.cs" />
+    <None Include="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
+    <None Include="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.Memory" Version="4.5.3" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.2" />
   </ItemGroup>
 
   <ItemGroup>

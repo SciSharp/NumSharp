@@ -1,31 +1,57 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
-using System.Text;
-using System.Drawing;
-using NumSharp.Backends;
+using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray array(Array array, Type dtype = null, int ndim = 1)
+        [MethodImpl((MethodImplOptions)768)]
+        public static NDArray array(NDArray nd, bool copy = false)
         {
-            dtype = (dtype == null) ? array.GetType().GetElementType() : dtype;
+            return copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
+        }
 
-            var nd = new NDArray(dtype, new Shape(new int[] {array.Length}));
+        public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
+        {
+            var arrType = array.ResolveElementType();
 
-            if ((array.Rank == 1) && (!array.GetType().GetElementType().IsArray))
+            //handle dim expansion and extract shape
+            Shape shape;
+            var dims = array.ResolveRank();
+            var missing = dims - ndmin;
+
+            if (missing < 0)
             {
-                nd.ReplaceData(array);
+                shape = Arrays.Concat(Enumerable.Repeat(1, Math.Abs(missing)).ToArray(), Shape.ExtractShape(array));
             }
             else
             {
-                throw new Exception("Method is not implemeneted for multidimensional arrays or jagged arrays.");
+                shape = Shape.ExtractShape(array);
             }
 
-            return dtype == null ? nd : nd.astype(dtype);
+            //flatten
+            if (shape.NDim > 1)
+            {
+                array = Arrays.Flatten(array);
+                copy = false;
+            }
+
+            if (dtype != null && dtype != arrType)
+            {
+                array = ArrayConvert.To(array, dtype);
+                copy = false;
+            }
+
+            return new NDArray(copy ? (Array)array.Clone() : array, shape, order);
+        }
+
+
+        public static NDArray array<T>(params T[] data) where T : unmanaged
+        {
+            return new NDArray(ArraySlice.FromArray(data), new Shape(data.Length));
         }
 
         public static NDArray array<T>(T[][] data)
@@ -36,7 +62,7 @@ namespace NumSharp
 
         public static NDArray array<T>(T[][][] data)
         {
-            var array = data.SelectMany(inner => inner  //todo! not use selectmany.
+            var array = data.SelectMany(inner => inner //todo! not use selectmany.
                     .SelectMany(innerInner => innerInner))
                 .ToArray();
 
@@ -45,37 +71,35 @@ namespace NumSharp
 
         public static NDArray array<T>(T[][][][] data)
         {
-            var array = data.SelectMany(inner => inner  //todo! not use selectmany.
+            var array = data.SelectMany(inner => inner //todo! not use selectmany.
                     .SelectMany(innerInner => innerInner
                         .SelectMany(innerInnerInner => innerInnerInner)))
                 .ToArray();
 
-            return new NDArray(array, new Shape(data.Length, data[0].Length, data[0][0].Length));
+            return new NDArray(array, new Shape(data.Length, data[0].Length, data[0][0].Length, data[0][0][0].Length));
         }
 
-        public static NDArray array<T>(T[,] data)
+        public static NDArray array<T>(T[,] data) where T : unmanaged
         {
-            var array = data.Cast<T>().ToArray(); //todo! not use ienumerable.
-            return new NDArray(array, new Shape(data.GetLength(0), data.GetLength(1)));
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1)));
         }
 
-        public static NDArray array<T>(T[,,] data)
+        public static NDArray array<T>(T[,,] data) where T : unmanaged
         {
-            var array = data.Cast<T>().ToArray(); //todo! not use ienumerable.
-            return new NDArray(array, new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2)));
         }
 
-        public static NDArray array<T>(T[,,,] data)
+        public static NDArray array<T>(T[,,,] data) where T : unmanaged
         {
-            var array = data.Cast<T>().ToArray(); //todo! not use ienumerable.
-            return new NDArray(data.Cast<T>().ToArray(), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3)));
-        }
-
-        public static NDArray array<T>(params T[] data)
-        {
-            var nd = new NDArray(typeof(T), data.Length);
-            nd.Array = data;
-            return nd;
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+            return new NDArray(ArraySlice.FromArray(data.Cast<T>().ToArray()), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3)));
         }
     }
 }

@@ -1,35 +1,31 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 
 namespace NumSharp.Backends
 {
     public class BackendFactory
     {
-        private static Dictionary<BackendType, ITensorEngine> cache
-            = new Dictionary<BackendType, ITensorEngine>();
+        [DebuggerNonUserCode]
+        public static TensorEngine GetEngine(BackendType backendType = BackendType.Default)
+        {
+            switch (backendType)
+            {
+                case BackendType.Default:
+                    return EngineCache<DefaultEngine>.Value;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(backendType), backendType, null);
+            }
+        }
 
         [DebuggerNonUserCode]
-        public static ITensorEngine GetEngine(BackendType backendType = BackendType.Default)
+        public static TensorEngine GetEngine<T>() where T : TensorEngine, new()
         {
-            if (!cache.ContainsKey(backendType))
-            {
-                switch (backendType)
-                {
-                    case BackendType.Default:
-                        return cache[backendType] = new DefaultEngine();
-                    case BackendType.MKL:
-                    case BackendType.SIMD:
-                        return cache[backendType] = new SimdEngine();
-                    //case BackendType.ArrayFire:
-                        //return cache[backendType] = new ArrayFireEngine();
-                    default:
-                        throw new NotImplementedException($"Storage {backendType} not found.");
-                }
-            }
+            return EngineCache<T>.Value;
+        }
 
-            return cache[backendType];
+        private static class EngineCache<T> where T : TensorEngine, new()
+        {
+            public static readonly T Value = new T();
         }
     }
 }

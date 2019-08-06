@@ -1,38 +1,18 @@
-﻿using System;
-using NumSharp;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public partial class NDArray
     {
-        public (NDArray,NDArray) mgrid(NDArray nd2)
+        /// <summary>
+        ///     nd_grid instance which returns a dense multi-dimensional “meshgrid”.
+        ///     An instance of numpy.lib.index_tricks.nd_grid which returns an dense (or fleshed out) mesh-grid when indexed, so that each returned argument has the same shape.
+        ///     The dimensions and number of the output arrays are equal to the number of indexing dimensions.If the step length is not a complex number, then the stop is not inclusive.
+        /// </summary>
+        /// <param name="rhs"></param>
+        /// <returns>mesh-grid `ndarrays` all of the same dimensions</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mgrid.html</remarks>
+        public (NDArray, NDArray) mgrid(NDArray rhs)
         {
-            if( !(this.ndim == 1 || nd2.ndim == 1))
-                throw new IncorrectShapeException("mgrid is implemented only for two single dimension arrays");
-
-            Array nd1Data = this.Storage.GetData();
-            Array nd2Data = nd2.Storage.GetData();
-
-            int[] resultDims = new int[]{this.Storage.Shape.Dimensions[0],nd2.Storage.Shape.Dimensions[0]};
-
-            NDArray res1 = new NDArray(this.dtype,resultDims);
-            NDArray res2 = new NDArray(this.dtype,resultDims);
-
-            Array res1Arr = res1.Storage.GetData();
-            Array res2Arr = res2.Storage.GetData();
-
-            int counter = 0;
-            for (int row = 0; row < nd1Data.Length; row++)
-            {
-                for (int col = 0; col < nd2Data.Length; col++)
-                {
-                    res1Arr.SetValue(nd1Data.GetValue(row), counter);
-                    res2Arr.SetValue(nd2Data.GetValue(col),counter);
-                    counter++;
-                }
-            }
-
-            return (res1,res2);
+            return np.mgrid(this, rhs);
         }
     }
 }

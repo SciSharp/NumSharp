@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void MeshgridTest()
         {
-            NDArray X = np.array(0,1,2);
+            NDArray X = np.array(0, 1, 2);
 
             NDArray y = np.array(0, 1);
 
@@ -21,8 +21,8 @@ namespace NumSharp.UnitTest.Creation
 
             var (xx, yy) = np.meshgrid(X, y, kw);
 
-             // Assert.IsTrue(xx, np.array(new int[,] { { 0,1,2}, { 0,1,2} }));
-             // Assert.IsTrue(yy, np.array(new int[,] { { 0, 0, 0 }, { 1, 1, 1 } }));
+            // Assert.IsTrue(xx, np.array(new int[,] { { 0,1,2}, { 0,1,2} }));
+            // Assert.IsTrue(yy, np.array(new int[,] { { 0, 0, 0 }, { 1, 1, 1 } }));
         }
     }
 }

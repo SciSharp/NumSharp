@@ -17,8 +17,8 @@ namespace NumSharp.UnitTest.RandomSampling
             copy.set_state(original.get_state());
             var expectedNext = original.randomizer.Next();
             copy.randomizer.Next().Should().Be(expectedNext);
-        }        
-        
+        }
+
         [TestMethod]
         public void CompareRandomizerToRandom()
         {
@@ -27,13 +27,13 @@ namespace NumSharp.UnitTest.RandomSampling
 
             rnd.Next().Should().Be(rndizer.Next());
             rnd.Next().Should().Be(rndizer.Next());
-            
+
             var bytes_a = new byte[50];
             var bytes_b = new byte[50];
             rnd.NextBytes(bytes_a);
             rndizer.NextBytes(bytes_b);
             bytes_a.Should().BeEquivalentTo(bytes_b);
-            
+
             rnd.NextBytes(bytes_a);
             rndizer.NextBytes(bytes_b);
             bytes_a.Should().BeEquivalentTo(bytes_b);

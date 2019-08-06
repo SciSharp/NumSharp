@@ -1,42 +1,28 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Text;
+﻿using System.IO;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        // ndarray.tofile(fid, sep="", format="%s")
-        public void tofile(string fileName)
-        {
-            switch (Type.GetTypeCode(dtype))
-            {
-                case TypeCode.Byte:
-                    {
-                        using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
-                        {
-                            writer.Write(Array as byte[]);
-                        }
-                    }
-                    break;
-                case TypeCode.UInt16:
-                    {
-                        var arr = Array as UInt16[];
-                        using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create)))
-                        {
-                            for (var i = 0; i < arr.Length; i++)
-                            {
-                                writer.Write(arr[i]);
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    throw new NotImplementedException($"tofile dtype={dtype} not implemented yet");
-            }            
-        }
 
+        /// <summary>
+        ///     Write array to a file as text or binary (default).<br></br>
+        ///     Data is always written in ‘C’ order, independent of the order of a. <br></br>The data produced by this method can be recovered using the function fromfile().
+        /// </summary>
+        /// <param name="fid">An open file object, or a string containing a filename.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.tofile.html</remarks>
+        public void tofile(string fid)
+        {
+            //TODO! support for sliced data (if sliced, clone and then save)
+            unsafe
+            {
+                using (var fs = File.Open(fid, FileMode.OpenOrCreate))
+                using (var ums = new UnmanagedMemoryStream((byte*)this.Array.Address, this.Array.BytesLength))
+                {
+                    fs.SetLength(0);
+                    ums.CopyTo(fs);
+                }
+            }
+        }
     }
 }

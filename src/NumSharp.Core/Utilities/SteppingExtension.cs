@@ -1,19 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace NumSharp.Utilities
 {
     public static class SteppingExtension
     {
-
         // this will step an array ... [1,2,3,4].Step(2) => [1,3]
         // if step is 1 the original array is returned without copying it
         public static T[] Step<T>(this T[] array, int step)
         {
             // todo: optimize performance? avoid array copying as much as possible, etc.
-            if (step==0)
+            if (step == 0)
                 throw new ArgumentException("Step of 0 is not allowed!");
             if (step == 1)
                 return array;

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Generic;
-
-namespace NumSharp.Backends
+﻿namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
@@ -23,7 +18,7 @@ namespace NumSharp.Backends
         /// <param name="atol">The absolute tolerance parameter(see Notes)</param>
         /// <param name="equal_nan">Whether to compare NaN's as equal.  If True, NaN's in `a` will be
         ///considered equal to NaN's in `b` in the output array.</param>
-        public bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
+        public override bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
             bool result = np.all(np.isclose(a, b, rtol, atol, equal_nan));
             return result;

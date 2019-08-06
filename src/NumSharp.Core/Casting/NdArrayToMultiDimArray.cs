@@ -17,40 +17,38 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Collections;
-using NumSharp;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public Array ToMuliDimArray<T>()
+        public T[] ToArray<T>() where T : unmanaged
         {
-            Array dotNetArray = Arrays.Create(typeof(T), this.shape);
+            return Storage.ToArray<T>();
+        }
 
-            var pufferShape = new Shape(shape);
-            pufferShape.ChangeTensorLayout();
+        public Array ToMuliDimArray<T>() where T : unmanaged
+        {
+            var ret = Arrays.Create(typeof(T), shape);
 
-            int[] indexes = null;
-            object idxValue = null;
+            var iter = this.AsIterator<T>();
+            var hasNext = iter.HasNext;
+            var next = iter.MoveNext;
+            var coorditer = new NDCoordinatesIncrementor(shape);
+            var indices = coorditer.Index;
 
-            T[] array = Storage.GetData<T>();
-
-            for(int idx = 0; idx < this.size;idx++)
+            while (hasNext())
             {
-                indexes = pufferShape.GetDimIndexOutShape(idx);
-                idxValue = array[Storage.Shape.GetIndexInShape(slice, indexes)];
-                dotNetArray.SetValue(idxValue,indexes);
+                ret.SetValue(next(), indices);
+                if (coorditer.Next() == null)
+                    break;
             }
 
-            return dotNetArray;
+            return ret;
         }
-        
+
+
     }
+    
 }

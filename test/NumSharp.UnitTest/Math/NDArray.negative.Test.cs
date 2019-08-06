@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.Maths
         [TestMethod]
         public void NegateAllPositives()
         {
-            NDArray nd = new [] { 1, -2, 3.3f };
+            NDArray nd = new[] {1, -2, 3.3f};
             nd = np.negative(nd);
             Assert.IsTrue(nd.Data<float>().All(v => v <= 0));
         }

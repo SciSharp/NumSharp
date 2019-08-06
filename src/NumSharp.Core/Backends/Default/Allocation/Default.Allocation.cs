@@ -4,14 +4,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public IStorage GetStorage(Type dtype)
+        public override UnmanagedStorage GetStorage(Type dtype)
         {
-            return new TypedArrayStorage(dtype) { Engine = this };
+            return new UnmanagedStorage(dtype) {Engine = this};
         }
 
-        public IStorage GetStorage(NPTypeCode typeCode)
+        public override UnmanagedStorage GetStorage(NPTypeCode typeCode)
         {
-            return new TypedArrayStorage(typeCode) { Engine = this };
+            return new UnmanagedStorage(typeCode) {Engine = this};
         }
     }
 }

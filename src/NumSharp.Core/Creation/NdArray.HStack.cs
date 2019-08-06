@@ -1,74 +1,26 @@
-﻿using NumSharp.Generic;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// Stack arrays in sequence horizontally
+        ///     Stack arrays in sequence horizontally (column wise).
+        ///     This is equivalent to concatenation along the second axis, except for 1-D arrays where it concatenates along the first axis.Rebuilds arrays divided by hsplit.
+        ///     This function makes most sense for arrays with up to 3 dimensions.For instance, for pixel-data with a height(first axis), width(second axis), and r/g/b channels(third axis). The functions concatenate, stack and block provide more general stacking and concatenation operations.
         /// </summary>
-        /// <param name="nps"></param>
-        /// <returns></returns>
-        public NDArray hstack<T>(params NDArray[] nps)
+        /// <param name="tup">The arrays must have the same shape along all but the second axis, except 1-D arrays which can be any length.</param>
+        /// <returns>The array formed by stacking the given arrays.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.hstack.html</remarks>
+        public NDArray hstack(params NDArray[] tup)
         {
-            if (nps == null || nps.Length == 0)
-                throw new Exception("Input arrays can not be empty");
+            if (tup == null)
+                throw new ArgumentNullException(nameof(tup));
 
-            var npAll = new NDArray[nps.Length + 1];
-            npAll[0] = this;
-
-            for (int idx = 0; idx < nps.Length; idx++)
-                if (nps[0].Storage.Shape != nps[idx].Storage.Shape)
-                    throw new Exception("Arrays mush have same shapes");
-                else
-                    npAll[idx + 1] = nps[idx];
-
-            var nd = new NDArray(typeof(T));
-
-            // easy 1D case
-            if (this.ndim == 1)
-            {
-                var list1D = new List<T>();
-                for (int idx = 0; idx < npAll.Length; idx++)
-                    list1D.AddRange(npAll[idx].Data<T>().ToList());
-
-                nd = np.array(list1D.ToArray(), this.dtype);
-            }
-            else
-            {
-                int total = npAll[0].ndim == 1 ? 1 : npAll[0].shape[0];
-                var list = new List<T>(); 
-
-                for (int i = 0; i < total; i++)
-                {
-                    for (int k = 0; k < npAll.Length; k++)
-                    {
-                        var pufferShape = new Shape(npAll[k].shape);
-                        int pageSize = npAll[k].ndim == 1 ? npAll[k].shape[0] : pufferShape.Strides[0];
-                        for (int j = i * pageSize; j < (i + 1) * pageSize; j++)
-                        {
-                            var ele = npAll[k].Data<T>()[j];
-                            list.Add(ele);
-                        }
-                    }
-                }
-
-                int[] shapes = new int[npAll[0].shape.Length];
-                npAll[0].shape.CopyTo(shapes, 0);
-                if (shapes.Length == 1)
-                    shapes[0] *= npAll.Length;
-                else
-                    shapes[1] = npAll.Sum(x => x.shape[1]);
-
-                nd.Storage.Allocate(new Shape(shapes));
-                nd.Storage.ReplaceData(list.ToArray());
-            }
-
-            return nd;
+            NDArray[] list = new NDArray[1 + tup.Length];
+            list[0] = this;
+            tup.CopyTo(list, 1);
+            return np.hstack(list);
         }
     }
 }

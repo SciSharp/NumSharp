@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
 using NumSharp.Backends;
 using NumSharp.Utilities;
 
@@ -19,12 +15,9 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value, Type dtype)
         {
-            var ndArray = new NDArray(dtype, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), Convert.ChangeType(value, dtype)));
+            return new NDArray(UnmanagedStorage.Scalar(Convert.ChangeType(value, dtype)));
+        }
 
-            return ndArray;
-        }        
-        
         /// <summary>
         ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
         /// </summary>
@@ -33,11 +26,40 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value)
         {
-            var dtype = value.GetType();
-            var ndArray = new NDArray(dtype, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(dtype.GetTypeCode(), value));
+            return new NDArray(UnmanagedStorage.Scalar(value));
+        }
 
-            return ndArray;
+        /// <summary>
+        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value of the scalar</param>
+        /// <returns></returns>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
+        public static NDArray Scalar(ValueType value)
+        {
+            return new NDArray(UnmanagedStorage.Scalar(value));
+        }
+
+        /// <summary>
+        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value of the scalar</param>
+        /// <returns></returns>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
+        public static NDArray Scalar<T>(T value) where T : unmanaged
+        {
+            return new NDArray(UnmanagedStorage.Scalar(value));
+        }
+
+        /// <summary>
+        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
+        /// </summary>
+        /// <param name="value">The value of the scalar, attempt to convert will be performed</param>
+        /// <returns></returns>
+        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
+        public static NDArray Scalar<T>(object value) where T : unmanaged
+        {
+            return new NDArray(UnmanagedStorage.Scalar(value as T? ?? Converts.ChangeType<T>(value, InfoOf<T>.NPTypeCode)));
         }
 
         /// <summary>
@@ -49,11 +71,7 @@ namespace NumSharp
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Convert.ChangeType(object,System.Type)"/> will be called.</remarks>
         public static NDArray Scalar(object value, NPTypeCode typeCode)
         {
-            var type = typeCode.AsType();
-            var ndArray = new NDArray(type, new int[0]);
-            ndArray.Storage.ReplaceData(Arrays.Wrap(typeCode, Convert.ChangeType(value, type))); //todo! create a NPConvert to support NPTypeCode
-
-            return ndArray;
+            return new NDArray(UnmanagedStorage.Scalar(value, typeCode));
         }
     }
 }

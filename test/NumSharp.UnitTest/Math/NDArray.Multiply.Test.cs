@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest
 
             var nd2 = nd1 * 2;
 
-            AssertAreEqual(new byte[] { 0, 2, 4 }, nd2.Data<byte>());
+            AssertAreEqual(new int[] {0, 2, 4}, nd2.Data<int>());
         }
 
         [TestMethod]
@@ -27,8 +27,7 @@ namespace NumSharp.UnitTest
 
             var nd2 = nd1 * 2;
 
-            AssertAreEqual(new ushort[] { 0, 2, 4 }, nd2.Data<ushort>());
+            AssertAreEqual(new int[] {0, 2, 4}, nd2.Data<int>());
         }
-
     }
 }

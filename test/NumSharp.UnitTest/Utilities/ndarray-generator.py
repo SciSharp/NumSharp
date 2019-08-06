@@ -32,3 +32,22 @@ class cSharp:
             print(rowStr)
         print("            }}, new Shape(new int[] {{ {}, {} }}));".format(v.shape[0], v.shape[1]))
         print("")
+
+    def asCode1D(varName, v):
+        if v.dtype.name == "int32":
+            vType = "Int32"
+        elif v.dtype.name == "float64":
+            vType = "double"
+        else:
+            vType = "unknown"
+        print("        static NDArray {0} = new NDArray(new {1}[] {{".format(varName, vType))
+        rowStr = "            "
+        commasToPrint = v.shape[0] - 1
+        for j, item in enumerate(v):
+            rowStr = rowStr + "{}".format(item)
+            if commasToPrint > 0:
+                rowStr = rowStr + ", "
+            commasToPrint -= 1
+        print(rowStr)
+        print("            }}, new Shape(new int[] {{ {} }}));".format(v.shape[0]))
+        print("")

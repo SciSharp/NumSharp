@@ -13,27 +13,27 @@ namespace NumSharp.UnitTest
         public void ConvertFromJagged()
         {
             double[][] a = new double[3][];
-            for(int idx = 0; idx < a.Length;idx++)
+            for (int idx = 0; idx < a.Length; idx++)
                 a[idx] = new double[2];
 
-            
-            for (int idx = 0; idx < 3;idx++)
-                for (int jdx = 0; jdx < 2;jdx++)
-                    a[idx][jdx] = 10 * idx + jdx;
+
+            for (int idx = 0; idx < 3; idx++)
+            for (int jdx = 0; jdx < 2; jdx++)
+                a[idx][jdx] = 10 * idx + jdx;
 
             NDArray b = a;
 
             var c = b.MakeGeneric<double>();
-            
-            for (int idx = 0; idx < 3;idx++)
-                for (int jdx = 0; jdx < 2;jdx++)
-                    Assert.IsTrue(c[idx,jdx] == a[idx][jdx]);
+
+            for (int idx = 0; idx < 3; idx++)
+            for (int jdx = 0; jdx < 2; jdx++)
+                Assert.IsTrue(c[idx, jdx] == a[idx][jdx]);
         }
 
         [TestMethod]
         public void FromDotNetVector()
         {
-            NDArray nd = new double[] { 1, 2, 3, 4 };
+            NDArray nd = new double[] {1, 2, 3, 4};
 
             Assert.IsTrue(((double)nd[0]) == 1);
             Assert.IsTrue(((double)nd[1]) == 2);
@@ -44,27 +44,27 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void FromDotNetMatrix()
         {
-            NDArray nd = new double[,]{{1,2,3},{4,5,6}};
+            NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
 
-            var doubleMatr = new double[,]{{1,2,3},{4,5,6}};
+            var doubleMatr = new double[,] {{1, 2, 3}, {4, 5, 6}};
 
-            for(int idx = 0; idx < doubleMatr.GetLength(0);idx++)
-                for(int jdx = 0; jdx < doubleMatr.GetLength(1);jdx++)
-                    Assert.IsTrue((double)nd[idx,jdx] == doubleMatr[idx,jdx]); 
+            for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
+            for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
+                Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
         }
 
         [TestMethod]
         public void FromAndToDotNetMatrix()
         {
-            NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
+            NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
 
-            double[,] nd_ = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
+            double[,] nd_ = new double[,] {{1, 2, 3}, {4, 5, 6}};
 
-            Array arr =  (Array) nd;
+            Array arr = (Array)nd;
 
-            double[,] doubleMatr = (double[,]) arr;
+            double[,] doubleMatr = (double[,])arr;
 
-            for(int idx = 0; idx < doubleMatr.GetLength(0); idx++)
+            for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
             {
                 for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
                 {
@@ -75,38 +75,26 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void StringCast1()
-        {
-            NDArray nd = "hello";
-
-            string str = nd;
-
-            Assert.IsTrue(str == "hello");
-        }
-
-        [TestMethod]
         public void StringCast2()
         {
             NDArray nd = "[1,2,3;4,5,6]";
 
-            var doubleMatr = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
-
+            var doubleMatr = new double[,] {{1, 2, 3}, {4, 5, 6}};
             for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
-                for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
-                {
-                    var val = (double)nd[idx, jdx];
-                    Assert.IsTrue(val == doubleMatr[idx, jdx]);
-                }
+            for (int jdx = 0; jdx < doubleMatr.GetLength(1); jdx++)
+            {
+                var val = (double)nd[idx, jdx];
+                Assert.IsTrue(val == doubleMatr[idx, jdx]);
+            }
         }
 
         [TestMethod]
         public void StringCast3()
         {
             NDArray nd = "[3,1,1,2]";
-            var intMatr = new double[] { 3, 1, 1, 2 };
+            var intMatr = new double[] {3, 1, 1, 2};
 
             Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<double>()));
         }
     }
-
 }

@@ -25,9 +25,8 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.IsTrue(lowdata[i - 1] <= data[i - 1] && lowdata[i - 1] + 1 > data[i - 1]);
             }
 
-            Assert.IsTrue(uniformed.ndim==1);
-            Assert.IsTrue(uniformed.len==5);
-            Assert.IsTrue(uniformed.size==5);
+            Assert.IsTrue(uniformed.ndim == 1);
+            Assert.IsTrue(uniformed.size == 5);
         }
 
         [TestMethod]
@@ -39,10 +38,9 @@ namespace NumSharp.UnitTest.RandomSampling
             var data = uniformed.Data<double>();
 
             Assert.IsTrue(uniformed.ndim == 1);
-            Assert.IsTrue(uniformed.len == 1);
             Assert.IsTrue(uniformed.size == 1);
 
-            Assert.IsTrue(data.Length == 1);
+            Assert.IsTrue(data.Count == 1);
             Assert.IsTrue(data[0] >= 1 && data[0] < 2);
         }
 
@@ -54,9 +52,8 @@ namespace NumSharp.UnitTest.RandomSampling
             var uniformed = np.random.uniform(low, high, 3, 3);
             var data = uniformed.Data<double>();
             Assert.IsTrue(uniformed.ndim == 2);
-            Assert.IsTrue(uniformed.len == 3);
             Assert.IsTrue(uniformed.size == 9);
-            Assert.IsTrue(data.Length == 9);
+            Assert.IsTrue(data.Count == 9);
             Assert.IsTrue(data.All(v => v >= 1) && data.All(v => v < 2));
         }
     }

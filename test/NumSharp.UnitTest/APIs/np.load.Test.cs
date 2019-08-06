@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.APIs
         [TestMethod]
         public void NumpyLoadTest()
         {
-            int[] a = { 1, 2, 3, 4, 5 };
+            int[] a = {1, 2, 3, 4, 5};
             byte[] mem = np.Save(a);
 
             int[] b = np.Load<int[]>(mem);

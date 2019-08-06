@@ -5,6 +5,8 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
     <!--<TargetFramework>netstandard2.0</TargetFramework>-->
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -41,8 +43,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Backends\Unmanaged\Iterators\**" />
     <Compile Remove="data\**" />
+    <EmbeddedResource Remove="Backends\Unmanaged\Iterators\**" />
     <EmbeddedResource Remove="data\**" />
+    <None Remove="Backends\Unmanaged\Iterators\**" />
     <None Remove="data\**" />
   </ItemGroup>
 
@@ -51,7 +56,6 @@
     <PackageReference Include="FluentAssertions" Version="5.7.0" />
     <PackageReference Include="Microsoft.CSharp" Version="4.5.0" />
     <PackageReference Include="OpenCover" Version="4.7.922" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
@@ -59,9 +63,10 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.1.1" />
-    <PackageReference Include="MSTest.TestAdapter" Version="1.4.0" />
-    <PackageReference Include="MSTest.TestFramework" Version="1.4.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="2.0.0-beta4" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.0.0-beta4" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.6.0-preview7.19362.9" />
   </ItemGroup>
 
   <ItemGroup>

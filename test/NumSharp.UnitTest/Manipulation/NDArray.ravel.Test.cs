@@ -1,13 +1,7 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Numerics;
-using System.Collections.Generic;
-using System.Text;
-using NumSharp.Extensions;
-using System.Linq;
-using NumSharp;
+﻿using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace NumSharp.UnitTest
+namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class RavelTest
@@ -15,14 +9,10 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Simple2DArray()
         {
-            var nd1 = np.array(new int[][]
-            {
-                new int[] { 3, 1, 1, 2 },
-                new int[] { 3, 1, 1, 2 }
-            });
+            var nd1 = np.array(new int[][] {new int[] {3, 1, 1, 2}, new int[] {3, 1, 1, 2}});
 
             var nd2 = nd1.ravel();
-            
+
             Assert.IsTrue(nd1.shape[0] == 2);
             Assert.IsTrue(nd1.shape[1] == 4);
             Assert.IsTrue(nd2.shape[0] == 8);

@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Numerics;
-using System.Threading.Tasks;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -13,119 +10,119 @@ namespace NumSharp
         /// </summary>
         public NDArray positive()
         {
-            var outputNDArray = new NDArray(this.dtype, this.shape);
+            if (this.size == 0)
+                return this.Clone();
 
-            Array inputArray = this.Storage.GetData();
-            Array outputArray = outputNDArray.Storage.GetData();
+            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, copy: true);
+            var len = @out.size;
 
-            switch (outputArray)
+            unsafe
             {
-                case int[] output:
+                switch (@out.GetTypeCode)
                 {
-                    var @in = inputArray as int[];
-                    Parallel.For(0, @in.Length, compute);
-
-                    void compute(int idx)
+                    case NPTypeCode.Boolean:
                     {
-                        var val = @in[idx];
-                        if (val < 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
+                        var out_addr = (bool*)@out.Address;
+                        var addr = (bool*)@out.Address;
+                        for (int i = 0; i < len; i++)
+                            *(out_addr + i) = !*(addr + i);
+                        return @out;
                     }
+#if _REGEN
+                    %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
+	                case NPTypeCode.#1:
+	                {
+                        var out_addr = (#2*)@out.Address;
 
-                    break;
-                }
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                %
+                    %foreach supported_numericals_unsigned,supported_numericals_unsigned_lowercase,supported_numericals_unsigned_defaultvals
+	                case NPTypeCode.#1:
+	                default:
+		                throw new NotSupportedException();
+#else
+	                case NPTypeCode.Int16:
+	                {
+                        var out_addr = (short*)@out.Address;
 
-                case long[] output:
-                {
-                    var @in = inputArray as long[];
-                    Parallel.For(0, @in.Length, compute);
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = (short) -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Int32:
+	                {
+                        var out_addr = (int*)@out.Address;
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val < 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Int64:
+	                {
+                        var out_addr = (long*)@out.Address;
 
-                    break;
-                }
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Double:
+	                {
+                        var out_addr = (double*)@out.Address;
 
-                case double[] output:
-                {
-                    var @in = inputArray as double[];
-                    Parallel.For(0, @in.Length, compute);
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Single:
+	                {
+                        var out_addr = (float*)@out.Address;
 
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val < 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Decimal:
+	                {
+                        var out_addr = (decimal*)@out.Address;
 
-                    break;
-                }
-
-                case float[] output:
-                {
-                    var @in = inputArray as float[];
-                    Parallel.For(0, @in.Length, compute);
-
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val < 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
-
-                    break;
-                }
-
-                case Complex[] output:
-                {
-                    var @in = inputArray as Complex[];
-                    Parallel.For(0, @in.Length, compute);
-
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        output[idx] = new Complex(val.Real < 0 ? -val.Real : val.Real, val.Imaginary < 0 ? -val.Imaginary : val.Imaginary);
-                    }
-
-                    break;
-                }
-
-                case decimal[] output:
-                {
-                    var @in = inputArray as decimal[];
-                    Parallel.For(0, @in.Length, compute);
-
-                    void compute(int idx)
-                    {
-                        var val = @in[idx];
-                        if (val < 0)
-                            output[idx] = -val;
-                        else
-                            output[idx] = val;
-                    }
-
-                    break;
-                }
-
-                default:
-                {
-                    throw new IncorrectTypeException();
+                        for (int i = 0; i < len; i++) {
+                            var val = *(out_addr + i);
+                            if (val < 0)
+                                *(out_addr + i) = -val;
+                        }
+                        return @out;
+	                }
+	                case NPTypeCode.Byte:
+	                case NPTypeCode.UInt16:
+	                case NPTypeCode.UInt32:
+	                case NPTypeCode.UInt64:
+	                case NPTypeCode.Char:
+	                default:
+		                throw new NotSupportedException();
+#endif
                 }
             }
-
-            return outputNDArray;
         }
     }
 }

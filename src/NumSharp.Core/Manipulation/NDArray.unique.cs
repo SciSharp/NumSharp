@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public partial class NDArray
     {
@@ -19,13 +14,14 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray unique<T>()
         {
-            var nd = new NDArray(dtype);
-            var data = Storage.GetData<T>().Distinct().ToArray();
-            nd.Storage.ReplaceData(data);
-            
-            nd.Storage.Reshape(data.Length);
+            return null;
+            //var nd = new NDArray(dtype);
+            //var data = Storage.GetData<T>().Distinct().ToArray();
+            //nd.Storage.ReplaceData(data);
 
-            return nd;
+            //nd.Storage.Reshape(data.Length);
+
+            //return nd;
         }
     }
 }

@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Numerics;
-using System.Text;
 
 namespace NumSharp
 {
@@ -103,21 +98,45 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(float start, float stop, float step = 1)
         {
-            if (start > stop)
+            if (Math.Abs(step) < 0.000001)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
             {
-                throw new Exception("parameters invalid, start is greater than stop.");
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
             }
 
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            if (start > stop)
+                throw new Exception("parameters invalid, start is greater than stop.");
 
-            var nd = new NDArray(typeof(float), new Shape(length));
 
-            float[] puffer = (float[])nd.Array;
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
 
-            for (int index = 0; index < length; index++)
+            if (negativeStep)
             {
-                float value = start + index * step;
-                puffer[index] = value;
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (float*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (float*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
             }
 
             return nd;
@@ -159,21 +178,45 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(double start, double stop, double step = 1)
         {
-            if (start > stop)
+            if (Math.Abs(step) < 0.000001)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
             {
-                throw new Exception("parameters invalid, start is greater than stop.");
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
             }
 
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
+            if (start > stop)
+                throw new Exception("parameters invalid, start is greater than stop.");
 
-            var nd = new NDArray(typeof(double), new Shape(length));
 
-            double[] puffer = (double[])nd.Array;
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(double), Shape.Vector(length), false); //do not fill, we are about to
 
-            for (int index = 0; index < length; index++)
+            if (negativeStep)
             {
-                double value = start + index * step;
-                puffer[index] = value;
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (double*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (double*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
             }
 
             return nd;
@@ -244,21 +287,46 @@ namespace NumSharp
         /// </returns>
         public static NDArray arange(int start, int stop, int step = 1)
         {
-            if (start > stop)
+            if (step == 0)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
             {
-                throw new Exception("parameters invalid, start is greater than stop.");
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
             }
 
-            int length = (int)Math.Ceiling((stop - start + 0.0) / step);
-            int index = 0;
+            if (start > stop)
+                throw new Exception("parameters invalid, start is greater than stop.");
 
-            var nd = new NDArray(np.int32, new Shape(length));
 
-            var a = new int[length];
-            for (int i = start; i < stop; i += step)
-                a[index++] = i;
+            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(int), Shape.Vector(length), false); //do not fill, we are about to
 
-            nd.ReplaceData(a);
+            if (negativeStep)
+            {
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (int*)nd.Array.Address;
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++) 
+                        *(addr + i) = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (int*)nd.Array.Address;
+                    for (int i = 0; i < length; i++)
+                        *(addr + i) = start + i * step;
+                }
+            }
 
             return nd;
         }

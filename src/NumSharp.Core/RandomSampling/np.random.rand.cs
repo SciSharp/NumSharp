@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using NumSharp.Generic;
+﻿using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -13,7 +8,8 @@ namespace NumSharp
         ///     Random values in a given shape.
         ///     Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).
         /// </summary>
-        public NDArray rand(params int[] size) {
+        public NDArray rand(params int[] size)
+        {
             return rand(new Shape(size));
         }
 
@@ -21,15 +17,21 @@ namespace NumSharp
         ///     Random values in a given shape.
         ///     Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).
         /// </summary>
-        public NDArray rand(Shape shape) {
-            NDArray ndArray = new NDArray(typeof(double), shape);
-            double[] numArray = ndArray.Data<double>();
-            for (int index = 0; index < ndArray.size; ++index) {
-                numArray[index] = randomizer.NextDouble();
+        public NDArray rand(Shape shape)
+        {
+            NDArray ret = new NDArray(typeof(double), shape, false);
+
+            unsafe
+            {
+                var addr = (double*)ret.Address;
+                var incr = new NDCoordinatesIncrementor(ref shape);
+                do
+                {
+                    *(addr + shape.GetOffset(incr.Index)) = randomizer.NextDouble();
+                } while (incr.Next() != null);
             }
 
-            ndArray.ReplaceData(numArray);
-            return ndArray;
+            return ret;
         }
 
         /// <summary>
@@ -40,7 +42,7 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray random_sample(params int[] size)
         {
-            return rand(size); 
+            return rand(size);
         }
 
         /// <summary>

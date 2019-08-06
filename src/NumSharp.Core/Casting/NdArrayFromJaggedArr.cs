@@ -18,12 +18,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Collections;
-using NumSharp;
 
 namespace NumSharp
 {
@@ -33,9 +27,9 @@ namespace NumSharp
         /// low performance due to loop element-wise
         /// </summary>
         /// <param name="dotNetArray"></param>
-        private NDArray FromJaggedArray<T>(Array dotNetArray)
+        private static NDArray FromJaggedArray<T>(Array dotNetArray)
         {
-            if(!dotNetArray.GetType().GetElementType().IsArray)
+            if (!dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Multi dim arrays are not allowed here!");
 
             var dimList = new List<int>();
@@ -46,7 +40,7 @@ namespace NumSharp
 
             while (currentArr.GetType().GetElementType().IsArray)
             {
-                Array child = (Array) ((Array) currentArr).GetValue(0);
+                Array child = (Array)((Array)currentArr).GetValue(0);
                 dimList.Add(child.Length);
                 currentArr = child;
             }
@@ -65,6 +59,5 @@ namespace NumSharp
 
             throw new NotImplementedException("FromJaggedArray<T>(Array dotNetArray)");
         }
-        
     }
 }

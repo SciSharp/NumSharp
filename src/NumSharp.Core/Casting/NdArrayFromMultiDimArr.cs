@@ -17,23 +17,16 @@
  */
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Globalization;
-using System.Collections;
-using NumSharp.Backends;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// low performance due to loop element-wise
+        ///     Creates an NDArray out of given array of type <typeparamref name="T"/>
         /// </summary>
         /// <param name="dotNetArray"></param>
-        public NDArray FromMultiDimArray<T>(Array dotNetArray)
+        public static NDArray FromMultiDimArray<T>(Array dotNetArray)
         {
             if (dotNetArray.GetType().GetElementType().IsArray)
                 throw new Exception("Jagged arrays are not allowed here!");

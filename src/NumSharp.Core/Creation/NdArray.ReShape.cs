@@ -1,113 +1,134 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Text;
-using System.Linq;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// 
+        ///     Gives a new shape to an array without changing its data.
         /// </summary>
-        /// <param name="shape"></param>
-        /// <param name="order">
-        /// C: row major
-        /// F: column major
-        /// </param>
-        /// <returns></returns>
-        public NDArray reshape(Shape shape, string order = "C")
+        /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape(Shape newShape)
         {
-            // have to update Array storage
-            if (ndim > 1 && order != this.order && shape != this.shape)
-            {
-                shape.ChangeTensorLayout(order);
-                if (ndim == 2)
-                {
-                    var nd = flatten(order);
-                    switch (dtype.Name)
-                    {
-                        case "Int32":
-                            return new NDArray(nd.Data<int>(), shape: shape, order: order);
-                    }
-                }
-            }
-
-            return new NDArray(Array, shape: shape, order: order);
+            return reshape(ref newShape);
         }
 
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape(ref Shape newShape)
+        {
+            var ret = Storage.Alias();
+            ret.Reshape(ref newShape, false);
+            return new NDArray(ret) {TensorEngine = TensorEngine};
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a 
+        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array 
+        /// and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
+        /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape(params int[] shape)
         {
-            return new NDArray(Array, shape);
+            var ret = Storage.Alias();
+            ret.Reshape(shape, false);
+            return new NDArray(ret) {TensorEngine = TensorEngine};
         }
 
-        protected static int FindNegativeIndex(params int[] shape)
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a 
+        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array 
+        /// and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
+        /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        protected internal NDArray reshape_broadcast(int[] shape, Shape? original)
         {
-            var count = shape.Length;
-            var negOne = false;
-            var indexOfNegOne = -1;
-            for (int i = 0; i < count; i++)
-            {
-                if (shape[i] == -1)
-                {
-                    if (negOne)
-                        throw new ArgumentException("Only allowed to pass one shape dimension as -1");
-
-                    negOne = true;
-                    indexOfNegOne = i;
-                }
-            }
-
-            return indexOfNegOne;
+            var ret = Storage.Alias();
+            var newShape = new Shape(shape);
+            ret.ReshapeBroadcastedUnsafe(ref newShape, false, original);
+            return new NDArray(ret) {TensorEngine = TensorEngine};
         }
-        protected static int[] CalculateNegativeShape(int negativeIndex, IList<int> currentShape, params int[] shapeParams)
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape_unsafe(Shape newshape)
         {
-            var currentShapeCount = currentShape.Count;
-            var shapeParamCount = shapeParams.Length;
-            var newShape = new List<int>();
-            var curShapeVolume = currentShape.Aggregate((x, y) => x * y);
-            if (negativeIndex > -1)
-            {
-                int x = shapeParams[0];
-                int y = 0;
-                if (shapeParamCount >= 1)
-                    y = shapeParams[1];
-                if (shapeParamCount > 2)
-                    throw new ArgumentException("We cannot currently handle reshapes of more than 2 dimensions");
-
-                if (negativeIndex == 0 && shapeParamCount == 2)
-                {
-                    var mod = curShapeVolume % y == 0;
-                    if (!mod)
-                        throw new ArgumentException($"Wrong Reshape. {curShapeVolume} is not evenly divisible by {y}");
-                    else
-                    {
-                        var a = curShapeVolume / y;
-                        var b = y;
-                        newShape.Add(a);
-                        newShape.Add(b);
-                    }
-                }
-                else if (negativeIndex == 1 && shapeParamCount == 2)
-                {
-                    var mod = curShapeVolume % x == 0;
-                    if (!mod)
-                        throw new ArgumentException($"Wrong Reshape. {curShapeVolume} is not evenly divisible by {x}");
-                    else
-                    {
-                        var a = x;
-                        var b = curShapeVolume / x;
-                        newShape.Add(a);
-                        newShape.Add(b);
-                    }
-                }
-            }
-            else
-                return currentShape.ToArray();
-
-            return newShape.ToArray();
+            return reshape_unsafe(ref newshape);
         }
 
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <param name="originalUnbroadcasted"></param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape_unsafe(Shape newshape, Shape originalUnbroadcasted)
+        {
+            return reshape_broadcast(newshape.dimensions, originalUnbroadcasted);
+        }
+
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <param name="originalUnbroadcasted"></param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape_unsafe(int[] dimensions, Shape originalUnbroadcasted)
+        {
+            return reshape_broadcast(dimensions, originalUnbroadcasted);
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        public NDArray reshape_unsafe(ref Shape newshape)
+        {
+            var ret = Storage.Alias();
+            ret.ReshapeBroadcastedUnsafe(ref newshape, false, newshape.BroadcastInfo?.OriginalShape);
+            return new NDArray(ret) {TensorEngine = TensorEngine};
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data.
+        /// </summary>
+        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a 
+        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array 
+        /// and remaining dimensions.</param>
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
+        /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray reshape_unsafe(params int[] shape)
+        {
+            var ret = Storage.Alias();
+            var newShape = new Shape(shape);
+            ret.ReshapeBroadcastedUnsafe(ref newShape, false);
+            return new NDArray(ret) {TensorEngine = TensorEngine};
+        }
     }
 }

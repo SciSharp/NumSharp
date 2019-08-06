@@ -14,13 +14,13 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void ToInt32()
         {
-            int[] ints = { 100, 200, 300, 400, 500};
+            int[] ints = {100, 200, 300, 400, 500};
             byte[] bytes = new byte[ints.Length * sizeof(int)];
             Buffer.BlockCopy(ints, 0, bytes, 0, bytes.Length);
 
             var nd = np.frombuffer(bytes, np.int32);
-            Assert.AreEqual(nd.Data<int>(0), 100);
-            Assert.AreEqual(nd.Data<int>(4), 500);
+            Assert.AreEqual(nd.GetInt32(0), 100);
+            Assert.AreEqual(nd.GetInt32(4), 500);
         }
     }
 }

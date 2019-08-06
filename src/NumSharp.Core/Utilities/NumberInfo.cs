@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return new Complex(double.MaxValue, double.MaxValue);
                 case NPTypeCode.Boolean:
-                    return (byte)1;
+                    return true;
 #if _REGEN
 	            %foreach except(supported_primitives, "Boolean", "String")%
                 case NPTypeCode.#1:
@@ -61,7 +61,7 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return new Complex(double.MinValue, double.MinValue);
                 case NPTypeCode.Boolean:
-                    return (byte)0;
+                    return false;
 #if _REGEN
 	            %foreach except(supported_primitives, "Boolean", "String")%
                 case NPTypeCode.#1:

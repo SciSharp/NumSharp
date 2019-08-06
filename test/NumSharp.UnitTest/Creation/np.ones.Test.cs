@@ -13,24 +13,26 @@ namespace NumSharp.UnitTest.Creation
         {
             var np1 = np.ones(new Shape(5));
 
-            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 5);
+            Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 5);
         }
+
         [TestMethod]
         public void SimpleInt2D()
         {
-            var np1 = np.ones(new Shape(5,5));
+            var np1 = np.ones(new Shape(5, 5));
 
-            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 25);
+            Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 25);
         }
+
         [TestMethod]
         public void SimpleDouble3D()
         {
-            var np1 = np.ones(new Shape(5,5,5));
+            var np1 = np.ones(new Shape(5, 5, 5));
 
-            Assert.IsTrue(np1.Data<double>().Where(x => x==1).ToArray().Length == 125);
+            Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 125);
         }
-		        
-		[DataTestMethod]
+
+        [DataTestMethod]
         [DataRow(typeof(double))]
         [DataRow(typeof(float))]
         [DataRow(typeof(byte))]
@@ -42,15 +44,13 @@ namespace NumSharp.UnitTest.Creation
         [DataRow(typeof(ulong))]
         [DataRow(typeof(ushort))]
         [DataRow(typeof(decimal))]
-        [DataRow(typeof(Complex))]
-        [DataRow(typeof(string))]
-        [DataRow(typeof(NDArray))]
+        //TODO! [DataRow(typeof(Complex))]
         [DataRow(typeof(bool))]
         public void One_AllTypes(Type dtype)
         {
             var np1 = np.ones(new Shape(3, 3, 3), dtype);
             Assert.IsTrue(np1.dtype == dtype);
-            Assert.IsTrue(np1.Array.GetValue(0).GetType() == dtype);
+            Assert.IsTrue(np1.Array.GetIndex(0).GetType() == dtype);
         }
     }
 }

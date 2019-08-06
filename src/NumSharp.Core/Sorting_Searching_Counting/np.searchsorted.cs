@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     public static partial class np
     {
@@ -21,10 +17,11 @@ namespace NumSharp
             NDArray output = new int[v.shape[0]];
             for (int i = 0; i < v.size; i++)
             {
-                double target = v[i];
+                double target = (double) v[i];
                 int idx = binarySearchRightmost(a, target);
-                output[i] = idx;
+                output[i] = (NDArray) idx;
             }
+
             return output;
         }
 
@@ -45,7 +42,7 @@ namespace NumSharp
             while (L < R)
             {
                 m = (L + R) / 2;
-                val = arr[m];
+                val = (double) arr[m];
                 if (val < target)
                 {
                     L = m + 1;
@@ -55,6 +52,7 @@ namespace NumSharp
                     R = m;
                 }
             }
+
             return L;
         }
     }

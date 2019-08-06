@@ -1,8 +1,33 @@
-﻿%supported_dtypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
-%supported_dtypes_lowercase = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
+﻿%all_dtypes = ["NDArray","Complex","Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
+%all_dtypes_lowercase = ["NDArray","Complex","bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
 
 %supported_primitives = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal","String"]
 %supported_primitives_lowercase = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal","string"]
 
 %supported_numericals = ["Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal"]
 %supported_numericals_lowercase = ["byte","short","ushort","int","uint","long","ulong","char","double","float","decimal"]
+%supported_numericals_defaultvals = ["0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
+%supported_numericals_onevales = ["1","1","1","1","1u","1L","1UL","'\1'","1d","1f","1m"]
+//this is the type we use in summerizing/reducting:
+%supported_numericals_accumulatingType = ["UInt32","Int32","UInt32","Int32","UInt32","Int64","UInt64","UInt32","Double","Single","Decimal"]
+%supported_numericals_accumulatingType_defaultvals = ["0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
+
+%supported_numericals_signed = ["Int16","Int32","Int64","Double","Single","Decimal"]
+%supported_numericals_signed_lowercase = ["short","int","long","double","float","decimal"]
+%supported_numericals_signed_defaultvals = ["0","0","0L","0d","0f","0m"]
+%supported_numericals_signed_onevales = ["1","1","1L","1d","1f","1m"]
+
+%supported_numericals_unsigned = ["Byte","UInt16","UInt32","UInt64","Char"]
+%supported_numericals_unsigned_lowercase = ["byte","ushort","uint","ulong","char"]
+%supported_numericals_unsigned_defaultvals = ["0","0","0U","0UL","'\0'"]
+%supported_numericals_unsigned_onevales = ["1","1","1U","1UL","'\1'"]
+
+%supported_dtypes = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal"]
+%supported_dtypes_lowercase = ["bool","byte","short","ushort","int","uint","long","ulong","char","double","float","decimal"]
+%supported_dtypes_defaultvals = [false,"0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
+%supported_dtypes_onevales = [true,"1","1","1","1","1u","1L","1UL","'\1'","1d","1f","1m"]
+%supported_dtypes_dtype = ["bool","uint8","int16","uint16","int32","uint32","int64","uint64","uint8","float64","float32","float64"]
+
+//this is the type we use in summerizing/reducting:
+%supported_dtypes_accumulatingType = ["Int32","UInt32","Int32","UInt32","Int32","UInt32","Int64","UInt64","UInt32","Double","Single","Decimal"]
+%supported_dtypes_accumulatingType_defaultvals = [false, "0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]

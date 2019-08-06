@@ -1,14 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Numerics;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray Transpose(NDArray x, int[] axes = null)
+        public override NDArray Transpose(NDArray x, int[] axes = null)
         {
             NDArray nd;
 
@@ -20,7 +17,7 @@ namespace NumSharp.Backends
             {
                 nd = new NDArray(x.Array, x.shape.Reverse().ToArray());
 
-                nd = nd.reshape(nd.shape, order: x.order == "C" ? "F" : "C");
+                nd = nd.reshape(nd.shape); //TODO , order: x.order == 'C' ? 'F' : 'C'
             }
             else
             {

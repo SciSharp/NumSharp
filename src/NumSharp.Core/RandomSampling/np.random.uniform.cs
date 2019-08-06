@@ -1,15 +1,25 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
 namespace NumSharp
 {
     public partial class NumPyRandom
     {
+        /// <summary>
+        ///     Draw samples from a uniform distribution.
+        ///     Samples are uniformly distributed over the half-open interval [low, high) (includes low, but excludes high). In other words, any value within the given interval is equally likely to be drawn by uniform.
+        /// </summary>
+        /// <param name="low">Lower boundary of the output interval. All values generated will be greater than or equal to low. The default value is 0.</param>
+        /// <param name="high">Upper boundary of the output interval. All values generated will be less than high. The default value is 1.0.</param>
+        /// <param name="shape">Output shape. If the given shape is, e.g., m, n, k, then m * n * k samples are drawn. If size is None (default), a single value is returned if low and high are both scalars. </param>
+        /// <returns>NDArray with values of type <see cref="double"/></returns>
+        public NDArray uniform(double low, double high, Shape shape)
+        {
+            return uniform(low, high, shape.Dimensions);
+        }
+        
         /// <summary>
         ///     Draw samples from a uniform distribution.
         ///     Samples are uniformly distributed over the half-open interval [low, high) (includes low, but excludes high). In other words, any value within the given interval is equally likely to be drawn by uniform.
@@ -29,7 +39,7 @@ namespace NumSharp
             }
 
             var result = new NDArray<double>(size);
-            double[] resultArray = result.Data<double>();
+            ArraySlice<double> resultArray = result.Data<double>();
 
             //parallelism is prohibited to make sure the result come out presistant
             double diff = high - low;

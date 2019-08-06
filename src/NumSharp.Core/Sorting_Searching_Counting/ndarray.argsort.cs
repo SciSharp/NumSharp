@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using NumSharp.Extensions;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-
         /// <summary>
         /// Returns the indices that would sort an array.
         ///
@@ -29,7 +28,7 @@ namespace NumSharp
 
             if (requiredSize.Length == 0)
             {
-                var data = Data<T>();
+                var data = Array;
                 var sorted = Enumerable.Range(0, size)
                     .Select(_ => new {Data = data[_], Index = _})
                     .OrderBy(_ => _.Data)
@@ -51,14 +50,13 @@ namespace NumSharp
                 var sortedIndex = Sort<T>(sortMe);
                 return allSortedData.Concat(sortMe.Zip(sortedIndex, (a, b) => new SortedData(a.ToArray(), b)));
             });
-           
+
             foreach (var arg in argSort)
             {
                 resultArray[arg.DataAccessor] = arg.Index;
             }
 
             return resultArray;
-          
         }
 
         /// <summary>
@@ -89,8 +87,8 @@ namespace NumSharp
                 var iterateUntil = originalIndices[currentStep];
                 var result = Enumerable.Range(0, iterateUntil).Select(_ => previousStep.Concat((_).Yield()));
                 return result;
-
             }
+
             var finalResult = Enumerable.Empty<IEnumerable<int>>();
             return Enumerable.Range(0, originalIndices[currentStep]).Aggregate(finalResult, (current, val) => current.Concat(AccessorCreator(originalIndices, previousStep.Concat((val).Yield()), currentStep + 1)));
         }
@@ -103,8 +101,8 @@ namespace NumSharp
         /// <returns>Sorted Data</returns>
         private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex)
         {
-            var sort = accessIndex.Select((x, index) => new { Data = this[x.ToArray()], Index = index });
-            return sort.OrderBy(a => a.Data).Select(a =>a.Index);
+            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()], Index = index});
+            return sort.OrderBy(a => a.Data).Select(a => a.Index);
         }
 
         private class SortedData
@@ -128,12 +126,6 @@ namespace NumSharp
                 DataAccessor = dataAccessor;
                 Index = index;
             }
-
-
         }
-
     }
-
-
-
 }

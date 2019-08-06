@@ -7,10 +7,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.UnitTest", "test\N
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\NumSharp.Benchmark\NumSharp.Benchmark.csproj", "{2D475706-0F69-4C9B-83B9-03AB1AE38186}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.PowerShell", "src\NumSharp.PowerShell\NumSharp.PowerShell.csproj", "{CA5288B3-C1C9-441B-9D34-D2580E2920FB}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Python", "src\NumSharp.Python\NumSharp.Python.csproj", "{381613F6-A794-4255-B50E-D2315F8A8CEC}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSharp.Core\NumSharp.Core.csproj", "{190A2514-31CD-4738-AF20-3492DD47DE8C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
@@ -31,14 +27,6 @@ Global
 		{2D475706-0F69-4C9B-83B9-03AB1AE38186}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2D475706-0F69-4C9B-83B9-03AB1AE38186}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2D475706-0F69-4C9B-83B9-03AB1AE38186}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CA5288B3-C1C9-441B-9D34-D2580E2920FB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{381613F6-A794-4255-B50E-D2315F8A8CEC}.Release|Any CPU.Build.0 = Release|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{190A2514-31CD-4738-AF20-3492DD47DE8C}.Release|Any CPU.ActiveCfg = Release|Any CPU

@@ -1,37 +1,46 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray asanyarray(string data)
+        /// <summary>
+        ///     Convert the input to an ndarray, but pass ndarray subclasses through.
+        /// </summary>
+        /// <param name="a">Input data, in any form that can be converted to an array. This includes scalars, lists, lists of tuples, tuples, tuples of tuples, tuples of lists, and ndarrays.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
+        /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.asanyarray.html</remarks>
+        public static NDArray asanyarray(in object a, Type dtype = null) //todo support order
         {
-            var nd = new NDArray(typeof(string), new int[0]);
-            nd.ReplaceData(new string[] { data });
-            return nd;
-        }
+            NDArray ret;
+            switch (a) {
+                case null:
+                    throw new ArgumentNullException(nameof(a));
+                case NDArray nd:
+                    return nd;
+                case Array array:
+                    ret = new NDArray(array);
+                    break;
+                case string str:
+                    ret = str; //implicit cast located in NDArray.Implicit.Array
+                    break;
+                default:
+                    var type = a.GetType();
+                    //is it a scalar
+                    if (type.IsPrimitive || type == typeof(decimal))
+                    {
+                        ret = NDArray.Scalar(a);
+                        break;
+                    }
 
-        public static NDArray asanyarray<T>(T data) where T : struct
-        {
-            var nd = new NDArray(typeof(T), new int[0]);
-            nd.ReplaceData(new T[] { data });
-            return nd;
-        }
+                    throw new NotSupportedException($"Unable resolve asanyarray for type {a.GetType().Name}");
+            }
 
-        public static NDArray asanyarray(string[] data, int ndim = 1)
-        {
-            var nd = new NDArray(typeof(string), data.Length);
-            nd.ReplaceData(data);
-            return nd;
-        }
+            if (dtype != null && a.GetType() != dtype)
+                return ret.astype(dtype, true);
 
-        public static NDArray asanyarray<T>(T[] data, int ndim = 1) where T : struct
-        {
-            var nd = new NDArray(typeof(T), data.Length);
-            nd.ReplaceData(data);
-            return nd;
+            return ret;
         }
     }
 }

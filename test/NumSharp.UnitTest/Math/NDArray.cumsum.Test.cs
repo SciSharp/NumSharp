@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-
 using FluentAssertions;
+using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
@@ -12,85 +13,57 @@ namespace NumSharp.UnitTest.Maths
     public class NDArrayCumsumTest : TestClass
     {
         [TestMethod]
-        public void CumsumStaticFunctionTest()
+        public void CumsumStaticFunction()
         {
-            NDArray arr = new double[] { 0, 1, 4, 2, 5, 6, 2 };
-            NDArray expected = new double[] { 0, 1, 5, 7, 12, 18, 20 };
+            NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
+            NDArray expected = new double[] {0, 1, 5, 7, 12, 18, 20};
 
-            NDArray actual = np.cumsum(arr);
-
-            actual.Array.Should().BeEquivalentTo(expected.Array);
+            np.cumsum(arr).Should().Be(expected);
         }
 
         [TestMethod]
-        public void CumsumMemberFunctionTest()
+        public void CumsumMemberFunction()
         {
-            NDArray arr = new double[] { 0, 1, 4, 2, 5, 6, 2 };
-            NDArray expected = new double[] { 0, 1, 5, 7, 12, 18, 20 };
+            NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
+            NDArray expected = new double[] {0, 1, 5, 7, 12, 18, 20};
 
-            NDArray actual = arr.cumsum();
-
-            actual.Array.Should().BeEquivalentTo(expected.Array);
+            arr.cumsum().Should().Be(expected);
         }
 
         [TestMethod]
-        [Ignore("Cumulative summing on multidimensional arrays not implemented yet")]
-        public void Cumsum2dTest()
+        public void Cumsum2d()
         {
-            NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
-            NDArray expected = new int[] { 1, 3, 6, 10, 15, 21 };
+            NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            NDArray expected = new int[] {1, 3, 6, 10, 15, 21};
 
-            NDArray actual = np.cumsum(arr);
-
-            actual.Array.Should().BeEquivalentTo(expected.Array);
+            np.cumsum(arr).Should().Be(expected);
         }
 
         [TestMethod]
-        [Ignore("Cumulative summing with specified data type not implemented yet")]
-        public void Cumsum2dDtypeTest()
+        public void Cumsum2dDtype()
         {
-            NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
-            NDArray expected = new float[] { 1, 3, 6, 10, 15, 21 };
+            NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            NDArray expected = new float[] {1, 3, 6, 10, 15, 21};
 
-            NDArray actual = np.cumsum(arr, dtype: typeof(float));
-
-            actual.Array.Should().BeEquivalentTo(expected.Array);
+            np.cumsum(arr, typeCode: NPTypeCode.Single).Should().Be(expected);
         }
 
         [TestMethod]
-        [Ignore("Cumulative summing along axis not implemented yet")]
-        public void Cumsum2dAxisRowsTest()
+        public void Cumsum2dAxisRows()
         {
-            NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
-            NDArray expected = new int[,] { { 1, 2, 3 }, { 5, 7, 9 } };
+            NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            NDArray expected = new int[,] {{1, 2, 3}, {5, 7, 9}};
 
-            NDArray actual = np.cumsum(arr, axis: 0);
-
-            for (int i = 0; i < actual.shape[0]; i++)
-            {
-                for (int j = 0; j < actual.shape[1]; j++)
-                {
-                    Assert.AreEqual((int)expected[i, j], (int)actual[i, j]);
-                }
-            }
-        }
-
+            np.cumsum(arr, axis: 0).Should().Be(expected);
+        }        
+        
         [TestMethod]
-        [Ignore("Cumulative summing along axis not implemented yet")]
-        public void Cumsum2dAxisColsTest()
+        public void Cumsum2dAxisCols()
         {
-            NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
-            NDArray expected = new int[,] { { 1, 3, 6 }, { 4, 9, 15 } };
+            NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            NDArray expected = new int[,] {{1, 3, 6}, {4, 9, 15}};
 
-            NDArray actual = np.cumsum(arr, axis: 1);
-
-            for (int i = 0; i < actual.shape[0]; i++)
-            {
-                for (int j = 0; j < actual.shape[1]; j++)
-                {
-                    Assert.AreEqual((int)expected[i, j], (int)actual[i, j]);
-                }
-            }
+            np.cumsum(arr, axis: 1).Should().Be(expected);
         }
     }
 }

@@ -1,11 +1,11 @@
-﻿
-using System;
+﻿using System;
 using System.Numerics;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Running;
 using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Benchmark
 {
@@ -18,9 +18,10 @@ namespace NumSharp.Benchmark
         public NDArray np1;
         public NDArray np2;
         public NDArray np3;
-        public double[] np1Double;
-        public double[] np2Double;
-        public double[] np3Double;
+        public ArraySlice<double> np1Double;
+        public ArraySlice<double> np2Double;
+        public ArraySlice<double> np3Double;
+
         [GlobalSetup]
         public void Setup()
         {
@@ -40,23 +41,27 @@ namespace NumSharp.Benchmark
             np3 = new NDArray(new double[100000]);
             np3Double = np3.Data<double>();
         }
+
         [Benchmark]
         public void DirectAddition1D()
         {
-            for(int idx = 0; idx < np3Double.Length;idx++)
+            for (int idx = 0; idx < np3Double.Count; idx++)
                 np3Double[idx] = np1Double[idx] + np2Double[idx];
-        } 
+        }
+
         [Benchmark]
         public void NDArrayAddition1D()
         {
             np3 = np1 + np2;
         }
+
         [Benchmark]
         public void DirectSubstration1D()
         {
-            for(int idx = 0; idx < np3Double.Length;idx++)
+            for (int idx = 0; idx < np3Double.Count; idx++)
                 np3Double[idx] = np1Double[idx] - np2Double[idx];
-        } 
+        }
+
         [Benchmark]
         public void NDArraySubstraction1D()
         {

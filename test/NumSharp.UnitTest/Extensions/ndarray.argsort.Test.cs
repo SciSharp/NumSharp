@@ -16,15 +16,15 @@ namespace NumSharp.UnitTest.Extensions
         [TestMethod]
         public void OneDimension()
         {
-            var x = np.array(new int[] { 3, 1, 2 });
+            var x = np.array(new int[] {3, 1, 2});
             x = x.argsort<int>();
-            Assert.IsTrue(Enumerable.SequenceEqual(new int[] { 1, 2, 0 }, x.Data<int>()));
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {1, 2, 0}, x.Data<int>()));
         }
 
         [TestMethod]
         public void TwoDimension()
         {
-            var x = np.array(new int[] { 3, 1, 2 });
+            var x = np.array(new int[] {3, 1, 2});
         }
     }
 }

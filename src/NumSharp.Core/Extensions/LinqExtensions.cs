@@ -1,15 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Drawing;
+﻿using System.Collections.Generic;
 
-namespace NumSharp
+namespace NumSharp.Extensions
 {
     public static class LinqExtensions
     {
-
         /// <summary>
         /// 
         /// </summary>
@@ -20,6 +14,5 @@ namespace NumSharp
         {
             yield return item;
         }
-
     }
 }

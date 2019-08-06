@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using FluentAssertions;
 
 namespace NumSharp.UnitTest.APIs
 {
@@ -14,16 +15,15 @@ namespace NumSharp.UnitTest.APIs
         public void arange()
         {
             var nd = np.arange(3);
-            AssertAreEqual(nd.Data<int>(), new int[] { 0, 1, 2 });
+            AssertAreEqual(nd.Data<int>(), new int[] {0, 1, 2});
         }
 
         [TestMethod]
         public void ndarray()
         {
-            var x = np.ndarray((2, 3), dtype: np.int32, order: "F");
-            for (int i = 0; i < 6; i++)
-                x.itemset(i, i + 1);
-            // todo: Assert the result!
+            var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
+            Console.WriteLine(x.Shape);
+            x.Cast<int>().Should().AllBeEquivalentTo(0);
         }
 
         [TestMethod]

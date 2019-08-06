@@ -1,9 +1,4 @@
-﻿using NumSharp.Extensions;
-using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace NumSharp
+﻿namespace NumSharp
 {
     /// <summary>
     ///     A class that serves as numpy.random.RandomState in python.
@@ -11,25 +6,25 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy-1.16.1/reference/routines.random.html</remarks>
     public partial class NumPyRandom
     {
-        internal Randomizer randomizer;
+        protected internal Randomizer randomizer;
 
         public int Seed { get; set; }
 
         #region Constructors
 
-        internal NumPyRandom(Randomizer randomizer)
+        protected internal NumPyRandom(Randomizer randomizer)
         {
             this.randomizer = randomizer;
         }
 
-        internal NumPyRandom(NativeRandomState nativeRandomState)
+        protected internal NumPyRandom(NativeRandomState nativeRandomState)
         {
             set_state(nativeRandomState);
         }
 
-        internal NumPyRandom(int seed) : this(new Randomizer(seed)) { }
+        protected internal NumPyRandom(int seed) : this(new Randomizer(seed)) { }
 
-        internal NumPyRandom() : this(new Randomizer()) { }
+        protected internal NumPyRandom() : this(new Randomizer()) { }
 
         #endregion
 

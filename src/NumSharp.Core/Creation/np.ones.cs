@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
 using System.Numerics;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -39,7 +36,7 @@ namespace NumSharp
         /// <param name="shapes">Shape of the new array.</param>
         /// <typeparam name="T">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</typeparam>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones<T>(params int[] shapes)
+        public static NDArray ones<T>(params int[] shapes) where T : unmanaged
         {
             return ones(new Shape(shapes), typeof(T));
         }
@@ -50,122 +47,52 @@ namespace NumSharp
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Shape shape, Type dtype = null)
+        public static NDArray ones(Shape shape, Type dtype)
         {
-            dtype = dtype ?? typeof(double);
-            var nd = new NDArray(dtype, shape); //already allocates inside.
+            return ones(shape, (dtype ?? typeof(double)).GetTypeCode());
+        }
+
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape)
+        {
+            return ones(shape, NPTypeCode.Double);
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <param name="typeCode">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(Shape shape, NPTypeCode typeCode)
+        {
             object one = null;
-            switch (nd.GetTypeCode)
+            switch (typeCode)
             {
                 case NPTypeCode.Complex:
                     one = new Complex(1d, 0d);
                     break;
                 case NPTypeCode.NDArray:
                     one = NDArray.Scalar(1, np.int32);
-                    break;                
+                    break;
                 case NPTypeCode.String:
                     one = "1";
-                    break;
-                default:
-                    one = Convert.ChangeType((byte)1, dtype);
-                    break;
-            }
-
-            switch (nd.GetTypeCode)
-            {
-
-#if _REGEN
-                %foreach except(supported_dtypes, "String")%
-                case NPTypeCode.#1:
-                {
-                    new Span<#1>((#1[]) nd.Array).Fill((#1)one);
-                    break;
-                }
-                %
-                default:
-                    throw new NotImplementedException();
-#else
-                case NPTypeCode.NDArray:
-                {
-                    new Span<NDArray>((NDArray[]) nd.Array).Fill((NDArray)one);
-                    break;
-                }
-                case NPTypeCode.Complex:
-                {
-                    new Span<Complex>((Complex[]) nd.Array).Fill((Complex)one);
-                    break;
-                }
-                case NPTypeCode.Boolean:
-                {
-                    new Span<Boolean>((Boolean[]) nd.Array).Fill((Boolean)one);
-                    break;
-                }
-                case NPTypeCode.Byte:
-                {
-                    new Span<Byte>((Byte[]) nd.Array).Fill((Byte)one);
-                    break;
-                }
-                case NPTypeCode.Int16:
-                {
-                    new Span<Int16>((Int16[]) nd.Array).Fill((Int16)one);
-                    break;
-                }
-                case NPTypeCode.UInt16:
-                {
-                    new Span<UInt16>((UInt16[]) nd.Array).Fill((UInt16)one);
-                    break;
-                }
-                case NPTypeCode.Int32:
-                {
-                    new Span<Int32>((Int32[]) nd.Array).Fill((Int32)one);
-                    break;
-                }
-                case NPTypeCode.UInt32:
-                {
-                    new Span<UInt32>((UInt32[]) nd.Array).Fill((UInt32)one);
-                    break;
-                }
-                case NPTypeCode.Int64:
-                {
-                    new Span<Int64>((Int64[]) nd.Array).Fill((Int64)one);
-                    break;
-                }
-                case NPTypeCode.UInt64:
-                {
-                    new Span<UInt64>((UInt64[]) nd.Array).Fill((UInt64)one);
-                    break;
-                }
+                    break;                
                 case NPTypeCode.Char:
-                {
-                    new Span<Char>((Char[]) nd.Array).Fill((Char)one);
+                    one = '1';
                     break;
-                }
-                case NPTypeCode.Double:
-                {
-                    new Span<Double>((Double[]) nd.Array).Fill((Double)one);
-                    break;
-                }
-                case NPTypeCode.Single:
-                {
-                    new Span<Single>((Single[]) nd.Array).Fill((Single)one);
-                    break;
-                }
-                case NPTypeCode.Decimal:
-                {
-                    new Span<Decimal>((Decimal[]) nd.Array).Fill((Decimal)one);
-                    break;
-                }
-                case NPTypeCode.String:
-                {
-                    new Span<String>((String[]) nd.Array).Fill((String)one);
-                    break;
-                }
                 default:
-                    throw new NotImplementedException();
-#endif
+                    one = Converts.ChangeType((byte)1, typeCode);
+                    break;
             }
 
-            return nd;
+            return new NDArray(ArraySlice.Allocate(typeCode, shape.size, one), shape);
         }
     }
 }

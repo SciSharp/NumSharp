@@ -1,138 +1,48 @@
-﻿using NumSharp.Backends;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
         /// <summary>
-        /// Return the maximum of an array or minimum along an axis
+        ///     Return the minimum of an array or minimum along an axis.
         /// </summary>
-        /// <param name="np"></param>
-        /// <param name="axis"></param>
-        /// <returns></returns>
-        public NDArray amin(int? axis = null)
+        /// <typeparam name="T">The expected return type, cast will be performed if necessary.</typeparam>
+        /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amin.html</remarks>
+        public T amin<T>() where T : unmanaged
         {
-            switch (dtype.Name)
-            {
-                case "Int32":
-                    return AminImpl<int>(axis);
-                case "Single":
-                    return AminImpl<float>(axis);
-            }
-
-            throw new NotImplementedException("amin");
+            return np.asscalar<T>(TensorEngine.AMin(this, null, typeof(T).GetTypeCode(), false));
+        }
+        
+        /// <summary>
+        ///     Return the minimum of an array or minimum along an axis.
+        /// </summary>
+        /// <param name="axis">Axis or axes along which to operate. </param>
+        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
+        /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
+        /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amin.html</remarks>
+        [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray amin(int axis, bool keepdims = false, Type dtype = null)
+        {
+            return TensorEngine.AMin(this, axis, dtype, keepdims);
         }
 
-        private NDArray AminImpl<T>(int? axis = null) where T : struct
+        /// <summary>
+        ///     Return the minimum of an array or minimum along an axis.
+        /// </summary>
+        /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
+        /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.amin.html</remarks>
+        [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray amin(Type dtype = null)
         {
-            var res = new NDArray(dtype);
-
-            if (axis == null)
-            {
-                var npArr = this.Storage.GetData<int>();
-                int min = npArr[0];
-                for (int i = 0; i < npArr.Length; i++)
-                    min = Math.Min(min, npArr[i]);
-
-                res.Storage = res.TensorEngine.GetStorage(dtype);
-                res.Storage.Allocate(new Shape(1));
-                res.Storage.ReplaceData(new int[1] {min});
-            }
-            else
-            {
-                if (axis < 0 || axis >= this.ndim)
-                    throw new Exception("Invalid input: axis");
-
-                int[] resShapes = new int[this.shape.Length - 1];
-                int index = 0; //index for result shape set
-                //axis departs the shape into three parts: prev, cur and post. They are all product of shapes
-                int prev = 1;
-                int cur = 1;
-                int post = 1;
-                int size = 1; //total number of the elements for result
-                //Calculate new Shape
-                for (int i = 0; i < this.shape.Length; i++)
-                {
-                    if (i == axis)
-                        cur = this.shape[i];
-                    else
-                    {
-                        resShapes[index++] = this.shape[i];
-                        size *= this.shape[i];
-                        if (i < axis)
-                            prev *= this.shape[i];
-                        else
-                            post *= this.shape[i];
-                    }
-                }
-
-                //Fill in data
-                index = 0; //index for result data set
-                int sameSetOffset = this.Storage.Shape.Strides[axis.Value];
-                int increments = cur * post;
-
-                switch (typeof(T).Name)
-                {
-                    case "Int32":
-                    {
-                        var resData = new int[size]; //res.Data = new double[size];
-                        var npArr = Data<int>();
-                        int start = 0;
-                        int min = 0;
-                        for (int i = 0; i < this.size; i += increments)
-                        {
-                            for (int j = i; j < i + post; j++)
-                            {
-                                start = j;
-                                min = npArr[start];
-                                for (int k = 0; k < cur; k++)
-                                {
-                                    min = Math.Min(min, npArr[start]);
-                                    start += sameSetOffset;
-                                }
-
-                                resData[index++] = min;
-                            }
-                        }
-
-                        res.Storage.Allocate(new Shape(resShapes));
-                        res.Storage.ReplaceData(resData);
-                    }
-                        break;
-                    case "Single":
-                    {
-                        var resData = new float[size]; //res.Data = new double[size];
-                        var npArr = Data<float>();
-                        int start = 0;
-                        float min = 0;
-                        for (int i = 0; i < this.size; i += increments)
-                        {
-                            for (int j = i; j < i + post; j++)
-                            {
-                                start = j;
-                                min = npArr[start];
-                                for (int k = 0; k < cur; k++)
-                                {
-                                    min = Math.Min(min, npArr[start]);
-                                    start += sameSetOffset;
-                                }
-
-                                resData[index++] = min;
-                            }
-                        }
-
-                        res.Storage.Allocate(new Shape(resShapes));
-                        res.Storage.ReplaceData(resData);
-                    }
-                        break;
-                }
-            }
-
-            return res;
+            return TensorEngine.AMin(this, null, dtype?.GetTypeCode(), false);
         }
     }
 }

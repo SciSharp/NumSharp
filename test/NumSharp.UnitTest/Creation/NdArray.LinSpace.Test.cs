@@ -8,19 +8,24 @@ using NumSharp;
 namespace NumSharp.UnitTest.Creation
 {
     [TestClass]
-    public class NdArrayLinSpaceTest
+    public class np_linspace_tests
     {
         [TestMethod]
         public void FromNumpyDocs()
         {
-            var np1 = np.linspace(2.0, 3.0,5);
+            NDArray nd;
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np1.Data<double>(),new double[]{2.0,2.25,2.5,2.75,3.0}));
+            nd = np.linspace(2.0, 3.0, 5);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<double>(), new double[] {2.0, 2.25, 2.5, 2.75, 3.0}));
 
-            var np2 = np.linspace(2.0, 3.0,5,false);
+            nd = np.linspace(2.0, 3.0, 5, false);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<double>(), new double[] {2.0, 2.20, 2.4, 2.6, 2.8}));
 
-            Assert.IsTrue(Enumerable.SequenceEqual(np2.Data<double>(),new double[]{2.0,2.20,2.4,2.6,2.8}));
+            nd = np.linspace(2.0f, 3.0f, 5);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<float>(), new float[] {2.0f, 2.25f, 2.5f, 2.75f, 3.0f}));
 
+            nd = np.linspace(2.0f, 3.0f, 5, false);
+            Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<float>(), new float[] {2.0f, 2.20f, 2.4f, 2.6f, 2.8f}));
         }
     }
 }

@@ -56,23 +56,6 @@ namespace NumSharp.UnitTest.Creation
             var np1 = np.zeros(new Shape(5, 5, 5));
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 0).ToArray().Length == 125);
-        }        
-        
-        [TestMethod, Description("When creating an array using zeros with type of NDArray, each value should be unique.")]
-        public void DtypeNDArray()
-        {
-            var nd = np.zeros(new Shape(5, 5, 5), dtype: typeof(NDArray));
-            var allocated = nd.GetData<NDArray>();
-            for (int i = 0; i < allocated.Length; i++)
-            {
-                for (int j = 0; j < allocated.Length; j++)
-                {
-                    if (i == j)
-                        continue;
-
-                    allocated[i].Should().NotBeEquivalentTo(allocated[j]);
-                }
-            }
         }
     }
 }

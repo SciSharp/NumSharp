@@ -1,7 +1,5 @@
-﻿using NumSharp.Extensions;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -9,20 +7,22 @@ namespace NumSharp
     {
         public static NDArray frombuffer(byte[] bytes, Type dtype)
         {
+
+            //TODO! all types
             if (dtype.Name == "Int32")
             {
-                var size = bytes.Length / sizeof(int);
+                var size = bytes.Length / InfoOf<int>.Size;
                 var ints = new int[size];
                 for (var index = 0; index < size; index++)
                 {
-                    ints[index] = BitConverter.ToInt32(bytes, index * sizeof(int));
+                    ints[index] = BitConverter.ToInt32(bytes, index * InfoOf<int>.Size);
                 }
 
                 return new NDArray(ints);
             }
             else if (dtype.Name == "Byte")
             {
-                var size = bytes.Length / sizeof(byte);
+                var size = bytes.Length / InfoOf<byte>.Size;
                 var ints = bytes;
                 return new NDArray(bytes);
             }
@@ -34,7 +34,7 @@ namespace NumSharp
         {
             if (dtype == ">u4")
             {
-                var size = bytes.Length / sizeof(uint);
+                var size = bytes.Length / InfoOf<uint>.Size;
                 var ints = new uint[size];
                 for (var index = 0; index < size; index++)
                 {

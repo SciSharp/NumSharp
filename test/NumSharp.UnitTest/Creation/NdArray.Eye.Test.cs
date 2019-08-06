@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
+using FluentAssertions;
 using NumSharp;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
@@ -12,58 +14,33 @@ namespace NumSharp.UnitTest.Creation
     public class NdArrayEyeTest
     {
         [TestMethod]
-        public void SimpleIntMatrix()
+        public void Case1()
         {
-            var np = new NDArray(typeof(int)).eye(5).MakeGeneric<int>();
+            np.eye(3, k: 1).Cast<double>().Count(i => i == 1d).Should().Be(2);
 
-            Assert.IsTrue(np[0,0] == 1);
-            Assert.IsTrue(np[1,1] == 1);
-            Assert.IsTrue(np[2,2] == 1);
-            Assert.IsTrue(np[3,3] == 1);
-            Assert.IsTrue(np[4,4] == 1);
-
-            int[] elementsZero = np.Data<int>().Where((x) => x == 0 ).ToArray();
-
-            Assert.IsTrue(elementsZero.Length == 20);
-        }
+            np.eye(3, k: 1).Cast<double>().Should()
+                .BeEquivalentTo(new NDArray(new double[][] {new double[] {0.0d, 1.0d, 0.0d}, new double[] {0.0d, 0d, 1.0d}, new double[] {0d, 0d, 0d}}, Shape.Matrix(3, 3)));
+        }        
+        
         [TestMethod]
-        public void SimpleDoubleMatrix()
+        public void Case2()
         {
-            var np = new NDArray(typeof(double)).eye(5).MakeGeneric<double>();
+            np.eye(3).Cast<double>().Count(i => i == 1).Should().Be(3);
+            np.eye(3).Cast<double>().Should()
+                .BeEquivalentTo(new NDArray(new double[][] { new double[] { 1.0d, 0.0d, 0.0d }, new double[] { 0.0d, 1d, 0d }, new double[] { 0d, 0d, 1d } }, Shape.Matrix(3, 3)));
 
-            Assert.IsTrue(np[0,0] == 1);
-            Assert.IsTrue(np[1,1] == 1);
-            Assert.IsTrue(np[2,2] == 1);
-            Assert.IsTrue(np[3,3] == 1);
-            Assert.IsTrue(np[4,4] == 1);
-
-            double[] elementsZero = np.Data<double>().Where((x) => x == 0.0 ).ToArray();
-
-            Assert.IsTrue(elementsZero.Length == 20);
-        }
+        }        
         [TestMethod]
-        public void DoubleMatrix2DiagonalLeft()
+        public void Case3()
         {
-            var np = new NDArray(typeof(double)).eye(5,-2).MakeGeneric<double>();
-
-            Assert.IsTrue(np[2,0] == 1);
-            Assert.IsTrue(np[3,1] == 1);
-            Assert.IsTrue(np[4,2] == 1);
-
-            Assert.IsTrue(np.Data<double>().Where(x => x ==0).ToArray().Length ==22);        
-        }
-
+            np.eye(10, k: -6).Cast<double>().Count(i=>i==1).Should().Be(4);
+        }        
         [TestMethod]
-        public void DoubleMatrix2DiagonalRight()
+        public void Case4()
         {
-            var np = new NDArray(typeof(double)).eye(5,2).MakeGeneric<double>();
-
-            Assert.IsTrue(np[0,2] == 1);
-            Assert.IsTrue(np[1,3] == 1);
-            Assert.IsTrue(np[2,4] == 1);
-
-            Assert.IsTrue(np.Data<double>().Where(x => x ==0).ToArray().Length ==22);        
+            np.eye(10, k: -6).Cast<double>().Count(i=>i==1).Should().Be(4);
         }
+
 
     }
 }
