@@ -2,13 +2,13 @@
 using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
     [TestClass]
     public class NDArraySetData
     {
-
         [TestMethod]
         public void Case1_ND_Scalar()
         {
@@ -16,14 +16,14 @@ namespace NumSharp.UnitTest.Manipulation
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
-            
+
             Console.WriteLine((string)lhs);
             lhs[0] = rhs;
-            Console.WriteLine("\n"+(string)lhs);
+            Console.WriteLine("\n" + (string)lhs);
 
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
-        }        
-        
+        }
+
         [TestMethod]
         public void Case1_Scalar_Scalar()
         {
@@ -37,7 +37,33 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("\n" + (string)lhs);
 
             lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
-        }       
+        }
+
+        [TestMethod]
+        public void Case1_ND_Scalar_ArraySlice()
+        {
+            var lhs = np.full(5, (3, 3));
+            var rhs = ((NDArray)1).Storage.InternalArray;
+
+            Console.WriteLine((string)lhs);
+            lhs.SetData(rhs, 0);
+            Console.WriteLine("\n" + (string)lhs);
+
+            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+        }
+
+        [TestMethod]
+        public void Case1_Scalar_Scalar_ArraySlice()
+        {
+            var lhs = np.full(5, (3, 3));
+            var rhs = ((NDArray)1).Storage.InternalArray;
+
+            Console.WriteLine((string)lhs);
+            lhs.SetData(rhs, 0, 1);
+            Console.WriteLine("\n" + (string)lhs);
+
+            lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
+        }
 
         [TestMethod]
         public void Case1_ND_ND()
@@ -45,11 +71,26 @@ namespace NumSharp.UnitTest.Manipulation
             var lhs = np.full(5, (2, 1, 3, 3));
             var rhs = np.full(1, (1, 1, 3, 3));
             rhs.Shape.IsScalar.Should().BeFalse();
-            lhs.Shape.size.Should().Be(9*2);
+            lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(9);
 
             Console.WriteLine((string)lhs);
             lhs[0] = rhs;
+            Console.WriteLine("\n" + (string)lhs);
+
+            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+        }
+
+
+        [TestMethod]
+        public void Case1_ND_ND_ArraySlice()
+        {
+            var lhs = np.full(5, (2, 1, 3, 3));
+            var rhs = np.full(1, (1, 1, 3, 3)).Storage.InternalArray;
+            lhs.Shape.size.Should().Be(9 * 2);
+
+            Console.WriteLine((string)lhs);
+            lhs.SetData(rhs, 0);
             Console.WriteLine("\n" + (string)lhs);
 
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
@@ -61,7 +102,7 @@ namespace NumSharp.UnitTest.Manipulation
             var lhs = np.full(5, (2, 1, 3, 3));
             var rhs = np.full(1, (1));
             rhs.Shape.IsScalar.Should().BeFalse();
-            lhs.Shape.size.Should().Be(9*2);
+            lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(1);
 
             Console.WriteLine((string)lhs);
@@ -69,8 +110,22 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("\n" + (string)lhs);
 
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
-        }        
-        
+        }
+
+        [TestMethod]
+        public void Case2_ND_ScalaryND_ArraySlice()
+        {
+            var lhs = np.full(5, (2, 1, 3, 3));
+            var rhs = np.full(1, (1)).Storage.InternalArray;
+            lhs.Shape.size.Should().Be(9 * 2);
+
+            Console.WriteLine((string)lhs);
+            lhs.SetData(rhs, 0);
+            Console.WriteLine("\n" + (string)lhs);
+
+            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+        }
+
         [TestMethod]
         public void Case1_ND_Scalar_Sliced()
         {
@@ -81,15 +136,14 @@ namespace NumSharp.UnitTest.Manipulation
             lhs.Shape.IsSliced.Should().BeTrue();
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
-            
+
             Console.WriteLine((string)lhs);
             lhs[0] = rhs;
-            Console.WriteLine("\n"+(string)lhs);
+            Console.WriteLine("\n" + (string)lhs);
 
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+        }
 
-        }        
-        
         [TestMethod]
         public void Case1_Scalar_Scalar_Sliced()
         {
@@ -106,7 +160,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("\n" + (string)lhs);
 
             lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
-        }       
+        }
 
         [TestMethod]
         public void Case1_ND_ND_Sliced()
@@ -175,7 +229,7 @@ namespace NumSharp.UnitTest.Manipulation
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
-            
+
             Console.WriteLine((string)lhs);
             lhs[0, 1] = rhs;
             Console.WriteLine("\n" + (string)lhs);
@@ -195,8 +249,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine((string)lhs);
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
-
-            lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            lhs[0].Should().AllValuesBe(1);
         }
 
         [TestMethod]
@@ -231,7 +284,6 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("\n" + (string)lhs);
 
             lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
-
         }
 
         [TestMethod]

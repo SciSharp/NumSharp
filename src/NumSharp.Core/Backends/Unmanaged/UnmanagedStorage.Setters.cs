@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
@@ -181,26 +182,22 @@ namespace NumSharp.Backends
         /// </remarks>
         public void SetData(object value, params int[] indices)
         {
-            if (value is NDArray nd)
+            switch (value)
             {
-                SetData(nd, indices);
-                return;
+                case NDArray nd:
+                    SetData(nd, indices);
+                    return;
+                case IArraySlice arr:
+                    SetData(arr, indices);
+                    return;
+                case Array array:
+                    SetData((NDArray)array, indices);
+                    return;
+                default:
+                    //we assume this is a scalar.
+                    SetValue(value, _shape.GetOffset(indices));
+                    break;
             }
-
-            if (value is IArraySlice arr)
-            {
-                SetData(arr, indices);
-                return;
-            }
-
-            if (value is Array array)
-            {
-                SetData((NDArray)array, indices);
-                return;
-            }
-
-            //we assume this is a scalar.
-            SetValue(value, _shape.GetOffset(indices));
         }
 
         /// <summary>
@@ -217,24 +214,53 @@ namespace NumSharp.Backends
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
-            var (subShape, offset) = _shape.GetSubshape(indices);
+            var valueshape = value.Shape;
+            bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
 
-            //is it a scalar to scalar
-            if (value.Shape.IsScalar && subShape.IsScalar)
+            //incase lhs or rhs are broadcasted or sliced (noncontagious)
+            if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                SetAtIndexUnsafe((ValueType)Convert.ChangeType(value.GetAtIndex(0), _dtype), offset);
+                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
+
+            //by now value and this are contagious
+            //////////////////////////////////////
+            
+            //incase it is 1 value assigned to all
+            if (valueIsScalary && indices.Length != _shape.NDim)
+            {
+                GetData(indices).InternalArray.Fill(Convert.ChangeType(value.GetAtIndex(0), _dtype));
+                //MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                return;
+            }
+
+            //incase its a scalar to scalar assignment
+            if (indices.Length == _shape.NDim)
+            {
+                if (!(valueIsScalary))
+                    throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to the target indices, these shapes can't be broadcasted together.");
+
+                SetValue((ValueType)Convert.ChangeType(value.GetAtIndex(0), _dtype), (indices));
+                return;
+            }
+
+            //regular case
+            var (subShape, offset) = _shape.GetSubshape(indices);
 
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
 
-            if (subShape.size % value.size != 0)
-                throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, these shapes can't be broadcasted together.");
+            if (subShape.size % valueshape.size != 0)
+                throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to target shape {subShape}, these shapes can't be broadcasted together.");
 
-            //if dtypes doesn't match, cast is performed inside.
-            MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
-            //TODO! there are cases where we can perform Buffer.MemoryCopy, when data is continous
+            //by now this ndarray is not broadcasted nor sliced
+            unsafe
+            {
+                //ReSharper disable once RedundantCast
+                //this must be a void* so it'll go through a typed switch.
+                value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+            }
         }
 
         /// <summary>
@@ -253,8 +279,21 @@ namespace NumSharp.Backends
 
             //casting is resolved inside
             var lhs = GetData(indices);
-            Debug.Assert(lhs.Count == value.Count);
-            MultiIterator.Assign(lhs, new UnmanagedStorage(value, lhs.Shape.Clean()));
+
+            if (lhs.Count % value.Count != 0)
+                throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
+
+            if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
+            {
+                MultiIterator.Assign(lhs, new UnmanagedStorage(value, Shape.Vector(value.Count)));
+                return;
+            }
+
+            //by now this ndarray is not broadcasted nor sliced
+
+            //this must be a void* so it'll go through a typed switch.
+            (value.TypeCode == _typecode ? value : value.CastTo(_typecode))
+                .CopyTo(lhs.InternalArray);
         }
 
         #region Typed Setters
@@ -282,9 +321,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetBoolean(bool value, params int[] indices)         
+        public void SetBoolean(bool value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((bool*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -295,9 +335,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetByte(byte value, params int[] indices)         
+        public void SetByte(byte value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((byte*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -308,9 +349,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetInt16(short value, params int[] indices)         
+        public void SetInt16(short value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((short*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -321,9 +363,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetUInt16(ushort value, params int[] indices)         
+        public void SetUInt16(ushort value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((ushort*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -334,9 +377,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetInt32(int value, params int[] indices)         
+        public void SetInt32(int value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((int*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -347,9 +391,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetUInt32(uint value, params int[] indices)         
+        public void SetUInt32(uint value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((uint*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -360,9 +405,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetInt64(long value, params int[] indices)         
+        public void SetInt64(long value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((long*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -373,9 +419,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetUInt64(ulong value, params int[] indices)         
+        public void SetUInt64(ulong value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((ulong*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -386,9 +433,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetChar(char value, params int[] indices)         
+        public void SetChar(char value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((char*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -399,9 +447,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetDouble(double value, params int[] indices)         
+        public void SetDouble(double value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((double*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -412,9 +461,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetSingle(float value, params int[] indices)         
+        public void SetSingle(float value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((float*)Address + _shape.GetOffset(indices)) = value;
             }
         }
@@ -425,9 +475,10 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetDecimal(decimal value, params int[] indices)         
+        public void SetDecimal(decimal value, params int[] indices)
         {
-            unsafe {
+            unsafe
+            {
                 *((decimal*)Address + _shape.GetOffset(indices)) = value;
             }
         }
