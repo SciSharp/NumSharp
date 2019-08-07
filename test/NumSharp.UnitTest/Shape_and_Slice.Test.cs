@@ -501,7 +501,7 @@ namespace NumSharp.UnitTest
             a._hashCode.Should().Be(b._hashCode);
 
             a = Shape.Matrix(5, 10);
-            b = new Shape(5,10);
+            b = new Shape(5, 10);
             a._hashCode.Should().Be(b._hashCode);
             a.ComputeHashcode();
             a._hashCode.Should().Be(b._hashCode);
@@ -513,6 +513,15 @@ namespace NumSharp.UnitTest
             a._hashCode.Should().Be(b._hashCode);
             a.ComputeHashcode();
             a._hashCode.Should().Be(b._hashCode);
+        }
+
+        [TestMethod]
+        public void HashcodeScalars()
+        {
+            Shape.Scalar.GetHashCode().Should().Be(int.MinValue);
+            Shape.NewScalar().GetHashCode().Should().Be(int.MinValue);
+            Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}).GetHashCode().Should().Be(int.MinValue);
+            Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}, new BroadcastInfo(Shape.Empty(1))).GetHashCode().Should().Be(int.MinValue);
         }
     }
 }

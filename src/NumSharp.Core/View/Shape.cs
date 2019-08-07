@@ -68,25 +68,25 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static readonly Shape Scalar = new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue};
+        public static readonly Shape Scalar = new Shape(Array.Empty<int>());
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar() => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue};
+        internal static Shape NewScalar() => new Shape(Array.Empty<int>());
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(Array.Empty<int>()) {ViewInfo = viewInfo};
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(Array.Empty<int>()) {size = 1, _hashCode = int.MinValue, ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(Array.Empty<int>()) {ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
 
         /// <summary>
         ///     Create a shape that represents a vector.
@@ -135,6 +135,7 @@ namespace NumSharp
                     size *= v;
                     hash ^= (size * 397) * (v * 397);
                 }
+
                 shape._hashCode = hash;
             }
 
@@ -211,6 +212,7 @@ namespace NumSharp
                         size *= v;
                         hash ^= (size * 397) * (v * 397);
                     }
+
                     _hashCode = hash;
                 }
                 else
@@ -248,6 +250,7 @@ namespace NumSharp
                         size *= v;
                         hash ^= (size * 397) * (v * 397);
                     }
+
                     _hashCode = hash;
                 }
                 else
@@ -274,10 +277,10 @@ namespace NumSharp
                 strides = new int[dims.Length];
             }
 
-            layout = 'C';
-            size = 1;
             unchecked
             {
+                size = 1;
+                layout = 'C';
                 if (dims.Length > 0)
                 {
                     int hash = (layout * 397);
@@ -286,10 +289,11 @@ namespace NumSharp
                         size *= v;
                         hash ^= (size * 397) * (v * 397);
                     }
+
                     _hashCode = hash;
                 }
                 else
-                    _hashCode = 0;
+                    _hashCode = int.MinValue; //scalar's hashcode is int.minvalue
 
                 if (dims.Length != 0)
                     if (layout == 'C')
@@ -306,11 +310,15 @@ namespace NumSharp
                     }
             }
 
-            IsScalar = size == 1 && dims.Length == 0;
+            IsScalar = _hashCode == int.MinValue;
             ViewInfo = null;
             BroadcastInfo = null;
         }
 
+        /// <summary>
+        ///     An empty shape without any fields set except all are default.
+        /// </summary>
+        /// <remarks>Used internally.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public static Shape Empty(int ndim)
         {
@@ -324,7 +332,7 @@ namespace NumSharp
 
 
         [MethodImpl((MethodImplOptions)768)]
-        private void _SetDimOffset()
+        private void _computeStrides()
         {
             if (dimensions.Length == 0)
                 return;
@@ -715,7 +723,7 @@ namespace NumSharp
         public void ChangeTensorLayout(char order = 'C')
         {
             layout = order;
-            _SetDimOffset();
+            _computeStrides();
             ComputeHashcode();
         }
 
@@ -814,6 +822,7 @@ namespace NumSharp
                         size *= v;
                         hash ^= (size * 397) * (v * 397);
                     }
+
                     _hashCode = hash;
                 }
             }

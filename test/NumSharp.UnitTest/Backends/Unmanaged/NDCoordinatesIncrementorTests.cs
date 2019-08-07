@@ -275,11 +275,5 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Index.Should().ContainInOrder(0, 0, 0);
             sh.Next().Should().BeNull();
         }
-
-        [TestMethod]
-        public void Case11_Scalar_Extended()
-        {
-            new Action(() => new NDExtendedCoordinatesIncrementor(new int[0], 2)).Should().Throw<InvalidOperationException>();
-        }
     }
 }
