@@ -17,11 +17,9 @@ namespace NumSharp.Backends
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
+                var r = NDArray.Scalar(typeCode.HasValue ? Converts.ChangeType(arr.GetAtIndex(0), typeCode.Value) : arr.GetAtIndex(0));
                 if (keepdims)
                     r.Storage.ExpandDimension(0);
-                else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
-                    r.Storage.Reshape(Shape.Scalar);
                 return r;
             }
 
