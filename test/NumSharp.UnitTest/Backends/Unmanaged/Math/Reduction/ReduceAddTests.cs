@@ -11,6 +11,12 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
     public class ReduceAddTests
     {
         [TestMethod]
+        public void EmptyArray()
+        {
+            np.sum(np.array(new int[0])).Should().BeScalar(0);
+        }
+
+        [TestMethod]
         public void Case1_Elementwise_keepdims()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);
@@ -227,7 +233,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             a = np.array(5);
             ret = np.prod(a);
             FluentExtension.Should(ret).BeScalar(5);
-            
+
             ret = np.sum(a);
             FluentExtension.Should(ret).BeScalar(5);
         }
