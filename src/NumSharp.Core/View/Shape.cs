@@ -95,10 +95,7 @@ namespace NumSharp
         public static Shape Vector(int length)
         {
             var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, layout = 'C', size = length};
-
             shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
-
-            shape.IsScalar = false;
             return shape;
         }
 
@@ -118,8 +115,6 @@ namespace NumSharp
             };
 
             shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
-
-            shape.IsScalar = false;
             return shape;
         }
 
@@ -369,7 +364,7 @@ namespace NumSharp
         public int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (ViewInfo == null)
+            if (ViewInfo == null && BroadcastInfo == null)
                 return offset;
 
             return GetOffset(GetCoordinates(offset));

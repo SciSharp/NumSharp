@@ -2123,6 +2123,16 @@ namespace NumSharp.UnitTest.Operations
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
             ret.Array.Should().BeEquivalentTo(a.Array);
         }
+
+        [TestMethod]
+        public void EqualsNull()
+        {
+            NDArray nd = null;
+            if (nd == null)
+                Console.WriteLine("yes");
+            else
+                throw new NotSupportedException();
+        }
         
 #endif
     }
