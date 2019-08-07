@@ -12,7 +12,7 @@ namespace NumSharp.Backends
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
-            if (shape.IsEmpty)
+            if (shape.IsEmpty || shape.size == 0)
                 return arr;
 
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
