@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Unmanaged;
@@ -40,5 +41,28 @@ namespace NumSharp.UnitTest
                 AssertAreEqual(a.GetValue(i), b.GetValue(i), $"Elements at index {i} differ. Expected '{a.GetValue(i)}', given '{b.GetValue(i)}'");
         }
 
+        public NDArray arange(params int[] dims)
+        {
+            var rshape = new Shape(dims);
+            return np.arange(rshape.size).reshape(rshape);
+        }
+        public NDArray arange(ITuple tup)
+        {
+            var rshape = new Shape(yield(tup).ToArray());
+            return np.arange(rshape.size).reshape(rshape);
+        }
+
+        public NDArray array(ITuple tuple, params int[] vals)
+        {
+            return np.array(vals).reshape(yield(tuple).ToArray());
+        }
+
+        private IEnumerable<int> yield(ITuple tup)
+        {
+            for (int i = 0; i < tup.Length; i++)
+            {
+                yield return (int) tup[i];
+            }
+        }
     }
 }
