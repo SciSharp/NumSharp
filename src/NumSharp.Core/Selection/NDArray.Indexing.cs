@@ -62,6 +62,13 @@ namespace NumSharp
                 }
             }
 
+            //handle when mindicies[i] is not int array.
+            for (int i = 0; i < mindices.Length; i++)
+            {
+                if (mindices[i].typecode != NPTypeCode.Int32)
+                    mindices[i] = new NDArray(mindices[i].Storage.CastIfNecessary<int>());
+            }
+
             //case 1 multidim eq to ndim
             if (mindices.Length == ndim)
             {
@@ -76,7 +83,7 @@ namespace NumSharp
                 {
                     for (int i = 0; i < ndims; i++)
                     {
-                        collapsedIndex[i] = (int)mindices[i].GetValue(individualIndex);
+                        collapsedIndex[i] = (int)mindices[i].GetInt32(individualIndex);
                     }
 
                     collapsed[individualIndex] = getOffset(collapsedIndex);
@@ -91,25 +98,21 @@ namespace NumSharp
                 var flat_mindices = new NDArray[mindices.Length];
                 for (var i = 0; i < mindices.Length; i++) flat_mindices[i] = mindices[i];
 
-                //this is multidims, collapse them into singledim
                 var collapsed = new NDArray(NPTypeCode.Int32, indicesShape, false);
 
                 var (retShape, _) = Shape.GetSubshape(new int[collapsed.ndim]);
                 var dims = collapsed.shape.Concat(retShape.dimensions).ToArray();
                 var ret = new NDArray(typecode, dims); //retshape is already clean
 
-                //this is multidims, collapse them into singledim
                 var iter = new NDCoordinatesIncrementor(ref indicesShape);
                 var ndims = mindices.Length;
                 var collapsedIndex = new int[ndims];
                 var individualIndex = iter.Index;
-
+                //TODO when mindicies.length == 1 we can really optimize it
                 do
                 {
-                    for (int i = 0; i < ndims; i++)
-                    {
-                        collapsedIndex[i] = (int)mindices[i].GetValue(individualIndex);
-                    }
+                    for (int i = 0; i < ndims; i++) 
+                        collapsedIndex[i] = (int)mindices[i].GetInt32(individualIndex);
 
                     ret[individualIndex] = this[collapsedIndex];
                 } while (iter.Next() != null);
