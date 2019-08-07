@@ -12,8 +12,7 @@ namespace NumSharp.Backends
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
 
-            NDArray clone() => new NDArray(nd.Storage.Clone());
-
+            //incase its an empty array
             if (nd.Shape.IsEmpty)
             {
                 if (copy)
@@ -23,6 +22,7 @@ namespace NumSharp.Backends
                 return nd;
             }
 
+            //incase its a scalar
             if (nd.Shape.IsScalar)
             {
                 var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
@@ -33,6 +33,7 @@ namespace NumSharp.Backends
                 return nd;
             }
 
+            //incase its a (1,) shaped
             if (nd.Shape.size == 1 && nd.Shape.NDim == 1)
             {
                 var ret = new NDArray(ArraySlice.Scalar(nd.GetAtIndex(0), dtype), Shape.Vector(1));
@@ -43,6 +44,7 @@ namespace NumSharp.Backends
                 return nd;
             }
 
+            //regular clone
             if (nd.GetTypeCode == dtype)
             {
                 //casting not needed
@@ -65,6 +67,8 @@ namespace NumSharp.Backends
                     return nd;
                 }
             }
+
+            NDArray clone() => nd.Clone();
         }
     }
 }
