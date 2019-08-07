@@ -14,7 +14,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             if (shape.IsEmpty || shape.size == 0)
             {
-                if (@out != null)
+                if (!(@out is null))
                 {
                     @out.SetAtIndex((typeCode ?? arr.typecode).GetDefaultValue(), 0);
                     return @out;
@@ -26,7 +26,7 @@ namespace NumSharp.Backends
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
             {
                 var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
-                if (@out != null)
+                if (!(@out is null))
                 {
                     @out.SetAtIndex(r.GetAtIndex(0), 0);
                     return @out;
@@ -69,7 +69,7 @@ namespace NumSharp.Backends
             //incase the axis is of size 1
             if (shape[axis] == 1)
             {
-                if (@out != null)
+                if (!(@out is null))
                     return null;
                 //if the given div axis is 1 and can be squeezed out.
                 if (keepdims)
@@ -82,7 +82,7 @@ namespace NumSharp.Backends
             
             //prepare ret
             NDArray ret;
-            if (@out != null)
+            if (!(@out is null))
             {
                 if (@out.Shape != axedShape)
                     throw new IncorrectShapeException($"Unable to perform {nameof(ReduceAdd)} when @out is specific but is not shaped {axedShape}.");
