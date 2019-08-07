@@ -357,9 +357,9 @@ namespace NumSharp
         public int this[int dim]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => Dimensions[dim];
+            get => dimensions[dim < 0 ? dimensions.Length + dim : dim];
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => Dimensions[dim] = value;
+            set => dimensions[dim < 0 ? dimensions.Length + dim : dim] = value;
         }
 
         /// <summary>
