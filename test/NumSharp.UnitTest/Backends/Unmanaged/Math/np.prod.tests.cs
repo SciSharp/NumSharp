@@ -4,12 +4,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using FluentAssertions;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
     [TestClass]
     public class np_prod_tests
     {
+
+        [TestMethod]
+        public void EmptyArray()
+        {
+            np.prod(np.array(new int[0])).Should().BeScalar(1);
+        }
+
         [TestMethod]
         public void Case1()
         {
