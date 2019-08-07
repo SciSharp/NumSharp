@@ -369,7 +369,7 @@ namespace NumSharp
         public int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (ViewInfo == null)
+            if (ViewInfo == null && BroadcastInfo == null)
                 return offset;
 
             return GetOffset(GetCoordinates(offset));
