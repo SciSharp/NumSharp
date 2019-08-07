@@ -23,7 +23,7 @@ namespace NumSharp.Backends
                 return nd;
             }
 
-            if (nd.Shape.IsScalar || (nd.Shape.size == 1 && nd.Shape.NDim == 1))
+            if (nd.Shape.IsScalar || (nd.Shape.size == 1 && nd.Shape.NDim == 0))
             {
                 var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
                 if (copy)
