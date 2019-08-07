@@ -23,9 +23,19 @@ namespace NumSharp.Backends
                 return nd;
             }
 
-            if (nd.Shape.IsScalar || (nd.Shape.size == 1 && nd.Shape.NDim == 1))
+            if (nd.Shape.IsScalar)
             {
                 var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
+                if (copy)
+                    return ret;
+
+                nd.Storage = ret.Storage;
+                return nd;
+            }
+
+            if (nd.Shape.size == 1 && nd.Shape.NDim == 1)
+            {
+                var ret = new NDArray(ArraySlice.Scalar(nd.GetAtIndex(0), dtype), Shape.Vector(1));
                 if (copy)
                     return ret;
 
