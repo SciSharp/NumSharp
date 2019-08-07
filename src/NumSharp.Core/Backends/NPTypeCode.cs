@@ -653,5 +653,44 @@ namespace NumSharp.Backends
 
             return typeCode;
         }
+        
+        /// <summary>
+        ///     Gets the default value of <paramref name="typeCode"/>.
+        /// </summary>
+        public static ValueType GetDefaultValue(this NPTypeCode typeCode)
+        {
+#if _REGEN
+            #region Compute
+		    switch (typeCode)
+		    {
+			    %foreach supported_dtypes,supported_dtypes_lowercase%
+			    case NPTypeCode.#1: return default(#2);
+			    %
+			    default:
+				    throw new NotSupportedException();
+		    }
+            #endregion
+#else
+            #region Compute
+		    switch (typeCode)
+		    {
+			    case NPTypeCode.Boolean: return default(bool);
+			    case NPTypeCode.Byte: return default(byte);
+			    case NPTypeCode.Int16: return default(short);
+			    case NPTypeCode.UInt16: return default(ushort);
+			    case NPTypeCode.Int32: return default(int);
+			    case NPTypeCode.UInt32: return default(uint);
+			    case NPTypeCode.Int64: return default(long);
+			    case NPTypeCode.UInt64: return default(ulong);
+			    case NPTypeCode.Char: return default(char);
+			    case NPTypeCode.Double: return default(double);
+			    case NPTypeCode.Single: return default(float);
+			    case NPTypeCode.Decimal: return default(decimal);
+			    default:
+				    throw new NotSupportedException();
+		    }
+            #endregion
+#endif
+        }
     }
 }
