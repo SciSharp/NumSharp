@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using CompilerUnsafe = System.Runtime.CompilerServices.Unsafe;
 
@@ -17,17 +18,14 @@ namespace NumSharp
 
             internal _Unsafe(NDArray @this)
             {
-                if (@this.Shape.IsSliced)
-                    throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
-
                 _this = @this;
             }
 
             /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
             public ref byte GetPinnableReference()
             {
-                if (_this.Shape.IsSliced)
-                    throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted)
+                    throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
 
                 unsafe
                 {
@@ -44,8 +42,8 @@ namespace NumSharp
             {
                 get
                 {
-                    if (_this.Shape.IsSliced)
-                        throw new InvalidOperationException("Can't return a memory address when NDArray is sliced.");
+                    if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted)
+                        throw new InvalidOperationException("Can't return a memory address when NDArray is sliced or broadcasted.");
 
                     return _this.Address;
                 }
@@ -56,7 +54,21 @@ namespace NumSharp
             ///     Set: Replace internal storage by calling <see cref="IStorage.ReplaceData(System.Array)"/>
             /// </summary>
             /// <remarks>Setting does not replace internal storage array.</remarks>
-            internal IArraySlice Array => _this.Array;
+            internal IArraySlice Array
+            {
+                get
+                {
+                    if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted)
+                        throw new InvalidOperationException("Can't access a memory address when NDArray is sliced or broadcasted.");
+
+                    return _this.Storage.InternalArray;
+                }
+            }
+
+            /// <summary>
+            ///     Provides access to the internal <see cref="UnmanagedStorage"/>.
+            /// </summary>
+            public UnmanagedStorage Storage => _this.Storage;
 
             /// A Span representing this slice.
             /// <remarks>Does not perform copy.</remarks>
@@ -64,6 +76,12 @@ namespace NumSharp
             {
                 return Array.AsSpan<T>();
             }
+
+            /// <summary>
+            ///     The size of a single item stored in <see cref="Address"/>.
+            /// </summary>
+            /// <remarks>Equivalent to <see cref="NPTypeCode.SizeOf"/> extension.</remarks>
+            public int ItemLength => Array.ItemLength;
 
             /// <summary>
             ///     How many bytes are stored in this memory block.
@@ -121,7 +139,7 @@ namespace NumSharp
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
                 public unsafe ref T GetPin<T>()
                 {
-                    if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                    if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                     return ref CompilerUnsafe.AsRef<T>(_this.Address);
                 }
 
@@ -133,10 +151,11 @@ namespace NumSharp
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<#2>(_this.Address);
                     }
                 } 
+
 		        %
                 #endregion
 #else
@@ -147,109 +166,121 @@ namespace NumSharp
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<bool>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref byte Byte
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<byte>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref short Int16
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<short>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref ushort UInt16
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<ushort>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref int Int32
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<int>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref uint UInt32
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<uint>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref long Int64
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<long>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref ulong UInt64
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<ulong>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref char Char
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<char>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref double Double
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<double>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref float Single
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<float>(_this.Address);
                     }
                 } 
+
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
 		        public unsafe ref decimal Decimal
                 {
                     get
                     {
-                        if (_this.Shape.IsSliced) throw new InvalidOperationException("Can't pin reference when NDArray is sliced.");
+                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
                         return ref CompilerUnsafe.AsRef<decimal>(_this.Address);
                     }
                 } 
+
                 #endregion
 #endif
             }
