@@ -387,15 +387,30 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public int GetOffset(params int[] indices)
         {
+            int offset;
             if (!IsSliced)
-                return GetOffset_IgnoreViewInfo(indices);
+            {
+                if (dimensions.Length == 0 && indices.Length == 1)
+                    return indices[0];
+                offset = 0;
+                unchecked
+                {
+                    for (int i = 0; i < indices.Length; i++)
+                        offset += strides[i] * indices[i];
+                }
+
+                if (IsBroadcasted)
+                    return offset % BroadcastInfo.OriginalShape.size;
+
+                return offset;
+            }
 
             //if both sliced and broadcasted
             if (IsBroadcasted)
                 return GetOffset_broadcasted(indices);
 
             // we are dealing with a slice
-            int offset;
+
             var vi = ViewInfo;
             if (IsRecursive && vi.Slices == null)
             {
