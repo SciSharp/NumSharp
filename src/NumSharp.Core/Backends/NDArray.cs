@@ -47,7 +47,7 @@ namespace NumSharp
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        protected internal NDArray(UnmanagedStorage storage)
+        public NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
             tensorEngine = storage.Engine;

@@ -122,7 +122,6 @@ namespace NumSharp
                 return ref Array.GetPinnableReference<T>();
             }
 
-
             #region Pinning
 
             /// <summary>
