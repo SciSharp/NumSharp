@@ -10,7 +10,7 @@ namespace NumSharp.Utilities.Maths
     [SuppressMessage("ReSharper", "ArrangeTypeMemberModifiers")]
     internal class Operator
     {
-
+        //all other gen
 #if _REGEN //We manually fixed types that naturally do not match with casting.
         %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
         %import NumSharp.np as np
@@ -25,6 +25,159 @@ namespace NumSharp.Utilities.Maths
         %
         %
 #else
+
+#endif
+
+        //boolean gen
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Add(bool lhs, bool rhs) => (lhs || rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Subtract(bool lhs, bool rhs) => ((lhs ? 1 : 0) - (rhs ? 1 : 0)) != 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Multiply(bool lhs, bool rhs) => lhs && rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Mod(bool lhs, bool rhs) => ((lhs ? 1 : 0) % (rhs ? 1 : 0)) != 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Divide(bool lhs, bool rhs) => lhs && rhs;
+
+
+#if _REGEN //We manually fixed types that naturally do not match with casting.
+        %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
+        %import NumSharp.np as np
+
+        %ops = ["+", "-", "%", "*", "/"]
+        %names = ["Add", "Subtract", "Mod", "Multiply", "Divide"]
+        //Add, Subtract, Mod, Multiply and Divide Booleanic Operators
+        //bool is lhs
+        %foreach ops,names%
+        %foreach ["Boolean"],["bool"]%
+        %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
+        |#rettype = np.find_common_type("#101", "#201")
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) ((lhs ? #204 : #203) #1 rhs);
+        %
+        %
+        %      
+
+        //bool is rhs
+        %foreach ops,names%
+        %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
+        %foreach ["Boolean"],["bool"]%
+        |#rettype = np.find_common_type("#101", "#201")
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) (lhs #1 (rhs ? #104 : #103));
+        %
+        %
+        %      
+#else
+
+        //Add, Subtract, Mod, Multiply and Divide Booleanic Operators
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Add(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) + rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Add(bool lhs, short rhs) => (short) ((lhs ? 1 : 0) + rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Add(bool lhs, ushort rhs) => (ushort) ((lhs ? 1 : 0) + rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Add(bool lhs, int rhs) => (lhs ? 1 : 0) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Add(bool lhs, uint rhs) => (lhs ? 1u : 0u) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Add(bool lhs, long rhs) => (lhs ? 1L : 0L) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Add(bool lhs, ulong rhs) => (lhs ? 1UL : 0UL) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Add(bool lhs, char rhs) => (char) ((lhs ? 1 : 0) + rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Add(bool lhs, double rhs) => (lhs ? 1d : 0d) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Add(bool lhs, float rhs) => (lhs ? 1f : 0f) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Add(bool lhs, decimal rhs) => (lhs ? 1m : 0m) + rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Subtract(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) - rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Subtract(bool lhs, short rhs) => (short) ((lhs ? 1 : 0) - rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Subtract(bool lhs, ushort rhs) => (ushort) ((lhs ? 1 : 0) - rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Subtract(bool lhs, int rhs) => (lhs ? 1 : 0) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Subtract(bool lhs, uint rhs) => (lhs ? 1u : 0u) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Subtract(bool lhs, long rhs) => (lhs ? 1L : 0L) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Subtract(bool lhs, ulong rhs) => (lhs ? 1UL : 0UL) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Subtract(bool lhs, char rhs) => (char) ((lhs ? 1 : 0) - rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Subtract(bool lhs, double rhs) => (lhs ? 1d : 0d) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Subtract(bool lhs, float rhs) => (lhs ? 1f : 0f) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Subtract(bool lhs, decimal rhs) => (lhs ? 1m : 0m) - rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Mod(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) % rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Mod(bool lhs, short rhs) => (short) ((lhs ? 1 : 0) % rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Mod(bool lhs, ushort rhs) => (ushort) ((lhs ? 1 : 0) % rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Mod(bool lhs, int rhs) => (lhs ? 1 : 0) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Mod(bool lhs, uint rhs) => (lhs ? 1u : 0u) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Mod(bool lhs, long rhs) => (lhs ? 1L : 0L) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Mod(bool lhs, ulong rhs) => (lhs ? 1UL : 0UL) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Mod(bool lhs, char rhs) => (char) ((lhs ? 1 : 0) % rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Mod(bool lhs, double rhs) => (lhs ? 1d : 0d) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Mod(bool lhs, float rhs) => (lhs ? 1f : 0f) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Mod(bool lhs, decimal rhs) => (lhs ? 1m : 0m) % rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Multiply(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) * rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Multiply(bool lhs, short rhs) => (short) ((lhs ? 1 : 0) * rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Multiply(bool lhs, ushort rhs) => (ushort) ((lhs ? 1 : 0) * rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Multiply(bool lhs, int rhs) => (lhs ? 1 : 0) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Multiply(bool lhs, uint rhs) => (lhs ? 1u : 0u) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Multiply(bool lhs, long rhs) => (lhs ? 1L : 0L) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Multiply(bool lhs, ulong rhs) => (lhs ? 1UL : 0UL) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Multiply(bool lhs, char rhs) => (char) ((lhs ? 1 : 0) * rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Multiply(bool lhs, double rhs) => (lhs ? 1d : 0d) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Multiply(bool lhs, float rhs) => (lhs ? 1f : 0f) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Multiply(bool lhs, decimal rhs) => (lhs ? 1m : 0m) * rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Divide(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) / rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Divide(bool lhs, short rhs) => (short) ((lhs ? 1 : 0) / rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Divide(bool lhs, ushort rhs) => (ushort) ((lhs ? 1 : 0) / rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Divide(bool lhs, int rhs) => (lhs ? 1 : 0) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Divide(bool lhs, uint rhs) => (lhs ? 1u : 0u) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Divide(bool lhs, long rhs) => (lhs ? 1L : 0L) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Divide(bool lhs, ulong rhs) => (lhs ? 1UL : 0UL) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Divide(bool lhs, char rhs) => (char) ((lhs ? 1 : 0) / rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Divide(bool lhs, double rhs) => (lhs ? 1d : 0d) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Divide(bool lhs, float rhs) => (lhs ? 1f : 0f) / rhs;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Divide(bool lhs, decimal rhs) => (lhs ? 1m : 0m) / rhs;
+
+        //bool is rhs
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Add(byte lhs, bool rhs) => (byte) (lhs + (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Add(short lhs, bool rhs) => (short) (lhs + (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Add(ushort lhs, bool rhs) => (ushort) (lhs + (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Add(int lhs, bool rhs) => lhs + (rhs ? 1 : 0);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Add(uint lhs, bool rhs) => lhs + (rhs ? 1u : 0u);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Add(long lhs, bool rhs) => lhs + (rhs ? 1L : 0L);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Add(ulong lhs, bool rhs) => lhs + (rhs ? 1UL : 0UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Add(char lhs, bool rhs) => (char) (lhs + (rhs ? 1 : '\0'));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Add(double lhs, bool rhs) => lhs + (rhs ? 1d : 0d);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Add(float lhs, bool rhs) => lhs + (rhs ? 1f : 0f);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Add(decimal lhs, bool rhs) => lhs + (rhs ? 1m : 0m);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Subtract(byte lhs, bool rhs) => (byte) (lhs - (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Subtract(short lhs, bool rhs) => (short) (lhs - (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Subtract(ushort lhs, bool rhs) => (ushort) (lhs - (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Subtract(int lhs, bool rhs) => lhs - (rhs ? 1 : 0);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Subtract(uint lhs, bool rhs) => lhs - (rhs ? 1u : 0u);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Subtract(long lhs, bool rhs) => lhs - (rhs ? 1L : 0L);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Subtract(ulong lhs, bool rhs) => lhs - (rhs ? 1UL : 0UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Subtract(char lhs, bool rhs) => (char) (lhs - (rhs ? 1 : '\0'));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Subtract(double lhs, bool rhs) => lhs - (rhs ? 1d : 0d);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Subtract(float lhs, bool rhs) => lhs - (rhs ? 1f : 0f);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Subtract(decimal lhs, bool rhs) => lhs - (rhs ? 1m : 0m);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Mod(byte lhs, bool rhs) => (byte) (lhs % (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Mod(short lhs, bool rhs) => (short) (lhs % (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Mod(ushort lhs, bool rhs) => (ushort) (lhs % (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Mod(int lhs, bool rhs) => lhs % (rhs ? 1 : 0);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Mod(uint lhs, bool rhs) => lhs % (rhs ? 1u : 0u);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Mod(long lhs, bool rhs) => lhs % (rhs ? 1L : 0L);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Mod(ulong lhs, bool rhs) => lhs % (rhs ? 1UL : 0UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Mod(char lhs, bool rhs) => (char) (lhs % (rhs ? 1 : '\0'));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Mod(double lhs, bool rhs) => lhs % (rhs ? 1d : 0d);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Mod(float lhs, bool rhs) => lhs % (rhs ? 1f : 0f);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Mod(decimal lhs, bool rhs) => lhs % (rhs ? 1m : 0m);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Multiply(byte lhs, bool rhs) => (byte) (lhs * (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Multiply(short lhs, bool rhs) => (short) (lhs * (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Multiply(ushort lhs, bool rhs) => (ushort) (lhs * (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Multiply(int lhs, bool rhs) => lhs * (rhs ? 1 : 0);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Multiply(uint lhs, bool rhs) => lhs * (rhs ? 1u : 0u);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Multiply(long lhs, bool rhs) => lhs * (rhs ? 1L : 0L);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Multiply(ulong lhs, bool rhs) => lhs * (rhs ? 1UL : 0UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Multiply(char lhs, bool rhs) => (char) (lhs * (rhs ? 1 : '\0'));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Multiply(double lhs, bool rhs) => lhs * (rhs ? 1d : 0d);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Multiply(float lhs, bool rhs) => lhs * (rhs ? 1f : 0f);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Multiply(decimal lhs, bool rhs) => lhs * (rhs ? 1m : 0m);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte Divide(byte lhs, bool rhs) => (byte) (lhs / (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static short Divide(short lhs, bool rhs) => (short) (lhs / (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ushort Divide(ushort lhs, bool rhs) => (ushort) (lhs / (rhs ? 1 : 0));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int Divide(int lhs, bool rhs) => lhs / (rhs ? 1 : 0);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static uint Divide(uint lhs, bool rhs) => lhs / (rhs ? 1u : 0u);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long Divide(long lhs, bool rhs) => lhs / (rhs ? 1L : 0L);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static ulong Divide(ulong lhs, bool rhs) => lhs / (rhs ? 1UL : 0UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static char Divide(char lhs, bool rhs) => (char) (lhs / (rhs ? 1 : '\0'));
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double Divide(double lhs, bool rhs) => lhs / (rhs ? 1d : 0d);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float Divide(float lhs, bool rhs) => lhs / (rhs ? 1f : 0f);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static decimal Divide(decimal lhs, bool rhs) => lhs / (rhs ? 1m : 0m);
+#endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte Add(byte lhs, byte rhs) => (byte)(lhs + rhs);
@@ -1840,6 +1993,5 @@ namespace NumSharp.Utilities.Maths
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static decimal Divide(decimal lhs, decimal rhs) => lhs / rhs;
-#endif
     }
 }
