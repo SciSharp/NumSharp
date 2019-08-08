@@ -7,7 +7,7 @@
 %supported_numericals = ["Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Char","Double","Single","Decimal"]
 %supported_numericals_lowercase = ["byte","short","ushort","int","uint","long","ulong","char","double","float","decimal"]
 %supported_numericals_defaultvals = ["0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
-%supported_numericals_onevales = ["1","1","1","1","1u","1L","1UL","'\1'","1d","1f","1m"]
+%supported_numericals_onevales = ["1","1","1","1","1u","1L","1UL",1,"1d","1f","1m"]
 //this is the type we use in summerizing/reducting:
 %supported_numericals_accumulatingType = ["UInt32","Int32","UInt32","Int32","UInt32","Int64","UInt64","UInt32","Double","Single","Decimal"]
 %supported_numericals_accumulatingType_defaultvals = ["0","0","0","0","0u","0L","0UL","'\0'","0d","0f","0m"]
