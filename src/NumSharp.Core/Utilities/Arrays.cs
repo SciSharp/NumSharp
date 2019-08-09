@@ -45,7 +45,7 @@ namespace NumSharp.Utilities
                     fixed (T* dst = ret)
                     {
                         new Span<T>(src, index).CopyTo(new Span<T>(dst, index));
-                        *(dst+index) = value;
+                        *(dst + index) = value;
                         var left = source.Length - index;
                         new Span<T>(src + index, left).CopyTo(new Span<T>(dst + index + 1, left));
                     }
@@ -73,17 +73,50 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="source">The array to remove <paramref name="index"/> from.</param>
         /// <param name="index">The index to remove.</param>
-        /// <returns></returns>
+        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
         public static T[] RemoveAt<T>(this T[] source, int index)
         {
-            T[] dest = new T[source.Length - 1];
+            var dest = new T[source.Length - 1];
+            CopyToExceptAt(source, index, dest, 0);
+            return dest;
+        }
+
+        /// <summary>
+        ///     Copies an array contents except for a specific index.
+        /// </summary>
+        /// <param name="source">The array to copy from.</param>
+        /// <param name="index">The index to ignore.</param>
+        /// <param name="destinition">The copying destinition</param>
+        /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
+        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        public static void CopyToExceptAt<T>(this T[] source, int index, T[] destinition, int destOffset = 0)
+        {
             if (index > 0)
-                Array.Copy(source, 0, dest, 0, index);
+                Array.Copy(source, 0, destinition, destOffset, index);
 
             if (index < source.Length - 1)
-                Array.Copy(source, index + 1, dest, index, source.Length - index - 1);
+                Array.Copy(source, index + 1, destinition, destOffset + index, source.Length - index - 1);
+        }
 
-            return dest;
+        /// <summary>
+        ///     Copies an array contents except for a specific index.
+        /// </summary>
+        /// <param name="source">The array to copy from.</param>
+        /// <param name="sourceOffset"></param>
+        /// <param name="index">The index to ignore.</param>
+        /// <param name="destinition">The copying destinition</param>
+        /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
+        /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        public static void CopyToExceptAt<T>(this T[] source, int sourceOffset, int index, T[] destinition, int destOffset = 0)
+        {
+            if (sourceOffset + index > 0)
+                Array.Copy(source, sourceOffset, destinition, destOffset, index);
+
+            if (sourceOffset + index < source.Length - 1)
+                Array.Copy(source, sourceOffset + index + 1, destinition, destOffset + index, source.Length - index - 1);
         }
 
         /// <summary>
