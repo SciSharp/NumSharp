@@ -1,8 +1,4 @@
-﻿#if _REGEN_TEMPLATE
-%template "./Add/Default.Add.#1.cs" for every supported_dtypes, supported_dtypes_lowercase
-#endif
-
-using System;
+﻿using System;
 
 namespace NumSharp.Backends
 {

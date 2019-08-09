@@ -8,7 +8,7 @@ namespace NumSharp.Utilities
     /// <summary>
     ///     Provides various methods related to <see cref="System.Convert"/>.
     /// </summary>
-    public static class Converts
+    public static partial class Converts
     {
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
         /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>

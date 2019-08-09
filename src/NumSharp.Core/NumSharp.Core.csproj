@@ -32,6 +32,7 @@
     <SignAssembly>false</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -51,10 +52,22 @@
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <NoWarn>1701;1702;IDE1006;0029</NoWarn>
     <DocumentationFile></DocumentationFile>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DocumentationFile></DocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DocumentationFile />
   </PropertyGroup>
 
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -75,15 +88,10 @@
   <ItemGroup>
     <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
     <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
     <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
     <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
     <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
     <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
@@ -102,17 +110,12 @@
   <ItemGroup>
     <None Include="Backends\Default\BLAS\Templates\Default.Op.Divide.Boolean.template.cs" />
     <None Include="Backends\Default\BLAS\Templates\Default.Op.Matmul.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.Boolean.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Multiply.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.Boolean.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Divide.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.Boolean.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Subtract.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Add.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
+    <None Include="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Backends\Default\Math\Templates\Default.Op.Add.template.cs" />
     <None Include="Backends\Iterators\NDIterator.template.cs" />
     <None Include="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
     <None Include="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />

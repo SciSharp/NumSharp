@@ -108,7 +108,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype.
+        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype only if necessary.
         /// </summary>
         /// <typeparam name="T">The dtype to convert to</typeparam>
         /// <returns>A copy of this <see cref="UnmanagedStorage"/> casted to a specific dtype.</returns>
@@ -123,7 +123,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype.
+        ///     Return a casted <see cref="UnmanagedStorage"/> to a specific dtype only if necessary
         /// </summary>
         /// <param name="typeCode">The dtype to convert to</param>
         /// <returns>A copy of this <see cref="UnmanagedStorage"/> casted to a specific dtype.</returns>

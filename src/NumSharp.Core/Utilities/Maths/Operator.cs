@@ -35,6 +35,13 @@ namespace NumSharp.Utilities.Maths
         [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Mod(bool lhs, bool rhs) => ((lhs ? 1 : 0) % (rhs ? 1 : 0)) != 0;
         [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool Divide(bool lhs, bool rhs) => lhs && rhs;
 
+        //boolean gen
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int AddBoolean(bool lhs, bool rhs) => (lhs || rhs) ? 1 : 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int SubtractBoolean(bool lhs, bool rhs) => (((lhs ? 1 : 0) - (rhs ? 1 : 0)) != 0)  ? 1 : 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int MultiplyBoolean(bool lhs, bool rhs) => (lhs && rhs) ? 1 : 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int ModBoolean(bool lhs, bool rhs) => (((lhs ? 1 : 0) % (rhs ? 1 : 0)) != 0) ? 1 : 0;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int DivideBoolean(bool lhs, bool rhs) => (lhs && rhs) ? 1 : 0;
+
 
 #if _REGEN //We manually fixed types that naturally do not match with casting.
         %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
