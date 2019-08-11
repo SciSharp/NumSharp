@@ -244,7 +244,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 if (length > Count)
                 {
-                    Fill(fill, Count, length - Count);
+                    @new.Fill(fill, Count, length - Count);
                 }
 
                 Free();
@@ -319,7 +319,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public void Fill(T value, long offset, long count)
         {
-            if (Count == 0)
+            if (Count == 0 || count == 0)
                 return;
 
             if (Unsafe.SizeOf<T>() == 1 && Count < uint.MaxValue)
@@ -334,10 +334,10 @@ namespace NumSharp.Backends.Unmanaged
             else
             {
                 // Do all math as nuint to avoid unnecessary 64->32->64 bit integer truncations
-                ulong length = (ulong)Count;
                 if (Count - offset <= 0)
                     return;
 
+                ulong length = (ulong)count;
                 T* addr = Address + offset;
 
                 // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
