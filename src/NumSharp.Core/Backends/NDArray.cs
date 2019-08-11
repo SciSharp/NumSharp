@@ -152,7 +152,7 @@ namespace NumSharp
                 shape.ChangeTensorLayout(order);
 
             if (shape.IsEmpty)
-                shape = Shape.Vector(values.Count);
+                shape = Shape.Vector((int) values.Count); //TODO! when long index, remove cast int
 
             Storage.Allocate(values, shape);
         }

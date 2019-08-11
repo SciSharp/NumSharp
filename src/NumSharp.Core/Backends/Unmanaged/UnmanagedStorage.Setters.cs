@@ -285,7 +285,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, Shape.Vector(value.Count)));
+                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector((int) value.Count))); //TODO! when long index, remove cast int
                 return;
             }
 
@@ -513,7 +513,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape(values.Count);
+                _shape = new Shape((int)values.Count); //TODO! when long index, remove cast int
         }
 
         /// <summary>
@@ -527,7 +527,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape(values.Count);
+                _shape = new Shape((int) values.Count); //TODO! when long index, remove cast int
         }
 
         /// <summary>

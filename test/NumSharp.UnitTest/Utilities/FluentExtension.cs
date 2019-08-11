@@ -51,6 +51,11 @@ namespace NumSharp.UnitTest.Utilities
             Subject.size.Should().Be(size, because, becauseArgs);
             return new AndConstraint<ShapeAssertions>(this);
         }
+        public AndConstraint<ShapeAssertions> NotBeOfSize(int size, string because = null, params object[] becauseArgs)
+        {
+            Subject.size.Should().NotBe(size, because, becauseArgs);
+            return new AndConstraint<ShapeAssertions>(this);
+        }
 
         public AndConstraint<ShapeAssertions> BeShaped(params int[] dimensions)
         {
