@@ -513,7 +513,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape(values.Count);
+                _shape = new Shape((int)values.Count); //TODO! when long index, remove cast int
         }
 
         /// <summary>
@@ -527,7 +527,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape(values.Count);
+                _shape = new Shape((int) values.Count); //TODO! when long index, remove cast int
         }
 
         /// <summary>

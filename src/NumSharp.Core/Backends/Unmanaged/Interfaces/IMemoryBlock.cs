@@ -17,13 +17,13 @@
         ///     How many items are stored in <see cref="Address"/>.
         /// </summary>
         /// <remarks>Not to confuse with <see cref="BytesLength"/></remarks>
-        int Count { get; }
+        long Count { get; }
 
         /// <summary>
         ///     How many bytes are stored in this memory block.
         /// </summary>
         /// <remarks>Calculated by <see cref="Count"/>*<see cref="ItemLength"/></remarks>
-        int BytesLength { get; }
+        long BytesLength { get; }
 
         /// <summary>
         ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
