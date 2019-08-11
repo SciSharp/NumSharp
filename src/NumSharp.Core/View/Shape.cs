@@ -392,6 +392,7 @@ namespace NumSharp
             {
                 if (dimensions.Length == 0 && indices.Length == 1)
                     return indices[0];
+
                 offset = 0;
                 unchecked
                 {
