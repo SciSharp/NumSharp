@@ -62,6 +62,7 @@ namespace NumSharp
 
             var arr = array.Data<double>();
 
+            //TODO! Parallel.ForEach using ienumerable that'll ensure it is linear
             for (int i = 0; i < array.size; i++)
             {
                 double u1 = 1.0 - randomizer.NextDouble(); //uniform(0,1] random doubles

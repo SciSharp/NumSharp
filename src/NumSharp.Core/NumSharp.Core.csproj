@@ -41,7 +41,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netstandard\d'))">
-    <DefineConstants>NETSTANDARD;CPU_PARALLEL</DefineConstants>
+    <DefineConstants>NETSTANDARD;CPU_PARALLEL;BIT64</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">

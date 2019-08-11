@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using CompilerUnsafe = System.Runtime.CompilerServices.Unsafe;
@@ -87,13 +88,13 @@ namespace NumSharp
             ///     How many bytes are stored in this memory block.
             /// </summary>
             /// <remarks>Calculated by <see cref="Count"/>*<see cref="ItemLength"/></remarks>
-            public int BytesLength => Array.BytesLength;
+            public int BytesLength => ((IConvertible)Array.BytesLength).ToInt32(CultureInfo.InvariantCulture);
 
             /// <summary>
             ///     How many items are stored in <see cref="Address"/>.
             /// </summary>
             /// <remarks>Not to confuse with <see cref="BytesLength"/></remarks>
-            public int Count => Array.Count;
+            public int Count => (int) Array.Count;
 
             /// <summary>
             ///     Fills all indexes with <paramref name="value"/>.

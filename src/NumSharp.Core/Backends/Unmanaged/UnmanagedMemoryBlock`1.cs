@@ -14,9 +14,9 @@ namespace NumSharp.Backends.Unmanaged
     public unsafe struct UnmanagedMemoryBlock<T> : IUnmanagedMemoryBlock, IMemoryBlock<T>, IEnumerable<T>, IEquatable<UnmanagedMemoryBlock<T>>, ICloneable where T : unmanaged
     {
         private readonly Disposer _disposer;
-        public readonly int Count;
+        public readonly long Count;
         public readonly T* Address;
-        public readonly int BytesCount;
+        public readonly long BytesCount;
 
         /// <summary>
         /// 
@@ -24,10 +24,10 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <remarks>Does claim ownership since allocation is publicly.</remarks>
         [MethodImpl((MethodImplOptions)512)]
-        public UnmanagedMemoryBlock(int count)
+        public UnmanagedMemoryBlock(long count)
         {
             var bytes = BytesCount = count * InfoOf<T>.Size;
-            var ptr = Marshal.AllocHGlobal(bytes);
+            var ptr = Marshal.AllocHGlobal(new IntPtr(bytes));
             _disposer = new Disposer(ptr);
             Address = (T*)ptr;
             Count = count;
@@ -40,7 +40,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)512)]
-        public UnmanagedMemoryBlock(T* ptr, int count)
+        public UnmanagedMemoryBlock(T* ptr, long count)
         {
             _disposer = Disposer.Null;
             Address = ptr;
@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="dispose"></param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(T* start, int count, Action dispose)
+        public UnmanagedMemoryBlock(T* start, long count, Action dispose)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
@@ -71,7 +71,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(GCHandle handle, int count)
+        public UnmanagedMemoryBlock(GCHandle handle, long count)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
@@ -87,7 +87,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="dispose"></param>
         /// <remarks>Does claim ownership.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(GCHandle handle, int count, Action dispose)
+        public UnmanagedMemoryBlock(GCHandle handle, long count, Action dispose)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
@@ -101,9 +101,9 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
         /// <param name="fill"></param>
         [MethodImpl((MethodImplOptions)768)]
-        public UnmanagedMemoryBlock(int count, T fill) : this(count)
+        public UnmanagedMemoryBlock(long count, T fill) : this(count)
         {
-            new Span<T>(Address, count).Fill(fill);
+            Fill(fill, 0, count);
         }
 
         #region Static
@@ -121,7 +121,10 @@ namespace NumSharp.Backends.Unmanaged
                 return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
 
             var ret = new UnmanagedMemoryBlock<T>(arr.Length);
-            new Span<T>(arr).CopyTo(ret.AsSpan());
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
 
             return ret;
         }
@@ -158,7 +161,7 @@ namespace NumSharp.Backends.Unmanaged
             var itemCount = source.Count;
             var len = itemCount * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(itemCount);
-            Buffer.MemoryCopy(source.Address, ret.Address, len, len);
+            source.CopyTo(ret);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
         }
@@ -174,7 +177,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(count);
-            Buffer.MemoryCopy(address, ret.Address, len, len);
+            new UnmanagedMemoryBlock<T>((T*) address, count).CopyTo(ret);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
         }
@@ -212,7 +215,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        public void Reallocate(int length, bool copyOldValues = false)
+        public void Reallocate(long length, bool copyOldValues = false)
         {
             if (copyOldValues)
             {
@@ -231,7 +234,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        public void Reallocate(int length, T fill, bool copyOldValues = false)
+        public void Reallocate(long length, T fill, bool copyOldValues = false)
         {
             if (copyOldValues)
             {
@@ -241,7 +244,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 if (length > Count)
                 {
-                    new Span<T>(@new.Address + Count, length - Count).Fill(fill);
+                    Fill(fill, Count, length - Count);
                 }
 
                 Free();
@@ -252,6 +255,119 @@ namespace NumSharp.Backends.Unmanaged
                 //we do not have to allocate first in we do not copy values.
                 Free();
                 this = new UnmanagedMemoryBlock<T>(length, fill);
+            }
+        }
+
+        /// <summary>
+        ///     Fills the contents of this span with the given value.
+        /// </summary>
+        [MethodImpl((MethodImplOptions)768)]
+        public void Fill(T value)
+        {
+            if (Count == 0)
+                return;
+
+            if (Unsafe.SizeOf<T>() == 1 && Count < uint.MaxValue)
+            {
+                T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
+
+                Unsafe.InitBlockUnaligned(Address, Unsafe.As<T, byte>(ref tmp), (uint)Count);
+            }
+            else
+            {
+                // Do all math as nuint to avoid unnecessary 64->32->64 bit integer truncations
+                UInt64 length = (uint)Count;
+                if (length == 0)
+                    return;
+
+                T* addr = Address;
+
+                // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
+
+                ulong i = 0;
+                for (; i < (length & ~7UL); i += 8)
+                {
+                    *(addr + (i   )) = value;
+                    *(addr + (i + 1)) = value;
+                    *(addr + (i + 2)) = value;
+                    *(addr + (i + 3)) = value;
+                    *(addr + (i + 4)) = value;
+                    *(addr + (i + 5)) = value;
+                    *(addr + (i + 6)) = value;
+                    *(addr + (i + 7)) = value;
+                }
+
+                if (i < (length & ~3UL))
+                {
+                    *(addr + (i)) = value;
+                    *(addr + (i + 1)) = value;
+                    *(addr + (i + 2)) = value;
+                    *(addr + (i + 3)) = value;
+                    i += 4;
+                }
+
+                for (; i < length; i++)
+                {
+                    *(addr + i) = value;
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Fills the contents of this span with the given value.
+        /// </summary>
+        [MethodImpl((MethodImplOptions)768)]
+        public void Fill(T value, long offset, long count)
+        {
+            if (Count == 0)
+                return;
+
+            if (Unsafe.SizeOf<T>() == 1 && Count < uint.MaxValue)
+            {
+                if (Count - offset <= 0)
+                    return;
+
+                T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
+
+                Unsafe.InitBlockUnaligned(Address + offset, Unsafe.As<T, byte>(ref tmp), (uint)count);
+            }
+            else
+            {
+                // Do all math as nuint to avoid unnecessary 64->32->64 bit integer truncations
+                ulong length = (ulong)Count;
+                if (Count - offset <= 0)
+                    return;
+
+                T* addr = Address + offset;
+
+                // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
+
+                ulong i = 0;
+                for (; i < (length & ~7UL); i += 8)
+                {
+                    *(addr + (i   )) = value;
+                    *(addr + (i + 1)) = value;
+                    *(addr + (i + 2)) = value;
+                    *(addr + (i + 3)) = value;
+                    *(addr + (i + 4)) = value;
+                    *(addr + (i + 5)) = value;
+                    *(addr + (i + 6)) = value;
+                    *(addr + (i + 7)) = value;
+                }
+
+                if (i < (length & ~3UL))
+                {
+                    *(addr + (i)) = value;
+                    *(addr + (i + 1)) = value;
+                    *(addr + (i + 2)) = value;
+                    *(addr + (i + 3)) = value;
+                    i += 4;
+                }
+
+                for (; i < length; i++)
+                {
+                    *(addr + i) = value;
+                }
             }
         }
 
@@ -279,6 +395,31 @@ namespace NumSharp.Backends.Unmanaged
             *(Address + index) = value;
         }
 
+
+        [MethodImpl((MethodImplOptions)768)]
+        public T GetIndex(long index)
+        {
+            return *(Address + index);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public ref T GetRefTo(long index)
+        {
+            return ref *(Address + index);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public void SetIndex(long index, ref T value)
+        {
+            *(Address + index) = value;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public void SetIndex(long index, T value)
+        {
+            *(Address + index) = value;
+        }
+
         [MethodImpl((MethodImplOptions)512)]
         public void Free()
         {
@@ -300,7 +441,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public bool Contains(T item)
         {
-            int len = Count;
+            long len = Count;
             for (var i = 0; i < len; i++)
             {
                 if ((*(Address + i)).Equals(item)) return true;
@@ -312,7 +453,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)512)]
         public void CopyTo(T[] array, int arrayIndex)
         {
-            int len = Count;
+            long len = Count;
             for (var i = 0; i < len; i++)
             {
                 array[i + arrayIndex] = *(Address + i);
@@ -320,14 +461,14 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, int arrayIndex)
+        public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, long arrayIndex)
         {
             //TODO! at netcore 3, AsSpan.CopyTo might be faster.
             Buffer.MemoryCopy(Address + arrayIndex, memoryBlock.Address, InfoOf<T>.Size * memoryBlock.Count, InfoOf<T>.Size * (Count - arrayIndex));
         }
 
         [MethodImpl((MethodImplOptions)512)]
-        public void CopyTo(T* array, int arrayIndex, int lengthToCopy)
+        public void CopyTo(T* array, long arrayIndex, long lengthToCopy)
         {
             //TODO! at netcore 3, AsSpan.CopyTo might be faster.
             var len = InfoOf<T>.Size * lengthToCopy;
@@ -352,9 +493,6 @@ namespace NumSharp.Backends.Unmanaged
             CopyTo(arr, arrayIndex);
         }
 
-        [MethodImpl((MethodImplOptions)768)]
-        public Span<T> AsSpan() => new Span<T>(Address, Count);
-
         /// <summary>
         ///     Performs a copy to this memory block.
         /// </summary>
@@ -362,7 +500,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedMemoryBlock<T> Clone()
         {
             var ret = new UnmanagedMemoryBlock<T>(Count);
-            AsSpan().CopyTo(ret.AsSpan());
+            this.CopyTo(ret);
             return ret;
         }
 
@@ -387,13 +525,13 @@ namespace NumSharp.Backends.Unmanaged
         ///     How many items are stored in <see cref="IMemoryBlock.Address"/>?
         /// </summary>
         /// <remarks></remarks>
-        int IMemoryBlock.Count => Count;
+        long IMemoryBlock.Count => Count;
 
         /// <summary>
         ///     The items with length of <see cref="IMemoryBlock.TypeCode"/> are present in <see cref="IMemoryBlock.Address"/>.
         /// </summary>
         /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
-        int IMemoryBlock.BytesLength => BytesCount;
+        long IMemoryBlock.BytesLength => BytesCount;
 
         /// <summary>
         ///     The <see cref="NPTypeCode"/> of the type stored inside this memory block.
@@ -444,7 +582,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             unchecked
             {
-                return (Count * 397) ^ unchecked((int)(long)Address);
+                return (unchecked((int)Count) * 397) ^ unchecked((int)(long)Address);
             }
         }
 
@@ -472,7 +610,8 @@ namespace NumSharp.Backends.Unmanaged
 
         private class Disposer : IDisposable
         {
-            public static Disposer Null = new Disposer();
+            public static readonly Disposer Null = new Disposer();
+
             private enum AllocationType
             {
                 AllocHGlobal,
