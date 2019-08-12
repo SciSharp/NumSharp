@@ -26,24 +26,35 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Used to perform filtering by whats true and whats false.
+        ///     Used to perform selection based on indices.
         /// </summary>
-        /// <param name="mindices"></param>
-        /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray this[params NDArray[] mindices] => _extract_indices(mindices, false);
+        public NDArray this[params NDArray[] mindices] => _extract_indices(mindices, false, null);
 
-        private NDArray _extract_indices(NDArray[] mindices, bool isCollapsed)
+        /// <summary>
+        ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
+        /// </summary>
+        /// <param name="@out">Alternative output array in which to place the result. It must have the same shape as the expected output and be of dtype <see cref="Int32"/>.</param>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        public NDArray GetIndices(NDArray @out, params NDArray[] mindices)
+        {
+            return _extract_indices(mindices, false, @out);
+        }
+
+        private NDArray _extract_indices(NDArray[] mindices, bool isCollapsed, NDArray @out)
         {
             if (mindices == null)
                 throw new ArgumentNullException(nameof(mindices));
 
+            //when mindices is single and 
             if (mindices.Length == 1 && (mindices[0].ndim >= this.ndim || isCollapsed))
             {
                 //element-wise if ndims are equal or src is flat
-                return _index_elemntwise(mindices[0]);
+                return _index_elemntwise(mindices[0], @out);
 
                 //otherwise returns like GetNDArrays() but specific indexes so we falldown
             }
@@ -51,8 +62,8 @@ namespace NumSharp
             if (mindices.Length > ndim)
                 throw new ArgumentException($"There are more mindices ({mindices.Length}) than dimensions ({ndim}) in current array.");
 
-            //handle broadcasting
-            var indicesShape = mindices[0].Shape.Clean();
+            //handle broadcasting if required
+            var indicesShape = mindices[0].Shape;
             for (int i = 1; i < mindices.Length; i++)
             {
                 if (indicesShape != mindices[i].Shape)
@@ -62,14 +73,26 @@ namespace NumSharp
                 }
             }
 
+            indicesShape = mindices[0].Shape.Clean(); //we clean it later incase we broadcast mindices[0] in the code above
+
+            //invalidate @out
+            if (!(@out is null))
+            {
+                if (indicesShape != @out.Shape) 
+                    throw new IncorrectShapeException($"shapes {indicesShape} is not compatible with given @out array's shape {@out.Shape} for indexing nd[NDArray].");
+
+                if (@out.typecode != NPTypeCode.Int32)
+                    throw new IncorrectTypeException("Unable to index nd[NDArray] when the @out specified dtype is not int32.");
+            }
+
             //handle when mindicies[i] is not int array.
             for (int i = 0; i < mindices.Length; i++)
             {
                 if (mindices[i].typecode != NPTypeCode.Int32)
-                    mindices[i] = new NDArray(mindices[i].Storage.CastIfNecessary<int>());
+                    mindices[i] = new NDArray(mindices[i].Storage.Cast<int>());
             }
 
-            //case 1 multidim eq to ndim
+            //case 1 multidim eq to ndim, meaning every index points to a scalar array
             if (mindices.Length == ndim)
             {
                 //this is multidims, collapse them into singledim
@@ -89,20 +112,21 @@ namespace NumSharp
                     collapsed[individualIndex] = getOffset(collapsedIndex);
                 } while (iter.Next() != null);
 
-                return _extract_indices(new NDArray[] {collapsed}, true);
+                return _extract_indices(new NDArray[] {collapsed}, true, @out);
             }
-
 
             //case 2 return is not scalar collection but axis iteration
             {
                 var flat_mindices = new NDArray[mindices.Length];
                 for (var i = 0; i < mindices.Length; i++) flat_mindices[i] = mindices[i];
 
-                var collapsed = new NDArray(NPTypeCode.Int32, indicesShape, false);
-
-                var (retShape, _) = Shape.GetSubshape(new int[collapsed.ndim]);
-                var dims = collapsed.shape.Concat(retShape.dimensions).ToArray();
-                var ret = new NDArray(typecode, dims); //retshape is already clean
+                NDArray ret = @out;
+                if (ret is null)
+                {
+                    var (retShape, _) = Shape.GetSubshape(new int[indicesShape.dimensions.Length]);
+                    var dims = indicesShape.dimensions.Concat(retShape.dimensions).ToArray();
+                    ret = new NDArray(typecode, dims, false); //retshape is already clean
+                }
 
                 var iter = new NDCoordinatesIncrementor(ref indicesShape);
                 var ndims = mindices.Length;
@@ -211,14 +235,23 @@ namespace NumSharp
         //}
 
         [MethodImpl((MethodImplOptions)512)]
-        private NDArray _index_elemntwise(NDArray indices)
+        private NDArray _index_elemntwise(NDArray indices, NDArray @out = null)
         {
             //verify the indices dtype is Int.
             var grp = indices.typecode.GetGroup();
             if (grp != 1 && grp != 2 && indices.typecode != NPTypeCode.Byte)
                 throw new ArgumentException("indices must be of Int type.", nameof(indices));
 
-            var ret = new NDArray(dtype, indices.Shape.Clean(), false);
+            //invalidate @out
+            if (!(@out is null))
+            {
+                if (indices.Shape != @out.Shape) throw new IncorrectShapeException($"shapes {indices.Shape} is not compatible with given @out array's shape {@out.Shape} for indexing element-wise nd[NDArray].");
+
+                if (@out.typecode != NPTypeCode.Int32)
+                    throw new IncorrectTypeException("Unable to index element-wise nd[NDArray] when the @out specified dtype is not int32.");
+            }
+
+            var ret = @out ?? new NDArray(dtype, indices.Shape.Clean(), false);
 
             // ReSharper disable once LocalVariableHidesMember
             var size = this.size;
