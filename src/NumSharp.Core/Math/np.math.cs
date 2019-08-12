@@ -25,6 +25,11 @@ namespace NumSharp
         public static NDArray subtract(in NDArray x1, in NDArray x2)
             => x1.TensorEngine.Subtract(x1, x2);
 
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mod.html</remarks>
+        public static NDArray mod(in NDArray x1, in NDArray x2)
+            => x1.TensorEngine.Mod(x1, x2);
+
+
         /// <summary>
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
         ///
