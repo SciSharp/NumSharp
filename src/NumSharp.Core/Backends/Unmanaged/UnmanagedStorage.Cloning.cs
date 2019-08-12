@@ -68,14 +68,14 @@ namespace NumSharp.Backends
         /// <remarks>Always copies, If dtype==typeof(T) then a <see cref="Clone"/> is returned.</remarks>
         public UnmanagedStorage Cast<T>() where T : unmanaged
         {
-            if (Shape.IsEmpty)
+            if (_shape.IsEmpty)
                 return new UnmanagedStorage(typeof(T));
 
             if (_dtype == typeof(T))
                 return Clone();
 
             //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), Shape.Clone(true, true));
+            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true));
         }
 
         /// <summary>
@@ -86,14 +86,14 @@ namespace NumSharp.Backends
         /// <remarks>Always copies, If dtype==typeof(T) then a <see cref="Clone"/> is returned.</remarks>
         public UnmanagedStorage Cast(NPTypeCode typeCode)
         {
-            if (Shape.IsEmpty)
+            if (_shape.IsEmpty)
                 return new UnmanagedStorage(typeCode);
 
             if (_typecode == typeCode)
                 return Clone();
 
             //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), Shape.Clone(true, true));
+            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true));
         }
 
         /// <summary>
@@ -115,11 +115,11 @@ namespace NumSharp.Backends
         /// <remarks>Copies only if dtypes does not match <typeparamref name="T"/></remarks>
         public UnmanagedStorage CastIfNecessary<T>() where T : unmanaged
         {
-            if (Shape.IsEmpty || _dtype == typeof(T))
+            if (_shape.IsEmpty || _dtype == typeof(T))
                 return this;
 
             //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), Shape.Clone(true, true));
+            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true));
         }
 
         /// <summary>
@@ -130,11 +130,11 @@ namespace NumSharp.Backends
         /// <remarks>Copies only if dtypes does not match <paramref name="typeCode"/></remarks>
         public UnmanagedStorage CastIfNecessary(NPTypeCode typeCode)
         {
-            if (Shape.IsEmpty || _typecode == typeCode)
+            if (_shape.IsEmpty || _typecode == typeCode)
                 return this;
 
             //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), Shape.Clone(true, true));
+            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true));
         }
 
         /// <summary>
@@ -159,16 +159,16 @@ namespace NumSharp.Backends
         public IArraySlice CloneData()
         {
             //Incase shape is not sliced, we can copy the internal buffer.
-            if (!Shape.IsSliced && !Shape.IsBroadcasted)
+            if (!_shape.IsSliced && !_shape.IsBroadcasted)
                 return InternalArray.Clone();
 
-            if (Shape.IsScalar)
+            if (_shape.IsScalar)
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
             //Linear copy of all the sliced items.
 
-            var ret = ArraySlice.Allocate(InternalArray.TypeCode, Shape.size, false);
-            MultiIterator.Assign(new UnmanagedStorage(ret, Shape.Clean()), this);
+            var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
+            MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);
 
             return ret;
         }

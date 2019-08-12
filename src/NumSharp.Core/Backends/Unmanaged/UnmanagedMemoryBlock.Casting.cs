@@ -147,8 +147,7 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.#101:
                             {
                                 var dst = (#102*)ret.Address;
-                                Func<#2, #102> convert = Convert.To#101;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.To#101(*(src + i)));
                                 break;
                             }
 	                        %
@@ -173,85 +172,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<bool, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<bool, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<bool, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<bool, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<bool, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<bool, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<bool, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<bool, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<bool, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<bool, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<bool, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<bool, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -268,85 +255,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<byte, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<byte, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<byte, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<byte, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<byte, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<byte, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<byte, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<byte, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<byte, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<byte, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<byte, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<byte, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -363,85 +338,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<short, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<short, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<short, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<short, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<short, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<short, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<short, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<short, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<short, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<short, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<short, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<short, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -458,85 +421,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<ushort, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<ushort, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<ushort, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<ushort, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<ushort, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<ushort, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<ushort, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<ushort, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<ushort, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<ushort, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<ushort, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<ushort, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -553,85 +504,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<int, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<int, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<int, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<int, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<int, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<int, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<int, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<int, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<int, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<int, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<int, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<int, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -648,85 +587,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<uint, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<uint, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<uint, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<uint, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<uint, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<uint, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<uint, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<uint, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<uint, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<uint, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<uint, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<uint, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -743,85 +670,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<long, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<long, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<long, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<long, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<long, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<long, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<long, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<long, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<long, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<long, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<long, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<long, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -838,85 +753,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<ulong, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<ulong, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<ulong, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<ulong, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<ulong, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<ulong, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<ulong, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<ulong, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<ulong, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<ulong, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<ulong, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<ulong, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -933,85 +836,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<char, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<char, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<char, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<char, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<char, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<char, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<char, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<char, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<char, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<char, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<char, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<char, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -1028,85 +919,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<double, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<double, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<double, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<double, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<double, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<double, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<double, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<double, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<double, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<double, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<double, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<double, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -1123,85 +1002,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<float, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<float, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<float, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<float, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<float, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<float, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<float, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<float, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<float, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<float, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<float, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<float, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:
@@ -1218,85 +1085,73 @@ namespace NumSharp.Backends.Unmanaged
 	                        case NPTypeCode.Boolean:
                             {
                                 var dst = (bool*)ret.Address;
-                                Func<decimal, bool> convert = Convert.ToBoolean;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Byte:
                             {
                                 var dst = (byte*)ret.Address;
-                                Func<decimal, byte> convert = Convert.ToByte;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int16:
                             {
                                 var dst = (short*)ret.Address;
-                                Func<decimal, short> convert = Convert.ToInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt16:
                             {
                                 var dst = (ushort*)ret.Address;
-                                Func<decimal, ushort> convert = Convert.ToUInt16;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int32:
                             {
                                 var dst = (int*)ret.Address;
-                                Func<decimal, int> convert = Convert.ToInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt32:
                             {
                                 var dst = (uint*)ret.Address;
-                                Func<decimal, uint> convert = Convert.ToUInt32;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Int64:
                             {
                                 var dst = (long*)ret.Address;
-                                Func<decimal, long> convert = Convert.ToInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.UInt64:
                             {
                                 var dst = (ulong*)ret.Address;
-                                Func<decimal, ulong> convert = Convert.ToUInt64;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Char:
                             {
                                 var dst = (char*)ret.Address;
-                                Func<decimal, char> convert = Convert.ToChar;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Double:
                             {
                                 var dst = (double*)ret.Address;
-                                Func<decimal, double> convert = Convert.ToDouble;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Single:
                             {
                                 var dst = (float*)ret.Address;
-                                Func<decimal, float> convert = Convert.ToSingle;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
                                 break;
                             }
 	                        case NPTypeCode.Decimal:
                             {
                                 var dst = (decimal*)ret.Address;
-                                Func<decimal, decimal> convert = Convert.ToDecimal;
-                                Parallel.For(0, len, i => *(dst + i) = convert(*(src + i)));
+                                Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
                                 break;
                             }
 	                        default:

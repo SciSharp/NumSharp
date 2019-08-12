@@ -32,20 +32,21 @@ namespace NumSharp
         #endregion
 
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Dot(in NDArray x, in NDArray y);
+        public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
         public abstract NDArray Mod(in NDArray lhs, in NDArray rhs);
 
         public abstract NDArray Mean(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
-        public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
-        public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
+
+        public abstract NDArray Dot(in NDArray x, in NDArray y);
+        public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
 
         public abstract NDArray Abs(in NDArray nd, Type dtype);
         public abstract NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null);

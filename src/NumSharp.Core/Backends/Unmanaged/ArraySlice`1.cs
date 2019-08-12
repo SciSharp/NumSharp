@@ -7,7 +7,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using NumSharp.Utilities;
-
 #pragma warning disable SA1121 // explicitly using type aliases instead of built-in types
 #if BIT64
 using nuint = System.UInt64;
@@ -54,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
             MemoryBlock = memoryBlock;
             IsSlice = false;
             VoidAddress = Address = MemoryBlock.Address;
-            Count = (int) MemoryBlock.Count; //TODO! when long index, remove cast int
+            Count = (int)MemoryBlock.Count; //TODO! when long index, remove cast int
         }
 
         public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
@@ -76,7 +75,7 @@ namespace NumSharp.Backends.Unmanaged
             MemoryBlock = memoryBlock;
             IsSlice = true;
             Count = count;
-            VoidAddress = Address = (T*) address;
+            VoidAddress = Address = (T*)address;
             //TODO! we should check that is does not exceed bounds.
         }
 
@@ -90,9 +89,15 @@ namespace NumSharp.Backends.Unmanaged
         {
             MemoryBlock = memoryBlock;
             IsSlice = true;
-            Count = (int) count; //TODO! When index long, this should not cast.
+            Count = (int)count; //TODO! When index long, this should not cast.
             VoidAddress = Address = address;
-            //TODO! we should check that is does not exceed bounds.
+#if DEBUG
+            if (address + count > memoryBlock.Address + memoryBlock.Count)
+                throw new ArgumentOutOfRangeException(nameof(address));
+
+            if (address + count < memoryBlock.Address || address < memoryBlock.Address)
+                throw new ArgumentOutOfRangeException(nameof(address));
+#endif
         }
 
         #endregion
@@ -103,16 +108,34 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns></returns>
         object IArraySlice.this[int index]
         {
-            get => *(Address + index);
-            set => *(Address + index) = (T)value;
+            get
+            {
+                Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
+                return *(Address + index);
+            }
+            set
+            {
+                Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
+                *(Address + index) = (T)value;
+            }
         }
 
         /// <param name="index"></param>
         /// <returns></returns>
         public T this[int index]
         {
-            [MethodImpl((MethodImplOptions)768)] get => *(Address + index);
-            [MethodImpl((MethodImplOptions)768)] set => *(Address + index) = value;
+            [MethodImpl((MethodImplOptions)768)]
+            get
+            {
+                Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
+                return *(Address + index);
+            }
+            [MethodImpl((MethodImplOptions)768)]
+            set
+            {
+                Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
+                *(Address + index) = value;
+            }
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -124,12 +147,14 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl((MethodImplOptions)768)]
         public void SetIndex(int index, object value)
         {
+            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = (T)value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         public void SetIndex(int index, T value)
         {
+            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = value;
         }
 
@@ -175,11 +200,11 @@ namespace NumSharp.Backends.Unmanaged
                 T* addr = Address;
 
                 // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
-                
+
                 nuint i = 0;
                 for (; i < (length & ~(nuint)7); i += 8)
                 {
-                    *(addr + (i   )) = value;
+                    *(addr + (i)) = value;
                     *(addr + (i + 1)) = value;
                     *(addr + (i + 2)) = value;
                     *(addr + (i + 3)) = value;
@@ -338,12 +363,14 @@ namespace NumSharp.Backends.Unmanaged
         void IArraySlice.SetIndex<TVal>(int index, TVal value)
         {
             Debug.Assert(InfoOf<TVal>.Size == InfoOf<T>.Size);
+            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *((TVal*)VoidAddress + index) = value;
         }
 
         [MethodImpl((MethodImplOptions)768)]
         object IArraySlice.GetIndex(int index)
         {
+            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             return *(Address + index);
         }
 
