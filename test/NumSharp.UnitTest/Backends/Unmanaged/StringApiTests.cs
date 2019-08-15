@@ -40,7 +40,27 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             str.Should().BeOfType<char>().And.BeShaped(5 * 5);
             str = str.reshape(5, 5);
             str.GetString(3).Should().Be("lllll");
-            new Action(() => { var _ = str.GetString(3, 1); }).Should().Throw<ArgumentOutOfRangeException>();
+            new Action(() =>
+            {
+                var _ = str.GetString(3, 1);
+            }).Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        [TestMethod]
+        public void GetString_Sliced()
+        {
+            var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            str.GetString().Should().Be("hello");
+        }
+        [TestMethod]
+        public void SetString_Sliced()
+        {
+            var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            str.GetString().Should().Be("hello");
+            str.SetString("kekek");
+            str.Should().BeOfValues("kekek".ToCharArray().Cast<object>().ToArray());
         }
 
         [TestMethod]

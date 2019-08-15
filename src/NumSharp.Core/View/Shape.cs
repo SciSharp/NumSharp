@@ -28,7 +28,7 @@ namespace NumSharp
         /// <summary>
         ///     Does this Shape represents a non-sliced and non-broadcasted hence contagious unmanaged memory?
         /// </summary>
-        public bool IsContagious
+        public bool IsContiguous
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => !IsSliced && !IsBroadcasted;

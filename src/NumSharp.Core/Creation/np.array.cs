@@ -61,7 +61,6 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(chars));
             if (chars.Length==0)
                 return new NDArray(NPTypeCode.Char);
-            return new NDArray(ArraySlice.FromArray(chars.ToArray()), Shape.Vector(chars.Length));
 
             unsafe
             {

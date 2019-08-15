@@ -47,24 +47,24 @@ namespace NumSharp
 
                 Debug.Assert(typecode == NPTypeCode.Char);
 
-                UnmanagedStorage arr = Storage.GetData(indices);
-                Debug.Assert(arr.Shape.NDim == 1);
+                UnmanagedStorage src = Storage.GetData(indices);
+                Debug.Assert(src.Shape.NDim == 1);
 
-                if (!Shape.IsContagious)
+                if (!Shape.IsContiguous)
                 {
                     //this works faster than cloning.
-                    var ret = new string('\0', arr.Count);
+                    var ret = new string('\0', src.Count);
                     fixed (char* retChars = ret)
                     {
-                        var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), arr.Shape.Clean());
-                        MultiIterator.Assign(dst, arr);
+                        var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), src.Shape.Clean());
+                        MultiIterator.Assign(dst, src);
                     }
 
                     return ret;
                 }
 
                 //new string always performs a copy, there is no need to keep reference to arr's unmanaged storage.
-                return new string((char*)arr.Address, 0, arr.Count);
+                return new string((char*)src.Address, 0, src.Count);
             }
         }
 
@@ -81,13 +81,13 @@ namespace NumSharp
 
             unsafe
             {
-                if (Shape.IsContagious)
+                if (Shape.IsContiguous)
                 {
                     var dst = (char*)Address + Shape.GetOffset(indices);
-                    fixed (char* strChars = value)
+                    fixed (char* src = value)
                     {
-                        var src = strChars;
-                        Parallel.For(0, value.Length, i => *(dst + i) = *(src + i));
+                        var len = sizeof(char) * value.Length;
+                        Buffer.MemoryCopy(src, dst, len, len);
                     }
                 }
                 else
