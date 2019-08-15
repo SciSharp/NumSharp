@@ -50,7 +50,7 @@ namespace NumSharp
         /// <summary>
         ///     Is this shape a broadcast and/or has modified strides?
         /// </summary>
-        internal bool IsBroadcasted => BroadcastInfo != null;
+        public bool IsBroadcasted => BroadcastInfo != null;
 
         /// <summary>
         ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
