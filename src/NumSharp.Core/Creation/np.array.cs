@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -9,10 +10,7 @@ namespace NumSharp
     public static partial class np
     {
         [MethodImpl((MethodImplOptions)768)]
-        public static NDArray array(NDArray nd, bool copy = false)
-        {
-            return copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
-        }
+        public static NDArray array(NDArray nd, bool copy = false) => copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
 
         public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
         {
@@ -49,15 +47,27 @@ namespace NumSharp
         }
 
 
-        public static NDArray array<T>(params T[] data) where T : unmanaged
+        public static NDArray array<T>(params T[] data) where T : unmanaged => new NDArray(ArraySlice.FromArray(data), Shape.Vector(data.Length));
+
+        /// <summary>
+        ///     Create a vector ndarray of type <see cref="char"/>.
+        /// </summary>
+        /// <param name="chars"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static NDArray array(string chars)
         {
-            return new NDArray(ArraySlice.FromArray(data), new Shape(data.Length));
+            if (chars == null)
+                throw new ArgumentNullException(nameof(chars));
+            if (chars.Length==0)
+                return new NDArray(NPTypeCode.Char);
+            return new NDArray(ArraySlice.FromArray(chars.ToArray()), Shape.Vector(chars.Length));
         }
 
         public static NDArray array<T>(T[][] data)
         {
             var array = data.SelectMany(inner => inner).ToArray(); //todo! not use selectmany.
-            return new NDArray(array, new Shape(data.Length, data[0].Length));
+            return new NDArray(array, Shape.Matrix(data.Length, data[0].Length));
         }
 
         public static NDArray array<T>(T[][][] data)

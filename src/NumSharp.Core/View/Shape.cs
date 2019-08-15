@@ -26,6 +26,15 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Does this Shape represents a non-sliced and non-broadcasted hence contagious unmanaged memory?
+        /// </summary>
+        public bool IsContagious
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => !IsSliced && !IsBroadcasted;
+        }
+
+        /// <summary>
         ///     Is this Shape a recusive view? (deeper than 1 view)
         /// </summary>
         public bool IsRecursive
