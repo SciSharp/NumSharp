@@ -12,6 +12,13 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         private static string hello = "hello";
 
         [TestMethod]
+        public void np_array_string()
+        {
+            var str = NDArray.FromString(hello);
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
+        }
+
+        [TestMethod]
         public void FromString()
         {
             var str = NDArray.FromString(hello);

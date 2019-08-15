@@ -62,6 +62,20 @@ namespace NumSharp
             if (chars.Length==0)
                 return new NDArray(NPTypeCode.Char);
             return new NDArray(ArraySlice.FromArray(chars.ToArray()), Shape.Vector(chars.Length));
+
+            unsafe
+            {
+                var ret = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(chars.Length));
+                fixed (char* strChars = chars)
+                {
+                    var src = strChars;
+                    var dst = ret.Address;
+                    var len = sizeof(char) * chars.Length;
+                    Buffer.MemoryCopy(src, dst, len, len);
+                }
+
+                return new NDArray(ret);
+            }
         }
 
         public static NDArray array<T>(T[][] data)
