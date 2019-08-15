@@ -497,6 +497,13 @@ namespace NumSharp
         public IArraySlice GetData() => Storage.GetData();
 
         /// <summary>
+        ///     Gets a NDArray at given <paramref name="indices"/>.
+        /// </summary>
+        /// <param name="indices">The coordinates to the wanted value</param>
+        /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
+        public NDArray GetData(params int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+
+        /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
