@@ -20,14 +20,11 @@ namespace NumSharp
             => x.TensorEngine.Transpose(x, axes: axes);
 
         /// <summary>
-        /// Find the unique elements of an array.
-        /// 
-        /// Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:
-        /// * the indices of the input array that give the unique values
-        /// * the indices of the unique array that reconstruct the input array
-        /// * the number of times each unique value comes up in the input array
+        ///     Find the unique elements of an array.
         /// </summary>
-        public static NDArray unique<T>(NDArray a)
-            => a.unique<T>();
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
+        public static NDArray unique(NDArray a)
+            => a.unique();
+
     }
 }
