@@ -59,8 +59,8 @@ namespace NumSharp
         {
             if (chars == null)
                 throw new ArgumentNullException(nameof(chars));
-            if (chars.Length==0)
-                return new NDArray(NPTypeCode.Char);
+            if (chars.Length == 0)
+                return new NDArray(NPTypeCode.Char, 0);
 
             unsafe
             {
