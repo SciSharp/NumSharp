@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -1328,19 +1330,33 @@ namespace NumSharp.Backends
             }
         }
 
+        [MethodImpl((MethodImplOptions)512)]
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
-            var addr = (T*)Address;
+
+            var src = (T*)Address;
             var ret = new T[Shape.Size];
-            var incr = new NDCoordinatesIncrementor(Shape.dimensions);
-            int[] current = incr.Index;
-            int i = 0;
-            do
+
+            if (Shape.IsContiguous)
             {
-                ret[i++] = (*(addr + Shape.GetOffset(current)));
-            } while (incr.Next() != null);
+                fixed (T* dst = ret)
+                {
+                    var len = sizeof(T) * ret.Length;
+                    Buffer.MemoryCopy(src, dst, len, len);
+                }
+            }
+            else
+            {
+                var incr = new NDCoordinatesIncrementor(Shape.dimensions);
+                int[] current = incr.Index;
+                Func<int[], int> getOffset = Shape.GetOffset;
+                int i = 0;
+
+                do ret[i++] = src[getOffset(current)];
+                while (incr.Next() != null);
+            }
 
             return ret;
         }
