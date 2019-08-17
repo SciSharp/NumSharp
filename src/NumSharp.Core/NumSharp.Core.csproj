@@ -12,41 +12,62 @@
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Main changes since v0.10
+    
+   
+
 - Rewrite n-d array storage.
+    
 - Performance improvements.
+    
 - All interfaces have are re-implemented.
+    
 - Revamped np.dot
+    
 - Revamped and optimized math operators algorithms
+    
 - Revamped np.shuffle
+    
 - Added np.mod and % operator between NDArrays
+    
 - Added NDArray.Unsafe which allows unmamanged access to the array's memory and other internal fields like access to UnmanagedStorage
+    
 - Added debug.assert for memory accessing methods in ArraySlice.
+    
 - Ported UnmanagedMemoryBlock and ArraySlice to use long.
+    
 - Reimplemented Fill and Slice methods of UnmanagedMemoryBlock`1 and ArraySlice`1 from coreclr source of Span&lt;T&gt;.
+    
 - Added BIT64 conditional compilation symbol.
+    
 - Significatly increased the performance of NDArray.SetData in a common case.
+    
 - Added NPTypeCode.GetDefaultValue
-- Perf-ops for NDArray's operator overloads
+    
+-  Perf-ops for NDArray's operator overloads
+    
 - Added NDArray operators for boolean cases
-- Fixed over a dozen of bugs</PackageReleaseNotes>
-    <AssemblyVersion>0.11.0.0</AssemblyVersion>
-    <FileVersion>0.11.0.0</FileVersion>
+    
+- Fixed over a dozen of bugs
+</PackageReleaseNotes>
+    <AssemblyVersion>0.20.0.0</AssemblyVersion>
+    <FileVersion>0.20.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
-    <PackageLicenseUrl>https://github.com/SciSharp/NumSharp/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>7.3</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.11.0-alpha3</Version>
+    <Version>0.20.0-alpha1</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SignAssembly>false</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -110,6 +131,10 @@
   <ItemGroup>
     <None Remove="NumSharp.Core.csproj.DotSettings" />
     <None Remove="Operations\NdArray.ElementsWise.tt" />
+    <None Include="..\..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
@@ -137,4 +162,4 @@
     <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
   </ItemGroup>
 
-</Project>
+</Project>    
