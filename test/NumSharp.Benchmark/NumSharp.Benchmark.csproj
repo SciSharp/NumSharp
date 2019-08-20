@@ -5,6 +5,10 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
+    <ApplicationIcon />
+    <Win32Resource />
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">

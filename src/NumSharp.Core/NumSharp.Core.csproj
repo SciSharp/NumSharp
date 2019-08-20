@@ -7,52 +7,25 @@
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
-    <Description>NumSharp is the fundamental package for scientific computing with dot NET. It has implemented the arange, array, max, min, reshape, normalize, unique and random interfaces and so on. More and more interfaces will be added to the library gradually. If you want to use .NET to get started with machine learning, NumSharp will be your best tool library.</Description>
+    <Description>NumSharp is the fundamental library for scientific computing with .NET providing a similar API to python's numpy scientific library. NumSharp has full N-D, broadcasting and axis support.  If you want to use .NET to get started with machine learning, NumSharp will be your best tool.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Main changes since v0.10
-    
-   
+    <PackageReleaseNotes>Most of the library (&gt;95%) has been rewritten within over 400 commits in course of 3 months.
 
-- Rewrite n-d array storage.
-    
-- Performance improvements.
-    
-- All interfaces have are re-implemented.
-    
-- Revamped np.dot
-    
-- Revamped and optimized math operators algorithms
-    
-- Revamped np.shuffle
-    
-- Added np.mod and % operator between NDArrays
-    
-- Added NDArray.Unsafe which allows unmamanged access to the array's memory and other internal fields like access to UnmanagedStorage
-    
-- Added debug.assert for memory accessing methods in ArraySlice.
-    
-- Ported UnmanagedMemoryBlock and ArraySlice to use long.
-    
-- Reimplemented Fill and Slice methods of UnmanagedMemoryBlock`1 and ArraySlice`1 from coreclr source of Span&lt;T&gt;.
-    
-- Added BIT64 conditional compilation symbol.
-    
-- Significatly increased the performance of NDArray.SetData in a common case.
-    
-- Added NPTypeCode.GetDefaultValue
-    
--  Perf-ops for NDArray's operator overloads
-    
-- Added NDArray operators for boolean cases
-    
-- Fixed over a dozen of bugs
-</PackageReleaseNotes>
+- Full n-d, slice, broadcasting and axis support in all reimplemented methods (e.g. np.sum, np.concatenate) Broadcasting n-d shapes against each other.
+
+- NDArray Slicing and nested slicing (nd["-1, ::2"]["1::3, :, 0"])
+
+- Full and precise (to numpy) type resolving and conversion (upcasting, downcasting and all other cases)
+
+- Use of unmanaged memory and unsafe code in favor of performance.
+
+- NumSharp no longer perform copies except for cases when numpy does. Compared to previous version, indexing an n-d array (e.g. nd[0,1] when shape is (3,3,3,3)) would return a copy when now it returns a reference (alias).</PackageReleaseNotes>
     <AssemblyVersion>0.20.0.0</AssemblyVersion>
     <FileVersion>0.20.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>NumPy, NumSharp, MachineLearning, Math, Scientific, Numeric</PackageTags>
+    <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
     <LangVersion>7.3</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
@@ -60,10 +33,10 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.20.0-alpha1</Version>
+    <Version>0.20.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <SignAssembly>false</SignAssembly>
+    <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
