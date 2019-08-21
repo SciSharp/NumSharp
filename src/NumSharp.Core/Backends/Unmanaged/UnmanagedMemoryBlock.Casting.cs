@@ -1188,2827 +1188,1040 @@ namespace NumSharp.Backends.Unmanaged
             var ret = @out ?? throw new ArgumentNullException(nameof(@out));
             if (source.BytesLength + bytesOffset > ret.BytesLength)
                 throw new ArgumentOutOfRangeException(nameof(@out), "The length of IMemoryBlock @out does not match source's length.");
-            //TODO! wth is going on here, the offsetting is not used below.
-#if __REGEN
-            //TODO* Nested regen code:
-            switch (ret.TypeCode)
+
+            switch (source.TypeCode)
             {
+
+#if _REGEN
+                #region Compute
+                //#n is in, #10n is out
 	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
                 {
                     var src = (#2*)source.Address;
-		            for (int i = 0; i < len; i++)
-                        *(dst + offset + i) = Convert.To___(*(src + i));
+                    switch (ret.TypeCode)
+                    {
+	                    %foreach supported_dtypes,supported_dtypes_lowercase%
+	                    case NPTypeCode.#101:
+                        {
+                            var dst = (#102*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.To#101(*(src + i)));
+                            break;
+                        }
+	                    %
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
                     break;
                 }
 	            %
 	            default:
 		            throw new NotSupportedException();
-            }
+                #endregion
 #else
-#endif
-            if (offset != 0) 
-                switch (ret.TypeCode)
+                #region Compute
+                //#n is in, #10n is out
+	            case NPTypeCode.Boolean:
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1:
+                    var src = (bool*)source.Address;
+                    switch (ret.TypeCode)
                     {
-                        var dst = (#2*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Boolean:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Boolean:
-                    {
-                        var dst = (bool*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Byte:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Byte:
-                    {
-                        var dst = (byte*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int16:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int16:
-                    {
-                        var dst = (short*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt16:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt16:
-                    {
-                        var dst = (ushort*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int32:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int32:
-                    {
-                        var dst = (int*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt32:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt32:
-                    {
-                        var dst = (uint*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int64:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int64:
-                    {
-                        var dst = (long*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt64:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt64:
-                    {
-                        var dst = (ulong*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Char:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Char:
-                    {
-                        var dst = (char*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Double:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Double:
-                    {
-                        var dst = (double*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Single:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Single:
-                    {
-                        var dst = (float*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Decimal:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
                         }
-
-                        break;
+	                    default:
+		                    throw new NotSupportedException();
                     }
-	                case NPTypeCode.Decimal:
-                    {
-                        var dst = (decimal*)ret.Address;
-                        switch (source.TypeCode)
-                        {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
 
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + offset + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
-                        }
-
-                        break;
-                    }
-	                default:
-		                throw new NotSupportedException();
-#endif
+                    break;
                 }
-            else
-            {
-#if __REGEN
-                //TODO* Nested regen code:
-                switch (ret.TypeCode)
+	            case NPTypeCode.Byte:
                 {
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1:
+                    var src = (byte*)source.Address;
+                    switch (ret.TypeCode)
                     {
-                        var src = (#2*)source.Address;
-		                for (int i = 0; i < len; i++)
-                            *(dst + i) = Convert.To___(*(src + i));
-                        break;
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
                     }
-	                %
-	                default:
-		                throw new NotSupportedException();
-                }
-#else
-#endif
 
-                switch (ret.TypeCode)
+                    break;
+                }
+	            case NPTypeCode.Int16:
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1:
+                    var src = (short*)source.Address;
+                    switch (ret.TypeCode)
                     {
-                        var dst = (#2*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Boolean:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.To#1(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Boolean:
-                    {
-                        var dst = (bool*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Byte:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToBoolean(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Byte:
-                    {
-                        var dst = (byte*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int16:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToByte(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int16:
-                    {
-                        var dst = (short*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt16:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt16(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt16:
-                    {
-                        var dst = (ushort*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int32:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt16(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int32:
-                    {
-                        var dst = (int*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt32:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt32(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt32:
-                    {
-                        var dst = (uint*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Int64:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt32(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Int64:
-                    {
-                        var dst = (long*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.UInt64:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToInt64(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.UInt64:
-                    {
-                        var dst = (ulong*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Char:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToUInt64(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Char:
-                    {
-                        var dst = (char*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Double:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToChar(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Double:
-                    {
-                        var dst = (double*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Single:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDouble(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
                         }
-
-                        break;
-                    }
-	                case NPTypeCode.Single:
-                    {
-                        var dst = (float*)ret.Address;
-                        switch (source.TypeCode)
+	                    case NPTypeCode.Decimal:
                         {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToSingle(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
                         }
-
-                        break;
+	                    default:
+		                    throw new NotSupportedException();
                     }
-	                case NPTypeCode.Decimal:
-                    {
-                        var dst = (decimal*)ret.Address;
-                        switch (source.TypeCode)
-                        {
-                            case NPTypeCode.Boolean:
-                            {
-                                var src = (bool*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }                            
-                            case NPTypeCode.Byte:
-                            {
-                                var src = (byte*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
 
-                            case NPTypeCode.Int16:
-                            {
-                                var src = (short*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt16:
-                            {
-                                var src = (ushort*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int32:
-                            {
-                                var src = (int*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt32:
-                            {
-                                var src = (uint*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Int64:
-                            {
-                                var src = (long*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.UInt64:
-                            {
-                                var src = (ulong*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Char:
-                            {
-                                var src = (char*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Double:
-                            {
-                                var src = (double*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Single:
-                            {
-                                var src = (float*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            case NPTypeCode.Decimal:
-                            {
-                                var src = (decimal*)source.Address;
-                                for (int i = 0; i < len; i++)
-                                    *(dst + i) = Convert.ToDecimal(*(src + i));
-                                break;
-                            }
-
-                            default:
-                                throw new NotSupportedException();
-                        }
-
-                        break;
-                    }
-	                default:
-		                throw new NotSupportedException();
-#endif
+                    break;
                 }
+	            case NPTypeCode.UInt16:
+                {
+                    var src = (ushort*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Int32:
+                {
+                    var src = (int*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.UInt32:
+                {
+                    var src = (uint*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Int64:
+                {
+                    var src = (long*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.UInt64:
+                {
+                    var src = (ulong*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Char:
+                {
+                    var src = (char*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Double:
+                {
+                    var src = (double*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Single:
+                {
+                    var src = (float*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            case NPTypeCode.Decimal:
+                {
+                    var src = (decimal*)source.Address;
+                    switch (ret.TypeCode)
+                    {
+	                    case NPTypeCode.Boolean:
+                        {
+                            var dst = (bool*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToBoolean(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Byte:
+                        {
+                            var dst = (byte*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToByte(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int16:
+                        {
+                            var dst = (short*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt16:
+                        {
+                            var dst = (ushort*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt16(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int32:
+                        {
+                            var dst = (int*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt32:
+                        {
+                            var dst = (uint*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt32(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Int64:
+                        {
+                            var dst = (long*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.UInt64:
+                        {
+                            var dst = (ulong*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToUInt64(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Char:
+                        {
+                            var dst = (char*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToChar(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Double:
+                        {
+                            var dst = (double*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDouble(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Single:
+                        {
+                            var dst = (float*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToSingle(*(src + i)));
+                            break;
+                        }
+	                    case NPTypeCode.Decimal:
+                        {
+                            var dst = (decimal*)ret.Address + offset;
+                            Parallel.For(0, len, i => *(dst + i) = Converts.ToDecimal(*(src + i)));
+                            break;
+                        }
+	                    default:
+		                    throw new NotSupportedException();
+                    }
+
+                    break;
+                }
+	            default:
+		            throw new NotSupportedException();
+                #endregion
+#endif
             }
         }
     }
