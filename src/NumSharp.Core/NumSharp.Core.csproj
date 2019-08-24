@@ -36,7 +36,7 @@
     <Version>0.20.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <SignAssembly>true</SignAssembly>
+    <SignAssembly>false</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
