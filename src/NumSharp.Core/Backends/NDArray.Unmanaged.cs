@@ -71,6 +71,11 @@ namespace NumSharp
             /// </summary>
             public UnmanagedStorage Storage => _this.Storage;
 
+            /// <summary>
+            ///     Provides access to the internal <see cref="Shape"/>.
+            /// </summary>
+            public Shape Shape => _this.Storage.Shape;
+
             /// A Span representing this slice.
             /// <remarks>Does not perform copy.</remarks>
             public Span<T> AsSpan<T>()
