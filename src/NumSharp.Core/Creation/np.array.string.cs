@@ -32,5 +32,33 @@ namespace NumSharp
             meta += $":{string.Join("", strArray)}";
             return new NDArray(meta.ToCharArray());
         }
+
+        /// <summary>
+        ///     Create a vector ndarray of type <see cref="char"/>.
+        /// </summary>
+        /// <param name="str">The string to turn into NDArray(NPTypeCode.Char)</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static NDArray array(string str)
+        {
+            if (str == null)
+                throw new ArgumentNullException(nameof(str));
+
+            if (str.Length == 0)
+                return new NDArray(NPTypeCode.Char, 0);
+
+            unsafe
+            {
+                var ret = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(str.Length));
+                fixed (char* strChars = str)
+                {
+                    var src = strChars;
+                    var dst = ret.Address;
+                    var len = sizeof(char) * str.Length;
+                    Buffer.MemoryCopy(src, dst, len, len);
+                }
+
+                return new NDArray(ret);
+            }
+        }
     }
 }
