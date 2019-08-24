@@ -77,25 +77,25 @@ namespace NumSharp
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
         /// </summary>
-        public static readonly Shape Scalar = new Shape(Array.Empty<int>());
+        public static readonly Shape Scalar = new Shape(new int[0]);
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar() => new Shape(Array.Empty<int>());
+        internal static Shape NewScalar() => new Shape(new int[0]);
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(Array.Empty<int>()) {ViewInfo = viewInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(new int[0]) {ViewInfo = viewInfo};
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(Array.Empty<int>()) {ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(new int[0]) {ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
 
         /// <summary>
         ///     Create a shape that represents a vector.
@@ -278,7 +278,7 @@ namespace NumSharp
         {
             if (dims == null)
             {
-                strides = dims = dimensions = Array.Empty<int>();
+                strides = dims = dimensions = new int[0];
             }
             else
             {
@@ -977,7 +977,7 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(dims));
 
             if (dims.Length == 0)
-                return Array.Empty<int>();
+                return new int[0];
 
             if (axis <= -1) axis = dims.Length - 1;
             if (axis >= dims.Length)
@@ -1116,7 +1116,7 @@ namespace NumSharp
         public static explicit operator int(Shape shape) => shape.Size;
         public static explicit operator Shape(int dim) => Shape.Vector(dim);
 
-        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0); //TODO! this should return (0,0) but rather (dim[0], dim[1]) regardless of size.
+        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => Shape.Matrix(dims.Item1, dims.Item2);
 
         public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
