@@ -49,6 +49,34 @@ namespace NumSharp
 
         public static NDArray array<T>(params T[] data) where T : unmanaged => new NDArray(ArraySlice.FromArray(data), Shape.Vector(data.Length));
 
+        /// <summary>
+        ///     Create a vector ndarray of type <see cref="char"/>.
+        /// </summary>
+        /// <param name="chars"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static NDArray array(string chars)
+        {
+            if (chars == null)
+                throw new ArgumentNullException(nameof(chars));
+            if (chars.Length == 0)
+                return new NDArray(NPTypeCode.Char, 0);
+
+            unsafe
+            {
+                var ret = new ArraySlice<char>(new UnmanagedMemoryBlock<char>(chars.Length));
+                fixed (char* strChars = chars)
+                {
+                    var src = strChars;
+                    var dst = ret.Address;
+                    var len = sizeof(char) * chars.Length;
+                    Buffer.MemoryCopy(src, dst, len, len);
+                }
+
+                return new NDArray(ret);
+            }
+        }
+
         public static NDArray array<T>(T[][] data)
         {
             var array = data.SelectMany(inner => inner).ToArray(); //todo! not use selectmany.
