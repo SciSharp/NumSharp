@@ -15,14 +15,6 @@ namespace NumSharp.Benchmark
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-
-            if (true)
-            {
-                var v = new Iterators();
-                v.Setup();
-                v.OffsetIncrementor();
-            }
-
             if (args?.Length > 0)
             {
                 for (int i = 0; i < args.Length; i++)
