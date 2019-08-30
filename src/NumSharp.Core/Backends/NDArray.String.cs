@@ -33,6 +33,33 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Convert to String[] from NDArray
+        /// </summary>
+        /// <param name="arr"></param>
+        /// <returns></returns>
+        public static string[] AsStringArray(NDArray arr)
+        {
+            var chars = arr.ToString();
+            int pos = chars.IndexOf(' ');
+            int numOfRows = int.Parse(chars.Substring(0, pos));
+            int posOfContent = chars.IndexOf(':');
+            string contents = chars.Substring(posOfContent + 1);
+            int[] strLengths = chars.Substring(pos + 1, posOfContent - pos - 1)
+                .Split(' ')
+                .Select(x => int.Parse(x))
+                .ToArray();
+            string[] strArray = new string[numOfRows];
+            int currentPos = 0;
+            for (int i = 0; i < numOfRows; i++)
+            {
+                strArray[i] = contents.Substring(currentPos, strLengths[i]);
+                currentPos += strLengths[i];
+            }
+
+            return strArray;
+        }
+
+        /// <summary>
         ///     Get a string out of a vector of chars.
         /// </summary>
         /// <param name="indices"></param>
