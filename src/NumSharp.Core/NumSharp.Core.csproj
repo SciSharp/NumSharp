@@ -11,17 +11,7 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Most of the library (&gt;95%) has been rewritten within over 400 commits in course of 3 months.
-
-- Full n-d, slice, broadcasting and axis support in all reimplemented methods (e.g. np.sum, np.concatenate) Broadcasting n-d shapes against each other.
-
-- NDArray Slicing and nested slicing (nd["-1, ::2"]["1::3, :, 0"])
-
-- Full and precise (to numpy) type resolving and conversion (upcasting, downcasting and all other cases)
-
-- Use of unmanaged memory and unsafe code in favor of performance.
-
-- NumSharp no longer perform copies except for cases when numpy does. Compared to previous version, indexing an n-d array (e.g. nd[0,1] when shape is (3,3,3,3)) would return a copy when now it returns a reference (alias).</PackageReleaseNotes>
+    <PackageReleaseNotes></PackageReleaseNotes>
     <AssemblyVersion>0.20.1.0</AssemblyVersion>
     <FileVersion>0.20.1.0</FileVersion>
     <RepositoryType>git</RepositoryType>
