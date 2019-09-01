@@ -10,6 +10,12 @@ namespace NumSharp
     {
         public static BackendType BackendEngine { get; set; }
 
+        /// <summary>
+        ///     A convenient alias for None, useful for indexing arrays.
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/reference/arrays.indexing.html<br></br><br></br>https://stackoverflow.com/questions/42190783/what-does-three-dots-in-python-mean-when-indexing-what-looks-like-a-number</remarks>
+        public static readonly Slice newaxis = new Slice(null, null, 1) {IsNewAxis = true};
+
         // https://docs.scipy.org/doc/numpy-1.16.0/user/basics.types.html
         public static readonly Type bool_ = typeof(bool);
         public static readonly Type bool8 = bool_;

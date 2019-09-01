@@ -20,9 +20,12 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(slices));
 
             foreach (var slice in slices)
+            {
                 if (slice.IsEllipsis)
                     throw new NotSupportedException("Ellipsis slicing '...' is not supported by NumSharp.");
-
+                if (slice.IsNewAxis)
+                    throw new NotSupportedException("np.newaxis slicing '...' is not supported by NumSharp. Consider calling np.expand_dims after performing slicing");
+            }
             //handle memory slice if possible
             if (!_shape.IsSliced)
             {
