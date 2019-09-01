@@ -19,6 +19,10 @@ namespace NumSharp.Backends
             if (slices == null)
                 throw new ArgumentNullException(nameof(slices));
 
+            foreach (var slice in slices)
+                if (slice.IsEllipsis)
+                    throw new NotSupportedException("Ellipsis slicing '...' is not supported by NumSharp.");
+
             //handle memory slice if possible
             if (!_shape.IsSliced)
             {
