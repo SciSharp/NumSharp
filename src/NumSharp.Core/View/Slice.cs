@@ -62,6 +62,8 @@ namespace NumSharp
         public int? Stop;
         public int Step;
         public bool IsIndex;
+        public bool IsEllipsis;
+        public bool IsNewAxis;
 
         /// <summary>
         /// Length of the slice. 
@@ -108,6 +110,23 @@ namespace NumSharp
 
         private void Parse(string slice_notation)
         {
+            if (slice_notation == "...")
+            {
+                Start = 0;
+                Stop = 0;
+                Step = 1;
+                IsEllipsis = true;
+                return;
+            }
+            else if (slice_notation == "")
+            {
+                Start = 0;
+                Stop = 0;
+                Step = 1;
+                IsNewAxis = true;
+                return;
+            }
+
             if (string.IsNullOrEmpty(slice_notation))
                 throw new ArgumentException("Slice notation expected, got empty string or null");
             var match = Regex.Match(slice_notation, @"^\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*\d+)?)?\s*$|^\s*([+-]?\s*\d+)\s*$");
@@ -200,6 +219,10 @@ namespace NumSharp
         {
             if (IsIndex)
                 return $"{Start ?? 0}";
+            else if (IsNewAxis)
+                return "newaxis";
+            else if (IsEllipsis)
+                return "ellipsis";
             var optional_step = Step == 1 ? "" : $":{Step}";
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
         }
