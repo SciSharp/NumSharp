@@ -153,7 +153,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -170,7 +170,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -204,7 +204,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -221,7 +221,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -238,7 +238,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -255,7 +255,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -272,7 +272,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -289,7 +289,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -306,7 +306,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -323,7 +323,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -351,7 +351,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -368,7 +368,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -385,7 +385,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -402,7 +402,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -419,7 +419,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -436,7 +436,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -453,7 +453,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -470,7 +470,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -487,7 +487,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -504,7 +504,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -521,7 +521,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -549,7 +549,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -566,7 +566,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -583,7 +583,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -600,7 +600,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -617,7 +617,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -634,7 +634,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -651,7 +651,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -668,7 +668,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -685,7 +685,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -702,7 +702,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -719,7 +719,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -747,7 +747,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -764,7 +764,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -781,7 +781,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -798,7 +798,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -815,7 +815,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -832,7 +832,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -849,7 +849,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -866,7 +866,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -883,7 +883,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -900,7 +900,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -917,7 +917,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -945,7 +945,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -962,7 +962,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -979,7 +979,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -996,7 +996,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1013,7 +1013,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1030,7 +1030,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1047,7 +1047,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1064,7 +1064,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1081,7 +1081,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1098,7 +1098,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1115,7 +1115,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1143,7 +1143,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1160,7 +1160,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1177,7 +1177,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1194,7 +1194,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1211,7 +1211,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1228,7 +1228,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1245,7 +1245,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1262,7 +1262,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1279,7 +1279,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1296,7 +1296,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1313,7 +1313,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1341,7 +1341,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1358,7 +1358,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1375,7 +1375,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1392,7 +1392,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1409,7 +1409,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1426,7 +1426,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1443,7 +1443,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1460,7 +1460,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1477,7 +1477,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1494,7 +1494,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1511,7 +1511,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1539,7 +1539,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1556,7 +1556,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1573,7 +1573,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1590,7 +1590,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1607,7 +1607,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1624,7 +1624,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1641,7 +1641,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1658,7 +1658,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1675,7 +1675,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1692,7 +1692,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1709,7 +1709,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1737,7 +1737,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1754,7 +1754,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1771,7 +1771,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1788,7 +1788,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1805,7 +1805,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1822,7 +1822,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1839,7 +1839,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1856,7 +1856,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1873,7 +1873,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1890,7 +1890,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1907,7 +1907,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1935,7 +1935,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1952,7 +1952,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1969,7 +1969,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1986,7 +1986,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2003,7 +2003,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2020,7 +2020,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2037,7 +2037,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2054,7 +2054,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2071,7 +2071,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2088,7 +2088,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2105,7 +2105,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2133,7 +2133,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (byte)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2150,7 +2150,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (short)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2167,7 +2167,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ushort)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2184,7 +2184,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2201,7 +2201,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2218,7 +2218,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2235,7 +2235,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2252,7 +2252,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (char)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2269,7 +2269,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2286,7 +2286,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2303,7 +2303,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2332,7 +2332,7 @@ namespace NumSharp.Backends
 
         public T SumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
         {
-            return (T)Convert.ChangeType(sum_elementwise(arr, typeCode), typeof(T));
+            return (T)Converts.ChangeType(sum_elementwise(arr, typeCode), InfoOf<T>.NPTypeCode);
         }
 
         protected object sum_elementwise(NDArray arr, NPTypeCode? typeCode)
@@ -2392,7 +2392,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -2404,7 +2404,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -2416,7 +2416,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -2428,7 +2428,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -2440,7 +2440,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -2452,7 +2452,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -2464,7 +2464,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -2476,7 +2476,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -2488,7 +2488,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -2500,7 +2500,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -2512,7 +2512,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -2535,7 +2535,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -2547,7 +2547,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -2559,7 +2559,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -2571,7 +2571,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -2583,7 +2583,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -2595,7 +2595,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -2607,7 +2607,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -2619,7 +2619,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -2631,7 +2631,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -2643,7 +2643,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -2655,7 +2655,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -2678,7 +2678,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -2690,7 +2690,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -2702,7 +2702,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -2714,7 +2714,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -2726,7 +2726,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -2738,7 +2738,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -2750,7 +2750,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -2762,7 +2762,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -2774,7 +2774,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -2786,7 +2786,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -2798,7 +2798,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -2821,7 +2821,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -2833,7 +2833,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -2845,7 +2845,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -2857,7 +2857,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -2869,7 +2869,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -2881,7 +2881,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -2893,7 +2893,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -2905,7 +2905,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -2917,7 +2917,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -2929,7 +2929,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -2941,7 +2941,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -2964,7 +2964,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -2976,7 +2976,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -2988,7 +2988,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3000,7 +3000,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3012,7 +3012,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3024,7 +3024,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3036,7 +3036,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3048,7 +3048,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3060,7 +3060,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3072,7 +3072,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3084,7 +3084,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3107,7 +3107,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3119,7 +3119,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3131,7 +3131,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3143,7 +3143,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3155,7 +3155,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3167,7 +3167,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3179,7 +3179,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3191,7 +3191,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3203,7 +3203,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3215,7 +3215,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3227,7 +3227,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3250,7 +3250,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3262,7 +3262,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3274,7 +3274,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3286,7 +3286,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3298,7 +3298,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3310,7 +3310,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3322,7 +3322,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3334,7 +3334,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3346,7 +3346,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3358,7 +3358,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3370,7 +3370,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3393,7 +3393,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3405,7 +3405,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3417,7 +3417,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3429,7 +3429,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3441,7 +3441,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3453,7 +3453,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3465,7 +3465,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3477,7 +3477,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3489,7 +3489,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3501,7 +3501,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3513,7 +3513,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3536,7 +3536,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3548,7 +3548,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3560,7 +3560,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3572,7 +3572,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3584,7 +3584,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3596,7 +3596,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3608,7 +3608,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3620,7 +3620,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3632,7 +3632,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3644,7 +3644,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3656,7 +3656,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3679,7 +3679,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3691,7 +3691,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3703,7 +3703,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3715,7 +3715,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3727,7 +3727,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3739,7 +3739,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3751,7 +3751,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3763,7 +3763,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3775,7 +3775,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3787,7 +3787,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3799,7 +3799,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:
@@ -3822,7 +3822,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToByte(sum);
+                            return Converts.ToByte(sum);
                         }
 
                         case NPTypeCode.Int16:
@@ -3834,7 +3834,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt16(sum);
+                            return Converts.ToInt16(sum);
                         }
 
                         case NPTypeCode.UInt16:
@@ -3846,7 +3846,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt16(sum);
+                            return Converts.ToUInt16(sum);
                         }
 
                         case NPTypeCode.Int32:
@@ -3858,7 +3858,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int32)moveNext();
 
-                            return Convert.ToInt32(sum);
+                            return Converts.ToInt32(sum);
                         }
 
                         case NPTypeCode.UInt32:
@@ -3870,7 +3870,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToUInt32(sum);
+                            return Converts.ToUInt32(sum);
                         }
 
                         case NPTypeCode.Int64:
@@ -3882,7 +3882,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Int64)moveNext();
 
-                            return Convert.ToInt64(sum);
+                            return Converts.ToInt64(sum);
                         }
 
                         case NPTypeCode.UInt64:
@@ -3894,7 +3894,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt64)moveNext();
 
-                            return Convert.ToUInt64(sum);
+                            return Converts.ToUInt64(sum);
                         }
 
                         case NPTypeCode.Char:
@@ -3906,7 +3906,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (UInt32)moveNext();
 
-                            return Convert.ToChar(sum);
+                            return Converts.ToChar(sum);
                         }
 
                         case NPTypeCode.Double:
@@ -3918,7 +3918,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Double)moveNext();
 
-                            return Convert.ToDouble(sum);
+                            return Converts.ToDouble(sum);
                         }
 
                         case NPTypeCode.Single:
@@ -3930,7 +3930,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Single)moveNext();
 
-                            return Convert.ToSingle(sum);
+                            return Converts.ToSingle(sum);
                         }
 
                         case NPTypeCode.Decimal:
@@ -3942,7 +3942,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (Decimal)moveNext();
 
-                            return Convert.ToDecimal(sum);
+                            return Converts.ToDecimal(sum);
                         }
 
                         default:

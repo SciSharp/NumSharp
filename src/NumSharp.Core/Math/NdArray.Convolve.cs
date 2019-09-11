@@ -60,7 +60,7 @@
 
                                                 for (int jdx = jmn; jdx <= jmx; ++jdx)
                                                 {
-                                                    outArray[idx] += Convert.To#201(lhsarr[jdx] * rhsarr[idx - jdx]);
+                                                    outArray[idx] += Converts.To#201(lhsarr[jdx] * rhsarr[idx - jdx]);
                                                 }
                                             }
 
@@ -83,7 +83,7 @@
 
                                                 for (int jdx = (min_v.Count - 1); jdx >= 0; --jdx)
                                                 {
-                                                    outArray[idx] += Convert.To#202(min_v[jdx] * max_v[kdx]);
+                                                    outArray[idx] += Converts.To#202(min_v[jdx] * max_v[kdx]);
                                                     ++kdx;
                                                 }
                                             }

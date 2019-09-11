@@ -1,6 +1,7 @@
 ﻿using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -37,7 +38,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<#2>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.To#1(randomizer.NextLong(low, high));
+                        data[i] = Converts.To#1(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -47,7 +48,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<byte>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToByte(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToByte(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -55,7 +56,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<short>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToInt16(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToInt16(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -63,7 +64,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<ushort>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToUInt16(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToUInt16(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -71,7 +72,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<int>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToInt32(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToInt32(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -79,7 +80,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<uint>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToUInt32(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToUInt32(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -87,7 +88,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<long>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToInt64(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToInt64(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -95,7 +96,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<ulong>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToUInt64(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToUInt64(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -103,7 +104,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<char>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToChar(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToChar(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -111,7 +112,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<double>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToDouble(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToDouble(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -119,7 +120,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<float>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToSingle(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToSingle(randomizer.NextLong(low, high));
                     
                     break;
                 }
@@ -127,7 +128,7 @@ namespace NumSharp
                 {
                     var data = (ArraySlice<decimal>)nd.Array;
                     for (int i = 0; i < data.Count; i++)
-                        data[i] = Convert.ToDecimal(randomizer.NextLong(low, high));
+                        data[i] = Converts.ToDecimal(randomizer.NextLong(low, high));
                     
                     break;
                 }

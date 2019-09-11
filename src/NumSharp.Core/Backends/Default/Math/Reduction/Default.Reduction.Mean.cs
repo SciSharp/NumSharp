@@ -83,7 +83,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (#104) moveNext();
 
-                                ret.Set#101(Convert.To#101(sum/slice.size), iterIndex);
+                                ret.Set#101(Converts.To#101(sum/slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -120,7 +120,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -138,7 +138,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -156,7 +156,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -174,7 +174,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -192,7 +192,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -210,7 +210,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -228,7 +228,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -246,7 +246,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -264,7 +264,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -282,7 +282,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -300,7 +300,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -329,7 +329,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -347,7 +347,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -365,7 +365,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -383,7 +383,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -401,7 +401,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -419,7 +419,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -437,7 +437,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -455,7 +455,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -473,7 +473,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -491,7 +491,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -509,7 +509,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -538,7 +538,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -556,7 +556,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -574,7 +574,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -592,7 +592,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -610,7 +610,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -628,7 +628,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -646,7 +646,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -664,7 +664,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -682,7 +682,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -700,7 +700,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -718,7 +718,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -747,7 +747,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -765,7 +765,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -783,7 +783,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -801,7 +801,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -819,7 +819,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -837,7 +837,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -855,7 +855,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -873,7 +873,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -891,7 +891,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -909,7 +909,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -927,7 +927,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -956,7 +956,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -974,7 +974,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -992,7 +992,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1010,7 +1010,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1028,7 +1028,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1046,7 +1046,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1064,7 +1064,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1082,7 +1082,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1100,7 +1100,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1118,7 +1118,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1136,7 +1136,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1165,7 +1165,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1183,7 +1183,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1201,7 +1201,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1219,7 +1219,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1237,7 +1237,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1255,7 +1255,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1273,7 +1273,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1291,7 +1291,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1309,7 +1309,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1327,7 +1327,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1345,7 +1345,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1374,7 +1374,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1392,7 +1392,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1410,7 +1410,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1428,7 +1428,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1446,7 +1446,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1464,7 +1464,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1482,7 +1482,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1500,7 +1500,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1518,7 +1518,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1536,7 +1536,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1554,7 +1554,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1583,7 +1583,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1601,7 +1601,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1619,7 +1619,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1637,7 +1637,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1655,7 +1655,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1673,7 +1673,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1691,7 +1691,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1709,7 +1709,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1727,7 +1727,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1745,7 +1745,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1763,7 +1763,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1792,7 +1792,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1810,7 +1810,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1828,7 +1828,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1846,7 +1846,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1864,7 +1864,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1882,7 +1882,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1900,7 +1900,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1918,7 +1918,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1936,7 +1936,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1954,7 +1954,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -1972,7 +1972,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2001,7 +2001,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2019,7 +2019,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2037,7 +2037,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2055,7 +2055,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2073,7 +2073,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2091,7 +2091,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2109,7 +2109,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2127,7 +2127,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2145,7 +2145,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2163,7 +2163,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2181,7 +2181,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2210,7 +2210,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2228,7 +2228,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2246,7 +2246,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2264,7 +2264,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (int)moveNext();
 
-                                ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2282,7 +2282,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2300,7 +2300,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (long)moveNext();
 
-                                ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2318,7 +2318,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (ulong)moveNext();
 
-                                ret.SetUInt64(Convert.ToUInt64(sum / (ulong)slice.size), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(sum / (ulong)slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2336,7 +2336,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (uint)moveNext();
 
-                                ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2354,7 +2354,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (double)moveNext();
 
-                                ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2372,7 +2372,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (float)moveNext();
 
-                                ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2390,7 +2390,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     sum += (decimal)moveNext();
 
-                                ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
                             break;
@@ -2419,7 +2419,7 @@ namespace NumSharp.Backends
 
         public T MeanElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
         {
-            return (T)Convert.ChangeType(mean_elementwise(arr, typeCode), typeof(T));
+            return (T)Converts.ChangeType(mean_elementwise(arr, typeCode), InfoOf<T>.NPTypeCode);
         }
 
         protected object mean_elementwise(NDArray arr, NPTypeCode? typeCode)
@@ -2447,7 +2447,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (#104) moveNext();
 
-                            return Convert.To#101(sum/arr.size);
+                            return Converts.To#101(sum/arr.size);
                         }
 			            %
 			            default:
@@ -2479,7 +2479,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -2492,7 +2492,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -2505,7 +2505,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -2518,7 +2518,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -2531,7 +2531,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -2544,7 +2544,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -2557,7 +2557,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -2570,7 +2570,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -2583,7 +2583,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -2596,7 +2596,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -2609,7 +2609,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -2633,7 +2633,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -2646,7 +2646,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -2659,7 +2659,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -2672,7 +2672,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -2685,7 +2685,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -2698,7 +2698,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -2711,7 +2711,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -2724,7 +2724,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -2737,7 +2737,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -2750,7 +2750,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -2763,7 +2763,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -2787,7 +2787,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -2800,7 +2800,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -2813,7 +2813,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -2826,7 +2826,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -2839,7 +2839,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -2852,7 +2852,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -2865,7 +2865,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -2878,7 +2878,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -2891,7 +2891,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -2904,7 +2904,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -2917,7 +2917,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -2941,7 +2941,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -2954,7 +2954,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -2967,7 +2967,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -2980,7 +2980,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -2993,7 +2993,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3006,7 +3006,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3019,7 +3019,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3032,7 +3032,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3045,7 +3045,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3058,7 +3058,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3071,7 +3071,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3095,7 +3095,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3108,7 +3108,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3121,7 +3121,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3134,7 +3134,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3147,7 +3147,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3160,7 +3160,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3173,7 +3173,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3186,7 +3186,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3199,7 +3199,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3212,7 +3212,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3225,7 +3225,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3249,7 +3249,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3262,7 +3262,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3275,7 +3275,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3288,7 +3288,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3301,7 +3301,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3314,7 +3314,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3327,7 +3327,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3340,7 +3340,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3353,7 +3353,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3366,7 +3366,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3379,7 +3379,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3403,7 +3403,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3416,7 +3416,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3429,7 +3429,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3442,7 +3442,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3455,7 +3455,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3468,7 +3468,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3481,7 +3481,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3494,7 +3494,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3507,7 +3507,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3520,7 +3520,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3533,7 +3533,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3557,7 +3557,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3570,7 +3570,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3583,7 +3583,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3596,7 +3596,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3609,7 +3609,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3622,7 +3622,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3635,7 +3635,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3648,7 +3648,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3661,7 +3661,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3674,7 +3674,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3687,7 +3687,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3711,7 +3711,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3724,7 +3724,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3737,7 +3737,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3750,7 +3750,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3763,7 +3763,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3776,7 +3776,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3789,7 +3789,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3802,7 +3802,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3815,7 +3815,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3828,7 +3828,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3841,7 +3841,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -3865,7 +3865,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -3878,7 +3878,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -3891,7 +3891,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -3904,7 +3904,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -3917,7 +3917,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -3930,7 +3930,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -3943,7 +3943,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -3956,7 +3956,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -3969,7 +3969,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -3982,7 +3982,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -3995,7 +3995,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 
@@ -4019,7 +4019,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToByte(sum / arr.size);
+                            return Converts.ToByte(sum / arr.size);
                             break;
                         }
 
@@ -4032,7 +4032,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt16(sum / arr.size);
+                            return Converts.ToInt16(sum / arr.size);
                             break;
                         }
 
@@ -4045,7 +4045,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt16(sum / arr.size);
+                            return Converts.ToUInt16(sum / arr.size);
                             break;
                         }
 
@@ -4058,7 +4058,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (int)moveNext();
 
-                            return Convert.ToInt32(sum / arr.size);
+                            return Converts.ToInt32(sum / arr.size);
                             break;
                         }
 
@@ -4071,7 +4071,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToUInt32(sum / arr.size);
+                            return Converts.ToUInt32(sum / arr.size);
                             break;
                         }
 
@@ -4084,7 +4084,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (long)moveNext();
 
-                            return Convert.ToInt64(sum / arr.size);
+                            return Converts.ToInt64(sum / arr.size);
                             break;
                         }
 
@@ -4097,7 +4097,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (ulong)moveNext();
 
-                            return Convert.ToUInt64(sum / (ulong)arr.size);
+                            return Converts.ToUInt64(sum / (ulong)arr.size);
                             break;
                         }
 
@@ -4110,7 +4110,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (uint)moveNext();
 
-                            return Convert.ToChar(sum / arr.size);
+                            return Converts.ToChar(sum / arr.size);
                             break;
                         }
 
@@ -4123,7 +4123,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (double)moveNext();
 
-                            return Convert.ToDouble(sum / arr.size);
+                            return Converts.ToDouble(sum / arr.size);
                             break;
                         }
 
@@ -4136,7 +4136,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (float)moveNext();
 
-                            return Convert.ToSingle(sum / arr.size);
+                            return Converts.ToSingle(sum / arr.size);
                             break;
                         }
 
@@ -4149,7 +4149,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 sum += (decimal)moveNext();
 
-                            return Convert.ToDecimal(sum / arr.size);
+                            return Converts.ToDecimal(sum / arr.size);
                             break;
                         }
 

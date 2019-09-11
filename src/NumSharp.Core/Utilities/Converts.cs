@@ -25,9 +25,9 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
         [MethodImpl((MethodImplOptions)512)]
-        public static TOut ChangeType<TOut>(Object value, NPTypeCode typeCode)
+        public static TOut ChangeType<TOut>(Object value)
         {
-            if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
+            if (value == null)
                 return default;
 
             // This line is invalid for things like Enums that return a NPTypeCode
@@ -206,7 +206,7 @@ namespace NumSharp.Utilities
 			            %foreach supported_dtypes,supported_dtypes_lowercase%
 			            case NPTypeCode.#101:
 			            {
-				            Func<#2, #102> ret = Convert.To#101;
+				            Func<#2, #102> ret = Converts.To#101;
                             return (Func<TIn, TOut>) (object) ret;
 			            }
 			            %
@@ -228,1027 +228,868 @@ namespace NumSharp.Utilities
 #else
 
             #region Compute
-
             //#n is input, #10n is output
-            switch (InfoOf<TIn>.NPTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<bool, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<bool, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<bool, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<bool, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<bool, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<bool, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<bool, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<bool, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<bool, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<bool, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<bool, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<bool, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		    switch (InfoOf<TIn>.NPTypeCode)
+		    {
+			    case NPTypeCode.Boolean:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<bool, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<bool, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<bool, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<bool, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<bool, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<bool, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<bool, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<bool, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<bool, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<bool, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<bool, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<bool, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Byte:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<byte, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<byte, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<byte, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<byte, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<byte, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<byte, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<byte, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<byte, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<byte, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<byte, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<byte, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<byte, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Byte:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<byte, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<byte, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<byte, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<byte, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<byte, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<byte, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<byte, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<byte, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<byte, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<byte, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<byte, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<byte, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Int16:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<short, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<short, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<short, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<short, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<short, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<short, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<short, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<short, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<short, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<short, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<short, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<short, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Int16:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<short, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<short, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<short, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<short, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<short, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<short, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<short, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<short, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<short, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<short, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<short, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<short, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<ushort, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<ushort, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<ushort, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<ushort, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<ushort, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<ushort, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<ushort, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<ushort, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<ushort, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<ushort, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<ushort, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<ushort, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.UInt16:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<ushort, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<ushort, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<ushort, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<ushort, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<ushort, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<ushort, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<ushort, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<ushort, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<ushort, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<ushort, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<ushort, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<ushort, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Int32:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<int, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<int, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<int, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<int, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<int, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<int, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<int, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<int, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<int, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<int, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<int, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<int, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Int32:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<int, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<int, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<int, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<int, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<int, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<int, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<int, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<int, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<int, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<int, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<int, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<int, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.UInt32:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<uint, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<uint, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<uint, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<uint, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<uint, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<uint, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<uint, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<uint, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<uint, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<uint, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<uint, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<uint, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.UInt32:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<uint, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<uint, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<uint, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<uint, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<uint, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<uint, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<uint, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<uint, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<uint, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<uint, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<uint, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<uint, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<long, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<long, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<long, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<long, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<long, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<long, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<long, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<long, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<long, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<long, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<long, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<long, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Int64:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<long, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<long, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<long, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<long, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<long, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<long, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<long, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<long, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<long, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<long, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<long, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<long, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<ulong, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<ulong, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<ulong, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<ulong, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<ulong, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<ulong, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<ulong, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<ulong, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<ulong, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<ulong, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<ulong, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<ulong, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.UInt64:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<ulong, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<ulong, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<ulong, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<ulong, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<ulong, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<ulong, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<ulong, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<ulong, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<ulong, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<ulong, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<ulong, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<ulong, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Char:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<char, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<char, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<char, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<char, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<char, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<char, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<char, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<char, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<char, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<char, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<char, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<char, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Char:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<char, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<char, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<char, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<char, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<char, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<char, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<char, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<char, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<char, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<char, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<char, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<char, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Double:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<double, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<double, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<double, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<double, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<double, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<double, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<double, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<double, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<double, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<double, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<double, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<double, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Double:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<double, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<double, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<double, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<double, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<double, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<double, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<double, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<double, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<double, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<double, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<double, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<double, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Single:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<float, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<float, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<float, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<float, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<float, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<float, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<float, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<float, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<float, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<float, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<float, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<float, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Single:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<float, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<float, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<float, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<float, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<float, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<float, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<float, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<float, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<float, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<float, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<float, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<float, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    switch (InfoOf<TOut>.NPTypeCode)
-                    {
-                        case NPTypeCode.Boolean:
-                        {
-                            Func<decimal, bool> ret = Convert.ToBoolean;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Byte:
-                        {
-                            Func<decimal, byte> ret = Convert.ToByte;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            Func<decimal, short> ret = Convert.ToInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            Func<decimal, ushort> ret = Convert.ToUInt16;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            Func<decimal, int> ret = Convert.ToInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            Func<decimal, uint> ret = Convert.ToUInt32;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            Func<decimal, long> ret = Convert.ToInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            Func<decimal, ulong> ret = Convert.ToUInt64;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            Func<decimal, char> ret = Convert.ToChar;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            Func<decimal, double> ret = Convert.ToDouble;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            Func<decimal, float> ret = Convert.ToSingle;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            Func<decimal, decimal> ret = Convert.ToDecimal;
-                            return (Func<TIn, TOut>)(object)ret;
-                        }
-
-                        default:
+		            }
+			    }
+			    case NPTypeCode.Decimal:
+			    {
+				    switch (InfoOf<TOut>.NPTypeCode)
+		            {
+			            case NPTypeCode.Boolean:
+			            {
+				            Func<decimal, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Byte:
+			            {
+				            Func<decimal, byte> ret = Converts.ToByte;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int16:
+			            {
+				            Func<decimal, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt16:
+			            {
+				            Func<decimal, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int32:
+			            {
+				            Func<decimal, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt32:
+			            {
+				            Func<decimal, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Int64:
+			            {
+				            Func<decimal, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.UInt64:
+			            {
+				            Func<decimal, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Char:
+			            {
+				            Func<decimal, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Double:
+			            {
+				            Func<decimal, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Single:
+			            {
+				            Func<decimal, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            case NPTypeCode.Decimal:
+			            {
+				            Func<decimal, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>) (object) ret;
+			            }
+			            default:
                         {
                             var tout = typeof(TOut);
                             return @in => (TOut)Convert.ChangeType(@in, tout);
                         }
-                    }
-                }
-
-                default:
+		            }
+			    }
+			    default:
                 {
                     var tout = typeof(TOut);
                     return @in => (TOut)Convert.ChangeType(@in, tout);
                 }
-            }
-
+		    }
             #endregion
-
 #endif
         }
     }

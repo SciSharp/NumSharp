@@ -86,7 +86,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.Set#101(Convert.To#101(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.Set#101(Converts.To#101(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -104,7 +104,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.Set#101(Convert.To#101(sum / slice.size), iterIndex);
+                                    ret.Set#101(Converts.To#101(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -140,7 +140,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.Set#101(Convert.To#101(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.Set#101(Converts.To#101(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -157,7 +157,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.Set#101(Convert.To#101(sum / (decimal)slice.size), iterIndex);
+                                    ret.Set#101(Converts.To#101(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -201,7 +201,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -219,7 +219,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -242,7 +242,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -260,7 +260,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -283,7 +283,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -301,7 +301,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -324,7 +324,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -342,7 +342,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -365,7 +365,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -383,7 +383,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -406,7 +406,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -424,7 +424,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -447,7 +447,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -465,7 +465,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -488,7 +488,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -506,7 +506,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -529,7 +529,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -547,7 +547,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -570,7 +570,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -588,7 +588,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -611,7 +611,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -629,7 +629,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -661,7 +661,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -679,7 +679,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -702,7 +702,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -720,7 +720,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -743,7 +743,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -761,7 +761,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -784,7 +784,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -802,7 +802,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -825,7 +825,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -843,7 +843,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -866,7 +866,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -884,7 +884,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -907,7 +907,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -925,7 +925,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -948,7 +948,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -966,7 +966,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -989,7 +989,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1007,7 +1007,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1030,7 +1030,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1048,7 +1048,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1071,7 +1071,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1089,7 +1089,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1121,7 +1121,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1139,7 +1139,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1162,7 +1162,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1180,7 +1180,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1203,7 +1203,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1221,7 +1221,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1244,7 +1244,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1262,7 +1262,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1285,7 +1285,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1303,7 +1303,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1326,7 +1326,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1344,7 +1344,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1367,7 +1367,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1385,7 +1385,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1408,7 +1408,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1426,7 +1426,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1449,7 +1449,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1467,7 +1467,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1490,7 +1490,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1508,7 +1508,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1531,7 +1531,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1549,7 +1549,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1581,7 +1581,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1599,7 +1599,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1622,7 +1622,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1640,7 +1640,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1663,7 +1663,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1681,7 +1681,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1704,7 +1704,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1722,7 +1722,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1745,7 +1745,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1763,7 +1763,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1786,7 +1786,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1804,7 +1804,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1827,7 +1827,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1845,7 +1845,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1868,7 +1868,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1886,7 +1886,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1909,7 +1909,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1927,7 +1927,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1950,7 +1950,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -1968,7 +1968,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -1991,7 +1991,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2009,7 +2009,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2041,7 +2041,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2059,7 +2059,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2082,7 +2082,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2100,7 +2100,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2123,7 +2123,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2141,7 +2141,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2164,7 +2164,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2182,7 +2182,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2205,7 +2205,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2223,7 +2223,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2246,7 +2246,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2264,7 +2264,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2287,7 +2287,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2305,7 +2305,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2328,7 +2328,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2346,7 +2346,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2369,7 +2369,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2387,7 +2387,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2410,7 +2410,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2428,7 +2428,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2451,7 +2451,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2469,7 +2469,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2501,7 +2501,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2519,7 +2519,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2542,7 +2542,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2560,7 +2560,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2583,7 +2583,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2601,7 +2601,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2624,7 +2624,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2642,7 +2642,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2665,7 +2665,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2683,7 +2683,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2706,7 +2706,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2724,7 +2724,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2747,7 +2747,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2765,7 +2765,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2788,7 +2788,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2806,7 +2806,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2829,7 +2829,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2847,7 +2847,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2870,7 +2870,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2888,7 +2888,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2911,7 +2911,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2929,7 +2929,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -2961,7 +2961,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -2979,7 +2979,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3002,7 +3002,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3020,7 +3020,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3043,7 +3043,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3061,7 +3061,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3084,7 +3084,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3102,7 +3102,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3125,7 +3125,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3143,7 +3143,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3166,7 +3166,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3184,7 +3184,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3207,7 +3207,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3225,7 +3225,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3248,7 +3248,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3266,7 +3266,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3289,7 +3289,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3307,7 +3307,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3330,7 +3330,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3348,7 +3348,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3371,7 +3371,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3389,7 +3389,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3421,7 +3421,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3439,7 +3439,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3462,7 +3462,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3480,7 +3480,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3503,7 +3503,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3521,7 +3521,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3544,7 +3544,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3562,7 +3562,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3585,7 +3585,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3603,7 +3603,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3626,7 +3626,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3644,7 +3644,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3667,7 +3667,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3685,7 +3685,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3708,7 +3708,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3726,7 +3726,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3749,7 +3749,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3767,7 +3767,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3790,7 +3790,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3808,7 +3808,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3831,7 +3831,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3849,7 +3849,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3881,7 +3881,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3899,7 +3899,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3922,7 +3922,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3940,7 +3940,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -3963,7 +3963,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -3981,7 +3981,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4004,7 +4004,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4022,7 +4022,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4045,7 +4045,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4063,7 +4063,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4086,7 +4086,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4104,7 +4104,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4127,7 +4127,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4145,7 +4145,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4168,7 +4168,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4186,7 +4186,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4209,7 +4209,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4227,7 +4227,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4250,7 +4250,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4268,7 +4268,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4291,7 +4291,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4309,7 +4309,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4341,7 +4341,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4359,7 +4359,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4382,7 +4382,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4400,7 +4400,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4423,7 +4423,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4441,7 +4441,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4464,7 +4464,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4482,7 +4482,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4505,7 +4505,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4523,7 +4523,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4546,7 +4546,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4564,7 +4564,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4587,7 +4587,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4605,7 +4605,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4628,7 +4628,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4646,7 +4646,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4669,7 +4669,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4687,7 +4687,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4710,7 +4710,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4728,7 +4728,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4751,7 +4751,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             } else {
@@ -4769,7 +4769,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                                 break;
                             }
@@ -4801,7 +4801,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -4818,7 +4818,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetByte(Convert.ToByte(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetByte(Converts.ToByte(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -4841,7 +4841,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -4858,7 +4858,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt16(Convert.ToInt16(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetInt16(Converts.ToInt16(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -4881,7 +4881,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -4898,7 +4898,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt16(Convert.ToUInt16(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetUInt16(Converts.ToUInt16(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -4921,7 +4921,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -4938,7 +4938,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt32(Convert.ToInt32(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetInt32(Converts.ToInt32(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -4961,7 +4961,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -4978,7 +4978,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt32(Convert.ToUInt32(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetUInt32(Converts.ToUInt32(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5001,7 +5001,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5018,7 +5018,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetInt64(Convert.ToInt64(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetInt64(Converts.ToInt64(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5041,7 +5041,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5058,7 +5058,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetUInt64(Convert.ToUInt64(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetUInt64(Converts.ToUInt64(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5081,7 +5081,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5098,7 +5098,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetChar(Convert.ToChar(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetChar(Converts.ToChar(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5121,7 +5121,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5138,7 +5138,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDouble(Convert.ToDouble(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5161,7 +5161,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5178,7 +5178,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetSingle(Convert.ToSingle(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetSingle(Converts.ToSingle(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5201,7 +5201,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / ((decimal)slice.size - _ddof)), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / ((decimal)slice.size - _ddof)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             } else {
                                 do
@@ -5218,7 +5218,7 @@ namespace NumSharp.Backends
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Convert.ToDecimal(sum / (decimal)slice.size), iterIndex);
+                                    ret.SetDecimal(Converts.ToDecimal(sum / (decimal)slice.size), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
                             break;
@@ -5243,7 +5243,7 @@ namespace NumSharp.Backends
 
         public T VarElementwise<T>(NDArray arr, NPTypeCode? typeCode, int? ddof) where T : unmanaged
         {
-            return (T)Convert.ChangeType(var_elementwise(arr, typeCode, ddof), typeof(T));
+            return (T)Converts.ChangeType(var_elementwise(arr, typeCode, ddof), InfoOf<T>.NPTypeCode);
         }
 
         protected object var_elementwise(NDArray arr, NPTypeCode? typeCode, int? ddof)

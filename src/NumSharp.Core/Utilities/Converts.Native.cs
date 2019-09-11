@@ -1079,7 +1079,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
         public static int ToInt32(decimal value)
         {
-            return Convert.ToInt32(value);
+            return Converts.ToInt32(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]

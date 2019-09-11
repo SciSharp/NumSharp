@@ -83,7 +83,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (#102) Math.Min((#102)moveNext(), min);
 
-                                ret.Set#101(Convert.To#101(min), iterIndex);
+                                ret.Set#101(Converts.To#101(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -118,7 +118,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -133,7 +133,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -148,7 +148,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -163,7 +163,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -178,7 +178,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -208,7 +208,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -223,7 +223,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -238,7 +238,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -253,7 +253,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -268,7 +268,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -292,7 +292,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -307,7 +307,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -322,7 +322,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -337,7 +337,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -352,7 +352,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -367,7 +367,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -382,7 +382,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -397,7 +397,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -412,7 +412,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -427,7 +427,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -442,7 +442,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -466,7 +466,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -481,7 +481,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -496,7 +496,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -511,7 +511,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -526,7 +526,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -541,7 +541,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -556,7 +556,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -571,7 +571,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -586,7 +586,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -601,7 +601,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -616,7 +616,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -640,7 +640,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -655,7 +655,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -670,7 +670,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -685,7 +685,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -700,7 +700,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -715,7 +715,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -730,7 +730,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -745,7 +745,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -760,7 +760,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -775,7 +775,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -790,7 +790,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -814,7 +814,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -829,7 +829,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -844,7 +844,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -859,7 +859,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -874,7 +874,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -889,7 +889,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -904,7 +904,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -919,7 +919,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -934,7 +934,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -949,7 +949,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -964,7 +964,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -988,7 +988,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1003,7 +1003,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1018,7 +1018,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1033,7 +1033,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1048,7 +1048,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1063,7 +1063,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1078,7 +1078,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1093,7 +1093,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1108,7 +1108,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1123,7 +1123,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1138,7 +1138,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1162,7 +1162,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1177,7 +1177,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1192,7 +1192,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1207,7 +1207,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1222,7 +1222,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1237,7 +1237,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((long)moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1252,7 +1252,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1267,7 +1267,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1282,7 +1282,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1297,7 +1297,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1312,7 +1312,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1336,7 +1336,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1351,7 +1351,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1366,7 +1366,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1381,7 +1381,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1396,7 +1396,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1411,7 +1411,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1426,7 +1426,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1441,7 +1441,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min(moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1456,7 +1456,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1471,7 +1471,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1486,7 +1486,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1510,7 +1510,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1525,7 +1525,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1540,7 +1540,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1555,7 +1555,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1570,7 +1570,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1585,7 +1585,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((long)moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1600,7 +1600,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1615,7 +1615,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1630,7 +1630,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1645,7 +1645,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((float)moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1660,7 +1660,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((decimal)moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1684,7 +1684,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1699,7 +1699,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1714,7 +1714,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1729,7 +1729,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1744,7 +1744,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1759,7 +1759,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((long)moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1774,7 +1774,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1789,7 +1789,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1804,7 +1804,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1819,7 +1819,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1834,7 +1834,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((decimal)moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1858,7 +1858,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((byte)moveNext(), min);
 
-                                ret.SetByte(Convert.ToByte(min), iterIndex);
+                                ret.SetByte(Converts.ToByte(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1873,7 +1873,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((short)moveNext(), min);
 
-                                ret.SetInt16(Convert.ToInt16(min), iterIndex);
+                                ret.SetInt16(Converts.ToInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1888,7 +1888,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ushort)moveNext(), min);
 
-                                ret.SetUInt16(Convert.ToUInt16(min), iterIndex);
+                                ret.SetUInt16(Converts.ToUInt16(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1903,7 +1903,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((int)moveNext(), min);
 
-                                ret.SetInt32(Convert.ToInt32(min), iterIndex);
+                                ret.SetInt32(Converts.ToInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1918,7 +1918,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((uint)moveNext(), min);
 
-                                ret.SetUInt32(Convert.ToUInt32(min), iterIndex);
+                                ret.SetUInt32(Converts.ToUInt32(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1933,7 +1933,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((long)moveNext(), min);
 
-                                ret.SetInt64(Convert.ToInt64(min), iterIndex);
+                                ret.SetInt64(Converts.ToInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1948,7 +1948,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((ulong)moveNext(), min);
 
-                                ret.SetUInt64(Convert.ToUInt64(min), iterIndex);
+                                ret.SetUInt64(Converts.ToUInt64(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1963,7 +1963,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = (char) Math.Min((char)moveNext(), min);
 
-                                ret.SetChar(Convert.ToChar(min), iterIndex);
+                                ret.SetChar(Converts.ToChar(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1978,7 +1978,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((double)moveNext(), min);
 
-                                ret.SetDouble(Convert.ToDouble(min), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1993,7 +1993,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min((float)moveNext(), min);
 
-                                ret.SetSingle(Convert.ToSingle(min), iterIndex);
+                                ret.SetSingle(Converts.ToSingle(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -2008,7 +2008,7 @@ namespace NumSharp.Backends
                                 while (hasNext())
                                     min = Math.Min(moveNext(), min);
 
-                                ret.SetDecimal(Convert.ToDecimal(min), iterIndex);
+                                ret.SetDecimal(Converts.ToDecimal(min), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -2031,7 +2031,7 @@ namespace NumSharp.Backends
 
         public T AMinElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
         {
-            return (T)Convert.ChangeType(amin_elementwise(arr, typeCode), typeof(T));
+            return (T)Converts.ChangeType(amin_elementwise(arr, typeCode), InfoOf<T>.NPTypeCode);
         }
 
         protected object amin_elementwise(NDArray arr, NPTypeCode? typeCode)
@@ -2059,7 +2059,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (#102) Math.Min((#102)moveNext(), min);
 
-                            return Convert.To#101(min);
+                            return Converts.To#101(min);
                         }
 			            %
 			            default:
@@ -2090,7 +2090,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2101,7 +2101,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2112,7 +2112,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2123,7 +2123,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2134,7 +2134,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2145,7 +2145,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2156,7 +2156,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2167,7 +2167,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2178,7 +2178,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2189,7 +2189,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2200,7 +2200,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2220,7 +2220,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2231,7 +2231,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2242,7 +2242,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2253,7 +2253,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2264,7 +2264,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2275,7 +2275,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2286,7 +2286,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2297,7 +2297,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2308,7 +2308,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2319,7 +2319,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2330,7 +2330,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2350,7 +2350,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2361,7 +2361,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2372,7 +2372,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2383,7 +2383,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2394,7 +2394,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2405,7 +2405,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2416,7 +2416,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2427,7 +2427,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2438,7 +2438,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2449,7 +2449,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2460,7 +2460,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2480,7 +2480,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2491,7 +2491,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2502,7 +2502,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2513,7 +2513,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2524,7 +2524,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2535,7 +2535,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2546,7 +2546,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2557,7 +2557,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2568,7 +2568,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2579,7 +2579,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2590,7 +2590,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2610,7 +2610,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2621,7 +2621,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2632,7 +2632,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2643,7 +2643,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2654,7 +2654,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2665,7 +2665,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2676,7 +2676,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2687,7 +2687,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2698,7 +2698,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2709,7 +2709,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2720,7 +2720,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2740,7 +2740,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2751,7 +2751,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2762,7 +2762,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2773,7 +2773,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2784,7 +2784,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2795,7 +2795,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2806,7 +2806,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2817,7 +2817,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2828,7 +2828,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2839,7 +2839,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2850,7 +2850,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2870,7 +2870,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -2881,7 +2881,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -2892,7 +2892,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2903,7 +2903,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -2914,7 +2914,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -2925,7 +2925,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((long)moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -2936,7 +2936,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -2947,7 +2947,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -2958,7 +2958,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -2969,7 +2969,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -2980,7 +2980,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3000,7 +3000,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -3011,7 +3011,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -3022,7 +3022,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -3033,7 +3033,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -3044,7 +3044,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -3055,7 +3055,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -3066,7 +3066,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -3077,7 +3077,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min(moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -3088,7 +3088,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -3099,7 +3099,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -3110,7 +3110,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3130,7 +3130,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -3141,7 +3141,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -3152,7 +3152,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -3163,7 +3163,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -3174,7 +3174,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -3185,7 +3185,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((long)moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -3196,7 +3196,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -3207,7 +3207,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -3218,7 +3218,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -3229,7 +3229,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((float)moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -3240,7 +3240,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((decimal)moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3260,7 +3260,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -3271,7 +3271,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -3282,7 +3282,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -3293,7 +3293,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -3304,7 +3304,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -3315,7 +3315,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((long)moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -3326,7 +3326,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -3337,7 +3337,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -3348,7 +3348,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -3359,7 +3359,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -3370,7 +3370,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((decimal)moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3390,7 +3390,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((byte)moveNext(), min);
 
-                            return Convert.ToByte(min);
+                            return Converts.ToByte(min);
                         }
 			            case NPTypeCode.Int16: 
                         {
@@ -3401,7 +3401,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((short)moveNext(), min);
 
-                            return Convert.ToInt16(min);
+                            return Converts.ToInt16(min);
                         }
 			            case NPTypeCode.UInt16: 
                         {
@@ -3412,7 +3412,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ushort)moveNext(), min);
 
-                            return Convert.ToUInt16(min);
+                            return Converts.ToUInt16(min);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -3423,7 +3423,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((int)moveNext(), min);
 
-                            return Convert.ToInt32(min);
+                            return Converts.ToInt32(min);
                         }
 			            case NPTypeCode.UInt32: 
                         {
@@ -3434,7 +3434,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((uint)moveNext(), min);
 
-                            return Convert.ToUInt32(min);
+                            return Converts.ToUInt32(min);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -3445,7 +3445,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((long)moveNext(), min);
 
-                            return Convert.ToInt64(min);
+                            return Converts.ToInt64(min);
                         }
 			            case NPTypeCode.UInt64: 
                         {
@@ -3456,7 +3456,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((ulong)moveNext(), min);
 
-                            return Convert.ToUInt64(min);
+                            return Converts.ToUInt64(min);
                         }
 			            case NPTypeCode.Char: 
                         {
@@ -3467,7 +3467,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = (char) Math.Min((char)moveNext(), min);
 
-                            return Convert.ToChar(min);
+                            return Converts.ToChar(min);
                         }
 			            case NPTypeCode.Double: 
                         {
@@ -3478,7 +3478,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((double)moveNext(), min);
 
-                            return Convert.ToDouble(min);
+                            return Converts.ToDouble(min);
                         }
 			            case NPTypeCode.Single: 
                         {
@@ -3489,7 +3489,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min((float)moveNext(), min);
 
-                            return Convert.ToSingle(min);
+                            return Converts.ToSingle(min);
                         }
 			            case NPTypeCode.Decimal: 
                         {
@@ -3500,7 +3500,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                                 min = Math.Min(moveNext(), min);
 
-                            return Convert.ToDecimal(min);
+                            return Converts.ToDecimal(min);
                         }
 			            default:
 				            throw new NotSupportedException();

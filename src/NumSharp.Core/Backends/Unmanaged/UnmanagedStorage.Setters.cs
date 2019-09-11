@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -230,7 +231,7 @@ namespace NumSharp.Backends
             //incase it is 1 value assigned to all
             if (valueIsScalary && indices.Length != _shape.NDim)
             {
-                GetData(indices).InternalArray.Fill(Convert.ChangeType(value.GetAtIndex(0), _dtype));
+                GetData(indices).InternalArray.Fill(Converts.ChangeType(value.GetAtIndex(0), _typecode));
                 //MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
@@ -241,7 +242,7 @@ namespace NumSharp.Backends
                 if (!(valueIsScalary))
                     throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to the target indices, these shapes can't be broadcasted together.");
 
-                SetValue((ValueType)Convert.ChangeType(value.GetAtIndex(0), _dtype), (indices));
+                SetValue((ValueType)Converts.ChangeType(value.GetAtIndex(0), _typecode), (indices));
                 return;
             }
 

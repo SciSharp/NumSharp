@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -77,7 +78,7 @@ namespace NumSharp
                     {
                         var addr = (#2*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.To#1(start + i * step);
+                            *(addr + i) = Converts.To#1(start + i * step);
                     }
 
                     return ret;
@@ -104,7 +105,7 @@ namespace NumSharp
                     {
                         var addr = (byte*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToByte(start + i * step);
+                            *(addr + i) = Converts.ToByte(start + i * step);
                     }
 
                     return ret;
@@ -116,7 +117,7 @@ namespace NumSharp
                     {
                         var addr = (short*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt16(start + i * step);
+                            *(addr + i) = Converts.ToInt16(start + i * step);
                     }
 
                     return ret;
@@ -128,7 +129,7 @@ namespace NumSharp
                     {
                         var addr = (ushort*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt16(start + i * step);
+                            *(addr + i) = Converts.ToUInt16(start + i * step);
                     }
 
                     return ret;
@@ -140,7 +141,7 @@ namespace NumSharp
                     {
                         var addr = (int*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt32(start + i * step);
+                            *(addr + i) = Converts.ToInt32(start + i * step);
                     }
 
                     return ret;
@@ -152,7 +153,7 @@ namespace NumSharp
                     {
                         var addr = (uint*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt32(start + i * step);
+                            *(addr + i) = Converts.ToUInt32(start + i * step);
                     }
 
                     return ret;
@@ -164,7 +165,7 @@ namespace NumSharp
                     {
                         var addr = (long*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt64(start + i * step);
+                            *(addr + i) = Converts.ToInt64(start + i * step);
                     }
 
                     return ret;
@@ -176,7 +177,7 @@ namespace NumSharp
                     {
                         var addr = (ulong*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt64(start + i * step);
+                            *(addr + i) = Converts.ToUInt64(start + i * step);
                     }
 
                     return ret;
@@ -188,7 +189,7 @@ namespace NumSharp
                     {
                         var addr = (char*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToChar(start + i * step);
+                            *(addr + i) = Converts.ToChar(start + i * step);
                     }
 
                     return ret;
@@ -200,7 +201,7 @@ namespace NumSharp
                     {
                         var addr = (double*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToDouble(start + i * step);
+                            *(addr + i) = Converts.ToDouble(start + i * step);
                     }
 
                     return ret;
@@ -212,7 +213,7 @@ namespace NumSharp
                     {
                         var addr = (float*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToSingle(start + i * step);
+                            *(addr + i) = Converts.ToSingle(start + i * step);
                     }
 
                     return ret;
@@ -224,7 +225,7 @@ namespace NumSharp
                     {
                         var addr = (decimal*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToDecimal(start + i * step);
+                            *(addr + i) = Converts.ToDecimal(start + i * step);
                     }
 
                     return ret;
@@ -253,7 +254,7 @@ namespace NumSharp
                 throw new ArgumentException("Invalid typeCode", nameof(typeCode));
 
             NDArray ret = new NDArray(typeCode, new Shape(num), false);
-            float step = Convert.ToSingle((stop - start) / (endpoint ? num - 1.0 : num));
+            float step = Converts.ToSingle((stop - start) / (endpoint ? num - 1.0 : num));
 
             switch (ret.GetTypeCode)
             {
@@ -276,7 +277,7 @@ namespace NumSharp
                     {
                         var addr = (#2*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.To#1(start + i * step);
+                            *(addr + i) = Converts.To#1(start + i * step);
                     }
 
                     return ret;
@@ -303,7 +304,7 @@ namespace NumSharp
                     {
                         var addr = (byte*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToByte(start + i * step);
+                            *(addr + i) = Converts.ToByte(start + i * step);
                     }
 
                     return ret;
@@ -315,7 +316,7 @@ namespace NumSharp
                     {
                         var addr = (short*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt16(start + i * step);
+                            *(addr + i) = Converts.ToInt16(start + i * step);
                     }
 
                     return ret;
@@ -327,7 +328,7 @@ namespace NumSharp
                     {
                         var addr = (ushort*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt16(start + i * step);
+                            *(addr + i) = Converts.ToUInt16(start + i * step);
                     }
 
                     return ret;
@@ -339,7 +340,7 @@ namespace NumSharp
                     {
                         var addr = (int*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt32(start + i * step);
+                            *(addr + i) = Converts.ToInt32(start + i * step);
                     }
 
                     return ret;
@@ -351,7 +352,7 @@ namespace NumSharp
                     {
                         var addr = (uint*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt32(start + i * step);
+                            *(addr + i) = Converts.ToUInt32(start + i * step);
                     }
 
                     return ret;
@@ -363,7 +364,7 @@ namespace NumSharp
                     {
                         var addr = (long*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToInt64(start + i * step);
+                            *(addr + i) = Converts.ToInt64(start + i * step);
                     }
 
                     return ret;
@@ -375,7 +376,7 @@ namespace NumSharp
                     {
                         var addr = (ulong*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToUInt64(start + i * step);
+                            *(addr + i) = Converts.ToUInt64(start + i * step);
                     }
 
                     return ret;
@@ -387,7 +388,7 @@ namespace NumSharp
                     {
                         var addr = (char*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToChar(start + i * step);
+                            *(addr + i) = Converts.ToChar(start + i * step);
                     }
 
                     return ret;
@@ -399,7 +400,7 @@ namespace NumSharp
                     {
                         var addr = (double*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToDouble(start + i * step);
+                            *(addr + i) = Converts.ToDouble(start + i * step);
                     }
 
                     return ret;
@@ -411,7 +412,7 @@ namespace NumSharp
                     {
                         var addr = (float*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToSingle(start + i * step);
+                            *(addr + i) = Converts.ToSingle(start + i * step);
                     }
 
                     return ret;
@@ -423,7 +424,7 @@ namespace NumSharp
                     {
                         var addr = (decimal*)ret.Address;
                         for (int i = 0; i < num; i++)
-                            *(addr + i) = Convert.ToDecimal(start + i * step);
+                            *(addr + i) = Converts.ToDecimal(start + i * step);
                     }
 
                     return ret;

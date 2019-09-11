@@ -17,7 +17,7 @@
             //{
             //    case int[] values :
             //    {
-            //        int value = Convert.ToInt32(obj);                 
+            //        int value = Converts.ToInt32(obj);                 
             //        for(int idx =0; idx < bools.Length;idx++)
             //        {
             //            if ( values[idx] < value )
@@ -27,7 +27,7 @@
             //    }
             //    case Int64[] values :
             //    {
-            //        Int64 value = Convert.ToInt64(obj);                 
+            //        Int64 value = Converts.ToInt64(obj);                 
             //        for(int idx =0; idx < bools.Length;idx++)
             //        {
             //            if ( values[idx] < value )
@@ -37,7 +37,7 @@
             //    }
             //    case float[] values :
             //    {
-            //        float value = Convert.ToSingle(obj);                 
+            //        float value = Converts.ToSingle(obj);                 
             //        for(int idx =0; idx < bools.Length;idx++)
             //        {
             //            if ( values[idx] < value )
@@ -47,7 +47,7 @@
             //    }
             //    case double[] values :
             //    {
-            //        double value = Convert.ToDouble(obj);                 
+            //        double value = Converts.ToDouble(obj);                 
             //        for(int idx =0; idx < bools.Length;idx++)
             //        {
             //            if ( values[idx] < value )

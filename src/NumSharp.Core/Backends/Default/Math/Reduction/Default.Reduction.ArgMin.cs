@@ -406,7 +406,7 @@ namespace NumSharp.Backends
 
         public int ArgMinElementwise(NDArray arr)
         {
-            return Convert.ToInt32(argmin_elementwise(arr));
+            return Converts.ToInt32(argmin_elementwise(arr));
         }
 
         protected object argmin_elementwise(NDArray arr)

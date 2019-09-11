@@ -1,5 +1,6 @@
 ﻿using System;
 using DecimalMath;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -28,7 +29,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (#2*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.To#1(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.To#1(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -48,7 +49,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (byte*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToByte(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToByte(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -56,7 +57,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (short*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt16(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToInt16(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -64,7 +65,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (ushort*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt16(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToUInt16(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -72,7 +73,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (int*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt32(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToInt32(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -80,7 +81,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (uint*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt32(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToUInt32(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -88,7 +89,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (long*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt64(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToInt64(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -96,7 +97,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (ulong*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt64(Math.Abs((double) *(out_addr + i)));
+                            *(out_addr + i) = Converts.ToUInt64(Math.Abs((double) *(out_addr + i)));
 
                         return @out;
 	                }
@@ -104,7 +105,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (char*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToChar(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToChar(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -112,7 +113,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (double*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToDouble(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToDouble(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }
@@ -120,7 +121,7 @@ namespace NumSharp.Backends
 	                {
                         var out_addr = (float*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToSingle(Math.Abs(*(out_addr + i)));
+                            *(out_addr + i) = Converts.ToSingle(Math.Abs(*(out_addr + i)));
 
                         return @out;
 	                }

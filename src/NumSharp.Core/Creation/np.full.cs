@@ -1,6 +1,7 @@
 ﻿using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -107,7 +108,7 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
 
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Convert.ChangeType(fill_value, (TypeCode)typeCode)), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
         }
     }
 }

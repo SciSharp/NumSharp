@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -17,7 +18,7 @@ namespace NumSharp
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
             var value = nd.Storage.GetAtIndex(0);
             if (nd.dtype != typeof(T))
-                return (T)Convert.ChangeType(value, typeof(T));
+                return (T)Converts.ChangeType(value, InfoOf<T>.NPTypeCode);
             return (T)value;
         }
 
@@ -33,7 +34,7 @@ namespace NumSharp
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
             var value = arr.GetValue(0);
             if (value.GetType() != typeof(T))
-                return (T)Convert.ChangeType(value, typeof(T));
+                return (T)Converts.ChangeType(value, InfoOf<T>.NPTypeCode);
             return (T)value;
         }
 
@@ -87,7 +88,7 @@ namespace NumSharp
             if (arr.Count != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
 
-            return (T)Convert.ChangeType(arr[0], typeof(T));
+            return Converts.ChangeType<T>(arr[0]);
         }
     }
 }

@@ -1,4 +1,6 @@
 ﻿using System;
+using NumSharp.Backends;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -41,7 +43,7 @@ namespace NumSharp
                 i = (-k) * M.Value;
 
             var flat = m.flat;
-            var one = dtype != null ? Convert.ChangeType(1d, dtype) : 1d;
+            var one = dtype != null ? Converts.ChangeType(1d, dtype.GetTypeCode()) : 1d;
             int skips = k < 0 ? Math.Abs(k)-1 : 0;
             for (int j = k; j < flat.size; j+=N+1)
             {

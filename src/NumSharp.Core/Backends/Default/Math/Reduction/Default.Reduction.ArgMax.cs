@@ -382,7 +382,7 @@ namespace NumSharp.Backends
 
         public int ArgMaxElementwise(NDArray arr)
         {
-            return Convert.ToInt32(argmax_elementwise(arr));
+            return Converts.ToInt32(argmax_elementwise(arr));
         }
 
         protected object argmax_elementwise(NDArray arr)

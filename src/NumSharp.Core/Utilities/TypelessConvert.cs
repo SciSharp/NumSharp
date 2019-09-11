@@ -198,7 +198,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object From#1To#2(object input)
         {
-            return Convert.To#2((#1)input);
+            return Converts.To#2((#1)input);
         }
 
         %
@@ -212,7 +212,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToByte(object input)
         {
-            return Convert.ToByte((Boolean)input);
+            return Converts.ToByte((Boolean)input);
         }
 
         /// <summary>
@@ -223,7 +223,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToInt16(object input)
         {
-            return Convert.ToInt16((Boolean)input);
+            return Converts.ToInt16((Boolean)input);
         }
 
         /// <summary>
@@ -234,7 +234,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToUInt16(object input)
         {
-            return Convert.ToUInt16((Boolean)input);
+            return Converts.ToUInt16((Boolean)input);
         }
 
         /// <summary>
@@ -245,7 +245,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToInt32(object input)
         {
-            return Convert.ToInt32((Boolean)input);
+            return Converts.ToInt32((Boolean)input);
         }
 
         /// <summary>
@@ -256,7 +256,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToUInt32(object input)
         {
-            return Convert.ToUInt32((Boolean)input);
+            return Converts.ToUInt32((Boolean)input);
         }
 
         /// <summary>
@@ -267,7 +267,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToInt64(object input)
         {
-            return Convert.ToInt64((Boolean)input);
+            return Converts.ToInt64((Boolean)input);
         }
 
         /// <summary>
@@ -278,7 +278,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToUInt64(object input)
         {
-            return Convert.ToUInt64((Boolean)input);
+            return Converts.ToUInt64((Boolean)input);
         }
 
         /// <summary>
@@ -289,7 +289,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToChar(object input)
         {
-            return Convert.ToChar((Boolean)input);
+            return Converts.ToChar((Boolean)input);
         }
 
         /// <summary>
@@ -300,7 +300,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToDouble(object input)
         {
-            return Convert.ToDouble((Boolean)input);
+            return Converts.ToDouble((Boolean)input);
         }
 
         /// <summary>
@@ -311,7 +311,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToSingle(object input)
         {
-            return Convert.ToSingle((Boolean)input);
+            return Converts.ToSingle((Boolean)input);
         }
 
         /// <summary>
@@ -322,7 +322,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToDecimal(object input)
         {
-            return Convert.ToDecimal((Boolean)input);
+            return Converts.ToDecimal((Boolean)input);
         }
 
         /// <summary>
@@ -333,7 +333,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromBooleanToString(object input)
         {
-            return Convert.ToString((Boolean)input);
+            return Converts.ToString((Boolean)input);
         }
 
         /// <summary>
@@ -344,7 +344,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToBoolean(object input)
         {
-            return Convert.ToBoolean((Byte)input);
+            return Converts.ToBoolean((Byte)input);
         }
 
         /// <summary>
@@ -355,7 +355,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToInt16(object input)
         {
-            return Convert.ToInt16((Byte)input);
+            return Converts.ToInt16((Byte)input);
         }
 
         /// <summary>
@@ -366,7 +366,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToUInt16(object input)
         {
-            return Convert.ToUInt16((Byte)input);
+            return Converts.ToUInt16((Byte)input);
         }
 
         /// <summary>
@@ -377,7 +377,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToInt32(object input)
         {
-            return Convert.ToInt32((Byte)input);
+            return Converts.ToInt32((Byte)input);
         }
 
         /// <summary>
@@ -388,7 +388,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToUInt32(object input)
         {
-            return Convert.ToUInt32((Byte)input);
+            return Converts.ToUInt32((Byte)input);
         }
 
         /// <summary>
@@ -399,7 +399,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToInt64(object input)
         {
-            return Convert.ToInt64((Byte)input);
+            return Converts.ToInt64((Byte)input);
         }
 
         /// <summary>
@@ -410,7 +410,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToUInt64(object input)
         {
-            return Convert.ToUInt64((Byte)input);
+            return Converts.ToUInt64((Byte)input);
         }
 
         /// <summary>
@@ -421,7 +421,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToChar(object input)
         {
-            return Convert.ToChar((Byte)input);
+            return Converts.ToChar((Byte)input);
         }
 
         /// <summary>
@@ -432,7 +432,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToDouble(object input)
         {
-            return Convert.ToDouble((Byte)input);
+            return Converts.ToDouble((Byte)input);
         }
 
         /// <summary>
@@ -443,7 +443,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToSingle(object input)
         {
-            return Convert.ToSingle((Byte)input);
+            return Converts.ToSingle((Byte)input);
         }
 
         /// <summary>
@@ -454,7 +454,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToDecimal(object input)
         {
-            return Convert.ToDecimal((Byte)input);
+            return Converts.ToDecimal((Byte)input);
         }
 
         /// <summary>
@@ -465,7 +465,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromByteToString(object input)
         {
-            return Convert.ToString((Byte)input);
+            return Converts.ToString((Byte)input);
         }
 
         /// <summary>
@@ -476,7 +476,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToBoolean(object input)
         {
-            return Convert.ToBoolean((Int16)input);
+            return Converts.ToBoolean((Int16)input);
         }
 
         /// <summary>
@@ -487,7 +487,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToByte(object input)
         {
-            return Convert.ToByte((Int16)input);
+            return Converts.ToByte((Int16)input);
         }
 
         /// <summary>
@@ -498,7 +498,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToUInt16(object input)
         {
-            return Convert.ToUInt16((Int16)input);
+            return Converts.ToUInt16((Int16)input);
         }
 
         /// <summary>
@@ -509,7 +509,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToInt32(object input)
         {
-            return Convert.ToInt32((Int16)input);
+            return Converts.ToInt32((Int16)input);
         }
 
         /// <summary>
@@ -520,7 +520,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToUInt32(object input)
         {
-            return Convert.ToUInt32((Int16)input);
+            return Converts.ToUInt32((Int16)input);
         }
 
         /// <summary>
@@ -531,7 +531,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToInt64(object input)
         {
-            return Convert.ToInt64((Int16)input);
+            return Converts.ToInt64((Int16)input);
         }
 
         /// <summary>
@@ -542,7 +542,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToUInt64(object input)
         {
-            return Convert.ToUInt64((Int16)input);
+            return Converts.ToUInt64((Int16)input);
         }
 
         /// <summary>
@@ -553,7 +553,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToChar(object input)
         {
-            return Convert.ToChar((Int16)input);
+            return Converts.ToChar((Int16)input);
         }
 
         /// <summary>
@@ -564,7 +564,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToDouble(object input)
         {
-            return Convert.ToDouble((Int16)input);
+            return Converts.ToDouble((Int16)input);
         }
 
         /// <summary>
@@ -575,7 +575,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToSingle(object input)
         {
-            return Convert.ToSingle((Int16)input);
+            return Converts.ToSingle((Int16)input);
         }
 
         /// <summary>
@@ -586,7 +586,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToDecimal(object input)
         {
-            return Convert.ToDecimal((Int16)input);
+            return Converts.ToDecimal((Int16)input);
         }
 
         /// <summary>
@@ -597,7 +597,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt16ToString(object input)
         {
-            return Convert.ToString((Int16)input);
+            return Converts.ToString((Int16)input);
         }
 
         /// <summary>
@@ -608,7 +608,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToBoolean(object input)
         {
-            return Convert.ToBoolean((UInt16)input);
+            return Converts.ToBoolean((UInt16)input);
         }
 
         /// <summary>
@@ -619,7 +619,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToByte(object input)
         {
-            return Convert.ToByte((UInt16)input);
+            return Converts.ToByte((UInt16)input);
         }
 
         /// <summary>
@@ -630,7 +630,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToInt16(object input)
         {
-            return Convert.ToInt16((UInt16)input);
+            return Converts.ToInt16((UInt16)input);
         }
 
         /// <summary>
@@ -641,7 +641,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToInt32(object input)
         {
-            return Convert.ToInt32((UInt16)input);
+            return Converts.ToInt32((UInt16)input);
         }
 
         /// <summary>
@@ -652,7 +652,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToUInt32(object input)
         {
-            return Convert.ToUInt32((UInt16)input);
+            return Converts.ToUInt32((UInt16)input);
         }
 
         /// <summary>
@@ -663,7 +663,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToInt64(object input)
         {
-            return Convert.ToInt64((UInt16)input);
+            return Converts.ToInt64((UInt16)input);
         }
 
         /// <summary>
@@ -674,7 +674,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToUInt64(object input)
         {
-            return Convert.ToUInt64((UInt16)input);
+            return Converts.ToUInt64((UInt16)input);
         }
 
         /// <summary>
@@ -685,7 +685,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToChar(object input)
         {
-            return Convert.ToChar((UInt16)input);
+            return Converts.ToChar((UInt16)input);
         }
 
         /// <summary>
@@ -696,7 +696,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToDouble(object input)
         {
-            return Convert.ToDouble((UInt16)input);
+            return Converts.ToDouble((UInt16)input);
         }
 
         /// <summary>
@@ -707,7 +707,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToSingle(object input)
         {
-            return Convert.ToSingle((UInt16)input);
+            return Converts.ToSingle((UInt16)input);
         }
 
         /// <summary>
@@ -718,7 +718,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToDecimal(object input)
         {
-            return Convert.ToDecimal((UInt16)input);
+            return Converts.ToDecimal((UInt16)input);
         }
 
         /// <summary>
@@ -729,7 +729,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt16ToString(object input)
         {
-            return Convert.ToString((UInt16)input);
+            return Converts.ToString((UInt16)input);
         }
 
         /// <summary>
@@ -740,7 +740,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToBoolean(object input)
         {
-            return Convert.ToBoolean((Int32)input);
+            return Converts.ToBoolean((Int32)input);
         }
 
         /// <summary>
@@ -751,7 +751,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToByte(object input)
         {
-            return Convert.ToByte((Int32)input);
+            return Converts.ToByte((Int32)input);
         }
 
         /// <summary>
@@ -762,7 +762,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToInt16(object input)
         {
-            return Convert.ToInt16((Int32)input);
+            return Converts.ToInt16((Int32)input);
         }
 
         /// <summary>
@@ -773,7 +773,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToUInt16(object input)
         {
-            return Convert.ToUInt16((Int32)input);
+            return Converts.ToUInt16((Int32)input);
         }
 
         /// <summary>
@@ -784,7 +784,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToUInt32(object input)
         {
-            return Convert.ToUInt32((Int32)input);
+            return Converts.ToUInt32((Int32)input);
         }
 
         /// <summary>
@@ -795,7 +795,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToInt64(object input)
         {
-            return Convert.ToInt64((Int32)input);
+            return Converts.ToInt64((Int32)input);
         }
 
         /// <summary>
@@ -806,7 +806,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToUInt64(object input)
         {
-            return Convert.ToUInt64((Int32)input);
+            return Converts.ToUInt64((Int32)input);
         }
 
         /// <summary>
@@ -817,7 +817,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToChar(object input)
         {
-            return Convert.ToChar((Int32)input);
+            return Converts.ToChar((Int32)input);
         }
 
         /// <summary>
@@ -828,7 +828,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToDouble(object input)
         {
-            return Convert.ToDouble((Int32)input);
+            return Converts.ToDouble((Int32)input);
         }
 
         /// <summary>
@@ -839,7 +839,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToSingle(object input)
         {
-            return Convert.ToSingle((Int32)input);
+            return Converts.ToSingle((Int32)input);
         }
 
         /// <summary>
@@ -850,7 +850,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToDecimal(object input)
         {
-            return Convert.ToDecimal((Int32)input);
+            return Converts.ToDecimal((Int32)input);
         }
 
         /// <summary>
@@ -861,7 +861,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt32ToString(object input)
         {
-            return Convert.ToString((Int32)input);
+            return Converts.ToString((Int32)input);
         }
 
         /// <summary>
@@ -872,7 +872,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToBoolean(object input)
         {
-            return Convert.ToBoolean((UInt32)input);
+            return Converts.ToBoolean((UInt32)input);
         }
 
         /// <summary>
@@ -883,7 +883,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToByte(object input)
         {
-            return Convert.ToByte((UInt32)input);
+            return Converts.ToByte((UInt32)input);
         }
 
         /// <summary>
@@ -894,7 +894,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToInt16(object input)
         {
-            return Convert.ToInt16((UInt32)input);
+            return Converts.ToInt16((UInt32)input);
         }
 
         /// <summary>
@@ -905,7 +905,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToUInt16(object input)
         {
-            return Convert.ToUInt16((UInt32)input);
+            return Converts.ToUInt16((UInt32)input);
         }
 
         /// <summary>
@@ -916,7 +916,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToInt32(object input)
         {
-            return Convert.ToInt32((UInt32)input);
+            return Converts.ToInt32((UInt32)input);
         }
 
         /// <summary>
@@ -927,7 +927,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToInt64(object input)
         {
-            return Convert.ToInt64((UInt32)input);
+            return Converts.ToInt64((UInt32)input);
         }
 
         /// <summary>
@@ -938,7 +938,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToUInt64(object input)
         {
-            return Convert.ToUInt64((UInt32)input);
+            return Converts.ToUInt64((UInt32)input);
         }
 
         /// <summary>
@@ -949,7 +949,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToChar(object input)
         {
-            return Convert.ToChar((UInt32)input);
+            return Converts.ToChar((UInt32)input);
         }
 
         /// <summary>
@@ -960,7 +960,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToDouble(object input)
         {
-            return Convert.ToDouble((UInt32)input);
+            return Converts.ToDouble((UInt32)input);
         }
 
         /// <summary>
@@ -971,7 +971,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToSingle(object input)
         {
-            return Convert.ToSingle((UInt32)input);
+            return Converts.ToSingle((UInt32)input);
         }
 
         /// <summary>
@@ -982,7 +982,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToDecimal(object input)
         {
-            return Convert.ToDecimal((UInt32)input);
+            return Converts.ToDecimal((UInt32)input);
         }
 
         /// <summary>
@@ -993,7 +993,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt32ToString(object input)
         {
-            return Convert.ToString((UInt32)input);
+            return Converts.ToString((UInt32)input);
         }
 
         /// <summary>
@@ -1004,7 +1004,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToBoolean(object input)
         {
-            return Convert.ToBoolean((Int64)input);
+            return Converts.ToBoolean((Int64)input);
         }
 
         /// <summary>
@@ -1015,7 +1015,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToByte(object input)
         {
-            return Convert.ToByte((Int64)input);
+            return Converts.ToByte((Int64)input);
         }
 
         /// <summary>
@@ -1026,7 +1026,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToInt16(object input)
         {
-            return Convert.ToInt16((Int64)input);
+            return Converts.ToInt16((Int64)input);
         }
 
         /// <summary>
@@ -1037,7 +1037,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToUInt16(object input)
         {
-            return Convert.ToUInt16((Int64)input);
+            return Converts.ToUInt16((Int64)input);
         }
 
         /// <summary>
@@ -1048,7 +1048,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToInt32(object input)
         {
-            return Convert.ToInt32((Int64)input);
+            return Converts.ToInt32((Int64)input);
         }
 
         /// <summary>
@@ -1059,7 +1059,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToUInt32(object input)
         {
-            return Convert.ToUInt32((Int64)input);
+            return Converts.ToUInt32((Int64)input);
         }
 
         /// <summary>
@@ -1070,7 +1070,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToUInt64(object input)
         {
-            return Convert.ToUInt64((Int64)input);
+            return Converts.ToUInt64((Int64)input);
         }
 
         /// <summary>
@@ -1081,7 +1081,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToChar(object input)
         {
-            return Convert.ToChar((Int64)input);
+            return Converts.ToChar((Int64)input);
         }
 
         /// <summary>
@@ -1092,7 +1092,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToDouble(object input)
         {
-            return Convert.ToDouble((Int64)input);
+            return Converts.ToDouble((Int64)input);
         }
 
         /// <summary>
@@ -1103,7 +1103,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToSingle(object input)
         {
-            return Convert.ToSingle((Int64)input);
+            return Converts.ToSingle((Int64)input);
         }
 
         /// <summary>
@@ -1114,7 +1114,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToDecimal(object input)
         {
-            return Convert.ToDecimal((Int64)input);
+            return Converts.ToDecimal((Int64)input);
         }
 
         /// <summary>
@@ -1125,7 +1125,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromInt64ToString(object input)
         {
-            return Convert.ToString((Int64)input);
+            return Converts.ToString((Int64)input);
         }
 
         /// <summary>
@@ -1136,7 +1136,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToBoolean(object input)
         {
-            return Convert.ToBoolean((UInt64)input);
+            return Converts.ToBoolean((UInt64)input);
         }
 
         /// <summary>
@@ -1147,7 +1147,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToByte(object input)
         {
-            return Convert.ToByte((UInt64)input);
+            return Converts.ToByte((UInt64)input);
         }
 
         /// <summary>
@@ -1158,7 +1158,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToInt16(object input)
         {
-            return Convert.ToInt16((UInt64)input);
+            return Converts.ToInt16((UInt64)input);
         }
 
         /// <summary>
@@ -1169,7 +1169,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToUInt16(object input)
         {
-            return Convert.ToUInt16((UInt64)input);
+            return Converts.ToUInt16((UInt64)input);
         }
 
         /// <summary>
@@ -1180,7 +1180,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToInt32(object input)
         {
-            return Convert.ToInt32((UInt64)input);
+            return Converts.ToInt32((UInt64)input);
         }
 
         /// <summary>
@@ -1191,7 +1191,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToUInt32(object input)
         {
-            return Convert.ToUInt32((UInt64)input);
+            return Converts.ToUInt32((UInt64)input);
         }
 
         /// <summary>
@@ -1202,7 +1202,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToInt64(object input)
         {
-            return Convert.ToInt64((UInt64)input);
+            return Converts.ToInt64((UInt64)input);
         }
 
         /// <summary>
@@ -1213,7 +1213,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToChar(object input)
         {
-            return Convert.ToChar((UInt64)input);
+            return Converts.ToChar((UInt64)input);
         }
 
         /// <summary>
@@ -1224,7 +1224,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToDouble(object input)
         {
-            return Convert.ToDouble((UInt64)input);
+            return Converts.ToDouble((UInt64)input);
         }
 
         /// <summary>
@@ -1235,7 +1235,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToSingle(object input)
         {
-            return Convert.ToSingle((UInt64)input);
+            return Converts.ToSingle((UInt64)input);
         }
 
         /// <summary>
@@ -1246,7 +1246,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToDecimal(object input)
         {
-            return Convert.ToDecimal((UInt64)input);
+            return Converts.ToDecimal((UInt64)input);
         }
 
         /// <summary>
@@ -1257,7 +1257,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromUInt64ToString(object input)
         {
-            return Convert.ToString((UInt64)input);
+            return Converts.ToString((UInt64)input);
         }
 
         /// <summary>
@@ -1268,7 +1268,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToBoolean(object input)
         {
-            return Convert.ToBoolean((Char)input);
+            return Converts.ToBoolean((Char)input);
         }
 
         /// <summary>
@@ -1279,7 +1279,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToByte(object input)
         {
-            return Convert.ToByte((Char)input);
+            return Converts.ToByte((Char)input);
         }
 
         /// <summary>
@@ -1290,7 +1290,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToInt16(object input)
         {
-            return Convert.ToInt16((Char)input);
+            return Converts.ToInt16((Char)input);
         }
 
         /// <summary>
@@ -1301,7 +1301,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToUInt16(object input)
         {
-            return Convert.ToUInt16((Char)input);
+            return Converts.ToUInt16((Char)input);
         }
 
         /// <summary>
@@ -1312,7 +1312,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToInt32(object input)
         {
-            return Convert.ToInt32((Char)input);
+            return Converts.ToInt32((Char)input);
         }
 
         /// <summary>
@@ -1323,7 +1323,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToUInt32(object input)
         {
-            return Convert.ToUInt32((Char)input);
+            return Converts.ToUInt32((Char)input);
         }
 
         /// <summary>
@@ -1334,7 +1334,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToInt64(object input)
         {
-            return Convert.ToInt64((Char)input);
+            return Converts.ToInt64((Char)input);
         }
 
         /// <summary>
@@ -1345,7 +1345,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToUInt64(object input)
         {
-            return Convert.ToUInt64((Char)input);
+            return Converts.ToUInt64((Char)input);
         }
 
         /// <summary>
@@ -1356,7 +1356,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToDouble(object input)
         {
-            return Convert.ToDouble((Char)input);
+            return Converts.ToDouble((Char)input);
         }
 
         /// <summary>
@@ -1367,7 +1367,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToSingle(object input)
         {
-            return Convert.ToSingle((Char)input);
+            return Converts.ToSingle((Char)input);
         }
 
         /// <summary>
@@ -1378,7 +1378,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToDecimal(object input)
         {
-            return Convert.ToDecimal((Char)input);
+            return Converts.ToDecimal((Char)input);
         }
 
         /// <summary>
@@ -1389,7 +1389,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromCharToString(object input)
         {
-            return Convert.ToString((Char)input);
+            return Converts.ToString((Char)input);
         }
 
         /// <summary>
@@ -1400,7 +1400,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToBoolean(object input)
         {
-            return Convert.ToBoolean((Double)input);
+            return Converts.ToBoolean((Double)input);
         }
 
         /// <summary>
@@ -1411,7 +1411,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToByte(object input)
         {
-            return Convert.ToByte((Double)input);
+            return Converts.ToByte((Double)input);
         }
 
         /// <summary>
@@ -1422,7 +1422,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToInt16(object input)
         {
-            return Convert.ToInt16((Double)input);
+            return Converts.ToInt16((Double)input);
         }
 
         /// <summary>
@@ -1433,7 +1433,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToUInt16(object input)
         {
-            return Convert.ToUInt16((Double)input);
+            return Converts.ToUInt16((Double)input);
         }
 
         /// <summary>
@@ -1444,7 +1444,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToInt32(object input)
         {
-            return Convert.ToInt32((Double)input);
+            return Converts.ToInt32((Double)input);
         }
 
         /// <summary>
@@ -1455,7 +1455,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToUInt32(object input)
         {
-            return Convert.ToUInt32((Double)input);
+            return Converts.ToUInt32((Double)input);
         }
 
         /// <summary>
@@ -1466,7 +1466,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToInt64(object input)
         {
-            return Convert.ToInt64((Double)input);
+            return Converts.ToInt64((Double)input);
         }
 
         /// <summary>
@@ -1477,7 +1477,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToUInt64(object input)
         {
-            return Convert.ToUInt64((Double)input);
+            return Converts.ToUInt64((Double)input);
         }
 
         /// <summary>
@@ -1488,7 +1488,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToChar(object input)
         {
-            return Convert.ToChar((Double)input);
+            return Converts.ToChar((Double)input);
         }
 
         /// <summary>
@@ -1499,7 +1499,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToSingle(object input)
         {
-            return Convert.ToSingle((Double)input);
+            return Converts.ToSingle((Double)input);
         }
 
         /// <summary>
@@ -1510,7 +1510,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToDecimal(object input)
         {
-            return Convert.ToDecimal((Double)input);
+            return Converts.ToDecimal((Double)input);
         }
 
         /// <summary>
@@ -1521,7 +1521,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDoubleToString(object input)
         {
-            return Convert.ToString((Double)input);
+            return Converts.ToString((Double)input);
         }
 
         /// <summary>
@@ -1532,7 +1532,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToBoolean(object input)
         {
-            return Convert.ToBoolean((Single)input);
+            return Converts.ToBoolean((Single)input);
         }
 
         /// <summary>
@@ -1543,7 +1543,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToByte(object input)
         {
-            return Convert.ToByte((Single)input);
+            return Converts.ToByte((Single)input);
         }
 
         /// <summary>
@@ -1554,7 +1554,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToInt16(object input)
         {
-            return Convert.ToInt16((Single)input);
+            return Converts.ToInt16((Single)input);
         }
 
         /// <summary>
@@ -1565,7 +1565,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToUInt16(object input)
         {
-            return Convert.ToUInt16((Single)input);
+            return Converts.ToUInt16((Single)input);
         }
 
         /// <summary>
@@ -1576,7 +1576,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToInt32(object input)
         {
-            return Convert.ToInt32((Single)input);
+            return Converts.ToInt32((Single)input);
         }
 
         /// <summary>
@@ -1587,7 +1587,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToUInt32(object input)
         {
-            return Convert.ToUInt32((Single)input);
+            return Converts.ToUInt32((Single)input);
         }
 
         /// <summary>
@@ -1598,7 +1598,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToInt64(object input)
         {
-            return Convert.ToInt64((Single)input);
+            return Converts.ToInt64((Single)input);
         }
 
         /// <summary>
@@ -1609,7 +1609,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToUInt64(object input)
         {
-            return Convert.ToUInt64((Single)input);
+            return Converts.ToUInt64((Single)input);
         }
 
         /// <summary>
@@ -1620,7 +1620,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToChar(object input)
         {
-            return Convert.ToChar((Single)input);
+            return Converts.ToChar((Single)input);
         }
 
         /// <summary>
@@ -1631,7 +1631,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToDouble(object input)
         {
-            return Convert.ToDouble((Single)input);
+            return Converts.ToDouble((Single)input);
         }
 
         /// <summary>
@@ -1642,7 +1642,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToDecimal(object input)
         {
-            return Convert.ToDecimal((Single)input);
+            return Converts.ToDecimal((Single)input);
         }
 
         /// <summary>
@@ -1653,7 +1653,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromSingleToString(object input)
         {
-            return Convert.ToString((Single)input);
+            return Converts.ToString((Single)input);
         }
 
         /// <summary>
@@ -1664,7 +1664,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToBoolean(object input)
         {
-            return Convert.ToBoolean((Decimal)input);
+            return Converts.ToBoolean((Decimal)input);
         }
 
         /// <summary>
@@ -1675,7 +1675,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToByte(object input)
         {
-            return Convert.ToByte((Decimal)input);
+            return Converts.ToByte((Decimal)input);
         }
 
         /// <summary>
@@ -1686,7 +1686,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToInt16(object input)
         {
-            return Convert.ToInt16((Decimal)input);
+            return Converts.ToInt16((Decimal)input);
         }
 
         /// <summary>
@@ -1697,7 +1697,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToUInt16(object input)
         {
-            return Convert.ToUInt16((Decimal)input);
+            return Converts.ToUInt16((Decimal)input);
         }
 
         /// <summary>
@@ -1708,7 +1708,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToInt32(object input)
         {
-            return Convert.ToInt32((Decimal)input);
+            return Converts.ToInt32((Decimal)input);
         }
 
         /// <summary>
@@ -1719,7 +1719,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToUInt32(object input)
         {
-            return Convert.ToUInt32((Decimal)input);
+            return Converts.ToUInt32((Decimal)input);
         }
 
         /// <summary>
@@ -1730,7 +1730,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToInt64(object input)
         {
-            return Convert.ToInt64((Decimal)input);
+            return Converts.ToInt64((Decimal)input);
         }
 
         /// <summary>
@@ -1741,7 +1741,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToUInt64(object input)
         {
-            return Convert.ToUInt64((Decimal)input);
+            return Converts.ToUInt64((Decimal)input);
         }
 
         /// <summary>
@@ -1752,7 +1752,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToChar(object input)
         {
-            return Convert.ToChar((Decimal)input);
+            return Converts.ToChar((Decimal)input);
         }
 
         /// <summary>
@@ -1763,7 +1763,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToDouble(object input)
         {
-            return Convert.ToDouble((Decimal)input);
+            return Converts.ToDouble((Decimal)input);
         }
 
         /// <summary>
@@ -1774,7 +1774,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToSingle(object input)
         {
-            return Convert.ToSingle((Decimal)input);
+            return Converts.ToSingle((Decimal)input);
         }
 
         /// <summary>
@@ -1785,7 +1785,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromDecimalToString(object input)
         {
-            return Convert.ToString((Decimal)input);
+            return Converts.ToString((Decimal)input);
         }
 
         /// <summary>
@@ -1796,7 +1796,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToBoolean(object input)
         {
-            return Convert.ToBoolean((String)input);
+            return Converts.ToBoolean((String)input);
         }
 
         /// <summary>
@@ -1807,7 +1807,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToByte(object input)
         {
-            return Convert.ToByte((String)input);
+            return Converts.ToByte((String)input);
         }
 
         /// <summary>
@@ -1818,7 +1818,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToInt16(object input)
         {
-            return Convert.ToInt16((String)input);
+            return Converts.ToInt16((String)input);
         }
 
         /// <summary>
@@ -1829,7 +1829,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToUInt16(object input)
         {
-            return Convert.ToUInt16((String)input);
+            return Converts.ToUInt16((String)input);
         }
 
         /// <summary>
@@ -1840,7 +1840,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToInt32(object input)
         {
-            return Convert.ToInt32((String)input);
+            return Converts.ToInt32((String)input);
         }
 
         /// <summary>
@@ -1851,7 +1851,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToUInt32(object input)
         {
-            return Convert.ToUInt32((String)input);
+            return Converts.ToUInt32((String)input);
         }
 
         /// <summary>
@@ -1862,7 +1862,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToInt64(object input)
         {
-            return Convert.ToInt64((String)input);
+            return Converts.ToInt64((String)input);
         }
 
         /// <summary>
@@ -1873,7 +1873,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToUInt64(object input)
         {
-            return Convert.ToUInt64((String)input);
+            return Converts.ToUInt64((String)input);
         }
 
         /// <summary>
@@ -1884,7 +1884,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToChar(object input)
         {
-            return Convert.ToChar((String)input);
+            return Converts.ToChar((String)input);
         }
 
         /// <summary>
@@ -1895,7 +1895,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToDouble(object input)
         {
-            return Convert.ToDouble((String)input);
+            return Converts.ToDouble((String)input);
         }
 
         /// <summary>
@@ -1906,7 +1906,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToSingle(object input)
         {
-            return Convert.ToSingle((String)input);
+            return Converts.ToSingle((String)input);
         }
 
         /// <summary>
@@ -1917,7 +1917,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object FromStringToDecimal(object input)
         {
-            return Convert.ToDecimal((String)input);
+            return Converts.ToDecimal((String)input);
         }
 #endif
     }

@@ -1285,7 +1285,7 @@ namespace NumSharp.Utilities
             var output = new #2[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.To#2(sourceArray[i]);
+                output[i] = Converts.To#2(sourceArray[i]);
             }
 
             return output;
@@ -1308,7 +1308,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -1329,7 +1329,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -1350,7 +1350,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -1371,7 +1371,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -1392,7 +1392,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -1413,7 +1413,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -1434,7 +1434,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -1455,7 +1455,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -1476,7 +1476,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -1497,7 +1497,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -1518,7 +1518,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -1539,7 +1539,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -1560,7 +1560,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -1581,7 +1581,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -1602,7 +1602,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -1623,7 +1623,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -1644,7 +1644,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -1665,7 +1665,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -1686,7 +1686,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -1707,7 +1707,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -1728,7 +1728,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -1749,7 +1749,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -1770,7 +1770,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -1791,7 +1791,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -1812,7 +1812,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -1833,7 +1833,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -1854,7 +1854,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -1875,7 +1875,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -1896,7 +1896,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -1917,7 +1917,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -1938,7 +1938,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -1959,7 +1959,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -1980,7 +1980,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -2001,7 +2001,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -2022,7 +2022,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -2043,7 +2043,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -2064,7 +2064,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -2085,7 +2085,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -2106,7 +2106,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -2127,7 +2127,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -2148,7 +2148,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -2169,7 +2169,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -2190,7 +2190,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -2211,7 +2211,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -2232,7 +2232,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -2253,7 +2253,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -2274,7 +2274,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -2295,7 +2295,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -2316,7 +2316,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -2337,7 +2337,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -2358,7 +2358,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -2379,7 +2379,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -2400,7 +2400,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -2421,7 +2421,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -2442,7 +2442,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -2463,7 +2463,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -2484,7 +2484,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -2505,7 +2505,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -2526,7 +2526,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -2547,7 +2547,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -2568,7 +2568,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -2589,7 +2589,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -2610,7 +2610,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -2631,7 +2631,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -2652,7 +2652,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -2673,7 +2673,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -2694,7 +2694,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -2715,7 +2715,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -2736,7 +2736,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -2757,7 +2757,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -2778,7 +2778,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -2799,7 +2799,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -2820,7 +2820,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -2841,7 +2841,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -2862,7 +2862,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -2883,7 +2883,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -2904,7 +2904,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -2925,7 +2925,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -2946,7 +2946,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -2967,7 +2967,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -2988,7 +2988,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -3009,7 +3009,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -3030,7 +3030,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -3051,7 +3051,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -3072,7 +3072,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -3093,7 +3093,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -3114,7 +3114,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -3135,7 +3135,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -3156,7 +3156,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -3177,7 +3177,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -3198,7 +3198,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -3219,7 +3219,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -3240,7 +3240,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -3261,7 +3261,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -3282,7 +3282,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -3303,7 +3303,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -3324,7 +3324,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -3345,7 +3345,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -3366,7 +3366,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -3387,7 +3387,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -3408,7 +3408,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -3429,7 +3429,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -3450,7 +3450,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -3471,7 +3471,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -3492,7 +3492,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -3513,7 +3513,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -3534,7 +3534,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -3555,7 +3555,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -3576,7 +3576,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -3597,7 +3597,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -3618,7 +3618,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -3639,7 +3639,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -3660,7 +3660,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -3681,7 +3681,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -3702,7 +3702,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -3723,7 +3723,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -3744,7 +3744,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -3765,7 +3765,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -3786,7 +3786,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -3807,7 +3807,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -3828,7 +3828,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -3849,7 +3849,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -3870,7 +3870,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -3891,7 +3891,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -3912,7 +3912,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -3933,7 +3933,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -3954,7 +3954,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -3975,7 +3975,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -3996,7 +3996,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -4017,7 +4017,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -4038,7 +4038,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -4059,7 +4059,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -4080,7 +4080,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -4101,7 +4101,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -4122,7 +4122,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -4143,7 +4143,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -4164,7 +4164,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -4185,7 +4185,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -4206,7 +4206,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -4227,7 +4227,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -4248,7 +4248,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -4269,7 +4269,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -4290,7 +4290,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -4311,7 +4311,7 @@ namespace NumSharp.Utilities
             var output = new String[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToString(sourceArray[i]);
+                output[i] = Converts.ToString(sourceArray[i]);
             }
 
             return output;
@@ -4332,7 +4332,7 @@ namespace NumSharp.Utilities
             var output = new Boolean[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToBoolean(sourceArray[i]);
+                output[i] = Converts.ToBoolean(sourceArray[i]);
             }
 
             return output;
@@ -4353,7 +4353,7 @@ namespace NumSharp.Utilities
             var output = new Byte[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToByte(sourceArray[i]);
+                output[i] = Converts.ToByte(sourceArray[i]);
             }
 
             return output;
@@ -4374,7 +4374,7 @@ namespace NumSharp.Utilities
             var output = new Int16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt16(sourceArray[i]);
+                output[i] = Converts.ToInt16(sourceArray[i]);
             }
 
             return output;
@@ -4395,7 +4395,7 @@ namespace NumSharp.Utilities
             var output = new UInt16[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt16(sourceArray[i]);
+                output[i] = Converts.ToUInt16(sourceArray[i]);
             }
 
             return output;
@@ -4416,7 +4416,7 @@ namespace NumSharp.Utilities
             var output = new Int32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt32(sourceArray[i]);
+                output[i] = Converts.ToInt32(sourceArray[i]);
             }
 
             return output;
@@ -4437,7 +4437,7 @@ namespace NumSharp.Utilities
             var output = new UInt32[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt32(sourceArray[i]);
+                output[i] = Converts.ToUInt32(sourceArray[i]);
             }
 
             return output;
@@ -4458,7 +4458,7 @@ namespace NumSharp.Utilities
             var output = new Int64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToInt64(sourceArray[i]);
+                output[i] = Converts.ToInt64(sourceArray[i]);
             }
 
             return output;
@@ -4479,7 +4479,7 @@ namespace NumSharp.Utilities
             var output = new UInt64[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToUInt64(sourceArray[i]);
+                output[i] = Converts.ToUInt64(sourceArray[i]);
             }
 
             return output;
@@ -4500,7 +4500,7 @@ namespace NumSharp.Utilities
             var output = new Char[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToChar(sourceArray[i]);
+                output[i] = Converts.ToChar(sourceArray[i]);
             }
 
             return output;
@@ -4521,7 +4521,7 @@ namespace NumSharp.Utilities
             var output = new Double[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDouble(sourceArray[i]);
+                output[i] = Converts.ToDouble(sourceArray[i]);
             }
 
             return output;
@@ -4542,7 +4542,7 @@ namespace NumSharp.Utilities
             var output = new Single[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToSingle(sourceArray[i]);
+                output[i] = Converts.ToSingle(sourceArray[i]);
             }
 
             return output;
@@ -4563,7 +4563,7 @@ namespace NumSharp.Utilities
             var output = new Decimal[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = Convert.ToDecimal(sourceArray[i]);
+                output[i] = Converts.ToDecimal(sourceArray[i]);
             }
 
             return output;
@@ -4592,7 +4592,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4616,7 +4616,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4637,7 +4637,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4658,7 +4658,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4679,7 +4679,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4700,7 +4700,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4721,7 +4721,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4742,7 +4742,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4763,7 +4763,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4784,7 +4784,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4805,7 +4805,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4826,7 +4826,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4847,7 +4847,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;
@@ -4868,7 +4868,7 @@ namespace NumSharp.Utilities
             var output = new Complex[length];
             for (int i = 0; i < length; i++)
             {
-                output[i] = new Complex(Convert.ToDouble(sourceArray[i]), 0d);
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             }
 
             return output;

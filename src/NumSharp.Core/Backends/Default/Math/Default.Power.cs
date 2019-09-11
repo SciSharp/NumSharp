@@ -1,5 +1,6 @@
 ﻿using System;
 using DecimalMath;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -26,17 +27,17 @@ namespace NumSharp.Backends
                     %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
 	                case NPTypeCode.#1:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (#2*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.To#1(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.To#1(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                %
                     case NPTypeCode.Decimal:
                     {
-                        var right = (decimal) Convert.ToDecimal(rhs);
+                        var right = (decimal) Converts.ToDecimal(rhs);
                         var out_addr = (decimal*)@out.Address;
                         for (int i = 0; i < len; i++)
                             *(out_addr + i) = DecimalEx.Pow(*(out_addr + i), right);
@@ -48,97 +49,97 @@ namespace NumSharp.Backends
 #else
 	                case NPTypeCode.Byte:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (byte*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToByte(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToByte(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Int16:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (short*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt16(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToInt16(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.UInt16:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (ushort*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt16(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToUInt16(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Int32:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (int*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt32(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToInt32(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.UInt32:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (uint*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt32(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToUInt32(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Int64:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (long*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToInt64(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToInt64(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.UInt64:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (ulong*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToUInt64(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToUInt64(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Char:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (char*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToChar(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToChar(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Double:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (double*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToDouble(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToDouble(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
 	                case NPTypeCode.Single:
 	                {
-                        var right = Convert.ToDouble(rhs);
+                        var right = Converts.ToDouble(rhs);
                         var out_addr = (float*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Convert.ToSingle(Math.Pow(*(out_addr + i), right));
+                            *(out_addr + i) = Converts.ToSingle(Math.Pow(*(out_addr + i), right));
 
                         return @out;
 	                }
                     case NPTypeCode.Decimal:
                     {
-                        var right = (decimal) Convert.ToDecimal(rhs);
+                        var right = (decimal) Converts.ToDecimal(rhs);
                         var out_addr = (decimal*)@out.Address;
                         for (int i = 0; i < len; i++)
                             *(out_addr + i) = DecimalEx.Pow(*(out_addr + i), right);
