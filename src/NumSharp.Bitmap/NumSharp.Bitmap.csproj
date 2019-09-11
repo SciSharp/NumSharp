@@ -1,0 +1,127 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
+    <PackageOutputPath>../../packages</PackageOutputPath>
+    <Description>This package provides extensions for System.Drawing.Bitmap for creating NDArray with or without copying.</Description>
+    <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
+    <Copyright>2019 © SciSharp STACK Team</Copyright>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <PackageReleaseNotes></PackageReleaseNotes>
+    <AssemblyVersion>0.20.1.0</AssemblyVersion>
+    <FileVersion>0.20.1.0</FileVersion>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
+    <PackageLicenseUrl></PackageLicenseUrl>
+    <LangVersion>7.3</LangVersion>
+    <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
+    <PackageId>NumSharp.Bitmap</PackageId>
+    <Product>NumSharp.Bitmap</Product>
+    <Company>SciSharp STACK</Company>
+    <RootNamespace>NumSharp.Bitmap</RootNamespace>
+    <Version>0.20.1</Version>
+    <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SignAssembly>false</SignAssembly>
+    <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
+    <DefineConstants>NETFRAMEWORK</DefineConstants>
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netstandard\d'))">
+    <DefineConstants>NETSTANDARD;CPU_PARALLEL;BIT64</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
+    <DefineConstants>NETCORE</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile></DocumentationFile>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DefineConstants>TRACE;DEBUG;BIT64</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile></DocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DocumentationFile />
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
+    <PackageReference Include="System.Memory" Version="4.5.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="2.0.1" />
+    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
+    <PackageReference Include="System.Memory" Version="4.5.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="NewFolder\**" />
+    <EmbeddedResource Remove="NewFolder\**" />
+    <None Remove="NewFolder\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
+    <Compile Remove="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
+    <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
+    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
+    <Compile Remove="Operations\NdArray.ElementsWise.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="NumSharp.Bitmap.csproj.DotSettings" />
+    <None Remove="NumSharp.Image.csproj.DotSettings" />
+    <None Remove="Open.snk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+  <Target Name="LogDebugInfo">
+    <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NumSharp.Core\NumSharp.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+  </ItemGroup>
+
+</Project>    
