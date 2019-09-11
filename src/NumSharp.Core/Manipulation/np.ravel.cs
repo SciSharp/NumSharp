@@ -14,7 +14,7 @@ namespace NumSharp
         {
             //TODO! when slice reshaping is done, prevent this cloning.
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (a.Shape.IsSliced)
+            if (!a.Shape.IsContiguous)
                 return new NDArray(new UnmanagedStorage(a.Storage.CloneData(), Shape.Vector(a.size)));
 
             return a.reshape(Shape.Vector(a.size));
