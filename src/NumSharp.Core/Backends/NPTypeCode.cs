@@ -5,7 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Utilities;
 
-namespace NumSharp.Backends
+// ReSharper disable once CheckNamespace
+namespace NumSharp
 {
     /// <summary>
     ///     Represents all available types in numpy.
