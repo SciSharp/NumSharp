@@ -4,12 +4,45 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using NumSharp.Backends;
 
 namespace NumSharp.Utilities
 {
     public static class Arrays
     {
+        /// <summary>
+        ///     Slice an array.
+        /// </summary>
+        /// <remarks>Supports negative <paramref name="end"/> index</remarks>
+        public static T[] Slice<T>(this T[] source, int start, int end)
+        {
+            // Handles negative ends.
+            if (end < 0) end = source.Length + end;
+            var len = end - start;
+
+            // Return new array.
+            var res = new T[len];
+            Parallel.For(0, len, i => res[i] = source[i + start]);
+            return res;
+        }
+
+        /// <summary>
+        ///     Slice an array.
+        /// </summary>
+        /// <remarks>Supports negative <paramref name="end"/> index</remarks>
+        public static T[] Slice<T>(this T[] source, long start, long end)
+        {
+            // Handles negative ends.
+            if (end < 0) end = source.Length + end;
+            var len = end - start;
+
+            // Return new array.
+            var res = new T[len];
+            Parallel.For(0, len, i => res[i] = source[i + start]);
+            return res;
+        }
+
         /// <summary>
         ///     Inserts item into a specific index.
         /// </summary>
