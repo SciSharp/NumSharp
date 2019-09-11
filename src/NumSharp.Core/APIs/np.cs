@@ -60,12 +60,12 @@ namespace NumSharp
 
         public static NumPyRandom random { get; } = new NumPyRandom();
 
-        // np.nan
+        #region Constants
+
         public static double nan => double.NaN;
         public static double NAN => double.NaN;
         public static double NaN => double.NaN;
         public static double pi => Math.PI;
-        
         public static double e => Math.E;
         public static double euler_gamma => 0.57721566490153286060651209008240243d;
         public static double inf => double.PositiveInfinity;
@@ -75,7 +75,7 @@ namespace NumSharp
         public static double PINF => double.PositiveInfinity;
         public static double Infinity => double.PositiveInfinity;
         public static double infinity => double.PositiveInfinity;
-        
-        #region Constants
+
+        #endregion
     }
 }
