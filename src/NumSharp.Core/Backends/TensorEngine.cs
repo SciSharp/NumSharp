@@ -54,6 +54,12 @@ namespace NumSharp
         public abstract NDArray Sqrt(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Log(in NDArray nd, Type dtype);
         public abstract NDArray Log(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log2(in NDArray nd, Type dtype);
+        public abstract NDArray Log2(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log10(in NDArray nd, Type dtype);
+        public abstract NDArray Log10(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log1p(in NDArray nd, Type dtype);
+        public abstract NDArray Log1p(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Exp(in NDArray nd, Type dtype);
         public abstract NDArray Exp(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Tan(in NDArray nd, Type dtype);
