@@ -62,5 +62,20 @@ namespace NumSharp
 
         // np.nan
         public static double nan => double.NaN;
+        public static double NAN => double.NaN;
+        public static double NaN => double.NaN;
+        public static double pi => Math.PI;
+        
+        public static double e => Math.E;
+        public static double euler_gamma => 0.57721566490153286060651209008240243d;
+        public static double inf => double.PositiveInfinity;
+        public static double infty => double.PositiveInfinity;
+        public static double Inf => double.PositiveInfinity;
+        public static double NINF => double.NegativeInfinity;
+        public static double PINF => double.PositiveInfinity;
+        public static double Infinity => double.PositiveInfinity;
+        public static double infinity => double.PositiveInfinity;
+        
+        #region Constants
     }
 }
