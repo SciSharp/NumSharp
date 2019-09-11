@@ -31,12 +31,6 @@ namespace NumSharp.UnitTest.Utilities
         }
 
         [TestMethod]
-        public void Create_4()
-        {
-            Arrays.Create(NPTypeCode.NDArray, 1000).Should().BeOfType<NDArray[]>().And.HaveCount(1000);
-        }
-
-        [TestMethod]
         public void Insert_0()
         {
             int index = 0;

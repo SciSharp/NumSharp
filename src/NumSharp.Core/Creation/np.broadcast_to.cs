@@ -19,8 +19,8 @@ namespace NumSharp
         /// <summary>
         ///     Broadcast an array to a new shape.
         /// </summary>
-        /// <param name="lhs">An array to broadcast.</param>
-        /// <param name="rhs">An array to broadcast.</param>
+        /// <param name="from">The NDArray to broadcast.</param>
+        /// <param name="against">The shape to broadcast against.</param>
         /// <returns>These arrays are views on the original arrays. They are typically not contiguous. Furthermore, more than one element of a broadcasted array may refer to a single memory location. If you need to write to the arrays, make copies first.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_to.html</remarks>
         public static NDArray broadcast_to(NDArray from, Shape against)

@@ -80,6 +80,11 @@ namespace NumSharp
         public abstract NDArray Sinh(in NDArray nd, Type dtype);
         public abstract NDArray Sinh(in NDArray nd, NPTypeCode? typeCode = null);
 
+        public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, Type dtype);
+        public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, NPTypeCode? typeCode = null);
+        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype);
+        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode? typeCode = null);
+
         #endregion
 
         #region Logic

@@ -167,8 +167,6 @@ namespace NumSharp.Benchmark.Unmanaged
                         break;
                     case NPTypeCode.String:
                         break;
-                    case NPTypeCode.NDArray:
-                        break;
                     case NPTypeCode.Complex:
                         b = a + 1 - 1;
                         break;
