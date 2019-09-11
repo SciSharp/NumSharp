@@ -12,7 +12,6 @@ namespace NumSharp
     {
         protected internal static readonly Dictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
         {
-            {NPTypeCode.NDArray, 'O'},
             {NPTypeCode.Complex, 'c'},
             {NPTypeCode.Boolean, '?'},
             {NPTypeCode.Byte, 'b'},
@@ -185,7 +184,6 @@ namespace NumSharp
             {
                 switch (code)
                 {
-                    case NPTypeCode.NDArray: return new DType(typeof(IntPtr)); //todo! ??
 #if _REGEN
 	                %foreach all_dtypes%
 	                case NPTypeCode.#1: return new DType(typeof(#1));

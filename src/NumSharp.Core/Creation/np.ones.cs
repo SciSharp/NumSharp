@@ -78,9 +78,6 @@ namespace NumSharp
                 case NPTypeCode.Complex:
                     one = new Complex(1d, 0d);
                     break;
-                case NPTypeCode.NDArray:
-                    one = NDArray.Scalar(1, np.int32);
-                    break;
                 case NPTypeCode.String:
                     one = "1";
                     break;                

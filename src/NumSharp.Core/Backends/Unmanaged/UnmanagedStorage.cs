@@ -70,7 +70,7 @@ namespace NumSharp.Backends
         {
             get
             {
-                if (_typecode == NPTypeCode.NDArray || _typecode == NPTypeCode.String)
+                if (_typecode == NPTypeCode.String)
                 {
                     return IntPtr.Size;
                 }

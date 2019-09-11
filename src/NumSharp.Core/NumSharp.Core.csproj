@@ -93,6 +93,7 @@
 
   <ItemGroup>
     <None Remove="NumSharp.Core.csproj.DotSettings" />
+    <None Remove="Open.snk" />
     <None Remove="Operations\NdArray.ElementsWise.tt" />
     <None Include="..\..\LICENSE">
       <Pack>True</Pack>

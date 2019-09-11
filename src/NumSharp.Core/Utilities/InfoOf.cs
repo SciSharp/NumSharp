@@ -31,9 +31,6 @@ namespace NumSharp.Utilities
 
             switch (NPTypeCode)
             {
-                case NPTypeCode.NDArray:
-                    Size = IntPtr.Size;
-                    break;
                 case NPTypeCode.Boolean:
                     Size = 1;
                     break;

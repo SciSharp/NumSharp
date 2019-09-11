@@ -427,12 +427,6 @@ namespace NumSharp.Utilities
                 default:
                     throw new NotImplementedException();
 #else
-
-                case NPTypeCode.NDArray:
-                {
-                    return new NDArray[length];
-                }
-
                 case NPTypeCode.Complex:
                 {
                     return new Complex[length];
@@ -529,12 +523,6 @@ namespace NumSharp.Utilities
                 default:
                     throw new NotImplementedException();
 #else
-
-                case NPTypeCode.NDArray:
-                {
-                    return new NDArray[1] {(NDArray)value};
-                }
-
                 case NPTypeCode.Complex:
                 {
                     return new Complex[1] {(Complex)value};

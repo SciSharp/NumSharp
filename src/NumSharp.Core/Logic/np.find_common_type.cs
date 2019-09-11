@@ -451,7 +451,6 @@ namespace NumSharp
             NPTypeCode.Complex, //Complex64
             NPTypeCode.Complex, //Complex128
             //NPTypeCode.Complex, //Complex128
-            NPTypeCode.NDArray, 
             NPTypeCode.Single,
         };
         // @formatter:off — disable formatter after this line
@@ -479,7 +478,6 @@ namespace NumSharp
             (NPTypeCode.Complex, NPTypeCode.Complex.GetPriority()), //Complex64
             (NPTypeCode.Complex, NPTypeCode.Complex.GetPriority()), //Complex128
             //NPTypeCode.Complex, //Complex128
-            (NPTypeCode.NDArray, NPTypeCode.NDArray.GetPriority()),
             (NPTypeCode.Single, NPTypeCode.Single.GetPriority()),
         };
 
