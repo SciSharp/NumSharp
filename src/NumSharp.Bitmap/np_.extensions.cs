@@ -74,8 +74,13 @@ namespace NumSharp
         ///     , wraps the <see cref="BitmapData.Scan0"/> with an NDArray and call <see cref="Bitmap.UnlockBits"/> only when the NDArray will be collected by the <see cref="GC"/>.
         /// </param>
         /// <returns>An NDArray that holds the pixel data of the given bitmap</returns>
-        public static NDArray ToNDArray(this Image image, bool flat = false, bool copy = true) 
-            => ToNDArray(new System.Drawing.Bitmap(image), flat, copy);
+        public static NDArray ToNDArray(this Image image, bool flat = false, bool copy = true)
+        {
+            if (image == null)
+                throw new ArgumentNullException(nameof(image));
+
+            return ToNDArray(new System.Drawing.Bitmap(image), flat, copy);
+        }
 
         /// <summary>
         ///     Wraps given <see cref="BitmapData"/> as n <see cref="NDArray"/> without performing copy.
@@ -94,6 +99,39 @@ namespace NumSharp
 
             var nd = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height)));
             return flat ? nd : nd.reshape(1, bmpData.Height, bmpData.Width, 3);
+        }
+
+        /// <summary>
+        ///     Converts <see cref="NDArray"/> to a <see cref="Bitmap"/>. 
+        /// </summary>
+        /// <param name="nd">The <see cref="NDArray"/> to copy pixels from, <see cref="Shape"/> is ignored completely. If nd.Unsafe.Shape.IsContiguous == false then a copy is made.</param>
+        /// <param name="width">The height of the <see cref="Bitmap"/></param>
+        /// <param name="height">The width of the <see cref="Bitmap"/></param>
+        /// <returns>A <see cref="Bitmap"/></returns>
+        /// <exception cref="ArgumentException">When nd.size != width*height, which means the ndarray be turned into the given bitmap size.</exception>
+        public static unsafe Bitmap ToBitmap(this NDArray nd, int width, int height)
+        {
+            if (nd == null)
+                throw new ArgumentNullException(nameof(nd));
+
+            if (width * height != nd.size)
+                throw new ArgumentException("Given nd.size != width*height");
+
+            if (!nd.Unsafe.Shape.IsContiguous)
+                nd = nd.Clone();
+
+            var ret = new Bitmap(height, width);
+            var bitdata = ret.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+            try
+            {
+                nd.CopyTo(new UnmanagedMemoryBlock<byte>((byte*)bitdata.Scan0, bitdata.Stride * bitdata.Height));
+            }
+            finally
+            {
+                ret.UnlockBits(bitdata);
+            }
+
+            return ret;
         }
     }
 }

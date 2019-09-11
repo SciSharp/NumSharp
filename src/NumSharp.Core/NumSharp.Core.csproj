@@ -11,9 +11,10 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes></PackageReleaseNotes>
-    <AssemblyVersion>0.20.1.0</AssemblyVersion>
-    <FileVersion>0.20.1.0</FileVersion>
+    <PackageReleaseNotes>Added np.clip, np.exp2, np.expm1, nd.flatten(), np.log2, np.log10, np.log1p, np.* constants (such as np.e or np.pi).
+Optimization for all binary operators. General performance optimization. Fixed few unlikely bugs.</PackageReleaseNotes>
+    <AssemblyVersion>0.20.2.0</AssemblyVersion>
+    <FileVersion>0.20.2.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -23,14 +24,15 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.20.1</Version>
+    <Version>0.20.2</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <SignAssembly>false</SignAssembly>
+    <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <DelaySign>false</DelaySign>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
