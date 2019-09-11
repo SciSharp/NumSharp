@@ -33,7 +33,7 @@ namespace NumSharp.Backends
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (decimal)(Math.Sinh(Converts.ToDouble(*(out_addr + i))));
+                        Parallel.For(0, len, i => *(out_addr + i) = (decimal)(Math.Sinh(Converts.ToDouble(*(out_addr + i)))));
                         return @out;
 	                }
 	                default:
@@ -102,7 +102,7 @@ namespace NumSharp.Backends
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (decimal)(Math.Sinh(Converts.ToDouble(*(out_addr + i))));
+                        Parallel.For(0, len, i => *(out_addr + i) = (decimal)(Math.Sinh(Converts.ToDouble(*(out_addr + i)))));
                         return @out;
 	                }
 	                default:

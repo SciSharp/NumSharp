@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
 
 namespace NumSharp.Utilities
 {
@@ -161,16 +162,6 @@ namespace NumSharp.Utilities
         private static readonly Func<T, decimal> _toDecimal = Converts.FindConverter<T, decimal>();
 
         /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="UString"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="UString"/></param>
-        /// <returns>A <see cref="UString"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UString ToUString(T obj) => _toUString(obj);
-
-        private static readonly Func<T, UString> _toUString = Converts.FindConverter<T, UString>();
-
-        /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="String"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="String"/></param>
@@ -302,14 +293,6 @@ namespace NumSharp.Utilities
         /// <returns>A <typeparamref name="T"/></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(decimal obj) => _fromDecimal(obj);
 		private static readonly Func<decimal, T> _fromDecimal = Converts.FindConverter<decimal, T>();
-
-        /// <summary>
-        ///     Converts <see cref="UString"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="UString"/></param>
-        /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(UString obj) => _fromUString(obj);
-		private static readonly Func<UString, T> _fromUString = Converts.FindConverter<UString, T>();
 
         /// <summary>
         ///     Converts <see cref="String"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
