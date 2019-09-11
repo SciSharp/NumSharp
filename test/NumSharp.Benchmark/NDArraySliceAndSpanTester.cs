@@ -30,10 +30,10 @@ namespace NumSharp.Benchmark
         public NDArray<double> NDDoubleSlice1;
         public NDArray<double> NDDoubleSliceStep2;
 
-        private Span<double> GetFullA1Span()
-        {
-            return A1.AsSpan;
-        }
+        //private Span<double> GetFullA1Span()
+        //{
+        //    return A1.AsSpan;
+        //}
 
         private Span<double> GetPartialA1Span()
         {
@@ -106,16 +106,16 @@ namespace NumSharp.Benchmark
             }
         }
 
-        [Benchmark(Description = "C# Span<double> initialized in a for loop")]
-        public void Span1InitInForLoop()
-        {
-            var S1 = GetFullA1Span();
-            //unchecked
-            {
-                for (int idx = 0; idx < S1.Length; idx++)
-                    S1[idx] = 1.0;
-            }
-        }
+        //[Benchmark(Description = "C# Span<double> initialized in a for loop")]
+        //public void Span1InitInForLoop()
+        //{
+        //    var S1 = GetFullA1Span();
+        //    //unchecked
+        //    {
+        //        for (int idx = 0; idx < S1.Length; idx++)
+        //            S1[idx] = 1.0;
+        //    }
+        //}
 
         [Benchmark(Description = "C# Span<double>(1:-1) initialized in a for loop")]
         public void Span2InitInForLoop()
@@ -141,19 +141,19 @@ namespace NumSharp.Benchmark
         }
 
 
-        [Benchmark(Description = "C# Span<double> initialized in a for loop via array copy")]
-        public void Span1AsArrayInitInForLoop()
-        {
-            var S1 = GetFullA1Span();
-            var S1Copy = S1.ToArray();
-            //unchecked
-            {
-                for (int idx = 0; idx < S1Copy.Length; idx++)
-                    S1Copy[idx] = 1.0;
-                for (int idx = 0; idx < S1Copy.Length; idx++)
-                    S1[idx] = S1Copy[idx];
-            }
-        }
+        //[Benchmark(Description = "C# Span<double> initialized in a for loop via array copy")]
+        //public void Span1AsArrayInitInForLoop()
+        //{
+        //    var S1 = GetFullA1Span();
+        //    var S1Copy = S1.ToArray();
+        //    //unchecked
+        //    {
+        //        for (int idx = 0; idx < S1Copy.Length; idx++)
+        //            S1Copy[idx] = 1.0;
+        //        for (int idx = 0; idx < S1Copy.Length; idx++)
+        //            S1[idx] = S1Copy[idx];
+        //    }
+        //}
 
         [Benchmark(Description = "C# Span<double>(1:-1) initialized in a for loop via array copy")]
         public void Span2AsArrayInitInForLoop()
