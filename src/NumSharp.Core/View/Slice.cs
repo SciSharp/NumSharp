@@ -110,6 +110,9 @@ namespace NumSharp
 
         private void Parse(string slice_notation)
         {
+            if (string.IsNullOrEmpty(slice_notation))
+                throw new ArgumentException("Slice notation expected, got empty string or null");
+
             if (slice_notation == "...")
             {
                 Start = 0;
@@ -118,7 +121,7 @@ namespace NumSharp
                 IsEllipsis = true;
                 return;
             }
-            else if (slice_notation == "")
+            if (slice_notation == "" || slice_notation == "newaxis" || slice_notation == "np.newaxis")
             {
                 Start = 0;
                 Stop = 0;
@@ -127,8 +130,6 @@ namespace NumSharp
                 return;
             }
 
-            if (string.IsNullOrEmpty(slice_notation))
-                throw new ArgumentException("Slice notation expected, got empty string or null");
             var match = Regex.Match(slice_notation, @"^\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*\d+)?)?\s*$|^\s*([+-]?\s*\d+)\s*$");
             if (!match.Success)
                 throw new ArgumentException("Invalid slice notation");

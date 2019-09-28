@@ -254,17 +254,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Data length of every dimension
+        ///     Data length of every dimension
         /// </summary>
         public int[] shape => Storage.Shape.Dimensions;
 
         /// <summary>
-        /// Dimension count
+        ///     Dimension count
         /// </summary>
         public int ndim => Storage.Shape.NDim;
 
         /// <summary>
-        /// Total of elements
+        ///     Total of elements
         /// </summary>
         public int size => Storage.Shape.Size;
 
