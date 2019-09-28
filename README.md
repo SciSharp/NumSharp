@@ -27,7 +27,7 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
 ### Install NumSharp in NuGet
-```
+```sh
 PM> Install-Package NumSharp
 ```
 
@@ -84,7 +84,7 @@ while (iter.HasNext())
     int val = iter.MoveNext();
 
     //write
-    iter.MoveNextReference() = 123; //set value to the next value
+    iter.MoveNextReference() = 123; //set value to the next val
     //note that setting is not supported when calling AsIterator<T>() where T is not the dtype of the ndarray.
 }
 ```
@@ -106,4 +106,8 @@ C: \> dotnet NumSharp.Benchmark.dll nparange
 You might also be interested in NumSharp's sister project [Numpy.NET](https://github.com/SciSharp/Numpy.NET) which provides a more whole implementation of numpy by using [pythonnet](https://github.com/pythonnet/pythonnet) and [behind-the-scenes deployment of python](https://github.com/henon/Python.Included) ([read more](https://henon.wordpress.com/2019/06/05/using-python-libraries-in-net-without-a-python-installation/)).
 
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
-Welcome to fork and pull request to add more APIs, and make reference list longer.
+
+### Regen Templating
+Our library contains over 150,000 lines of generated code, mostly for handling different data types without hurting performance.<br>
+The templates can be recognized with `#if _REGEN` blocks and are powered by [Regen Templating Engine](https://github.com/Nucs/Regen).
+Regen is an external tool (Visual studio extension, [download here](https://github.com/Nucs/Regen/tree/master/releases)) that are generated on demand.
