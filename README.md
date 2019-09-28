@@ -36,7 +36,7 @@ PM> Install-Package NumSharp
 using NumSharp;
 
 var nd = np.full(5, 12); //[5, 5, 5 .. 5]
-nd = np.zeros(); //[0, 0, 0 .. 0]
+nd = np.zeros(12); //[0, 0, 0 .. 0]
 nd = np.arange(12); //[0, 1, 2 .. 11]
 
 // create a matrix
