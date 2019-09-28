@@ -290,6 +290,19 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The transposed array. <br></br>
+        ///     Same as self.transpose().
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html</remarks>
+        public NDArray T
+        {
+            get
+            {
+                return transpose();
+            }
+        }
+
         protected internal Shape Shape
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
