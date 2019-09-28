@@ -20,7 +20,7 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 * [NDArray Slicing](https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html) and nested/recusive slicing (`nd["-1, ::2"]["1::3, :, 0"]`)
 * Axis iteration and support in all of our implemented functions.
 * Full and precise (to numpy) automatic type resolving and conversion (upcasting, downcasting and other cases)
-* Non-copy - most cases, similarly to numpy, do not perform copying but returns a view instead.
+* Non-copy - most cases, similarly to numpy, does not perform copying but returns a view instead.
 * Almost non-effort copy-pasting numpy code from python to C#.
 
 ### Implemented APIs
