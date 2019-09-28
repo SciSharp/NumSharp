@@ -108,6 +108,6 @@ You might also be interested in NumSharp's sister project [Numpy.NET](https://gi
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 
 ### Regen Templating
-Our library contains over 150,000 lines of generated code, mostly for handling different data types without hurting performance.<br>
-The templates can be recognized with `#if _REGEN` blocks and are powered by [Regen Templating Engine](https://github.com/Nucs/Regen).
-Regen is an external tool (Visual studio extension, [download here](https://github.com/Nucs/Regen/tree/master/releases)) that are generated on demand.
+Our library contains over 150,000 lines of repetitive generated code, mostly for handling different data types without hurting performance.<br>
+The templates can be recognized with `#if _REGEN` blocks and are powered by [Regen Templating Engine](https://github.com/Nucs/Regen).<br>
+Regen is a powerful external tool (Visual studio extension, [download here](https://github.com/Nucs/Regen/tree/master/releases)) that generates on demand based on a C#-like `regen-lang`.
