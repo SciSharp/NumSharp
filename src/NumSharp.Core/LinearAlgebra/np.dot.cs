@@ -19,17 +19,7 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
-        public static NDArray dot(NDArray a, NDArray b)
+        public static NDArray dot(in NDArray a, in NDArray b)
             => a.TensorEngine.Dot(a, b);
-
-        /// <summary>
-        ///     Matrix product of two arrays.
-        /// </summary>
-        /// <param name="x1">Lhs Input array, scalars not allowed.</param>
-        /// <param name="x2">Rhs Input array, scalars not allowed.</param>
-        /// <returns>The matrix product of the inputs. This is a scalar only when both x1, x2 are 1-d vectors.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
-        public static NDArray matmul(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Matmul(x1, x2);
     }
 }
