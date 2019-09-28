@@ -40,6 +40,7 @@ nd = np.zeros(12); //[0, 0, 0 .. 0]
 nd = np.arange(12); //[0, 1, 2 .. 11]
 
 // create a matrix
+nd = np.zeros((3, 4)); //[0, 0, 0 .. 0]
 nd = np.arange(12).reshape(3, 4);
 
 // access data by index
