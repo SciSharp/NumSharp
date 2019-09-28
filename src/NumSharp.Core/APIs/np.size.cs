@@ -16,10 +16,13 @@ namespace NumSharp
             if (a == null)
                 throw new ArgumentNullException(nameof(a));
 
-            if (axis == null || axis == -1)
+            if (!axis.HasValue)
                 return a.size;
 
-            return a.shape[axis.Value];
+            if (axis.Value <= -1) 
+                axis = a.ndim + axis.Value;
+
+            return a.Shape.dimensions[axis.Value];
         }
 
         //based on:
