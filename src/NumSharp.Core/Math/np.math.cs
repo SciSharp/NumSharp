@@ -45,12 +45,6 @@ namespace NumSharp
             => a.convolve(v, mode);
 
         /// <summary>
-        /// Array elements raised to given powers, element-wise.
-        /// </summary>
-        public static NDArray power(in NDArray x, ValueType y)
-            => x.TensorEngine.Power(x, y);
-
-        /// <summary>
         ///     Return the product of array elements over a given axis.
         /// </summary>
         /// <param name="a">Input data.</param>
