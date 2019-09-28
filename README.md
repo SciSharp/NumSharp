@@ -8,7 +8,9 @@ NumSharp is the fundamental package needed for scientific computing with C#.<br>
 [![NuGet](https://img.shields.io/nuget/dt/NumSharp.svg)](https://www.nuget.org/packages/NumSharp)
 [![Badge](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu/#/en_US)
 
-Is it difficult to translate python machine learning code into C#? Because too many functions can’t be found in the corresponding code in the .Net SDK. NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# code. Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
+Is it difficult to translate python machine learning code into C#? Because too many functions can’t be found in the corresponding code in the .NET SDK. 
+NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# code.
+Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
 
 ![comparision](docfx_project/images/python-csharp-comparision.png)
 
@@ -19,9 +21,9 @@ Is it difficult to translate python machine learning code into C#? Because too m
 * Axis iteration and support in all of our implemented functions.
 * Full and precise (to numpy) automatic type resolving and conversion (upcasting, downcasting and other cases)
 * Non-copy - most cases, similarly to numpy, do not perform copying but returns a view instead.
+* Almost non-effort copy-pasting numpy code from python to C#.
 
 ### Implemented APIs
-
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
 ### Install NumSharp in NuGet
@@ -91,7 +93,7 @@ while (iter.HasNext())
 C: \> dotnet NumSharp.Benchmark.dll nparange
 ```
 
-NumSharp is referenced by:
+### NumSharp is referenced by
 * [dotnet/ML.NET](https://github.com/dotnet/machinelearning)
 * [ScipSharp/TensorFlow.NET](https://github.com/SciSharp/TensorFlow.NET)
 * [ScipSharp/Gym.NET](https://github.com/SciSharp/Gym.NET)
@@ -104,11 +106,3 @@ You might also be interested in NumSharp's sister project [Numpy.NET](https://gi
 
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 Welcome to fork and pull request to add more APIs, and make reference list longer.
-
-<img src="https://avatars3.githubusercontent.com/u/44989469?s=200&v=4" width="80">
-
-Join us on [Gitter](https://gitter.im/sci-sharp/community)
-
-Scan QR code to join TIM group:
-
-![SciSharp STACK](https://raw.githubusercontent.com/SciSharp/TensorFlow.NET/master/docs/TIM.jpg)
