@@ -12,7 +12,7 @@ Is it difficult to translate python machine learning code into C#? Because too m
 NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# code.
 Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
 
-![comparision](docfx_project/images/python-csharp-comparision.png)
+[![comparision](docfx_project/images/python-csharp-comparision.png)](https://raw.githubusercontent.com/SciSharp/NumSharp/master/docfx_project/images/python-csharp-comparision.png)
 
 ### Bold Features
 * Use of Unmanaged Memory and fast unsafe algorithms.
