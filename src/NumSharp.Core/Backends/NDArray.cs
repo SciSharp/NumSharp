@@ -25,6 +25,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Generic;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -429,8 +430,20 @@ namespace NumSharp
         public NDArray view(Type dtype = null)
         {
             //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
-            return dtype == null ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
+            return dtype == null || dtype == this.dtype ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
         }
+
+        /// <summary>
+        ///     New view of array with the same data.
+        /// </summary>
+        /// <param name="dtype">
+        ///     Data-type descriptor of the returned view, e.g., float32 or int16. The default, None, results in the view having the same data-type as a.
+        ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
+        /// </param>
+        /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.view.html</remarks>
+        public NDArray<T> view<T>() where T : unmanaged 
+            => view(typeof(T)).AsGeneric<T>();
 
         #region Getters
 
