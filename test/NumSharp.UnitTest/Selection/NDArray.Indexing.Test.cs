@@ -656,23 +656,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] {12, 13, 14}, xS2.ToArray<int>());
             AssertAreEqual(new int[] {0, 1, 2, 12, 13, 14, 6, 7, 8}, x.ToArray<int>());
         }
-
-        [TestMethod]
-        public void Transpose10x10()
-        {
-            new Action(() =>
-            {
-                var array = np.arange(100).reshape(3, 3, 3);
-                for (var i = 0; i < array.shape[0]; i++)
-                {
-                    for (var j = 0; j < array.shape[1]; j++)
-                    {
-                        Console.WriteLine(array[i, j].ToString());
-                    }
-                }
-            }).Should().NotThrow("It has to run completely.");
-        }
-
+        
         /// <summary>
         /// Based on issue https://github.com/SciSharp/NumSharp/issues/293
         /// </summary>

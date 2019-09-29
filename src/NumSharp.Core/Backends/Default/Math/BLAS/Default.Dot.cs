@@ -75,7 +75,6 @@ namespace NumSharp.Backends
             throw new NotSupportedException();
         }
 
-
         private static int[] ExpandStartDim(Shape shape)
         {
             var ret = new int[shape.NDim + 1];

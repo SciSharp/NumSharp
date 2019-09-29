@@ -103,7 +103,10 @@ namespace NumSharp
 
         public abstract NDArray CreateNDArray(Shape shape, Type dtype = null, Array buffer = null, char order = 'C');
         public abstract NDArray CreateNDArray(Shape shape, Type dtype = null, IArraySlice buffer = null, char order = 'C');
-        public abstract NDArray Transpose(NDArray nd, int[] axes = null);
+        public abstract NDArray Transpose(in NDArray nd, int[] premute = null);
+        public abstract NDArray SwapAxes(in NDArray nd, int axis1, int axis2);
+        public abstract NDArray MoveAxis(in NDArray nd, int[] source, int[] destinition);
+        public abstract NDArray RollAxis(in NDArray nd, int axis, int start = 0);
         public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
         public abstract NDArray Cast(NDArray x, NPTypeCode dtype, bool copy);
 
