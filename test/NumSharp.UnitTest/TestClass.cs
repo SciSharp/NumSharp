@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest
 {
@@ -63,6 +64,39 @@ namespace NumSharp.UnitTest
             {
                 yield return (int) tup[i];
             }
+        }
+
+        private static string _tostring(object obj)
+        {
+            switch (obj)
+            {
+                case NDArray nd:
+                    return nd.ToString(false);
+                case Array arr:
+                    if (arr.Rank!=1 || arr.GetType().GetElementType()?.IsArray == true)
+                        arr = Arrays.Flatten(arr);
+                    var objs = toObjectArray(arr);
+                    return $"[{string.Join(", ", objs.Select(_tostring))}]";
+                default:
+                    return obj?.ToString() ?? "null";
+            }
+
+            object[] toObjectArray(Array arr)
+            {
+                var len = arr.LongLength;
+                var ret = new object[len];
+                for (long i = 0; i < len; i++)
+                {
+                    ret[i] = arr.GetValue(i);
+                }
+
+                return ret;
+            }
+        }
+
+        public static void print(object obj)
+        {
+            Console.WriteLine(_tostring(obj));
         }
     }
 }
