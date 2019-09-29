@@ -1297,7 +1297,7 @@ namespace NumSharp.Backends
             if (typeof(T) != _dtype)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (Shape.IsSliced || Shape.IsBroadcasted)
+            if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
                 MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
