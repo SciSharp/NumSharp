@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -151,14 +153,24 @@ namespace NumSharp.Backends
                 }
             }
 
-            var ret = nd.Clone();
+            UnmanagedStorage src;
+            if (nd.Shape.IsContiguous)
+                src = nd.Storage.Alias(nd.Shape.Clone());
+            else
+                src = nd.Storage.Clone();
+
             for (i = 0; i < n; i++)
             {
-                ret.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
-                ret.Shape.strides[i] = nd.Shape.strides[permutation[i]];
+                src.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
+                src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
             }
 
-            return new NDArray(ret.Storage);
+            //Linear copy of all the sliced items.
+
+            var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
+            MultiIterator.Assign(dst, src);
+
+            return new NDArray(dst);
         }
     }
 }
