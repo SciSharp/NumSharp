@@ -47,5 +47,49 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tanh.html</remarks>
         public static NDArray tanh(in NDArray x, Type outType) 
             => x.TensorEngine.Tanh(x, outType);
+
+        /// <summary>
+        ///     Compute hyperbolic tangent element-wise. <br></br>
+        ///     Equivalent to np.sinh(x)/np.cosh(x) or -1j * np.tan(1j*x).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tanh.html</remarks>
+        public static NDArray arctan(in NDArray x, NPTypeCode? outType = null)
+            => x.TensorEngine.ATan(x, outType);
+
+        /// <summary>
+        ///     Compute hyperbolic tangent element-wise. <br></br>
+        ///     Equivalent to np.sinh(x)/np.cosh(x) or -1j * np.tan(1j*x).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tanh.html</remarks>
+        public static NDArray arctan(in NDArray x, Type outType)
+            => x.TensorEngine.ATan(x, outType);
+
+        /// <summary>
+        ///     Compute hyperbolic tangent element-wise. <br></br>
+        ///     Equivalent to np.sinh(x)/np.cosh(x) or -1j * np.tan(1j*x).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tanh.html</remarks>
+        public static NDArray arctan2(in NDArray y, in NDArray x, NPTypeCode? outType = null)
+            => x.TensorEngine.ATan2(y, x, outType);
+
+        /// <summary>
+        ///     Compute hyperbolic tangent element-wise. <br></br>
+        ///     Equivalent to np.sinh(x)/np.cosh(x) or -1j * np.tan(1j*x).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tanh.html</remarks>
+        public static NDArray arctan2(in NDArray y, in NDArray x, Type outType)
+            => x.TensorEngine.ATan2(y, x, outType);
     }
 }
