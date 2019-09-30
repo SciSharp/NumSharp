@@ -1,6 +1,6 @@
 ﻿namespace NumSharp
 {
-    public class IncorrectShapeException : System.Exception
+    public class IncorrectShapeException : NumSharpException
     {
         public IncorrectShapeException() : base("This method does not work with this shape or was not already implemented.") { }
 
