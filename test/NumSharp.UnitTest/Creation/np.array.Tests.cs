@@ -1,6 +1,7 @@
 ﻿using System;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest.Utilities;
 using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Creation
@@ -39,7 +40,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var v = np.array((Array)new int[,] {{1, 2, 3, 4}, {5, 6, 7, 8}});
 
-            v.shape.Should().ContainInOrder(2,4);
+            v.shape.Should().ContainInOrder(2, 4);
             v.size.Should().Be(8);
         }
 
@@ -118,11 +119,40 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [TestMethod]
-        public void dev()
+        public void Arrays_Concat()
         {
             var a = new int[] {1, 2, 3};
             var b = new int[] {4, 5, 6};
             var r = Arrays.Concat(a, b);
+            r.Should().ContainInOrder(1, 2, 3, 4, 5, 6);
+        }
+
+        [TestMethod]
+        public void Array_Copy()
+        {
+            var arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            np.array(arr, copy: true).Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
+            np.array(arr, copy: false).Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
+        }
+
+        [TestMethod]
+        public void Array_NonCopy()
+        {
+            var arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
+            var nd = np.array(arr, copy: false);
+            nd.Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
+            arr[0, 2] = 0;
+            nd[0, 2].Should().BeOfValues(0);
+        }
+
+        [TestMethod]
+        public void Array_Jagged()
+        {
+            var arr = new int[][] {new int[] {1, 2, 3}, new int[] {4, 5, 6}};
+            var nd = np.array(arr);
+            nd.Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
+            arr[0][2] = 0;
+            nd[0, 2].Should().BeOfValues(3);
         }
     }
 }

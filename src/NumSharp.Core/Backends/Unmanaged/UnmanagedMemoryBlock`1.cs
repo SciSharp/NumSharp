@@ -108,6 +108,8 @@ namespace NumSharp.Backends.Unmanaged
 
         #region Static
 
+        #region FromArray
+
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedMemoryBlock<T> FromArray(T[] arr)
         {
@@ -128,6 +130,324 @@ namespace NumSharp.Backends.Unmanaged
 
             return ret;
         }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,,,] arr)
+        {
+            return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        public static UnmanagedMemoryBlock<T> FromArray(T[,,,,,,,,,,,,,,,] arr, bool copy)
+        {
+            if (!copy)
+                return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(arr, GCHandleType.Pinned), arr.Length);
+
+            var ret = new UnmanagedMemoryBlock<T>(arr.Length);
+            fixed (T* arrptr = arr)
+            {
+                new UnmanagedMemoryBlock<T>(arrptr, arr.Length).CopyTo(ret);
+            }
+
+            return ret;
+        }
+
+        #endregion
 
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedMemoryBlock<T> FromBuffer(byte[] arr)
@@ -177,7 +497,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(count);
-            new UnmanagedMemoryBlock<T>((T*) address, count).CopyTo(ret);
+            new UnmanagedMemoryBlock<T>((T*)address, count).CopyTo(ret);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
             return ret;
         }
@@ -287,7 +607,7 @@ namespace NumSharp.Backends.Unmanaged
                 ulong i = 0;
                 for (; i < (length & ~7UL); i += 8)
                 {
-                    *(addr + (i   )) = value;
+                    *(addr + (i)) = value;
                     *(addr + (i + 1)) = value;
                     *(addr + (i + 2)) = value;
                     *(addr + (i + 3)) = value;
@@ -345,7 +665,7 @@ namespace NumSharp.Backends.Unmanaged
                 ulong i = 0;
                 for (; i < (length & ~7UL); i += 8)
                 {
-                    *(addr + (i   )) = value;
+                    *(addr + (i)) = value;
                     *(addr + (i + 1)) = value;
                     *(addr + (i + 2)) = value;
                     *(addr + (i + 3)) = value;
