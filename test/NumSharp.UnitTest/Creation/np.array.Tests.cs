@@ -45,6 +45,24 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [TestMethod]
+        public void nparray_1d_typeless_knowntype()
+        {
+            var v = np.array(new int[] {1, 2, 3, 4, 5, 6, 7, 8});
+
+            v.shape.Should().ContainInOrder(8);
+            v.size.Should().Be(8);
+        }
+
+        [TestMethod]
+        public void nparray_3d_jagged_knowntype()
+        {
+            var v = np.array(new int[,] {{1, 2, 3, 4}, {5, 6, 7, 8}});
+
+            v.shape.Should().ContainInOrder(2, 4);
+            v.size.Should().Be(8);
+        }
+
+        [TestMethod]
         public void nparray_3d_typeless()
         {
             // @formatter:off — disable formatter after this line
