@@ -31,5 +31,23 @@ namespace NumSharp.UnitTest.Manipulation
                 .BeOfValues(0, 1, 2, 3, 4, 5)
                 .And.BeShaped(2, 1, 3);
         }
+
+        [TestMethod]
+        public void Case4()
+        {
+            var nd = np.arange(12).reshape(6, 2);
+            var slice = nd["::2, :"];
+            var trans = slice.transpose();
+            trans[0].Should().BeOfValues(0,4,8).And.BeShaped(3);
+        }
+
+
+        [TestMethod]
+        public void Case5()
+        {
+            var nd = np.broadcast_arrays(np.array(1), np.arange(9).reshape(3,3)).Lhs;
+            var trans = nd.transpose();
+            trans[0].Should().AllValuesBe(1).And.BeShaped(3);
+        }
     }
 }
