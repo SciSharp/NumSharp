@@ -75,7 +75,7 @@ namespace NumSharp.Backends
                 return Clone();
 
             //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true));
+            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true, true));
         }
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace NumSharp.Backends
                 return Clone();
 
             //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true));
+            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
         }
 
         /// <summary>
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
                 return this;
 
             //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true));
+            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true, true));
         }
 
         /// <summary>
@@ -134,7 +134,7 @@ namespace NumSharp.Backends
                 return this;
 
             //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true));
+            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
         }
 
         /// <summary>
@@ -191,7 +191,7 @@ namespace NumSharp.Backends
         ///     Perform a complete copy of this <see cref="UnmanagedStorage"/> and <see cref="InternalArray"/>.
         /// </summary>
         /// <remarks>If shape is sliced, discards any slicing properties but copies only the sliced data</remarks>
-        public UnmanagedStorage Clone() => new UnmanagedStorage(CloneData(), _shape.Clone(true, true));
+        public UnmanagedStorage Clone() => new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true));
 
         object ICloneable.Clone() => Clone();
 
