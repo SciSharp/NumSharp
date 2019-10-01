@@ -1,11 +1,12 @@
-# NumSharp
+[![NumSharp](docs/images/numsharp.logo.png)](docs/images/numsharp.logo.png)
+
 [![NuGet](https://img.shields.io/nuget/dt/NumSharp.svg)](https://www.nuget.org/packages/NumSharp)
 [![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sci-sharp/community)
 [![AppVeyor](https://ci.appveyor.com/api/projects/status/bmaauxd9rx5lsq9i?svg=true)](https://ci.appveyor.com/project/Haiping-Chen/numsharp)
 [![codecov](https://codecov.io/gh/SciSharp/NumSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SciSharp/NumSharp)
 [![Badge](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu/#/en_US)
 
-[NumPy](https://github.com/numpy/numpy) port to C# targetting .NET Standard.<a href="http://scisharpstack.org"><img src="https://github.com/SciSharp/SciSharp/blob/master/art/scisharp_badge.png" width="200" height="200" align="right" /></a><br>
+**NumSharp** (NS) is a [NumPy](https://github.com/numpy/numpy) port to C# targetting .NET Standard.<a href="http://scisharpstack.org"><img src="https://github.com/SciSharp/SciSharp/blob/master/art/scisharp_badge.png" width="200" height="200" align="right" /></a><br>
 NumSharp is the fundamental package needed for scientific computing with C#.<br>
 
 Is it difficult to translate python machine learning code into C#? Because too many functions can’t be found in the corresponding code in the .NET SDK. 
