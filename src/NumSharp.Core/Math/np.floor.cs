@@ -6,23 +6,24 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Compute tangent element-wise. <br></br>
-        ///     Equivalent to np.sin(x)/np.cos(x) element-wise.
+        ///     Return the floor of the input, element-wise. <br></br>
+        ///     The floor of the scalar x is the largest integer i, such that i <= x. It is often denoted as \lfloor x \rfloor.
         /// </summary>
-        /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
+        /// <param name="x">Input array</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
-        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tan.html</remarks>
+        /// <returns>The floor of each element in x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.floor.html</remarks>
         public static NDArray floor(in NDArray x, NPTypeCode? outType = null)
             => x.TensorEngine.Floor(x, outType);
 
         /// <summary>
-        ///     Trigonometric sine, element-wise.
+        ///     Return the floor of the input, element-wise. <br></br>
+        ///     The floor of the scalar x is the largest integer i, such that i <= x. It is often denoted as \lfloor x \rfloor.
         /// </summary>
-        /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
+        /// <param name="x">Input array</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
-        /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.tan.html</remarks>
+        /// <returns>The floor of each element in x. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.floor.html</remarks>
         public static NDArray floor(in NDArray x, Type outType) 
             => x.TensorEngine.Floor(x, outType);
     }
