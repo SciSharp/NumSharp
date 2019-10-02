@@ -29,6 +29,8 @@ namespace NumSharp
         public static NDArray mod(in NDArray x1, in NDArray x2)
             => x1.TensorEngine.Mod(x1, x2);
 
+        public static NDArray mod(in NDArray x1, in float x2)
+            => x1.TensorEngine.Mod(x1, x2);
 
         /// <summary>
         /// Returns the discrete, linear convolution of two one-dimensional sequences.

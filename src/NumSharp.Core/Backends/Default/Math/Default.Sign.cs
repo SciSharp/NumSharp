@@ -77,7 +77,7 @@ namespace NumSharp.Backends
 	                case NPTypeCode.UInt64:
 	                {
                         var out_addr = (ulong*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToUInt64(Math.Sign(*(out_addr + i))));
+                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToUInt64(Math.Sign((long)*(out_addr + i))));
                         return @out;
 	                }
 	                case NPTypeCode.Char:
