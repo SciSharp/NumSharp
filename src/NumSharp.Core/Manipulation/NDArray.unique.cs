@@ -9,6 +9,16 @@ namespace NumSharp
 {
     public partial class NDArray
     {
+        /// <summary>
+        ///     Find the unique elements of an array.<br></br>
+        ///     
+        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
+        ///     * the indices of the input array that give the unique values<br></br>
+        ///     * the indices of the unique array that reconstruct the input array<br></br>
+        ///     * the number of times each unique value comes up in the input array<br></br>
+        /// </summary>
+        /// <returns>The sorted unique values.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
         public NDArray unique()
         {
             switch (typecode)
@@ -37,15 +47,15 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Find the unique elements of an array.
-        /// 
-        /// Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:
-        /// * the indices of the input array that give the unique values
-        /// * the indices of the unique array that reconstruct the input array
-        /// * the number of times each unique value comes up in the input array
+        ///     Find the unique elements of an array.<br></br>
+        ///     
+        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
+        ///     * the indices of the input array that give the unique values<br></br>
+        ///     * the indices of the unique array that reconstruct the input array<br></br>
+        ///     * the number of times each unique value comes up in the input array<br></br>
         /// </summary>
-        /// <typeparam name="T"></typeparam>
         /// <returns></returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
         protected NDArray unique<T>() where T : unmanaged
         {
             unsafe
@@ -55,12 +65,12 @@ namespace NumSharp
                 {
                     var src = (T*)this.Address;
                     int len = this.size;
-                    for (int i = 0; i < len; i++) //we do not use Parellel.For because of the internal lock
+                    for (int i = 0; i < len; i++) //we do not use Parellel.For to retain order like numpy does.
                         hashset.Add(src[i]);
 
-                    var ret = new NDArray(typeof(T), Shape.Vector(hashset.Count));
-                    Hashset<T>.CopyTo(hashset, (ArraySlice<T>)ret.Array);
-                    return ret;
+                    var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
+                    Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
+                    return dst;
                 }
                 else
                 {
@@ -68,9 +78,10 @@ namespace NumSharp
                     var flat = this.flat;
                     var src = (T*)flat.Address;
                     Func<int, int> getOffset = flat.Shape.GetOffset_1D;
-                    Parallel.For(0, len, i => hashset.Add(src[getOffset(i)])); //we use parallel to speed up offset computation
+                    for (int i = 0; i < len; i++) //we do not use Parellel.For to retain order like numpy does.
+                        hashset.Add(src[getOffset(i)]);
 
-                    var dst = new NDArray(typeof(T), Shape.Vector(hashset.Count));
+                    var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
                     Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
                     return dst;
                 }

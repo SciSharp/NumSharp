@@ -4,36 +4,37 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.Serialization;
 using System.Threading;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Utilities
 {
     [DebuggerDisplay("Count = {Count}")]
     [Serializable]
-    public class ConcurrentHashSet<T> : ICollection<T>, ISet<T>, ISerializable, IDeserializationCallback
+    public class ConcurrentHashset<T> : ICollection<T>, ISet<T>, ISerializable, IDeserializationCallback where T : unmanaged
     {
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
         private readonly Hashset<T> hashset = new Hashset<T>();
 
-        public ConcurrentHashSet()
+        public ConcurrentHashset()
         { }
 
-        public ConcurrentHashSet(IEqualityComparer<T> comparer)
+        public ConcurrentHashset(IEqualityComparer<T> comparer)
         {
             hashset = new Hashset<T>(comparer);
         }
 
-        public ConcurrentHashSet(IEnumerable<T> collection)
+        public ConcurrentHashset(IEnumerable<T> collection)
         {
             hashset = new Hashset<T>(collection);
         }
 
-        public ConcurrentHashSet(IEnumerable<T> collection, IEqualityComparer<T> comparer)
+        public ConcurrentHashset(IEnumerable<T> collection, IEqualityComparer<T> comparer)
         {
             hashset = new Hashset<T>(collection, comparer);
         }
 
-        protected ConcurrentHashSet(SerializationInfo info, StreamingContext context)
+        protected ConcurrentHashset(SerializationInfo info, StreamingContext context)
         {
             hashset = new Hashset<T>();
 
@@ -62,7 +63,7 @@ namespace NumSharp.Utilities
             return hashset.GetEnumerator();
         }
 
-        ~ConcurrentHashSet()
+        ~ConcurrentHashset()
         {
             Dispose(false);
         }
@@ -331,5 +332,28 @@ namespace NumSharp.Utilities
         {
             get { return false; }
         }
+
+
+        public void CopyTo(ArraySlice<T> array)
+        {
+            CopyTo(array, 0, hashset.Count);
+        }
+
+        public void CopyTo(ArraySlice<T> array, int arrayIndex, int count)
+        {
+            _lock.EnterWriteLock();
+            _lock.EnterReadLock();
+            try
+            {
+                //CopyTo<T>(Hashset<T> src, ArraySlice<T> array, int arrayIndex, int count)
+                Hashset<T>.CopyTo(hashset, array, arrayIndex, count);
+            }
+            finally
+            {
+                if (_lock.IsWriteLockHeld) _lock.ExitWriteLock();
+                if (_lock.IsReadLockHeld) _lock.ExitReadLock();
+            }
+        }
+
     }
 }
