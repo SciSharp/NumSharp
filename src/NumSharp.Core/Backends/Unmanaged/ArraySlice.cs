@@ -196,7 +196,6 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ArraySlice<T> FromPool<T>(StackedMemoryPool pool) where T : unmanaged
         {
-            //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(pool));
         }
 
