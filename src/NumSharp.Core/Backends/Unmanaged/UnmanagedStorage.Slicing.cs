@@ -31,7 +31,7 @@ namespace NumSharp.Backends
             }
 
             // deal with ellipsis
-            if (ellipsis_count>1)
+            if (ellipsis_count > 1)
                 throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");
             else if (ellipsis_count == 1)
                 slices = ExpandEllipsis(slices).ToArray();
@@ -40,16 +40,16 @@ namespace NumSharp.Backends
             if (newaxis_count > 0)
             {
                 var view = this;
-                var axis = 0;
-                foreach (var slice in slices)
+                for (var axis = 0; axis < slices.Length; axis++)
                 {
+                    var slice = slices[axis];
                     if (slice.IsNewAxis)
                     {
                         slices[axis] = Slice.All;
                         view = view.Alias(view.Shape.ExpandDimension(axis));
                     }
-                    axis++;
                 }
+
                 return view.GetViewInternal(slices);
             }
 
@@ -109,15 +109,17 @@ namespace NumSharp.Backends
                     continue;
                 count++;
             }
+
             // expand 
             foreach (var slice in slices)
             {
                 if (slice.IsEllipsis)
                 {
-                    for(int i=0; i<Shape.NDim-count; i++)
+                    for (int i = 0; i < Shape.NDim - count; i++)
                         yield return Slice.All;
                     continue;
                 }
+
                 yield return slice;
             }
         }
