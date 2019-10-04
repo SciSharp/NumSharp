@@ -386,6 +386,8 @@ namespace NumSharp.UnitTest
             Assert.AreEqual(Slice.All, new Slice(":"));
             Assert.AreEqual(Slice.None, new Slice("0:0"));
             Assert.AreEqual(Slice.Index(17), new Slice("17:18"));
+            Assert.AreEqual(Slice.Ellipsis, new Slice("..."));
+            Assert.AreEqual(Slice.NewAxis, new Slice("np.newaxis"));
 
             // invalid values
             Assert.ThrowsException<ArgumentException>(() => new Slice(""));
@@ -398,13 +400,16 @@ namespace NumSharp.UnitTest
             Assert.ThrowsException<ArgumentException>(() => new Slice("209572048752047520934750283947529083475:"));
             Assert.ThrowsException<ArgumentException>(() => new Slice(":209572048752047520934750283947529083475:2"));
             Assert.ThrowsException<ArgumentException>(() => new Slice("::209572048752047520934750283947529083475"));
+            Assert.ThrowsException<ArgumentException>(() => new Slice(".."));
+            Assert.ThrowsException<ArgumentException>(() => new Slice("...."));
         }
 
         [TestMethod]
         public void N_DimensionalSliceNotation()
         {
-            var s = "1:3,-5:-8,7:8:9,1:,999,:,:1,7::9,:7:9,::-1,-5:-8,5:8";
+            var s = "1:3,-5:-8,7:8:9,...,1:,999,:,:1,7::9,:7:9,::-1,-5:-8,5:8,...";
             Assert.AreEqual(s, Slice.FormatSlices(Slice.ParseSlices(s)));
+            //Assert.AreEqual("...,:,...", Slice.FormatSlices(Slice.ParseSlices("...,...,...,:,...,..."))); // <-- multiple ellipsis at the same location is reduced to one ??? todo test how it works
         }
 
         [TestMethod]

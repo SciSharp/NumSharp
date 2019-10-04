@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -18,14 +20,19 @@ namespace NumSharp.Backends
         {
             if (slices == null)
                 throw new ArgumentNullException(nameof(slices));
-
+            int ellipsis_count = 0;
             foreach (var slice in slices)
             {
                 if (slice.IsEllipsis)
-                    throw new NotSupportedException("Ellipsis slicing '...' is not supported by NumSharp.");
+                    ellipsis_count++;
                 if (slice.IsNewAxis)
-                    throw new NotSupportedException("np.newaxis slicing '...' is not supported by NumSharp. Consider calling np.expand_dims after performing slicing");
+                    throw new NotSupportedException("np.newaxis slicing is not supported by NumSharp. Consider calling np.expand_dims after performing slicing");
             }
+            if (ellipsis_count>1)
+                throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");
+            else if (ellipsis_count == 1)
+                slices = ExpandEllipsis(slices).ToArray();
+
             //handle memory slice if possible
             if (!_shape.IsSliced)
             {
@@ -61,6 +68,20 @@ namespace NumSharp.Backends
                 return Alias();
 
             return Alias(_shape.Slice(slices));
+        }
+
+        private IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
+        {
+            foreach (var slice in slices)
+            {
+                if (slice.IsEllipsis)
+                {
+                    for(int i=0; i<Shape.NDim-(slices.Length-1); i++)
+                        yield return Slice.All;
+                    continue;
+                }
+                yield return slice;
+            }
         }
 
         #endregion
