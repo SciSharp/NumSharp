@@ -13,6 +13,14 @@ namespace NumSharp
         /// Draw samples from a bernoulli distribution.
         /// </summary>
         /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
+        /// <param name="shape">Output Shape</param>
+        /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
+        public NDArray bernoulli(double p, Shape shape) => bernoulli(p, shape.Dimensions);
+
+        /// <summary>
+        /// Draw samples from a bernoulli distribution.
+        /// </summary>
+        /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
         public NDArray bernoulli(double p, params int[] dims)

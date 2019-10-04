@@ -13,6 +13,14 @@ namespace NumSharp
         /// Draw samples from a Poisson distribution. The Poisson distribution is the limit of the binomial distribution for large N.
         /// </summary>
         /// <param name="lam">Expectation of interval, should be >= 0. A sequence of expectation intervals must be broadcastable over the requested size.</param>
+        /// <param name="shape">Output Shape</param>
+        /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
+        public NDArray poisson(double lam, Shape shape) => poisson(lam, shape.Dimensions);
+
+        /// <summary>
+        /// Draw samples from a Poisson distribution. The Poisson distribution is the limit of the binomial distribution for large N.
+        /// </summary>
+        /// <param name="lam">Expectation of interval, should be >= 0. A sequence of expectation intervals must be broadcastable over the requested size.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
         public NDArray poisson(double lam, params int[] dims)

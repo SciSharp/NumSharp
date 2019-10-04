@@ -13,6 +13,16 @@ namespace NumSharp
         /// the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.
         /// </summary>
         /// <param name="df">Number of degrees of freedom, should be > 0.</param>
+        /// <param name="shape">Output Shape</param>
+        /// <returns></returns>
+        public NDArray chisquare(double df, Shape shape) => chisquare(df, shape.Dimensions);
+
+        /// <summary>
+        /// Draw samples from a chi-square distribution.
+        /// When df independent random variables, each with standard normal distributions(mean 0, variance 1), are squared and summed, 
+        /// the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.
+        /// </summary>
+        /// <param name="df">Number of degrees of freedom, should be > 0.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns></returns>
         public NDArray chisquare(double df, params int[] dims)

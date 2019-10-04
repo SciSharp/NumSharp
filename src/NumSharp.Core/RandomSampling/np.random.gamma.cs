@@ -14,6 +14,17 @@ namespace NumSharp
         /// Samples are drawn from a Gamma distribution with specified parameters, shape (sometimes designated “k”) and scale(sometimes designated “theta”), 
         /// where both parameters are > 0.
         /// </summary>
+        /// <param name="shapeV">The shape of the gamma distribution. Should be greater than zero.</param>
+        /// <param name="scale">The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</param>
+        /// <param name="shape">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
+        public NDArray gamma(double shapeV, double scale, Shape shape) => gamma(shapeV, scale, shape.Dimensions);
+
+        /// <summary>
+        /// Draw samples from a Gamma distribution.
+        /// Samples are drawn from a Gamma distribution with specified parameters, shape (sometimes designated “k”) and scale(sometimes designated “theta”), 
+        /// where both parameters are > 0.
+        /// </summary>
         /// <param name="shape">The shape of the gamma distribution. Should be greater than zero.</param>
         /// <param name="scale">The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</param>
         /// <param name="dims">Output shape.</param>

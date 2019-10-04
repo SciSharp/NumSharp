@@ -41,24 +41,16 @@ namespace NumSharp
             var arr = array.Data<double>();
 
             //TODO! Parallel.ForEach using ienumerable that'll ensure it is linear
-            Parallel.For(0, array.size, (i) => {
+
+            for (int i = 0; i < array.size; i++)
+            {
                 double u1 = 1.0 - randomizer.NextDouble(); //uniform(0,1] random doubles
                 double u2 = 1.0 - randomizer.NextDouble();
                 double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
                                        Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
                 double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
                 arr[i] = randNormal;
-            });
-           
-            //for (int i = 0; i < array.size; i++)
-            //{
-            //    double u1 = 1.0 - randomizer.NextDouble(); //uniform(0,1] random doubles
-            //    double u2 = 1.0 - randomizer.NextDouble();
-            //    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
-            //                           Math.Sin(2.0 * Math.PI * u2); //random normal(0,1)
-            //    double randNormal = loc + scale * randStdNormal; //random normal(mean,stdDev^2)
-            //    arr[i] = randNormal;
-            //}
+            }
 
             array.ReplaceData(arr);
 
