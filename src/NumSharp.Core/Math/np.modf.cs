@@ -13,8 +13,8 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Fractional part of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.modf.html</remarks>
-        public static NDArray modf(in NDArray x, NPTypeCode? outType = null)
-            => x.TensorEngine.Frac(x, outType);
+        public static (NDArray, NDArray) modf(in NDArray x, NPTypeCode? outType = null)
+            => x.TensorEngine.ModF(x, outType);
 
         /// <summary>
         ///     Return the fractional and integral parts of an array, element-wise.
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Fractional part of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.modf.html</remarks>
-        public static NDArray modf(in NDArray x, Type outType) 
-            => x.TensorEngine.Frac(x, outType);
+        public static (NDArray, NDArray) modf(in NDArray x, Type outType) 
+            => x.TensorEngine.ModF(x, outType);
     }
 }

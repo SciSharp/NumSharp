@@ -80,8 +80,8 @@ namespace NumSharp
         public abstract NDArray Ceil(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Round(in NDArray nd, Type dtype);
         public abstract NDArray Round(in NDArray nd, NPTypeCode? typeCode = null);
-        public abstract NDArray Frac(in NDArray nd, Type dtype);
-        public abstract NDArray Frac(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract (NDArray, NDArray) ModF(in NDArray nd, Type dtype);
+        public abstract (NDArray, NDArray) ModF(in NDArray nd, NPTypeCode? typeCode = null);
        
         public abstract NDArray Tanh(in NDArray nd, Type dtype);
         public abstract NDArray Tanh(in NDArray nd, NPTypeCode? typeCode = null);
