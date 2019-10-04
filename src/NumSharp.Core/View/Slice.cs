@@ -58,6 +58,10 @@ namespace NumSharp
 
         public static readonly Slice None = new Slice(0, 0, 1);
 
+        public static readonly Slice Ellipsis = new Slice(0, 0, 1) { IsEllipsis = true };
+
+        public static readonly Slice NewAxis = new Slice(0, 0, 1) { IsNewAxis = true };
+
         public int? Start;
         public int? Stop;
         public int Step;
@@ -112,8 +116,10 @@ namespace NumSharp
         {
             if (string.IsNullOrEmpty(slice_notation))
                 throw new ArgumentException("Slice notation expected, got empty string or null");
-
-            if (slice_notation == "...")
+            var match = Regex.Match(slice_notation, @"^\s*((?'start'[+-]?\s*\d+)?\s*:\s*(?'stop'[+-]?\s*\d+)?\s*(:\s*(?'step'[+-]?\s*\d+)?)?|(?'index'[+-]?\s*\d+)|(?'ellipsis'\.\.\.)|(?'newaxis'(np\.)?newaxis))\s*$");
+            if (!match.Success)
+                throw new ArgumentException($"Invalid slice notation: '{slice_notation}'");
+            if (match.Groups["ellipsis"].Success)
             {
                 Start = 0;
                 Stop = 0;
@@ -121,7 +127,7 @@ namespace NumSharp
                 IsEllipsis = true;
                 return;
             }
-            if (slice_notation == "" || slice_notation == "newaxis" || slice_notation == "np.newaxis")
+            if (match.Groups["newaxis"].Success)
             {
                 Start = 0;
                 Stop = 0;
@@ -129,24 +135,19 @@ namespace NumSharp
                 IsNewAxis = true;
                 return;
             }
-
-            var match = Regex.Match(slice_notation, @"^\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*\d+)?)?\s*$|^\s*([+-]?\s*\d+)\s*$");
-            if (!match.Success)
-                throw new ArgumentException("Invalid slice notation");
-            var start_string = Regex.Replace(match.Groups[1].Value ?? "", @"\s+", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
-            var stop_string = Regex.Replace(match.Groups[2].Value ?? "", @"\s+", "");
-            var step_string = Regex.Replace(match.Groups[4].Value ?? "", @"\s+", "");
-            var single_pick_string = match.Groups[5].Value;
-            if (!string.IsNullOrWhiteSpace(single_pick_string))
+            if (match.Groups["index"].Success)
             {
-                if (!int.TryParse(Regex.Replace(single_pick_string ?? "", @"\s+", ""), out var start))
-                    throw new ArgumentException($"Invalid value for start: {start_string}");
+                if (!int.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
+                    throw new ArgumentException($"Invalid value for index: '{match.Groups["index"].Value}'");
                 Start = start;
                 Stop = start + 1;
                 Step = 1; // special case for dimensionality reduction by picking a single element
                 IsIndex = true;
                 return;
             }
+            var start_string = Regex.Replace(match.Groups["start"].Value ?? "", @"\s+", ""); // removing spaces from match to be able to parse what python allows, like: "+ 1" or  "-   9";
+            var stop_string = Regex.Replace(match.Groups["stop"].Value ?? "", @"\s+", "");
+            var step_string = Regex.Replace(match.Groups["step"].Value ?? "", @"\s+", "");
 
             if (string.IsNullOrWhiteSpace(start_string))
                 Start = null;
@@ -221,9 +222,9 @@ namespace NumSharp
             if (IsIndex)
                 return $"{Start ?? 0}";
             else if (IsNewAxis)
-                return "newaxis";
+                return "np.newaxis";
             else if (IsEllipsis)
-                return "ellipsis";
+                return "...";
             var optional_step = Step == 1 ? "" : $":{Step}";
             return $"{(Start == 0 ? "" : Start.ToString())}:{(Stop == null ? "" : Stop.ToString())}{optional_step}";
         }
