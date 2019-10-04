@@ -384,6 +384,7 @@ namespace NumSharp.UnitTest
 
             // Create functions
             Assert.AreEqual(Slice.All, new Slice(":"));
+            Assert.AreEqual(Slice.None, new Slice("0:0"));
             Assert.AreEqual(Slice.Index(17), new Slice("17:18"));
 
             // invalid values
