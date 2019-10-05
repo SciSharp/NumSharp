@@ -117,7 +117,7 @@ namespace NumSharp
             if (width * height != nd.size)
                 throw new ArgumentException("Given nd.size != width*height");
 
-            if (!nd.Unsafe.Shape.IsContiguous)
+            if (!nd.Shape.IsContiguous)
                 nd = nd.Clone();
 
             var ret = new Bitmap(height, width);

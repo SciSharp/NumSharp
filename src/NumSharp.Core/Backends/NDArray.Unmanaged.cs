@@ -74,6 +74,7 @@ namespace NumSharp
             /// <summary>
             ///     Provides access to the internal <see cref="Shape"/>.
             /// </summary>
+            [Obsolete("Please use nd.Shape directly instead of nd.Unsafe.Shape, will be removed in 0.21.0")]
             public Shape Shape => _this.Storage.Shape;
 
             /// A Span representing this slice.

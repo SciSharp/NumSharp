@@ -303,7 +303,10 @@ namespace NumSharp
             }
         }
 
-        protected internal Shape Shape
+        /// <summary>
+        ///     The shape representing this <see cref="NDArray"/>.
+        /// </summary>
+        public Shape Shape
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Storage.Shape;
