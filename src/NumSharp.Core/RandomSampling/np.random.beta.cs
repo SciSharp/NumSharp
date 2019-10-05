@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="betaValue">Beta value</param>
         /// <param name="shape">Output Shape</param>
         /// <returns></returns>
-        public NDArray beta(double alpha, double betaValue, Shape shape) => beta(alpha, betaValue, shape.Dimensions);
+        public NDArray beta(double alpha, double betaValue, Shape shape) => beta(alpha, betaValue, shape.dimensions);
 
         /// <summary>
         /// Draw samples from a Beta distribution.

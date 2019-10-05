@@ -12,15 +12,15 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a bernoulli distribution.
         /// </summary>
-        /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
+        /// <param name="p">Parameter of the distribution, >= 0 and &lt;=1.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
-        public NDArray bernoulli(double p, Shape shape) => bernoulli(p, shape.Dimensions);
+        public NDArray bernoulli(double p, Shape shape) => bernoulli(p, shape.dimensions);
 
         /// <summary>
         ///     Draw samples from a bernoulli distribution.
         /// </summary>
-        /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
+        /// <param name="p">Parameter of the distribution, >= 0 and &lt;=1.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
         public NDArray bernoulli(double p, params int[] dims)
@@ -29,12 +29,13 @@ namespace NumSharp
                 return NDArray.Scalar(randomizer.NextDouble());
 
             var result = new NDArray<double>(dims);
-            var len = result.size;
             unsafe
             {
                 var addr = result.Address;
+                var len = result.size;
+                Func<double> nextDouble = randomizer.NextDouble;
                 for (int i = 0; i < len; i++)
-                    addr[i] = randomizer.NextDouble() > p ? 1 : 0;
+                    addr[i] = nextDouble() > p ? 1 : 0;
             }
 
             return result;
