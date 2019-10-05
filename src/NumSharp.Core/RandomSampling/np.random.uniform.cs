@@ -17,7 +17,7 @@ namespace NumSharp
         /// <returns>NDArray with values of type <see cref="double"/></returns>
         public NDArray uniform(double low, double high, Shape shape)
         {
-            return uniform(low, high, shape.Dimensions);
+            return uniform(low, high, shape.dimensions);
         }
         
         /// <summary>

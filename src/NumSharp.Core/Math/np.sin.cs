@@ -46,5 +46,27 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sinh.html</remarks>
         public static NDArray sinh(in NDArray x, Type outType) 
             => x.TensorEngine.Sinh(x, outType);
+
+        /// <summary>
+        ///     Inverse sine, element-wise. <br></br>
+        ///     The convention is to return the angle z whose real part lies in [-pi/2, pi/2].
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.arcsin.html</remarks>
+        public static NDArray arcsin(in NDArray x, NPTypeCode? outType = null)
+            => x.TensorEngine.ASin(x, outType);
+
+        /// <summary>
+        ///     Inverse sine, element-wise. <br></br>
+        ///     The convention is to return the angle z whose real part lies in [-pi/2, pi/2].
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.arcsin.html</remarks>
+        public static NDArray arcsin(in NDArray x, Type outType)
+            => x.TensorEngine.ASin(x, outType);
     }
 }

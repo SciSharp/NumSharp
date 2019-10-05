@@ -72,13 +72,32 @@ namespace NumSharp
         public abstract NDArray Sin(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Cos(in NDArray nd, Type dtype);
         public abstract NDArray Cos(in NDArray nd, NPTypeCode? typeCode = null);
-
+        public abstract NDArray Sign(in NDArray nd, Type dtype);
+        public abstract NDArray Sign(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Floor(in NDArray nd, Type dtype);
+        public abstract NDArray Floor(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Ceil(in NDArray nd, Type dtype);
+        public abstract NDArray Ceil(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Round(in NDArray nd, Type dtype);
+        public abstract NDArray Round(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract (NDArray, NDArray) ModF(in NDArray nd, Type dtype);
+        public abstract (NDArray, NDArray) ModF(in NDArray nd, NPTypeCode? typeCode = null);
+       
         public abstract NDArray Tanh(in NDArray nd, Type dtype);
         public abstract NDArray Tanh(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Cosh(in NDArray nd, Type dtype);
         public abstract NDArray Cosh(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Sinh(in NDArray nd, Type dtype);
         public abstract NDArray Sinh(in NDArray nd, NPTypeCode? typeCode = null);
+
+        public abstract NDArray ATan(in NDArray nd, Type dtype);
+        public abstract NDArray ATan(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray ATan2(in NDArray y, in NDArray x, Type dtype);
+        public abstract NDArray ATan2(in NDArray y, in NDArray x, NPTypeCode? typeCode = null);
+        public abstract NDArray ACos(in NDArray nd, Type dtype);
+        public abstract NDArray ACos(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray ASin(in NDArray nd, Type dtype);
+        public abstract NDArray ASin(in NDArray nd, NPTypeCode? typeCode = null);
 
         public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, Type dtype);
         public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, NPTypeCode? typeCode = null);

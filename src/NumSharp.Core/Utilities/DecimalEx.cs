@@ -439,7 +439,7 @@ namespace DecimalMath
 
             // At or beyond precision of decimal data type
             if (places >= 28) return value;
-
+            
             return decimal.Floor(value * PowersOf10[places]) / PowersOf10[places];
         }
 

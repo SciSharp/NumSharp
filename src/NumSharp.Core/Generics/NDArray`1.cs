@@ -20,6 +20,7 @@ using System;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 // ReSharper disable once CheckNamespace
 namespace NumSharp.Generic
@@ -63,7 +64,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        protected internal NDArray(TensorEngine engine) : base(typeof(T).GetTypeCode(), engine) { }
+        protected internal NDArray(TensorEngine engine) : base(InfoOf<T>.NPTypeCode, engine) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -71,7 +72,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="dtype">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray() : base(typeof(T).GetTypeCode()) { }
+        public NDArray() : base(InfoOf<T>.NPTypeCode) { }
 
         /// <summary>
         /// Constructor which takes .NET array
@@ -110,14 +111,14 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Shape shape) : base(typeof(T).GetTypeCode(), shape) { }
+        public NDArray(Shape shape) : base(InfoOf<T>.NPTypeCode, shape) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(int size) : base(typeof(T).GetTypeCode(), size) { }
+        public NDArray(int size) : base(InfoOf<T>.NPTypeCode, size) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -127,7 +128,7 @@ namespace NumSharp.Generic
         /// <param name="shape">Shape of NDArray</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Shape shape, bool fillZeros) : base(typeof(T).GetTypeCode(), shape, fillZeros) { }
+        public NDArray(Shape shape, bool fillZeros) : base(InfoOf<T>.NPTypeCode, shape, fillZeros) { }
 
         /// <summary>
         /// Array access to storage data - overridden on purpose
