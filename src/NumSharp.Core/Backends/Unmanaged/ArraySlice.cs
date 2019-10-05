@@ -26,20 +26,20 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
 
-	            case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -62,20 +62,20 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
 
-	            case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
-	            case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
+                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
+                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -90,26 +90,116 @@ namespace NumSharp.Backends.Unmanaged
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(_buffer)) {[0] = val};
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
+        {
+            return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ArraySlice<T> FromBuffer<T>(byte[] arr, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromBuffer(arr, copy));
         }
 
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ArraySlice<T> FromPool<T>(StackedMemoryPool pool) where T : unmanaged
         {
-            //TODO! Upgrade InternalBufferManager to use pre-pinned arrays.
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(pool));
         }
 
+        [MethodImpl((MethodImplOptions)768)]
         public static IArraySlice FromArray(Array arr, bool copy = false)
         {
             var elementType = arr.GetType().GetElementType();
@@ -145,10 +235,10 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
+        [MethodImpl((MethodImplOptions)768)]
         public static IArraySlice FromMemoryBlock(IMemoryBlock block, bool copy = false)
         {
-
-            if (block is IArraySlice arr) 
+            if (block is IArraySlice arr)
                 block = arr.MemoryBlock;
 
             var type = block.GetType();
@@ -215,20 +305,20 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, ((IConvertible)fill).ToInt32(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, ((IConvertible)fill).ToUInt32(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, ((IConvertible)fill).ToInt32(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, ((IConvertible)fill).ToUInt32(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }
@@ -305,20 +395,20 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
 #else
-	            case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, ((IConvertible)fill).ToInt32(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, ((IConvertible)fill).ToUInt32(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
-	            case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
-	            default:
-		            throw new NotSupportedException();
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, ((IConvertible)fill).ToInt32(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, ((IConvertible)fill).ToUInt32(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
+                case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
+                default:
+                    throw new NotSupportedException();
 #endif
             }
         }

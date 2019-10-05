@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -42,6 +44,23 @@ namespace NumSharp.Backends
             }
 
             return allow_duplicate ? (int[])axis.Clone() : axis.Distinct().ToArray();
+        }
+        /// <summary>
+        ///     Normalizes an axis argument into a tuple of non-negative integer axes.
+        ///     This handles shorthands such as ``1`` and converts them to ``(1,)``,
+        ///     as well as performing the handling of negative indices covered by
+        ///     `normalize_axis_index`.
+        ///     By default, this forbids axes from being specified multiple times.
+        ///         Used internally by multi-axis-checking logic.
+        /// </summary>
+        /// <param name="axis">The un-normalized index or indices of the axis.</param>
+        /// <param name="ndim">The number of dimensions of the array that `axis` should be normalized against.</param>
+        /// <param name="argname">A prefix to put before the error message, typically the name of the argument.</param>
+        /// <param name="allow_duplicate">If False, the default, disallow an axis from being specified twice.</param>
+        /// <returns>The normalized axis index, such that `0 <= normalized_axis < ndim`</returns>
+        public static int[] normalize_axis_tuple(int axis, object argname = null, bool allow_duplicate = false)
+        {
+            return normalize_axis_tuple(new int[] {axis}, argname, allow_duplicate);
         }
 
         public override NDArray MoveAxis(in NDArray nd, int[] source, int[] destinition)
@@ -134,14 +153,24 @@ namespace NumSharp.Backends
                 }
             }
 
-            var ret = nd.Clone();
+            UnmanagedStorage src;
+            if (nd.Shape.IsContiguous)
+                src = nd.Storage.Alias(nd.Shape.Clone());
+            else
+                src = nd.Storage.Clone();
+
             for (i = 0; i < n; i++)
             {
-                ret.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
-                ret.Shape.strides[i] = nd.Shape.strides[permutation[i]];
+                src.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
+                src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
             }
 
-            return new NDArray(ret.Storage);
+            //Linear copy of all the sliced items.
+
+            var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
+            MultiIterator.Assign(dst, src);
+
+            return new NDArray(dst);
         }
     }
 }

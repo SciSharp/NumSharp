@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -13,19 +15,53 @@ namespace NumSharp.Backends
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
         public UnmanagedStorage GetView(params Slice[] slices)
         {
             if (slices == null)
                 throw new ArgumentNullException(nameof(slices));
-
+            // deal with ellipsis and newaxis if any before continuing into GetViewInternal
+            int ellipsis_count = 0;
+            int newaxis_count = 0;
             foreach (var slice in slices)
             {
                 if (slice.IsEllipsis)
-                    throw new NotSupportedException("Ellipsis slicing '...' is not supported by NumSharp.");
+                    ellipsis_count++;
                 if (slice.IsNewAxis)
-                    throw new NotSupportedException("np.newaxis slicing '...' is not supported by NumSharp. Consider calling np.expand_dims after performing slicing");
+                    newaxis_count++;
             }
+
+            // deal with ellipsis
+            if (ellipsis_count > 1)
+                throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");
+            else if (ellipsis_count == 1)
+                slices = ExpandEllipsis(slices).ToArray();
+
+            // deal with newaxis
+            if (newaxis_count > 0)
+            {
+                var view = this;
+                for (var axis = 0; axis < slices.Length; axis++)
+                {
+                    var slice = slices[axis];
+                    if (slice.IsNewAxis)
+                    {
+                        slices[axis] = Slice.All;
+                        view = view.Alias(view.Shape.ExpandDimension(axis));
+                    }
+                }
+
+                return view.GetViewInternal(slices);
+            }
+
+            // slicing without newaxis
+            return GetViewInternal(slices);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
+        private UnmanagedStorage GetViewInternal(params Slice[] slices)
+        {
+            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
             //handle memory slice if possible
             if (!_shape.IsSliced)
             {
@@ -61,6 +97,31 @@ namespace NumSharp.Backends
                 return Alias();
 
             return Alias(_shape.Slice(slices));
+        }
+
+        private IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
+        {
+            // count dimensions without counting ellipsis or newaxis
+            var count = 0;
+            foreach (var slice in slices)
+            {
+                if (slice.IsNewAxis || slice.IsEllipsis)
+                    continue;
+                count++;
+            }
+
+            // expand 
+            foreach (var slice in slices)
+            {
+                if (slice.IsEllipsis)
+                {
+                    for (int i = 0; i < Shape.NDim - count; i++)
+                        yield return Slice.All;
+                    continue;
+                }
+
+                yield return slice;
+            }
         }
 
         #endregion

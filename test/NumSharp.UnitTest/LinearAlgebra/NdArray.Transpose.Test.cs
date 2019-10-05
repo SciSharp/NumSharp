@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var x = np.arange(4);
             var y = np.transpose(x);
             x[0] = 3;
-            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()));
+            Assert.IsFalse(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()), "Transpose in NumSharp produces a copy");
         }
 
         [TestMethod]
@@ -39,23 +39,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.AreEqual(y[1, 0], 1);
             Assert.AreEqual(y[1, 1], 3);
             Assert.AreEqual(y[1, 2], 5);
-        }
-
-        [TestMethod, Ignore("No actual asserts inside")] //todo!
-        public void Transpose10x10()
-        {
-            new Action(() =>
-            {
-                var array = np.arange(100).reshape(3, 3, 3);
-                array = array.transpose();
-                for (var i = 0; i < array.shape[0]; i++)
-                {
-                    for (var j = 0; j < array.shape[1]; j++)
-                    {
-                        Console.WriteLine(array[i, j].ToString());
-                    }
-                }
-            }).Should().NotThrow("It has to run completely.");
         }
     }
 }

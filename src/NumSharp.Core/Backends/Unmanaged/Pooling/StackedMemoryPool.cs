@@ -2,104 +2,241 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Backends;
+#pragma warning disable IDE0052 // Remove unread private members
 
 namespace NumSharp.Unmanaged.Memory
 {
     /// <summary>
-    ///     Pool of allocated buffers.
+    ///     Pool of allocated buffers managed by internal garbage collection mechanism.
     /// </summary>
-    /// <remarks>Used to speed up scalar allocation.</remarks>
+    /// <remarks>Used to speed up scalar allocation. Thread-safe.</remarks>
     public class StackedMemoryPool : IDisposable
     {
-
-        //TODO! this should have a mechanism of auto-trimming via task creation.
-        //todo      We only start monitoring once we exceed the existing pool size.
-        //todo      If we surpassed 1/3 of the original size:
-        //todo      after 10 seconds, a trim should occur - a GC clean in other words.
-
+        //TODO! Instead of allocating n buffer, allocate one block and split it.
         private static readonly int DefaultSingleSize = Enum.GetValues(typeof(NPTypeCode)).Cast<NPTypeCode>().Where(v => v != 0).Max(n => n.SizeOf());
+
+        private long _originalTotals;
+        private long _originalTotalsThreshold;
+        private long _totalCount;
+
         public readonly int SingleSize;
-        public readonly int TotalSize;
 
-        private readonly Stack<IntPtr> ptrs;
-        private readonly List<IntPtr> allptrs;
+        private readonly Stack<IntPtr> availables;
+        private readonly Stack<IntPtr> availables_blocks;
+        private readonly List<IntPtr> individualyAllocated;
+        private List<UnmanagedMemoryBlock<byte>> _blocks;
 
-        public int Available
+        private bool _isGcRunning = false;
+        private System.Threading.Timer _gcTimer = null;
+        private volatile bool _abortGc = false;
+#if DEBUG
+        public event Action GCInvoked;
+#endif
+        /// <summary>
+        ///     How many Scalar pointers are allocated.
+        /// </summary>
+        public long TotalAllocated => _totalCount;
+
+        /// <summary>
+        ///     How many pointers are currently preallocated and available for the taking.
+        /// </summary>
+        public long Available
         {
             get
             {
                 lock (this)
-                    return ptrs.Count;
+                    return availables.Count + availables_blocks.Count;
             }
         }
+
+        /// <summary>
+        ///     After how many milliseconds should unused excess memory be deallocated. (only if allocated exceeded above 133% of firstly allocated).<br></br>
+        ///     Default: 5000ms.
+        /// </summary>
+        public int GarbageCollectionDelay = 5000;
 
         public StackedMemoryPool(int totalSize) : this(DefaultSingleSize, totalSize / (int)Math.Ceiling(totalSize / (double)DefaultSingleSize)) { }
 
         public StackedMemoryPool(int singleSize, int count)
         {
-            TotalSize = singleSize * count;
             SingleSize = singleSize;
 
-            var queue = new Stack<IntPtr>(count);
-            allptrs = new List<IntPtr>(count);
-            for (int i = 0; i < count; i++)
-            {
-                var alloc = Marshal.AllocHGlobal(SingleSize);
-                queue.Push(alloc);
-                allptrs.Add(alloc);
-            }
+            availables = new Stack<IntPtr>(0);
+            availables_blocks = new Stack<IntPtr>(count);
+            individualyAllocated = new List<IntPtr>(count);
+            _blocks = new List<UnmanagedMemoryBlock<byte>>(1);
 
-            ptrs = queue;
+            AllocateCount(count);
+
+            _originalTotals = count;
+            _originalTotalsThreshold = unchecked((int)Math.Min((count * 1.333f), int.MaxValue));
         }
+
 
         public IntPtr Take()
         {
             lock (this)
             {
-                if (ptrs.Count == 0)
+                if (availables.Count == 0)
                 {
+                    if (availables_blocks.Count != 0)
+                        return availables_blocks.Pop();
+
                     var ret = Marshal.AllocHGlobal(SingleSize);
-                    allptrs.Add(ret);
+                    individualyAllocated.Add(ret);
+                    _totalCount += 1;
                     return ret;
                 }
 
-                return ptrs.Pop();
+                return availables.Pop();
             }
         }
 
-        public void Return(IntPtr x)
+        public unsafe void Return(IntPtr x)
         {
+            //check if it belongs to a block
+            foreach (var block in _blocks)
+            {
+                var x_addr = x.ToPointer();
+                if (block.Address <= x_addr && x_addr <= (block.Address + block.BytesCount - SingleSize))
+                {
+                    lock (this)
+                    {
+                        availables_blocks.Push(x);
+                        tryStartGC();
+                        return;
+                    }
+
+                }
+            }
+
+            //belongs to an individual
+            lock (this)
+            {
+                Debug.Assert(availables.Count == 0 || availables.Contains(x) == false, "availables.Contains(x)==false");
+
+                availables.Push(x);
+                tryStartGC();
+            }
+        }
+
+
+        #region Garbage Collection
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void tryStartGC()
+        {
+            //try start GC
+            if (_isGcRunning || availables.Count + availables_blocks.Count < _originalTotalsThreshold)
+                return;
+
+            _isGcRunning = true;
+            _runGC(GarbageCollectionDelay);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void _runGC(int delay, int restarts = 0)
+        {
+            //assinging to prevent GC from collecting.
+            _gcTimer = new System.Threading.Timer(state => CollectGarbage((GCContext)state), new GCContext(availables.Count, restarts), delay, -1);
+        }
+
+        private void CollectGarbage(GCContext ctx)
+        {
+            lock (this)
+            {
+                if (_abortGc)
+                {
+                    _abortGc = false;
+                    return;
+                }
+
+                //if there were pushes or pops during the 5000 delay, postpone for an other 5000 seconds.
+                if (!ctx.Immediate && availables.Count != ctx.LastAvailablePtrs) //postpone
+                    goto _restart;
+
+                var removeCount = Math.Min(_totalCount - _originalTotals, availables.Count);
+                for (int i = 0; i < removeCount; i++)
+                {
+                    var addr = availables.Pop();
+                    Debug.Assert(individualyAllocated.Contains(addr), "individualyAllocated.Contains(addr)");
+                    individualyAllocated.Remove(addr);
+                    Marshal.FreeHGlobal(addr);
+                }
+
+                availables.TrimExcess();
+                individualyAllocated.TrimExcess();
+
+                if (removeCount > 0)
+                    _totalCount -= removeCount;
+#if DEBUG
+                GCInvoked?.Invoke();
+#endif
+                _isGcRunning = false;
+                return;
+            }
+
+//first restart is 1000ms, second and above is GarbageCollectionDelay
+_restart:
+            _runGC(ctx.Restarts >= 1 ? GarbageCollectionDelay : 1000, ctx.Restarts + 1);
+        }
+
+        #endregion
+
+        public unsafe void AllocateBytes(long bytes)
+        {
+            AllocateCount(Math.Max(bytes / SingleSize, 1));
+        }
+
+        public unsafe void AllocateCount(long count)
+        {
+            if (count <= 0)
+                throw new ArgumentException(nameof(count));
 
             lock (this)
             {
-                Debug.Assert(ptrs.Count == 0 || ptrs.Contains(x) == false, "ptrs.Contains(x)==false");
-                Debug.Assert(allptrs.Contains(x) == true, "allptrs.Contains(x)==true");
+                var blocksize = SingleSize * count;
+                var block = new UnmanagedMemoryBlock<byte>(blocksize);
 
-                ptrs.Push(x);
+                var addr = new IntPtr(block.Address);
+                for (int i = 0; i < count; i++, addr += SingleSize)
+                    availables_blocks.Push(addr);
+
+                _blocks.Add(block);
+
+                _totalCount += count;
             }
         }
 
-        public void AddAllocations(int count)
+        public void TrimExcess()
         {
-            lock (this)
-                for (int i = 0; i < count; i++)
-                {
-                    var alloc = Marshal.AllocHGlobal(SingleSize);
-                    ptrs.Push(alloc);
-                    allptrs.Add(alloc);
-                }
+            CollectGarbage(new GCContext() { Immediate = true });
+        }
+
+        /// <summary>
+        ///     Set the point of GC activation to the current <see cref="TotalAllocated"/> multiplied by 1.33.
+        /// </summary>
+        public void UpdateGarbageCollectionThreshold()
+        {
+            _originalTotals = _totalCount;
+            _originalTotalsThreshold = unchecked((int)Math.Min((_totalCount * 1.333f), int.MaxValue));
         }
 
         private void ReleaseUnmanagedResources()
         {
             lock (this)
             {
-                foreach (var ptr in allptrs)
-                    Marshal.FreeHGlobal(ptr);
-                ptrs.Clear();
-                allptrs.Clear();
+                _blocks.Clear(); //clearing block removes all existing references causing GC to collect and dispose the memory block.
+                availables.Clear();
+                availables_blocks.Clear();
+
+                individualyAllocated.ForEach(Marshal.FreeHGlobal);
+                individualyAllocated.Clear();
             }
         }
 
@@ -107,8 +244,23 @@ namespace NumSharp.Unmanaged.Memory
         {
             ReleaseUnmanagedResources();
             GC.SuppressFinalize(this);
+            _abortGc = true;
         }
 
         ~StackedMemoryPool() => ReleaseUnmanagedResources();
+
+        private class GCContext
+        {
+            public int LastAvailablePtrs;
+            public int Restarts;
+            public bool Immediate;
+            public GCContext() { }
+            public GCContext(int lastAvailablePtrs, int restarts)
+            {
+                LastAvailablePtrs = lastAvailablePtrs;
+                Restarts = restarts;
+            }
+        }
+
     }
 }

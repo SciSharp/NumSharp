@@ -11,7 +11,6 @@ namespace NumSharp
         /// </summary>
         /// <param name="dst">The array into which values are copied.</param>
         /// <param name="src">The array from which values are copied.</param>
-        /// <returns>A boolean array which is broadcasted to match the dimensions of dst, and selects elements to copy from src to dst wherever it contains the value True.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.copyto.html</remarks>
         public static void copyto(NDArray dst, NDArray src) //todo! add where argument
         {

@@ -29,8 +29,9 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var arr = np.repeat(arange(10), 10).reshape(10, 10)[":, 0"];
             Console.WriteLine((string)arr);
-            Console.WriteLine((string)arr.unique());
+            Console.WriteLine(arr.Shape);
             arr.unique().Should().BeShaped(10).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+            Console.WriteLine((string)arr.unique());
         }
     }
 }
