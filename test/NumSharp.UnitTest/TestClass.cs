@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -47,6 +50,7 @@ namespace NumSharp.UnitTest
             var rshape = new Shape(dims);
             return np.arange(rshape.size).reshape(rshape);
         }
+
         public NDArray arange(ITuple tup)
         {
             var rshape = new Shape(yield(tup).ToArray());
@@ -62,7 +66,7 @@ namespace NumSharp.UnitTest
         {
             for (int i = 0; i < tup.Length; i++)
             {
-                yield return (int) tup[i];
+                yield return (int)tup[i];
             }
         }
 
@@ -73,7 +77,7 @@ namespace NumSharp.UnitTest
                 case NDArray nd:
                     return nd.ToString(false);
                 case Array arr:
-                    if (arr.Rank!=1 || arr.GetType().GetElementType()?.IsArray == true)
+                    if (arr.Rank != 1 || arr.GetType().GetElementType()?.IsArray == true)
                         arr = Arrays.Flatten(arr);
                     var objs = toObjectArray(arr);
                     return $"[{string.Join(", ", objs.Select(_tostring))}]";
@@ -97,6 +101,51 @@ namespace NumSharp.UnitTest
         public static void print(object obj)
         {
             Console.WriteLine(_tostring(obj));
+        }
+
+        public static string EmbeddedString(string resourceName, Assembly assembly = null)
+        {
+            if (assembly == null)
+                assembly = Assembly.GetExecutingAssembly();
+
+            resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
+            using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (resourceStream == null)
+                    return null;
+
+                using (var reader = new StreamReader(resourceStream))
+                    return reader.ReadToEnd();
+            }
+        }
+
+        public static byte[] EmbeddedBytes(string resourceName, Assembly assembly = null)
+        {
+            if (assembly == null)
+                assembly = Assembly.GetExecutingAssembly();
+
+            resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
+            using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (resourceStream == null)
+                    return null;
+                using (var ms = new MemoryStream())
+                    return ms.ToArray();
+            }
+        }
+
+        public static Bitmap EmbeddedBitmap(string resourceName, Assembly assembly = null)
+        {
+            if (assembly == null)
+                assembly = Assembly.GetExecutingAssembly();
+
+            resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
+            using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (resourceStream == null)
+                    return null;
+                return new Bitmap(resourceStream);
+            }
         }
     }
 }
