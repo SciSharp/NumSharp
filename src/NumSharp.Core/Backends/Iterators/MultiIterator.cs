@@ -10,6 +10,15 @@ namespace NumSharp
         ///     Assigns rhs values to lhs.
         /// </summary>
         /// <remarks>Stops at first iterator stop.</remarks>
+        public static void Assign(NDArray lhs, NDArray rhs)
+        {
+            Assign(lhs.Storage, rhs.Storage);
+        }
+        
+        /// <summary>
+        ///     Assigns rhs values to lhs.
+        /// </summary>
+        /// <remarks>Stops at first iterator stop.</remarks>
         public static void Assign(UnmanagedStorage lhs, UnmanagedStorage rhs)
         {
 #if _REGEN
