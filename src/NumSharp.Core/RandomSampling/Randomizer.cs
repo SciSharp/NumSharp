@@ -9,7 +9,7 @@ namespace NumSharp
     /// </summary>
     /// <remarks>Copied and modified from https://referencesource.microsoft.com/#mscorlib/system/random.cs</remarks>
     [Serializable]
-    public class Randomizer : ICloneable
+    public sealed class Randomizer : ICloneable
     {
         private const int MBIG = int.MaxValue;
         private const long MBIG_LONG = long.MaxValue;
@@ -76,11 +76,29 @@ namespace NumSharp
         ==============================================================================*/
         /// <summary>Returns a random floating-point number between 0.0 and 1.0.</summary>
         /// <returns>A double-precision floating point number that is greater than or equal to 0.0, and less than 1.0.</returns>
-        protected virtual double Sample()
+        protected double Sample()
         {
             //Including this division at the end gives us significantly improved
             //random number distribution.
-            return (InternalSample() * (1.0 / MBIG));
+
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
+            return retVal * (1.0 / MBIG);
         }
 
         private int InternalSample()
@@ -112,7 +130,24 @@ namespace NumSharp
         private long InternalSampleLong()
         {
             const double factor = long.MaxValue / int.MaxValue;
-            return (long)(InternalSample() * factor);
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
+            return (long)(retVal * factor);
         }
 
         //
@@ -128,9 +163,26 @@ namespace NumSharp
 
         /// <summary>Returns a non-negative random integer.</summary>
         /// <returns>A 32-bit signed integer that is greater than or equal to 0 and less than <see cref="F:System.Int32.MaxValue" />.</returns>
-        public virtual int Next()
+        public int Next()
         {
-            return InternalSample();
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
+            return retVal;
         }
 
         private double GetSampleForLargeRange()
@@ -140,9 +192,37 @@ namespace NumSharp
             // If we use Sample for a range [Int32.MinValue..Int32.MaxValue)
             // We will end up getting even numbers only.
 
-            int result = InternalSample();
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            var result = retVal;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
             // Note we can't use addition here. The distribution will be bad if we do that.
-            bool negative = (InternalSample() % 2 == 0) ? true : false; // decide the sign based on second sample
+            bool negative = (retVal % 2 == 0) ? true : false; // decide the sign based on second sample
             if (negative)
             {
                 result = -result;
@@ -168,7 +248,7 @@ namespace NumSharp
         /// <returns>A 32-bit signed integer greater than or equal to <paramref name="minValue" /> and less than <paramref name="maxValue" />; that is, the range of return values includes <paramref name="minValue" /> but not <paramref name="maxValue" />. If <paramref name="minValue" /> equals <paramref name="maxValue" />, <paramref name="minValue" /> is returned.</returns>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
         /// <paramref name="minValue" /> is greater than <paramref name="maxValue" />.</exception>
-        public virtual int Next(int minValue, int maxValue)
+        public int Next(int minValue, int maxValue)
         {
             if (minValue > maxValue)
             {
@@ -202,7 +282,7 @@ namespace NumSharp
         /// <returns>A 32-bit signed integer that is greater than or equal to 0, and less than <paramref name="maxValue" />; that is, the range of return values ordinarily includes 0 but not <paramref name="maxValue" />. However, if <paramref name="maxValue" /> equals 0, <paramref name="maxValue" /> is returned.</returns>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
         /// <paramref name="maxValue" /> is less than 0.</exception>
-        public virtual long NextLong(long maxValue)
+        public long NextLong(long maxValue)
         {
             return (long)(Sample() * maxValue);
         }
@@ -212,7 +292,7 @@ namespace NumSharp
         /// <returns>A 32-bit signed integer that is greater than or equal to 0, and less than <paramref name="maxValue" />; that is, the range of return values ordinarily includes 0 but not <paramref name="maxValue" />. However, if <paramref name="maxValue" /> equals 0, <paramref name="maxValue" /> is returned.</returns>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
         /// <paramref name="maxValue" /> is less than 0.</exception>
-        public virtual long NextLong()
+        public long NextLong()
         {
             return InternalSampleLong();
         }
@@ -231,7 +311,7 @@ namespace NumSharp
         /// <returns>A 32-bit signed integer greater than or equal to <paramref name="minValue" /> and less than <paramref name="maxValue" />; that is, the range of return values includes <paramref name="minValue" /> but not <paramref name="maxValue" />. If <paramref name="minValue" /> equals <paramref name="maxValue" />, <paramref name="minValue" /> is returned.</returns>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
         /// <paramref name="minValue" /> is greater than <paramref name="maxValue" />.</exception>
-        public virtual long NextLong(long minValue, long maxValue)
+        public long NextLong(long minValue, long maxValue)
         {
             if (minValue > maxValue)
             {
@@ -264,9 +344,29 @@ namespace NumSharp
         /// <returns>A 32-bit signed integer that is greater than or equal to 0, and less than <paramref name="maxValue" />; that is, the range of return values ordinarily includes 0 but not <paramref name="maxValue" />. However, if <paramref name="maxValue" /> equals 0, <paramref name="maxValue" /> is returned.</returns>
         /// <exception cref="T:System.ArgumentOutOfRangeException">
         /// <paramref name="maxValue" /> is less than 0.</exception>
-        public virtual int Next(int maxValue)
+        public int Next(int maxValue)
         {
-            return (int)(Sample() * maxValue);
+            //Including this division at the end gives us significantly improved
+            //random number distribution.
+
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
+            return (int) (retVal * (1.0 / MBIG) * maxValue);
         }
 
 
@@ -277,9 +377,29 @@ namespace NumSharp
         ==============================================================================*/
         /// <summary>Returns a random floating-point number that is greater than or equal to 0.0, and less than 1.0.</summary>
         /// <returns>A double-precision floating point number that is greater than or equal to 0.0, and less than 1.0.</returns>
-        public virtual double NextDouble()
+        public double NextDouble()
         {
-            return Sample();
+            //Including this division at the end gives us significantly improved
+            //random number distribution.
+
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
+
+            if (++locINext >= 56) locINext = 1;
+            if (++locINextp >= 56) locINextp = 1;
+
+            retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+            if (retVal == MBIG) retVal--;
+            if (retVal < 0) retVal += MBIG;
+
+            SeedArray[locINext] = retVal;
+
+            inext = locINext;
+            inextp = locINextp;
+
+            return retVal * (1.0 / MBIG);
         }
 
 
@@ -294,12 +414,28 @@ namespace NumSharp
         /// <param name="buffer">An array of bytes to contain random numbers.</param>
         /// <exception cref="T:System.ArgumentNullException">
         /// <paramref name="buffer" /> is <see langword="null" />.</exception>
-        public virtual void NextBytes(byte[] buffer)
+        public void NextBytes(byte[] buffer)
         {
+            int retVal;
+            int locINext = inext;
+            int locINextp = inextp;
             for (int i = 0; i < buffer.Length; i++)
             {
-                buffer[i] = (byte)(InternalSample() % (byte.MaxValue + 1));
+                if (++locINext >= 56) locINext = 1;
+                if (++locINextp >= 56) locINextp = 1;
+
+                retVal = SeedArray[locINext] - SeedArray[locINextp];
+
+                if (retVal == MBIG) retVal--;
+                if (retVal < 0) retVal += MBIG;
+
+                SeedArray[locINext] = retVal;
+
+                buffer[i] = (byte)(retVal % 256);
             }
+
+            inext = locINext;
+            inextp = locINextp;
         }
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
