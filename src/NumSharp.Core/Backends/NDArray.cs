@@ -256,7 +256,11 @@ namespace NumSharp
         /// <summary>
         ///     Data length of every dimension
         /// </summary>
-        public int[] shape => Storage.Shape.Dimensions;
+        public int[] shape
+        {
+            get => Storage.Shape.Dimensions;
+            set => Storage.Reshape(value);
+        }
 
         /// <summary>
         ///     Dimension count
