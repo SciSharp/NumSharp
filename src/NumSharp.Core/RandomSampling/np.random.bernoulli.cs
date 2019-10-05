@@ -10,7 +10,7 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        /// Draw samples from a bernoulli distribution.
+        ///     Draw samples from a bernoulli distribution.
         /// </summary>
         /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
         /// <param name="shape">Output Shape</param>
@@ -18,7 +18,7 @@ namespace NumSharp
         public NDArray bernoulli(double p, Shape shape) => bernoulli(p, shape.Dimensions);
 
         /// <summary>
-        /// Draw samples from a bernoulli distribution.
+        ///     Draw samples from a bernoulli distribution.
         /// </summary>
         /// <param name="p">Parameter of the distribution, >= 0 and <=1.</param>
         /// <param name="dims">Output Shape</param>
@@ -26,21 +26,17 @@ namespace NumSharp
         public NDArray bernoulli(double p, params int[] dims)
         {
             if (dims == null || dims.Length == 0) //return scalar
-            {
-                var ret = new NDArray<double>(new Shape(1));
-                var data = new double[] { randomizer.NextDouble()};
-                ret.ReplaceData(data);
-                return ret;
-            }
+                return NDArray.Scalar(randomizer.NextDouble());
 
             var result = new NDArray<double>(dims);
-            ArraySlice<double> resultArray = result.Data<double>();
+            var len = result.size;
+            unsafe
+            {
+                var addr = result.Address;
+                for (int i = 0; i < len; i++)
+                    addr[i] = randomizer.NextDouble() > p ? 1 : 0;
+            }
 
-            Parallel.For(0, result.size, (i) => {
-                resultArray[i] = randomizer.NextDouble() > p ? 1 : 0;
-            });
-
-            result.ReplaceData(resultArray);
             return result;
         }
     }
