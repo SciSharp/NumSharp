@@ -79,7 +79,7 @@ namespace NumSharp.Backends
         {
             var ret = new int[shape.NDim + 1];
             ret[0] = 1;
-            Array.Copy(shape.Dimensions, 0, ret, 1, shape.NDim);
+            Array.Copy(shape.dimensions, 0, ret, 1, shape.NDim);
             return ret;
         }
 
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
         {
             var ret = new int[shape.NDim + 1];
             ret[ret.Length - 1] = 1;
-            Array.Copy(shape.Dimensions, 0, ret, 0, shape.NDim);
+            Array.Copy(shape.dimensions, 0, ret, 0, shape.NDim);
             return new Shape(ret);
         }
     }
