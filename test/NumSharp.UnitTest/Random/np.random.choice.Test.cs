@@ -25,8 +25,8 @@ namespace NumSharp.UnitTest.RandomSampling
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual[i] >= low, "Element was less than expected");
-                Assert.IsTrue(actual[i] < high, "Element was greater than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) >= low, "Element was less than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) < high, "Element was greater than expected");
             }
         }
 
@@ -46,8 +46,8 @@ namespace NumSharp.UnitTest.RandomSampling
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual[i] >= low, "Element was less than expected");
-                Assert.IsTrue(actual[i] < high, "Element was greater than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) >= low, "Element was less than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) < high, "Element was greater than expected");
             }
         }
 
@@ -67,10 +67,10 @@ namespace NumSharp.UnitTest.RandomSampling
             // Verify that all elements in output are within the range
             for (int i = 0; i < actual.size; i++)
             {
-                Assert.IsTrue(actual[i] >= low, "Element was less than expected");
-                Assert.IsTrue(actual[i] < high, "Element was greater than expected");
-                Assert.IsTrue(actual[i] != 1, "Sampled zero-probability element");
-                Assert.IsTrue(actual[i] != 4, "Sampled zero-probability element");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) >= low, "Element was less than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) < high, "Element was greater than expected");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) != 1, "Sampled zero-probability element");
+                Assert.IsTrue(actual.GetAtIndex<int>(i) != 4, "Sampled zero-probability element");
             }
         }
 
