@@ -84,6 +84,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
     <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 
@@ -92,6 +93,30 @@
     <None Include="data\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <None Remove="NumSharp.Bitmap\resources\captcha-a.png" />
+    <None Remove="NumSharp.Bitmap\resources\captcha-b.png" />
+    <None Remove="NumSharp.Bitmap\resources\captcha-c.png" />
+    <None Remove="NumSharp.Bitmap\resources\captcha-d.png" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-a.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-b.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-c.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-d.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
   </ItemGroup>
 
 
