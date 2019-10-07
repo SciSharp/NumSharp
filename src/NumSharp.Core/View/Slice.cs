@@ -82,6 +82,11 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
 
+        /// <summary>
+        /// return multiple elements for this dimension specified by the given index array (or boolean mask array)
+        /// </summary>
+        /// <param name="index_array_or_mask"></param>
+        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
@@ -346,7 +351,9 @@ namespace NumSharp
             return a;
         }
 
-        public static implicit operator Slice(int index) => new Slice(index, index + 1) {IsIndex = true};
+        public static implicit operator Slice(int index) => Slice.Index(index);
+        public static implicit operator Slice(string slice) => new Slice(slice);
+        public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
 
         #endregion
     }

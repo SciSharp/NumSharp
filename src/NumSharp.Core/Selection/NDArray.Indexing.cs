@@ -31,7 +31,14 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray this[params NDArray[] mindices] => _extract_indices(mindices, false, null);
+        public NDArray this[params NDArray[] indices]
+        {
+            get => _extract_indices(indices, false, null);
+            set
+            {
+                throw new NotImplementedException("Setter is not implemnted yet");
+            }
+        }
 
         /// <summary>
         ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
@@ -40,9 +47,9 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray GetIndices(NDArray @out, params NDArray[] mindices)
+        public NDArray GetIndices(NDArray @out, params NDArray[] indices)
         {
-            return _extract_indices(mindices, false, @out);
+            return _extract_indices(indices, false, @out);
         }
 
         private NDArray _extract_indices(NDArray[] mindices, bool isCollapsed, NDArray @out)
