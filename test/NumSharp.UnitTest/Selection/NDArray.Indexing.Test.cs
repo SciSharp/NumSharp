@@ -61,43 +61,30 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt32(1, 3) == 7);
         }
 
-        //TODO! NDArray[NDArray]
-        //[TestMethod]
-        //public void BoolArray()
-        //{
-        //    NDArray A = new double[] {1, 2, 3};
+        [TestMethod]
+        public void MaskSetter()
+        {
+            NDArray nd = new double[] { 1, 2, 3 };
+            nd[new bool[] { true, false, true }] = 99;
+            nd.Should().BeOfValues(99, 2, 99);
 
-        //    NDArray booleanArr = new bool[] {false, false, true};
+            nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
+            nd[new bool[,] { { true, false, true }, { false, true, false } }] = -2;
+            nd.Should().BeOfValues( -2, 2, -2, 4, -2, 6 );
+        }
 
-        //    A[booleanArr.MakeGeneric<bool>()] = 1;
+        [TestMethod]
+        public void Compare()
+        {
+            NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
+            (nd < 3).Should().BeOfValues(true, true, false, false, false, false);
 
-        //    Assert.IsTrue(System.Linq.Enumerable.SequenceEqual(A.ToArray<double>(), new double[] {1, 2, 1}));
+            nd[(NDArray)(nd < 3)] = -2;
+            nd.Should().BeOfValues( -2, -2, 3, 4, 5, 6 );
 
-        //    A = new double[,] {{1, 2, 3}, {4, 5, 6}};
-
-        //    booleanArr = new bool[,] {{true, false, true}, {false, true, false}};
-
-        //    A[booleanArr.MakeGeneric<bool>()] = -2;
-
-        //    Assert.IsTrue(System.Linq.Enumerable.SequenceEqual(A.ToArray<double>(), new double[] {-2, 2, -2, 4, -2, 6}));
-        //}
-
-        //TODO! NDArray[NDArray]
-        //[TestMethod]
-        //public void Compare()
-        //{
-        //    NDArray A = new double[,] {{1, 2, 3}, {4, 5, 6}};
-
-        //    var boolArr = A < 3;
-        //    Assert.IsTrue(Enumerable.SequenceEqual(boolArr.ToArray<bool>(), new[] {true, true, false, false, false, false}));
-
-        //    A[A < 3] = -2;
-        //    Assert.IsTrue(Enumerable.SequenceEqual(A.ToArray<double>(), new double[] {-2, -2, 3, 4, 5, 6}));
-
-        //    var a = A[A == -2 | A > 5];
-
-        //    Assert.IsTrue(Enumerable.SequenceEqual(a.ToArray<double>(), new double[] {-2, -2, 6}));
-        //}
+            var a = nd[nd == -2 | nd > 5];
+            a.Should().BeOfValues( -2, -2, 6 );
+        }
 
         [TestMethod]
         public void NDArrayByNDArray()
