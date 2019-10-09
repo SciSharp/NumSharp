@@ -82,13 +82,13 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
 
-        /// <summary>
-        /// return multiple elements for this dimension specified by the given index array (or boolean mask array)
-        /// </summary>
-        /// <param name="index_array_or_mask"></param>
-        /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
+        ///// <summary>
+        ///// return multiple elements for this dimension specified by the given index array (or boolean mask array)
+        ///// </summary>
+        ///// <param name="index_array_or_mask"></param>
+        ///// <returns></returns>
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
         public int? Start;
         public int? Stop;
@@ -97,10 +97,10 @@ namespace NumSharp
         public bool IsEllipsis;
         public bool IsNewAxis;
 
-        /// <summary>
-        /// Array of integer indices to select elements by index extraction or boolean values to select by masking the elements of the given dimension.
-        /// </summary>
-        public NDArray Selection = null;
+        ///// <summary>
+        ///// Array of integer indices to select elements by index extraction or boolean values to select by masking the elements of the given dimension.
+        ///// </summary>
+        //public NDArray Selection = null;
 
         /// <summary>
         /// Length of the slice. 
@@ -353,7 +353,7 @@ namespace NumSharp
 
         public static implicit operator Slice(int index) => Slice.Index(index);
         public static implicit operator Slice(string slice) => new Slice(slice);
-        public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
+        //public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
 
         #endregion
     }

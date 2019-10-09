@@ -1020,5 +1020,79 @@ namespace NumSharp.UnitTest.Selection
             var sliced = a[-1, Slice.All];
             sliced.Should().BeShaped(3).And.NotBeSliced();
         }
+
+        [TestMethod]
+        public void IndexSelecton_2D_from_1D()
+        {
+            //>>> x = np.arange(10,1,-1)
+            //>>> x
+            //array([10,  9,  8,  7,  6,  5,  4,  3,  2])
+            //>>> x[np.array([[1, 1],[2, 3]])]
+            //array([[9, 9],
+            //       [8, 7]])
+            //>>>
+
+            var x = np.arange(10, 1, -1);
+            x[np.array(new int[,]{{1, 1},{2, 3}})].Should().BeOfValues(1, 1, 2, 3).And.BeShaped(2,2);
+        }
+
+
+        [TestMethod]
+        public void IndexSelecton_2D_from_2D()
+        {
+            //>>> y = np.arange(35).reshape(5, 7)
+            //>>> y[np.array([0, 2, 4]), np.array([0, 1, 2])]
+            //array([0, 15, 30])
+
+            var y = np.arange(35).reshape(5, 7);
+            y[np.array(0,2,4), np.array(0, 1, 2)].Should().BeOfValues(0, 15, 30).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void IndexSelecton_IndexArray_plus_Scalar_from_2D()
+        {
+            //>>> y = np.arange(35).reshape(5, 7)
+            //>>> y[np.array([0, 2, 4]), 1]
+            //array([ 1, 15, 29])
+
+            var y = np.arange(35).reshape(5, 7);
+            y[np.array(0, 2, 4), 1].Should().BeOfValues(1, 15, 29).And.BeShaped(3);
+        }
+
+        [TestMethod]
+        public void IndexSelecton_1D_from_2D()
+        {
+            //>>> y = np.arange(35).reshape(5, 7)
+            //>>> y[np.array([0, 2, 4])]
+            //array([[ 0,  1,  2,  3,  4,  5,  6],
+            //       [14, 15, 16, 17, 18, 19, 20],
+            //       [28, 29, 30, 31, 32, 33, 34]])
+            var y = np.arange(35).reshape(5, 7);
+            y[np.array(0, 2, 4)].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19, 20, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(3, 7);
+        }
+
+        [TestMethod]
+        public void Masking_2D_over_2D()
+        {
+            //>>> y = np.arange(35).reshape(5, 7)
+            //>>> b = y>20
+            //>>> y[b]
+            //array([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34])
+            var y = np.arange(35).reshape(5, 7);
+            y[y > 20].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19, 20, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(3, 7);
+        }
+
+
+        [TestMethod]
+        public void MixedIndexing_NDim()
+        {
+            // slicing with mixed index types
+            var a = np.arange(27).reshape(3, 3, 3);
+            a["..., 0, 0"].Should().BeOfValues(0, 9, 18).And.BeShaped(3);
+            a["...", 0, 0].Should().BeOfValues(0,9,18).And.BeShaped(3);
+            a["...", Slice.Index(0), 0].Should().BeOfValues(0, 9, 18).And.BeShaped(3);
+            a[Slice.All, "1:2", 0].Should().BeOfValues(3, 12, 21).And.BeShaped(3,1);
+
+        }
     }
 }

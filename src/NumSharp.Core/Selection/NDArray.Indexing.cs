@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Generic;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -25,15 +26,63 @@ namespace NumSharp
             set => Storage.SetData(value, indices);
         }
 
-        /// <summary>
-        ///     Used to perform selection based on indices.
-        /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray this[params NDArray[] indices]
+        ///// <summary>
+        /////     Used to perform selection based on indices.
+        ///// </summary>
+        ///// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        ///// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        ///// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        public NDArray this[NDArray indices]
         {
-            get => _extract_indices(indices, false, null);
+            get => _extract_indices(new []{indices}, false, null);
+            set
+            {
+                throw new NotImplementedException("Setter is not implemnted yet");
+            }
+        }
+
+        ///// <summary>
+        /////     Used to perform selection based on a boolean mask.
+        ///// </summary>
+        ///// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        ///// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        ///// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        public NDArray this[NDArray<bool> mask]
+        {
+            get => _extract_indices(new[] { np.nonzero(mask) }, false, null);
+            set
+            {
+                throw new NotImplementedException("Setter is not implemnted yet");
+            }
+        }
+
+        /// <summary>
+        /// Perform slicing, index extraction, masking and indexing all at the same time with mixed index objects
+        /// </summary>
+        /// <param name="indices_or_slices"></param>
+        /// <returns></returns>
+        public NDArray this[params object[] indices_or_slices]
+        {
+            get
+            {
+                if (indices_or_slices.Any(x=> x is NDArray))
+                {
+                    var indices = (NDArray)indices_or_slices;
+                    if (indices.Shape == this.Shape)
+                        return _extract_indices(new NDArray[] {indices}, false, null);
+                }
+                var slices = indices_or_slices.Select(x =>
+                {
+                    switch (x)
+                    {
+                        case Slice o: return o;
+                        case int o: return Slice.Index(o);
+                        case string o: return new Slice(o);
+                    }
+                    throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
+                }).ToArray();
+                return new NDArray(Storage.GetView(slices));
+            }
             set
             {
                 throw new NotImplementedException("Setter is not implemnted yet");
