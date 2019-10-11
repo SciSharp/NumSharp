@@ -101,8 +101,8 @@ namespace NumSharp
 
         public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, Type dtype);
         public abstract NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, NPTypeCode? typeCode = null);
-        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype);
-        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode? typeCode = null);
+        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype, NDArray @out = null);
+        public abstract NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode ? typeCode = null, NDArray @out = null);
 
         #endregion
 
