@@ -11,7 +11,7 @@ namespace NumSharp
     ///     Represents a shape of an N-D array.
     /// </summary>
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
-    public struct Shape : ICloneable, IEquatable<Shape>
+    public partial struct Shape : ICloneable, IEquatable<Shape>
     {
         internal ViewInfo ViewInfo;
         internal BroadcastInfo BroadcastInfo;

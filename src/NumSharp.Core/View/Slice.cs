@@ -54,13 +54,41 @@ namespace NumSharp
     [DebuggerStepThrough]
     public class Slice
     {
+        /// <summary>
+        /// return : for this dimension
+        /// </summary>
         public static readonly Slice All = new Slice(null, null);
 
+        /// <summary>
+        /// return 0:0 for this dimension
+        /// </summary>
         public static readonly Slice None = new Slice(0, 0, 1);
 
+        /// <summary>
+        /// fill up the missing dimensions with : at this point, corresponds to ... 
+        /// </summary>
         public static readonly Slice Ellipsis = new Slice(0, 0, 1) { IsEllipsis = true };
 
+        /// <summary>
+        /// insert a new dimension at this point
+        /// </summary>
         public static readonly Slice NewAxis = new Slice(0, 0, 1) { IsNewAxis = true };
+
+        /// <summary>
+        /// return exactly one element at this dimension and reduce the shape from n-dim to (n-1)-dim
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
+
+        ///// <summary>
+        ///// return multiple elements for this dimension specified by the given index array (or boolean mask array)
+        ///// </summary>
+        ///// <param name="index_array_or_mask"></param>
+        ///// <returns></returns>
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
         public int? Start;
         public int? Stop;
@@ -68,6 +96,11 @@ namespace NumSharp
         public bool IsIndex;
         public bool IsEllipsis;
         public bool IsNewAxis;
+
+        ///// <summary>
+        ///// Array of integer indices to select elements by index extraction or boolean values to select by masking the elements of the given dimension.
+        ///// </summary>
+        //public NDArray Selection = null;
 
         /// <summary>
         /// Length of the slice. 
@@ -214,9 +247,6 @@ namespace NumSharp
 
         #endregion
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Slice Index(int index) => new Slice(index, index + 1) {IsIndex = true};
-
         public override string ToString()
         {
             if (IsIndex)
@@ -321,7 +351,9 @@ namespace NumSharp
             return a;
         }
 
-        public static implicit operator Slice(int index) => new Slice(index, index + 1) {IsIndex = true};
+        public static implicit operator Slice(int index) => Slice.Index(index);
+        public static implicit operator Slice(string slice) => new Slice(slice);
+        //public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
 
         #endregion
     }

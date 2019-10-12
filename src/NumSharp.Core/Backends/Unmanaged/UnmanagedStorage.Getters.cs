@@ -110,6 +110,42 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Gets a subshape based on given <paramref name="indices"/>.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <returns></returns>
+        /// <remarks>Does not copy, returns a <see cref="Slice"/> or a memory slice</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        public unsafe UnmanagedStorage GetData(int* dims, int ndims)
+        {
+            var this_shape = Shape;
+
+            // ReSharper disable once ConvertIfStatementToReturnStatement
+            Shape.InferNegativeCoordinates(Shape.dimensions, dims, ndims);
+            if (this_shape.IsBroadcasted)
+            {
+                var (shape, offset) = this_shape.GetSubshape(dims, ndims);
+                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
+            }
+            else if (this_shape.IsSliced)
+            {
+                // in this case we can not get a slice of contiguous memory, so we slice
+                var slices = new Slice[ndims];
+                for (int i = 0; i < ndims; i++)
+                {
+                    slices[i] = Slice.Index(*(dims + i));
+                }
+
+                return GetView(slices);
+            }
+            else
+            {
+                var (shape, offset) = this_shape.GetSubshape(dims, ndims);
+                return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+            }
+        }
+
+        /// <summary>
         ///     Get reference to internal data storage and cast (also copies) elements to new dtype if necessary
         /// </summary>
         /// <typeparam name="T">new storage data type</typeparam>

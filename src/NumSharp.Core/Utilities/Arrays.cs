@@ -23,7 +23,12 @@ namespace NumSharp.Utilities
 
             // Return new array.
             var res = new T[len];
-            Parallel.For(0, len, i => res[i] = source[i + start]);
+            if (len > 700_000)
+                Parallel.For(0, len, i => res[i] = source[i + start]);
+            else
+                for (int i = 0; i < len; i++)
+                    res[i] = source[i + start];
+
             return res;
         }
 
@@ -39,7 +44,11 @@ namespace NumSharp.Utilities
 
             // Return new array.
             var res = new T[len];
-            Parallel.For(0, len, i => res[i] = source[i + start]);
+            if (len > 700_000)
+                Parallel.For(0, len, i => res[i] = source[i + start]);
+            else
+                for (long i = 0; i < len; i++)
+                    res[i] = source[i + start];
             return res;
         }
 
