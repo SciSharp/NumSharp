@@ -292,11 +292,11 @@ namespace NumSharp.Backends
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
-            if (leftShape.IsBroadcasted || rightShape.IsBroadcasted)
-                throw new NotSupportedException("Unable to broadcast already broadcasted shape."); //TODO!
-
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
+
+            if (leftShape.IsBroadcasted || rightShape.IsBroadcasted)
+                throw new NotSupportedException("Unable to broadcast already broadcasted shape."); //TODO! it would make sense to use shape.BroadcastInfo.Original.
 
             Shape left, right, mit;
             int i, nd, k, j, tmp;
