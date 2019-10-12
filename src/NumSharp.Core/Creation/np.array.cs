@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -72,10 +74,54 @@ namespace NumSharp
         ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from. .</param>
+        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         public static NDArray array<T>(params T[] data) where T : unmanaged => new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
+
+        /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        public static NDArray array<T>(IEnumerable<T> data) where T : unmanaged
+        {
+            var slice = ArraySlice.FromArray(data.ToArray(), false);
+            return new NDArray(slice, Shape.Vector(slice.Count));
+        }
+
+        /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <remarks>
+        ///     https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>
+        ///     Always performs a copy.<br></br>
+        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
+        /// </remarks>
+        public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
+        {
+            var slice = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(size));
+            unsafe
+            {
+                using (var enumerator = data.GetEnumerator())
+                {
+                    Func<bool> next = enumerator.MoveNext;
+                    
+                    var addr = slice.Address;
+                    for (int i = 0; i < size && next(); i++)
+                    {
+                        addr[i] = enumerator.Current;
+                    }
+                }
+            }
+
+            return new NDArray(slice, Shape.Vector(slice.Count));
+        }
 
         /// <summary>
         ///     Create a vector <see cref="NDArray"/> of dtype <see cref="char"/>.
