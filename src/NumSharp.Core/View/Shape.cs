@@ -389,6 +389,12 @@ namespace NumSharp
 
         /// <summary>
         ///     Get offset index out of coordinate indices.
+        ///
+        ///     The offset is the absolute offset in memory for the given coordinates.
+        ///     Even for shapes that were sliced and reshaped after slicing and sliced again (and so forth)
+        ///     this returns the absolute memory offset.
+        ///
+        ///     Note: the inverse operation to this is GetCoordinatesFromAbsoluteIndex
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
@@ -878,9 +884,14 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Transforms offset index in this shape into coordinates that matches this shape.
+        ///  Gets coordinates in this shape from index in this shape (slicing is ignored).
+        ///  Example: Shape (2,3)
+        /// 0 => [0, 0]
+        /// 1 => [0, 1]
+        /// ...
+        /// 6 => [1, 2]
         /// </summary>
-        /// <param name="offset"></param>
+        /// <param name="offset">the index if you would iterate from 0 to shape.size in row major order</param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
         public int[] GetCoordinates(int offset)
@@ -931,7 +942,21 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array
+        /// Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.
+        /// Note: this is the inverse operation of GetOffset
+        /// Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]
+        /// The absolute indices in a are:
+        /// [0, 1, 2,
+        ///  3, 4, 5]
+        /// The absolute indices in b are:
+        /// [1, 2,
+        ///  4, 5]
+        /// Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.
+        ///
+        /// Examples:
+        /// a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]
+        /// b.GetCoordinatesFromAbsoluteIndex(1) returns [0, 0]
+        /// b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape
         /// </summary>
         /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
         /// <returns></returns>
