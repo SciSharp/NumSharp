@@ -138,5 +138,23 @@ namespace NumSharp.UnitTest.APIs
             z = np.divide(x, y);
             Assert.IsTrue(Enumerable.SequenceEqual(z.Data<UInt16>(), new UInt16[] {1, 1, 1, 1, 1, 1, 1, 1, 1}));
         }
+
+        [TestMethod]
+        public void Maximum_Slice()
+        {
+            var boxes1 = np.array(new double[] { 12.875, 14.125, 39.75, 49 }).reshape(1, 4);
+            var boxes2 = np.array(new double[]
+            {
+                25.875, 30.6875, 27.125, 32.3125,
+                25.5, 29.625 , 27.5, 33.375,
+                24.4375, 30.0625, 28.5625, 32.9375
+            }).reshape(3, 4);
+
+            var x = boxes1[Slice.Ellipsis, new Slice(":2")];
+            var y = boxes2[Slice.Ellipsis, new Slice(":2")];
+
+            var z = np.maximum(x, y);
+            Assert.IsTrue(Enumerable.SequenceEqual(z.Data<double>(), new double[] { 25.875, 30.6875 }));
+        }
     }
 }
