@@ -164,7 +164,7 @@ namespace NumSharp.UnitTest.Maths
             x.Should().BeOfValues(12.875, 14.125).And.BeShaped(1, 2);
             y.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3,2);
             var z = np.maximum(x, y);
-            z.Should().BeOfValues( 25.875, 30.6875 );
+            z.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625);
         }
     }
 }
