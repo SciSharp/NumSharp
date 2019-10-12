@@ -14,7 +14,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray maximum(in NDArray x1, in NDArray x2, NPTypeCode? outType = null)
         {
-            return np.clip(x1, a_min: x2, a_max: null, outType: outType);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, outType: outType);
         }
 
         /// <summary>
@@ -27,7 +28,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray maximum(in NDArray x1, in NDArray x2, Type outType)
         {
-            return np.clip(x1, a_min: x2, a_max: null, outType: outType);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, outType: outType);
         }
 
         /// <summary>
@@ -40,7 +42,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray maximum(in NDArray x1, in NDArray x2, NDArray @out)
         {
-            return np.clip(x1, a_min: x2, a_max: null, @out: @out);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, @out: @out);
         }
 
         /// <summary>
@@ -53,7 +56,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray fmax(in NDArray x1, in NDArray x2, NPTypeCode? outType = null)
         {
-            return np.clip(x1, a_min: x2, a_max: null, outType: outType);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, outType: outType);
         }
 
         /// <summary>
@@ -66,7 +70,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray fmax(in NDArray x1, in NDArray x2, Type outType)
         {
-            return np.clip(x1, a_min: x2, a_max: null, outType: outType);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, outType: outType);
         }
 
         /// <summary>
@@ -79,7 +84,8 @@ namespace NumSharp
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
         public static NDArray fmax(in NDArray x1, in NDArray x2, NDArray @out)
         {
-            return np.clip(x1, a_min: x2, a_max: null, @out: @out);
+            var (_x1, _x2) = np.broadcast_arrays(x1, x2);
+            return np.clip(_x1, a_min: _x2, a_max: null, @out: @out);
         }
     }
 }
