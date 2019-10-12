@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest.Maths
         }
 
         [TestMethod]
-        public void Maximum_Minimum_Slice()
+        public void Minimum_Slice()
         {
             //>>> boxes1 = np.array([12.875, 14.125, 39.75, 49]).reshape(1, 4)
             //>>> boxes2 = np.array([25.875, 30.6875, 27.125, 32.3125, 25.5, 29.625, 27.5, 33.375, 24.4375, 30.0625, 28.5625, 32.9375]).reshape(3, 4)
@@ -160,17 +160,44 @@ namespace NumSharp.UnitTest.Maths
                 24.4375, 30.0625, 28.5625, 32.9375
             }).reshape(3, 4);
 
-            var left_up = boxes1[Slice.Ellipsis, new Slice(":2")];
-            var right_down = boxes2[Slice.Ellipsis, new Slice(":2")];
-            left_up.Should().BeOfValues(12.875, 14.125).And.BeShaped(1, 2);
-            right_down.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3,2);
-            var z = np.maximum(left_up, right_down);
-            z.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3, 2);
-
-            left_up = boxes1[Slice.Ellipsis, new Slice("2:")];
-            right_down = boxes2[Slice.Ellipsis, new Slice("2:")];
-            z = np.minimum(left_up, right_down);
+            var left_up = boxes1[Slice.Ellipsis, new Slice("2:")];
+            var right_down = boxes2[Slice.Ellipsis, new Slice("2:")];
+            var z = np.minimum(left_up, right_down);
             z.Should().BeOfValues(27.125, 32.3125, 27.5, 33.375, 28.5625, 32.9375).And.BeShaped(3, 2);
+        }
+
+        [TestMethod]
+        public void Maximum_Slice()
+        {
+            //>>> boxes1 = np.array([12.875, 14.125, 39.75, 49]).reshape(1, 4)
+            //>>> boxes2 = np.array([25.875, 30.6875, 27.125, 32.3125, 25.5, 29.625, 27.5, 33.375, 24.4375, 30.0625, 28.5625, 32.9375]).reshape(3, 4)
+            //>>> x = boxes1[..., :2]
+            //>>> x
+            //array([[12.875, 14.125]])
+            //>>> y = boxes2[..., :2]
+            //>>> y
+            //array([[25.875 , 30.6875],
+            //           [25.5   , 29.625 ],
+            //           [24.4375, 30.0625]])
+            //>>> z = np.maximum(x, y)
+            //>>> z
+            //array([[25.875, 30.6875],
+            //       [25.5   , 29.625 ],
+            //       [24.4375, 30.0625]])
+            var boxes1 = np.array(new double[] { 12.875, 14.125, 39.75, 49 }).reshape(1, 4);
+            var boxes2 = np.array(new double[]
+            {
+                25.875, 30.6875, 27.125, 32.3125,
+                25.5, 29.625 , 27.5, 33.375,
+                24.4375, 30.0625, 28.5625, 32.9375
+            }).reshape(3, 4);
+
+            var x = boxes1[Slice.Ellipsis, new Slice(":2")];
+            var y = boxes2[Slice.Ellipsis, new Slice(":2")];
+            x.Should().BeOfValues(12.875, 14.125).And.BeShaped(1, 2);
+            y.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3, 2);
+            var z = np.maximum(x, y);
+            z.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3, 2);
         }
     }
 }
