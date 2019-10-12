@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -51,9 +52,9 @@ namespace NumSharp
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
-            var coords = new List<int>(ndims+10);
+            var coords = new List<int>(ndims + 10);
             for (int i = 0; i < ndims; i++)
-                coords.Add( indices[i]);
+                coords.Add(indices[i]);
             if (vi.UnreducedShape.IsScalar && ndims == 1 && indices[0] == 0 && !IsRecursive)
                 return 0;
             if (ndims > vi.UnreducedShape.dimensions.Length)
@@ -109,6 +110,105 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Gets the shape based on given <see cref="indicies"/> and the index offset (C-Contiguous) inside the current storage.
+        /// </summary>
+        /// <param name="indicies">The selection of indexes 0 based.</param>
+        /// <returns></returns>
+        /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
+        [MethodImpl((MethodImplOptions)768)]
+        public unsafe (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)
+        {
+            if (ndims == 0)
+                return (this, 0);
+
+            int offset;
+            var dim = ndims;
+            var newNDim = dimensions.Length - dim;
+            if (IsBroadcasted)
+            {
+                var dimsClone = stackalloc int[ndims];
+                for (int j = 0; j < ndims; j++)
+                {
+                    dimsClone[j] = dims[j];
+                }
+
+                Shape unreducedBroadcasted;
+                if (!BroadcastInfo.UnbroadcastShape.HasValue)
+                {
+                    unreducedBroadcasted = this.Clone(true, false, false);
+                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
+                    {
+                        if (unreducedBroadcasted.strides[i] == 0)
+                            unreducedBroadcasted.dimensions[i] = 1;
+                    }
+
+                    BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                }
+                else
+                    unreducedBroadcasted = BroadcastInfo.UnbroadcastShape.Value;
+
+                //unbroadcast indices
+                for (int i = 0; i < dim; i++)
+                    dimsClone[i] = dimsClone[i] % unreducedBroadcasted[i];
+
+                offset = unreducedBroadcasted.GetOffset(dimsClone, ndims);
+
+                var retShape = new int[newNDim];
+                var strides = new int[newNDim];
+                var original = new int[newNDim];
+                var original_strides = new int[newNDim];
+                for (int i = 0; i < newNDim; i++)
+                {
+                    retShape[i] = this.dimensions[dim + i];
+                    strides[i] = this.strides[dim + i];
+                    original[i] = unreducedBroadcasted[dim + i];
+                    original_strides[i] = unreducedBroadcasted.strides[dim + i];
+                }
+
+                return (new Shape(retShape, strides, new Shape(original, original_strides)), offset);
+            }
+
+            //compute offset
+            offset = GetOffset(dims, ndims);
+
+            var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
+            if (offset >= orig_shape.Size)
+                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {orig_shape.Size}");
+
+            if (ndims == dimensions.Length)
+                return (Scalar, offset);
+
+            //compute subshape
+            var innerShape = new int[newNDim];
+            for (int i = 0; i < innerShape.Length; i++)
+                innerShape[i] = this.dimensions[dim + i];
+
+            //TODO! This is not full support of sliced,
+            //TODO! when sliced it usually diverts from this function but it would be better if we add support for sliced arrays too.
+            return (new Shape(innerShape), offset);
+        }
+
+
+        /// <summary>
+        ///     Translates coordinates with negative indices, e.g:<br></br>
+        ///     np.arange(9)[-1] == np.arange(9)[8]<br></br>
+        ///     np.arange(9)[-2] == np.arange(9)[7]<br></br>
+        /// </summary>
+        /// <param name="dimensions">The dimensions these coordinates are targeting</param>
+        /// <param name="coords">The coordinates.</param>
+        /// <returns>Coordinates without negative indices.</returns>
+        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
+        public static unsafe void InferNegativeCoordinates(int[] dimensions, int* coords, int coordsCount)
+        {
+            for (int i = 0; i < coordsCount; i++)
+            {
+                var curr = coords[i];
+                if (curr < 0)
+                    coords[i] = dimensions[i] + curr;
+            }
+        }
+
+        /// <summary>
         ///     Get offset index out of coordinate indices.
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
@@ -128,7 +228,7 @@ namespace NumSharp
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
-            var coords = new List<int>(ndims+10);
+            var coords = new List<int>(ndims + 10);
             for (int i = 0; i < ndims; i++)
                 coords.Add(indices[i]);
             if (vi.UnreducedShape.IsScalar && ndims == 1 && indices[0] == 0 && !IsRecursive)
