@@ -48,7 +48,7 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(indices, ndims);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
@@ -105,7 +105,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 
@@ -224,7 +224,7 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(indices, ndims);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
@@ -304,7 +304,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 

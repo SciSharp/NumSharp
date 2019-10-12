@@ -114,6 +114,31 @@ namespace NumSharp.UnitTest.View
             new NDArray(t).ToString(flat: true).Should().Be("array([0, 11, 2, 3, 4, 5, 6, 7, 8, 99, -10, 11, 12, 13, 14, 15, 16, 17, -18, 19])");
         }
 
+        [TestMethod]
+        public void ReshapeSlicedArray1()
+        {
+            //>>> a
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            var t = new UnmanagedStorage(np.arange(9).GetData(), new Shape(3, 3));
+            var view = t.GetView(":, 1:");
+            //>>> a[:, 1:]
+            //array([[1, 2],
+            //       [4, 5],
+            //       [7, 8]])
+            view.Should().BeOfValues(1,2,4,5,7,8).And.BeShaped(3, 2);
+            view.Reshape(2,3);
+            //>>> a[:, 1:].reshape(2,3)
+            //array([[1, 2, 4],
+            //       [5, 7, 8]])
+            view.Should().BeOfValues(1, 2, 4, 5, 7, 8).And.BeShaped(2,3);
+            view.GetValue(0, 0).Should().Be(1);
+            view.GetValue(1, 0).Should().Be(5);
+            view.GetValue(1, 1).Should().Be(7);
+            view.GetValue(1, 2).Should().Be(8);
+        }
+
     }
 }
 

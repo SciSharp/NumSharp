@@ -89,13 +89,13 @@ namespace NumSharp
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(new int[0]) {ViewInfo = viewInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo) => new Shape(new int[0]) { ViewInfo = viewInfo };
 
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(new int[0]) {ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
+        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) => new Shape(new int[0]) { ViewInfo = viewInfo, BroadcastInfo = broadcastInfo };
 
         /// <summary>
         ///     Create a shape that represents a vector.
@@ -103,7 +103,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, layout = 'C', size = length};
+            var shape = new Shape { dimensions = new int[] { length }, strides = new int[] { 1 }, layout = 'C', size = length };
             shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
             return shape;
         }
@@ -116,8 +116,8 @@ namespace NumSharp
         {
             var shape = new Shape
             {
-                dimensions = new[] {length},
-                strides = new int[] {1},
+                dimensions = new[] { length },
+                strides = new int[] { 1 },
                 layout = 'C',
                 size = length,
                 ViewInfo = viewInfo
@@ -133,7 +133,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Matrix(int rows, int cols)
         {
-            var shape = new Shape {dimensions = new[] {rows, cols}, strides = new int[] {cols, 1}, layout = 'C', size = rows * cols};
+            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, layout = 'C', size = rows * cols };
 
             unchecked
             {
@@ -270,7 +270,7 @@ namespace NumSharp
             this.dimensions = dims;
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
-            BroadcastInfo = new BroadcastInfo() {OriginalShape = originalShape};
+            BroadcastInfo = new BroadcastInfo() { OriginalShape = originalShape };
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -331,7 +331,7 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public static Shape Empty(int ndim)
         {
-            return new Shape {dimensions = new int[ndim], strides = new int[ndim]};
+            return new Shape { dimensions = new int[ndim], strides = new int[ndim] };
             //default vals already sets: ret.layout = 0;
             //default vals already sets: ret.size = 0;
             //default vals already sets: ret._hashCode = 0;
@@ -426,7 +426,7 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(indices);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
@@ -481,7 +481,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 
@@ -523,11 +523,11 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(index);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
-            var coords = new List<int>(1) {index};
+            var coords = new List<int>(1) { index };
             if (vi.UnreducedShape.IsScalar && index == 0 && !IsRecursive)
                 return 0;
             if (1 > vi.UnreducedShape.dimensions.Length)
@@ -578,7 +578,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 
@@ -622,7 +622,7 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(indices);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
@@ -700,7 +700,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 
@@ -720,11 +720,11 @@ namespace NumSharp
             {
                 // we are dealing with an unsliced recursively reshaped slice
                 offset = GetOffset_IgnoreViewInfo(index);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+                var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
 
-            var coords = new List<int>(1) {index};
+            var coords = new List<int>(1) { index };
             if (vi.UnreducedShape.IsScalar && index == 0 && !IsRecursive)
                 return 0;
             if (1 > vi.UnreducedShape.dimensions.Length)
@@ -798,7 +798,7 @@ namespace NumSharp
             if (!IsRecursive)
                 return offset;
             // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset, ignore_view_info: true);
+            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
             return vi.ParentShape.GetOffset(parent_coords1);
         }
 
@@ -878,16 +878,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Transforms offset index into coordinates that matches this shape.
+        ///     Transforms offset index in this shape into coordinates that matches this shape.
         /// </summary>
         /// <param name="offset"></param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int[] GetCoordinates(int offset, bool ignore_view_info = false)
+        public int[] GetCoordinates(int offset)
         {
             int[] coords = null;
+
             if (strides.Length == 1)
-                coords = new int[] {offset};
+                coords = new int[] { offset };
             else if (layout == 'C')
             {
                 int counter = offset;
@@ -926,24 +927,99 @@ namespace NumSharp
                     }
                 }
             }
+            return coords;
+        }
 
-            if (IsSliced && !ignore_view_info)
+        /// <summary>
+        /// Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array
+        /// </summary>
+        /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
+        /// <returns></returns>
+        [MethodImpl((MethodImplOptions)768)]
+        public int[] GetCoordinatesFromAbsoluteIndex(int offset)
+        {
+            int[] coords = null;
+            if (!IsSliced)
             {
-                // TODO! undo dimensionality reduction
-                for (int i = 0; i < coords.Length; i++)
+                if (strides.Length == 1)
+                    coords = new int[] { offset };
+                else if (layout == 'C')
                 {
-                    var slices = ViewInfo.Slices;
-                    if (slices == null)
+                    int counter = offset;
+                    coords = new int[strides.Length];
+                    int stride;
+                    for (int i = 0; i < strides.Length; i++)
                     {
-                        if (ViewInfo.ParentShape != null)
-                            slices = ViewInfo.ParentShape.ViewInfo.Slices;
+                        stride = strides[i];
+                        if (stride == 0)
+                        {
+                            coords[i] = 0;
+                        }
+                        else
+                        {
+                            coords[i] = counter / stride;
+                            counter -= coords[i] * stride;
+                        }
                     }
-                    var slice = slices[i];
-                    coords[i] = (coords[i] / slice.Step) - slice.Start;
                 }
+                else
+                {
+                    int counter = offset;
+                    coords = new int[strides.Length];
+                    int stride;
+                    for (int i = strides.Length - 1; i >= 0; i--)
+                    {
+                        stride = strides[i];
+                        if (stride == 0)
+                        {
+                            coords[i] = 0;
+                        }
+                        else
+                        {
+                            coords[i] = counter / stride;
+                            counter -= coords[i] * stride;
+                        }
+                    }
+                }
+                return coords;
             }
 
-            return coords;
+            // handle sliced shape
+            int[] parent_coords = null;
+            if (IsRecursive)
+            {
+                var parent = ViewInfo.ParentShape;
+                var unreshaped_parent_coords = parent.GetCoordinatesFromAbsoluteIndex(offset);
+                var parent_shape_offset = parent.GetOffset_IgnoreViewInfo(unreshaped_parent_coords);
+                var orig_shape = ViewInfo.OriginalShape.IsEmpty ? this : ViewInfo.OriginalShape;
+                parent_coords = orig_shape.GetCoordinates(parent_shape_offset);
+            }
+            else
+                parent_coords = ViewInfo.OriginalShape.GetCoordinates(offset);
+            if (ViewInfo.Slices == null)
+                return parent_coords;
+            return ReplaySlicingOnCoords(parent_coords, ViewInfo.Slices);
+        }
+
+        [MethodImpl((MethodImplOptions)768)]
+        private int[] ReplaySlicingOnCoords(int[] parentCoords, SliceDef[] slices)
+        {
+            var coords = new List<int>();
+            for (int i = 0; i < parentCoords.Length; i++)
+            {
+                var slice = slices[i];
+                var coord = parentCoords[i];
+                if (slice.Count == -1) // this is a Slice.Index so we remove this dim from coords
+                    continue;
+                if (slice.Count == 0) // this is a Slice.None which means there is no set of coordinates that can index anything in this shape
+                    return new int[0];
+                if (slice.Start > coord && slice.Step > 0 || slice.Start < coord && slice.Step < 0) // outside of the slice, return empty coords
+                    return new int[0];
+                if (coord % Math.Abs(slice.Step) != 0) // coord is between the steps, so we are "outside" of this shape, return empty coords
+                    return new int[0];
+                coords.Add((coord - slice.Start) / slice.Step);
+            }
+            return coords.ToArray();
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -1058,7 +1134,8 @@ namespace NumSharp
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
+        public Shape
+Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
         [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(params Slice[] input_slices)
@@ -1101,7 +1178,7 @@ namespace NumSharp
 
             var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
             var origin = (this.IsSliced && ViewInfo.Slices != null) ? this.ViewInfo.OriginalShape : this;
-            var viewInfo = new ViewInfo() {OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),};
+            var viewInfo = new ViewInfo() { OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()), };
 
             if (IsRecursive)
                 viewInfo.ParentShape = ViewInfo.ParentShape;
@@ -1109,32 +1186,32 @@ namespace NumSharp
             if (sliced_axes.Length == 0) //is it a scalar
                 return NewScalar(viewInfo);
 
-            return new Shape(sliced_axes) {ViewInfo = viewInfo};
+            return new Shape(sliced_axes) { ViewInfo = viewInfo };
         }
 
         #endregion
 
         #region Implicit Operators
 
-        public static explicit operator int[](Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
+        public static explicit operator int[] (Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
         public static explicit operator int(Shape shape) => shape.Size;
         public static explicit operator Shape(int dim) => Shape.Vector(dim);
 
-        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
+        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => Shape.Matrix(dims.Item1, dims.Item2);
 
-        public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
+        public static explicit operator (int, int, int) (Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);
 
-        public static explicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
+        public static explicit operator (int, int, int, int) (Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4);
 
-        public static explicit operator (int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5);
 
-        public static explicit operator (int, int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
 
         #endregion
@@ -1304,7 +1381,7 @@ namespace NumSharp
             ret.strides = strides;
             if (IsSliced)
             {
-                ret.ViewInfo = new ViewInfo() {ParentShape = this, Slices = null};
+                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
             }
 
             ret.ComputeHashcode();

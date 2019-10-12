@@ -33,10 +33,10 @@ namespace NumSharp.UnitTest
 
             int index = shape0.GetOffset(1, 2, 1);
 
-            Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new int[] {1, 2, 1}));
+            Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new int[] { 1, 2, 1 }));
 
             var rnd = new Randomizer();
-            var randomIndex = new int[] {rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1)};
+            var randomIndex = new int[] { rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1) };
 
             int index1 = shape0.GetOffset(randomIndex);
             Assert.IsTrue(shape0.GetCoordinates(index1).SequenceEqual(randomIndex));
@@ -44,17 +44,17 @@ namespace NumSharp.UnitTest
             var shape1 = new Shape(2, 3, 4);
 
             index = shape1.GetOffset(1, 2, 1);
-            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(new int[] {1, 2, 1}));
+            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(new int[] { 1, 2, 1 }));
 
-            randomIndex = new int[] {rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3)};
+            randomIndex = new int[] { rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3) };
             index = shape1.GetOffset(randomIndex);
             Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(randomIndex));
 
-            randomIndex = new int[] {rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10)};
+            randomIndex = new int[] { rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10) };
 
             var shape2 = new Shape(randomIndex);
 
-            randomIndex = new int[] {rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2])};
+            randomIndex = new int[] { rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2]) };
 
             index = shape2.GetOffset(randomIndex);
             Assert.IsTrue(shape2.GetCoordinates(index).SequenceEqual(randomIndex));
@@ -64,22 +64,22 @@ namespace NumSharp.UnitTest
         public void CheckColRowSwitch()
         {
             var shape1 = new Shape(5);
-            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] {1}));
+            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] { 1 }));
 
             shape1.ChangeTensorLayout();
-            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] {1}));
+            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] { 1 }));
 
             var shape2 = new Shape(4, 3);
-            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] {1, 4}));
+            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] { 1, 4 }));
 
             shape2.ChangeTensorLayout();
-            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] {3, 1}));
+            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] { 3, 1 }));
 
             var shape3 = new Shape(2, 3, 4);
-            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] {1, 2, 6}));
+            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] { 1, 2, 6 }));
 
             shape3.ChangeTensorLayout();
-            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] {12, 4, 1}));
+            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] { 12, 4, 1 }));
         }
 
         /// <summary>
@@ -129,7 +129,7 @@ namespace NumSharp.UnitTest
             v.Should().ContainInOrder(2, 2, 2);
             v.Sum().Should().Be(6);
 
-            v = Shape.ExtractShape(new int[][] {new int[] {1, 2, 3, 4}, new int[] {5, 6, 7, 8}});
+            v = Shape.ExtractShape(new int[][] { new int[] { 1, 2, 3, 4 }, new int[] { 5, 6, 7, 8 } });
 
             v.Should().ContainInOrder(2, 4);
             v.Sum().Should().Be(6);
@@ -485,21 +485,106 @@ namespace NumSharp.UnitTest
         {
             Shape.Scalar.GetHashCode().Should().Be(int.MinValue);
             Shape.NewScalar().GetHashCode().Should().Be(int.MinValue);
-            Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}).GetHashCode().Should().Be(int.MinValue);
-            Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}, new BroadcastInfo(Shape.Empty(1))).GetHashCode().Should().Be(int.MinValue);
+            Shape.NewScalar(new ViewInfo() { OriginalShape = new Shape(1, 2, 3) }).GetHashCode().Should().Be(int.MinValue);
+            Shape.NewScalar(new ViewInfo() { OriginalShape = new Shape(1, 2, 3) }, new BroadcastInfo(Shape.Empty(1))).GetHashCode().Should().Be(int.MinValue);
         }
 
-        [Ignore("TODO: GetCoordinates should work with sliced and/or reshaped shapes")]
+        #region GetCoordinatesFromAbsoluteIndex
+
         [TestMethod]
-        public void GetCoordinates()
+        public void GetCoordinatesFromAbsoluteIndex_Unsliced()
         {
-            var shape = new Shape(10);
-            shape.GetCoordinates(3).Should().Equal(new int[]{3});
-            shape.Slice(Slice.Index(7)).GetCoordinates(0).Should().Equal(new int[] { });
-            shape = new Shape(3,3);
-            shape.GetCoordinates(3).Should().Equal(new int[] { 1,0 });
-            shape.Slice(Slice.Index(1)).GetOffset(1).Should().Be(4);
-            shape.Slice(Slice.Index(1)).GetCoordinates(4).Should().Equal(new int[] { 1 });
+            var shape = new Shape(3, 3);
+            //[[0 1 2]
+            // [3 4 5]
+            // [6 7 8]]
+            shape.GetOffset(1, 0).Should().Be(3);
+            shape.GetCoordinatesFromAbsoluteIndex(3).Should().Equal(new int[] { 1, 0 });
+            shape.GetOffset(2, 2).Should().Be(8);
+            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 2, 2 });
         }
+
+        [TestMethod]
+        public void GetCoordinatesFromAbsoluteIndex_Sliced()
+        {
+            var shape = new Shape(3, 3).Slice("1:");
+            // 0 1 2
+            //[[3 4 5]
+            // [6 7 8]]
+            shape.Should().BeShaped(2, 3);
+            shape.GetOffset(0,0).Should().Be(3);
+            shape.GetCoordinatesFromAbsoluteIndex(3).Should().Equal(new int[] { 0, 0 });
+            shape.GetOffset(1, 2).Should().Be(8);
+            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1, 2 });
+            shape = new Shape(3, 3).Slice(":, ::2");
+            //[[0] 1 [2]
+            // [3] 4 [5]
+            // [6] 7 [8]]
+            shape.Should().BeShaped(3, 2);
+            shape.GetOffset(0, 1).Should().Be(2);
+            shape.GetCoordinatesFromAbsoluteIndex(2).Should().Equal(new int[] { 0, 1 });
+            shape.GetOffset(2, 1).Should().Be(8);
+            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 2, 1 });
+        }
+
+        [TestMethod]
+        public void GetCoordinatesFromAbsoluteIndex_Sliced_by_Index()
+        {
+            var shape = new Shape(3, 3).Slice(Slice.Index(1));
+            // 0 1 2
+            //[3 4 5]
+            // 6 7 8
+            shape.Should().BeShaped(3);
+            shape.GetOffset(1).Should().Be(4);
+            shape.GetCoordinatesFromAbsoluteIndex(4).Should().Equal(new int[] { 1 });
+        }
+
+        private Shape ReshapeSlicedShape(Shape shape, params int[] new_dims)
+        {
+            Shape newShape = new Shape(new_dims);
+            if (shape.IsSliced)
+                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                newShape.ViewInfo = new ViewInfo() { ParentShape = shape, Slices = null };
+            return newShape;
+        } 
+
+        [TestMethod]
+        public void GetCoordinatesFromAbsoluteIndex_Sliced_and_Reshaped()
+        {
+            //>>> a
+            //array([[0, 1, 2],
+            //       [3, 4, 5],
+            //       [6, 7, 8]])
+            //>>> a[:, 1:]
+            //array([[1, 2],
+            //       [4, 5],
+            //       [7, 8]])
+            //>>> a[:, 1:].reshape(2,3)
+            //array([[1, 2, 4],
+            //       [5, 7, 8]])
+            var shape = ReshapeSlicedShape(new Shape(3, 3).Slice(":, 1:"), 2,3);
+            shape.Should().BeShaped(2,3);
+            //shape.GetOffset(0, 0).Should().Be(1);
+            //shape.GetCoordinates(1).Should().Equal(new int[] { 0, 0 });
+            shape.GetOffset(1,1).Should().Be(7);
+            shape.GetCoordinatesFromAbsoluteIndex(7).Should().Equal(new int[] { 1, 1 });
+            shape.GetOffset(1, 2).Should().Be(8);
+            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1, 2 });
+            // now slice again:
+            //>>> c
+            //array([[1, 2, 4],
+            //       [5, 7, 8]])
+            //>>> c[1, 1:]
+            //array([7, 8])
+            var shape1 = shape.Slice("1, 1:");
+            shape1.GetOffset(1).Should().Be(8);
+            shape1.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1 });
+            shape1.GetOffset(0).Should().Be(7);
+            shape1.GetCoordinatesFromAbsoluteIndex(7).Should().Equal(new int[] { 0 });
+        }
+
+        #endregion
+
+      
     }
 }
