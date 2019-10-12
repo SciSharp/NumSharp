@@ -1350,20 +1350,28 @@ namespace NumSharp
 
             if (IsScalar)
             {
-                if (unview || ViewInfo == null && BroadcastInfo == null)
+                if ((unview || ViewInfo == null) && (unbroadcast || BroadcastInfo == null))
                     return Scalar;
 
-                return NewScalar(ViewInfo?.Clone(), BroadcastInfo?.Clone());
+                return NewScalar(unview ? null : ViewInfo?.Clone(), unbroadcast ? null : BroadcastInfo?.Clone());
             }
 
-            if (!deep && !unview)
+            if (deep && unview && unbroadcast)
+                return new Shape((int[])this.dimensions.Clone());
+
+            if (!deep && !unview && !unbroadcast)
                 return this; //basic struct reassign
 
             var ret = deep ? new Shape(this) : (Shape)MemberwiseClone();
+
             if (unview)
                 ret.ViewInfo = null;
+
             if (unbroadcast)
+            {
                 ret.BroadcastInfo = null;
+                ret._computeStrides();
+            }
 
             return ret;
         }

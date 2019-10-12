@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         {
             if (lhs.size == 0)
                 return lhs.Clone();
-            var broadcasted = np.broadcast_arrays(new NDArray[] {lhs, min, max}.Where(nd => !(nd is null)).ToArray());
+            var broadcasted = np.broadcast_arrays(new NDArray[] {lhs, min, max}.Where(nd => !(nd is null)).ToArray()); //its to ensure they are all broadcastable to each other.
             var _min = min is null ? null : np.broadcast_to(min, lhs.Shape);
             var _max = max is null ? null : np.broadcast_to(max, lhs.Shape);
 
