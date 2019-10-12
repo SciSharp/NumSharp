@@ -149,8 +149,9 @@ namespace NumSharp.UnitTest.Maths
             //           [24.4375, 30.0625]])
             //>>> z = np.maximum(x, y)
             //>>> z
-            //array([25.875, 30.6875])
-            //>>>
+            //array([[25.875, 30.6875],
+            //       [25.5   , 29.625 ],
+            //       [24.4375, 30.0625]])
             var boxes1 = np.array(new double[] { 12.875, 14.125, 39.75, 49 }).reshape(1, 4);
             var boxes2 = np.array(new double[]
             {
@@ -164,7 +165,7 @@ namespace NumSharp.UnitTest.Maths
             x.Should().BeOfValues(12.875, 14.125).And.BeShaped(1, 2);
             y.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3,2);
             var z = np.maximum(x, y);
-            z.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625);
+            z.Should().BeOfValues(25.875, 30.6875, 25.5, 29.625, 24.4375, 30.0625).And.BeShaped(3, 2);
         }
     }
 }
