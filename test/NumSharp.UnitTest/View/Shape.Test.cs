@@ -488,5 +488,18 @@ namespace NumSharp.UnitTest
             Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}).GetHashCode().Should().Be(int.MinValue);
             Shape.NewScalar(new ViewInfo() {OriginalShape = new Shape(1, 2, 3)}, new BroadcastInfo(Shape.Empty(1))).GetHashCode().Should().Be(int.MinValue);
         }
+
+        [Ignore("TODO: GetCoordinates should work with sliced and/or reshaped shapes")]
+        [TestMethod]
+        public void GetCoordinates()
+        {
+            var shape = new Shape(10);
+            shape.GetCoordinates(3).Should().Equal(new int[]{3});
+            shape.Slice(Slice.Index(7)).GetCoordinates(0).Should().Equal(new int[] { });
+            shape = new Shape(3,3);
+            shape.GetCoordinates(3).Should().Equal(new int[] { 1,0 });
+            shape.Slice(Slice.Index(1)).GetOffset(1).Should().Be(4);
+            shape.Slice(Slice.Index(1)).GetCoordinates(4).Should().Equal(new int[] { 1 });
+        }
     }
 }
