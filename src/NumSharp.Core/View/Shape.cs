@@ -938,51 +938,8 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public int[] GetCoordinatesFromAbsoluteIndex(int offset)
         {
-            int[] coords = null;
             if (!IsSliced)
-            {
-                if (strides.Length == 1)
-                    coords = new int[] { offset };
-                else if (layout == 'C')
-                {
-                    int counter = offset;
-                    coords = new int[strides.Length];
-                    int stride;
-                    for (int i = 0; i < strides.Length; i++)
-                    {
-                        stride = strides[i];
-                        if (stride == 0)
-                        {
-                            coords[i] = 0;
-                        }
-                        else
-                        {
-                            coords[i] = counter / stride;
-                            counter -= coords[i] * stride;
-                        }
-                    }
-                }
-                else
-                {
-                    int counter = offset;
-                    coords = new int[strides.Length];
-                    int stride;
-                    for (int i = strides.Length - 1; i >= 0; i--)
-                    {
-                        stride = strides[i];
-                        if (stride == 0)
-                        {
-                            coords[i] = 0;
-                        }
-                        else
-                        {
-                            coords[i] = counter / stride;
-                            counter -= coords[i] * stride;
-                        }
-                    }
-                }
-                return coords;
-            }
+                return GetCoordinates(offset);
 
             // handle sliced shape
             int[] parent_coords = null;
