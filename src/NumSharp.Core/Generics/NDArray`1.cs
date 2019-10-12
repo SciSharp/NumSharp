@@ -75,6 +75,16 @@ namespace NumSharp.Generic
         public NDArray() : base(InfoOf<T>.NPTypeCode) { }
 
         /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="dtype">Internal data type</param>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(int size, bool fillZeros) : base(InfoOf<T>.NPTypeCode, size, fillZeros)
+        { }
+
+        /// <summary>
         /// Constructor which takes .NET array
         /// dtype and shape is determined from array
         /// </summary>
@@ -216,5 +226,6 @@ namespace NumSharp.Generic
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static explicit operator NDArray<T>(T[] tArray) => new NDArray(tArray).MakeGeneric<T>();
+
     }
 }
