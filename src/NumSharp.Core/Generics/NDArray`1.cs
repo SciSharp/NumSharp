@@ -25,7 +25,7 @@ using NumSharp.Utilities;
 // ReSharper disable once CheckNamespace
 namespace NumSharp.Generic
 {
-    public class NDArray<T> : NDArray where T : unmanaged
+    public partial class NDArray<T> : NDArray where T : unmanaged
     {
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
