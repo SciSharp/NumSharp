@@ -10,9 +10,9 @@ namespace NumSharp.Backends
     {
         // TODO! create an overload because np.power also allows to pass an array of exponents for every entry in the array
 
-        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype) => ClipNDArray(lhs, min, max, dtype?.GetTypeCode());
+        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype, NDArray @out = null) => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
 
-        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode? typeCode = null)
+        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();
@@ -20,7 +20,11 @@ namespace NumSharp.Backends
             var _min = min is null ? null : np.broadcast_to(min, lhs.Shape);
             var _max = max is null ? null : np.broadcast_to(max, lhs.Shape);
 
-            var @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
+            if (@out is null)
+                @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
+            else if (@out.Shape != lhs.Shape)
+                throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
+                
             var len = @out.size;
             if (!(min is null) && !(max is null))
                 unsafe

@@ -932,7 +932,13 @@ namespace NumSharp
                 // TODO! undo dimensionality reduction
                 for (int i = 0; i < coords.Length; i++)
                 {
-                    var slice = ViewInfo.Slices[i];
+                    var slices = ViewInfo.Slices;
+                    if (slices == null)
+                    {
+                        if (ViewInfo.ParentShape != null)
+                            slices = ViewInfo.ParentShape.ViewInfo.Slices;
+                    }
+                    var slice = slices[i];
                     coords[i] = (coords[i] / slice.Step) - slice.Start;
                 }
             }
