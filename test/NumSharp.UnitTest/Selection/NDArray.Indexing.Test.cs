@@ -5,6 +5,7 @@ using NumSharp.Generic;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using FluentAssertions;
@@ -1122,8 +1123,8 @@ namespace NumSharp.UnitTest.Selection
             //       [20, 21, 22, 23, 24],
             //       [25, 26, 27, 28, 29]])
             var x = np.arange(30).reshape(2, 3, 5);
-            var b = np.array(new[,] {{true, true, false}, {false, true, true } }).MakeGeneric<bool>();
-            y[b[":, 5"]].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4,5);
+            var b = np.array(new[,] { { true, true, false }, { false, true, true } }).MakeGeneric<bool>();
+            y[b[":, 5"]].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
         }
 
         [TestMethod]
@@ -1147,7 +1148,7 @@ namespace NumSharp.UnitTest.Selection
             //          [15, 16],
             //          [29, 30]])
             var y = np.arange(35).reshape(5, 7);
-            y[np.array(0,2,4), "1:3"].Should().BeOfValues(1, 2, 15, 16, 29, 30).And.BeShaped(3,2);
+            y[np.array(0, 2, 4), "1:3"].Should().BeOfValues(1, 2, 15, 16, 29, 30).And.BeShaped(3, 2);
         }
 
 
@@ -1168,7 +1169,21 @@ namespace NumSharp.UnitTest.Selection
             //       [29, 30]])
             var y = np.arange(35).reshape(5, 7);
             var b = y > 20;
-            y[b[":, 5"], "1:3"].Should().BeOfValues(22,23, 29, 30).And.BeShaped(2, 2);
+            y[b[":, 5"], "1:3"].Should().BeOfValues(22, 23, 29, 30).And.BeShaped(2, 2);
+        }
+
+        // use this as a proxy for the private static method GetIndicesFromSlice of NDArray
+        private NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
+        {
+            var method = typeof(NDArray).GetMethod("GetIndicesFromSlice", BindingFlags.NonPublic | BindingFlags.Static);
+            return (NDArray<int>)method.Invoke(null, new object[] { shape, slice, axis });
+        }
+
+        [TestMethod]
+        public void GetIndicesFromSlice_Test()
+        {
+            GetIndicesFromSlice((3, 4, 3), new Slice("::2"), 1).Should().BeOfValues(0, 2).And.BeShaped(2);
+            GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2,1,0);
         }
     }
 }
