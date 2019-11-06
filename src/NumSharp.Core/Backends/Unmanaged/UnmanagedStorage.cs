@@ -91,8 +91,8 @@ namespace NumSharp.Backends
         /// <remarks>This ignores completely slicing.</remarks>
         public Span<T> AsSpan<T>()
         {
-            if (_shape.IsSliced)
-                throw new InvalidOperationException("Unable to span a sliced storage.");
+            if (!_shape.IsContiguous)
+                throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
             unsafe
             {
