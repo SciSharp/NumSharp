@@ -770,15 +770,12 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case12_Multi()
         {
-            var a = np.arange(27).reshape(1, 3, 3, 1, 3);
+            var a = np.arange(16).reshape(2, 2, 2, 2);
             Console.WriteLine((string)a);
             Console.WriteLine(a.Shape);
-            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 2 }];
-            ret.shape.Should().ContainInOrder(3, 3, 1, 3);
-            ret.GetValue(2, 0, 0, 2).Should().Be(20);
-            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
-            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
-            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
+            ret.Should().BeShaped(3, 2, 2);
+            ret.GetValue(1, 0, 0).Should().Be(4);
         }
 
         [TestMethod]
@@ -789,6 +786,21 @@ namespace NumSharp.UnitTest.Selection
             ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
             ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
             ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_Case14_Multi()
+        {
+            var a = np.arange(16).reshape(2, 2, 1, 2, 2);
+            Console.WriteLine((string)a);
+            Console.WriteLine(a.Shape);
+            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
+            ret.Should().BeShaped(3, 1, 2, 2);
+            ret[1, 0, 0].Should().BeOfValues(4,5).And.BeShaped(2);
+            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
         [TestMethod]
