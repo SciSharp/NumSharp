@@ -652,35 +652,7 @@ namespace NumSharp
             }
 
             var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted;
-            if (!bi.UnbroadcastShape.HasValue)
-            {
-                if (bi.OriginalShape.IsScalar)
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                    {
-                        unreducedBroadcasted.dimensions[i] = 1;
-                        unreducedBroadcasted.strides[i] = 0;
-                    }
-                }
-                else
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
-                    {
-                        if (strides[j] == 0)
-                        {
-                            unreducedBroadcasted.dimensions[i] = 1;
-                            unreducedBroadcasted.strides[i] = 0;
-                        }
-                    }
-                }
-
-                bi.UnbroadcastShape = unreducedBroadcasted;
-            }
-            else
-                unreducedBroadcasted = bi.UnbroadcastShape.Value;
+            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
 
             orig_strides = unreducedBroadcasted.strides;
             offset = 0;
@@ -750,35 +722,8 @@ namespace NumSharp
             }
 
             var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted;
-            if (!bi.UnbroadcastShape.HasValue)
-            {
-                if (bi.OriginalShape.IsScalar)
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                    {
-                        unreducedBroadcasted.dimensions[i] = 1;
-                        unreducedBroadcasted.strides[i] = 0;
-                    }
-                }
-                else
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
-                    {
-                        if (strides[j] == 0)
-                        {
-                            unreducedBroadcasted.dimensions[i] = 1;
-                            unreducedBroadcasted.strides[i] = 0;
-                        }
-                    }
-                }
+            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
 
-                bi.UnbroadcastShape = unreducedBroadcasted;
-            }
-            else
-                unreducedBroadcasted = bi.UnbroadcastShape.Value;
 
             orig_strides = unreducedBroadcasted.strides;
             offset = 0;
@@ -828,7 +773,7 @@ namespace NumSharp
             {
                 indicies = (int[])indicies.Clone(); //we must copy because we make changes to it.
                 Shape unreducedBroadcasted;
-                if (!BroadcastInfo.UnbroadcastShape.HasValue)
+                if (!BroadcastInfo.UnreducedBroadcastedShape.HasValue)
                 {
                     unreducedBroadcasted = this.Clone(true, false, false);
                     for (int i = 0; i < unreducedBroadcasted.NDim; i++)
@@ -837,10 +782,10 @@ namespace NumSharp
                             unreducedBroadcasted.dimensions[i] = 1;
                     }
 
-                    BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                    BroadcastInfo.UnreducedBroadcastedShape = unreducedBroadcasted;
                 }
                 else
-                    unreducedBroadcasted = BroadcastInfo.UnbroadcastShape.Value;
+                    unreducedBroadcasted = BroadcastInfo.UnreducedBroadcastedShape.Value;
 
                 //unbroadcast indices
                 for (int i = 0; i < dim; i++)
@@ -942,24 +887,24 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.
-        /// Note: this is the inverse operation of GetOffset
-        /// Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]
-        /// The absolute indices in a are:
-        /// [0, 1, 2,
-        ///  3, 4, 5]
-        /// The absolute indices in b are:
-        /// [1, 2,
-        ///  4, 5]
-        /// Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.
-        ///
-        /// Examples:
-        /// a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]
-        /// b.GetCoordinatesFromAbsoluteIndex(1) returns [0, 0]
-        /// b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape
+        ///     Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.<br></br>
+        ///     Note: this is the inverse operation of GetOffset<br></br>
+        ///     Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]<br></br>
+        ///     The absolute indices in a are:<br></br>
+        ///     [0, 1, 2,<br></br>
+        ///      3, 4, 5]<br></br>
+        ///     The absolute indices in b are:<br></br>
+        ///     [1, 2,<br></br>
+        ///      4, 5]<br></br>
+        ///     <br></br>
+        ///     <br></br>
+        ///     Examples:<br></br>
+        ///     a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]<br></br>
+        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [0, 0]<br></br>
+        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape<br></br>
         /// </summary>
         /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
-        /// <returns></returns>
+        /// <remarks>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public int[] GetCoordinatesFromAbsoluteIndex(int offset)
         {
@@ -1090,6 +1035,40 @@ namespace NumSharp
             return l.ToArray();
         }
 
+        private Shape resolveUnreducedBroadcastedShape()
+        {
+            var bi = BroadcastInfo;
+            if (bi.UnreducedBroadcastedShape.HasValue)
+                return bi.UnreducedBroadcastedShape.Value;
+
+            Shape unreducedBroadcasted;
+            var vi = ViewInfo;
+            if (bi.OriginalShape.IsScalar)
+            {
+                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                for (int i = 0; i < unreducedBroadcasted.NDim; i++)
+                {
+                    unreducedBroadcasted.dimensions[i] = 1;
+                    unreducedBroadcasted.strides[i] = 0;
+                }
+            }
+            else
+            {
+                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
+                {
+                    if (strides[j] == 0)
+                    {
+                        unreducedBroadcasted.dimensions[i] = 1;
+                        unreducedBroadcasted.strides[i] = 0;
+                    }
+                }
+            }
+
+            bi.UnreducedBroadcastedShape = unreducedBroadcasted;
+            return unreducedBroadcasted;
+        }
+
         /// <summary>
         ///     Recalculate hashcode from current dimension and layout.
         /// </summary>
@@ -1116,8 +1095,7 @@ namespace NumSharp
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape
-Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
+        public Shape Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
         [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(params Slice[] input_slices)
