@@ -62,7 +62,6 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt32(1, 3) == 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void MaskSetter()
         {
@@ -75,7 +74,6 @@ namespace NumSharp.UnitTest.Selection
             nd.Should().BeOfValues(-2, 2, -2, 4, -2, 6);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Compare()
         {
@@ -696,10 +694,9 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case5_Shaped()
         {
-            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] { new int[] { 0, 1 }, new int[] { 1, 3 }, })];
+            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] { new int[] { 0, 1 }, new int[] { 1, 1 }, })];
             Console.WriteLine((string)ret);
-            ret.Array.Cast<int>().Should().ContainInOrder(0, 1, 1, 3);
-            ret.shape.Should().ContainInOrder(2, 2);
+            ret.Should().BeShaped(2, 2, 5).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9);
         }
 
         [TestMethod]
@@ -707,11 +704,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[] { 0, 1, 1 })];
             Console.WriteLine((string)ret);
-            ret.shape.Should().ContainInOrder(3, 5);
-            ret[1, 0].GetValue(0).Should().Be(5);
-            ret[1, 4].GetValue(0).Should().Be(9);
-            ret[2, 0].GetValue(0).Should().Be(5);
-            ret[2, 4].GetValue(0).Should().Be(9);
+            ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9).And.BeShaped(3, 5);
         }
 
         [TestMethod]
@@ -774,7 +767,6 @@ namespace NumSharp.UnitTest.Selection
             ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexNDArray_Case12_Multi()
         {
@@ -1025,7 +1017,6 @@ namespace NumSharp.UnitTest.Selection
             sliced.Should().BeShaped(3).And.NotBeSliced();
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexSelecton_2D_from_1D()
         {
@@ -1053,7 +1044,6 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4), np.array(0, 1, 2)].Should().BeOfValues(0, 15, 30).And.BeShaped(3);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexSelecton_IndexArray_plus_Scalar_from_2D()
         {
@@ -1077,7 +1067,6 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4)].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19, 20, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(3, 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_2D_over_2D()
         {
@@ -1089,7 +1078,6 @@ namespace NumSharp.UnitTest.Selection
             y[y > 20].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(14);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_1D_over_2D()
         {
@@ -1104,7 +1092,6 @@ namespace NumSharp.UnitTest.Selection
             y[b[":, 5"]].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(2, 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_2D_over_3D()
         {
@@ -1138,7 +1125,6 @@ namespace NumSharp.UnitTest.Selection
             a[Slice.All, "1:2", 0].Should().BeOfValues(3, 12, 21).And.BeShaped(3, 1);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Combining_IndexArrays_with_Slices()
         {
@@ -1152,7 +1138,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Combining_MaskArrays_with_Slices()
         {
@@ -1175,15 +1160,114 @@ namespace NumSharp.UnitTest.Selection
         // use this as a proxy for the private static method GetIndicesFromSlice of NDArray
         private NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
-            var method = typeof(NDArray).GetMethod("GetIndicesFromSlice", BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<int>)method.Invoke(null, new object[] { shape, slice, axis });
+            var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
+            return (NDArray<int>)methods.FirstOrDefault(m=>m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
         }
 
+
+        [TestMethod]
+        public void IndexNDArray_1d_indexed_by_2d()
+        {
+            var nd = np.arange(12);
+            var ret = nd[np.arange(9).reshape(3, 3)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8).And.BeShaped(3, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_1d_indexed_by_2d_1d()
+        {
+            var nd = np.arange(24).reshape(6, 4);
+            var ret = nd[np.arange(4).reshape(2, 2), NDArray.Scalar(1)];
+            print(ret);
+
+            ret.Should().BeOfValues(1, 5, 9, 13).And.BeShaped(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_indexed_by_1d()
+        {
+            var nd = np.arange(2 * 4).reshape(4, 2);
+            var ret = nd[np.array(0, 2)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 1, 4, 5).And.BeShaped(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_indexed_by_1d_1d()
+        {
+            var nd = np.arange(2 * 4).reshape(4, 2);
+            var ret = nd[np.array(0, 2), np.array(0, 1)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 5).And.BeShaped(2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_and_2dsliced_indexed_by_1dsliced_1dsliced()
+        {
+            Test(np.arange(2 * 4).reshape(4, 2));
+            Test(np.arange(2 * 4 * 2).reshape(2, 4, 2)[":1:"].reshape(4, 2));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1, 2)["::2"], np.array(0, 1, 2)[":2"]];
+                print(ret);
+
+                ret.Should().BeOfValues(0, 5).And.BeShaped(2);
+            }
+        }
+
+        [TestMethod]
+        public void IndexNDArray_sliced2dreshaped_indexed_by_1d_1d()
+        {
+            Test(np.arange(2 * 2 * 4)["::2"].reshape(2, 4));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1), np.array(1, 2)];
+                print(ret);
+
+                ret.Should().BeShaped(2).And.BeOfValues(2, 12);
+            }
+        }
+
+        [TestMethod]
+        public void IndexNDArray_sliced3dreshaped_indexed_by_1d_1d()
+        {
+            Test(np.arange(2 * 2 * 4 * 2)["::2"].reshape(2, 4, 2));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1), np.array(1, 2)];
+                print(ret);
+
+                ret.Should().BeShaped(2, 2).And.BeOfValues(4, 6, 24, 26);
+            }
+        }
+        
         [TestMethod]
         public void GetIndicesFromSlice_Test()
         {
             GetIndicesFromSlice((3, 4, 3), new Slice("::2"), 1).Should().BeOfValues(0, 2).And.BeShaped(2);
             GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2,1,0);
+        }
+
+        [TestMethod]
+        public void GetCoordinates_Broadcasted()
+        {
+            var nd = np.broadcast_to(np.array(1), (2, 2, 2));
+            var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
+            print(t);
+            t.Should().AllBeEquivalentTo(0);
         }
     }
 }

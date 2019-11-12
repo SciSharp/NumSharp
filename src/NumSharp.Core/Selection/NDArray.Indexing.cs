@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
@@ -10,36 +12,6 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        /// <summary>
-        ///     Used to perform selection based on a boolean mask.
-        /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray this[NDArray<bool> mask]
-        {
-            get => _extract_indices(new[] {np.nonzero(mask)}, false, null);
-            set
-            {
-                throw new NotImplementedException("Setter is not implemnted yet");
-            }
-        }
-
-        /// <summary>
-        ///     Used to perform selection based on a selection indices.
-        /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
-        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
-        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
-        public NDArray this[params NDArray<int>[] selection]
-        {
-            get => _extract_indices(selection.Select(array => (NDArray)array).ToArray(), false, null);
-            set
-            {
-                throw new NotImplementedException("Setter is not implemnted yet");
-            }
-        }
-
         /// <summary>
         ///     Used to perform selection based on given indices.
         /// </summary>
@@ -52,51 +24,77 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Used to perform selection based on a selection indices.
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
+        /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        public NDArray this[params NDArray<int>[] selection]
+        {
+            get => retrieve_indices(this, selection.Select(array => (NDArray)array).ToArray());
+            set
+            {
+                throw new NotImplementedException("Setter is not implemnted yet");
+            }
+        }
+
+        /// <summary>
         /// Perform slicing, index extraction, masking and indexing all at the same time with mixed index objects
         /// </summary>
-        /// <param name="indices_or_slices"></param>
+        /// <param name="indicesObjects"></param>
         /// <returns></returns>
-        public NDArray this[params object[] indices_or_slices]
+        public NDArray this[params object[] indicesObjects]
         {
             get
             {
-                var indicesLen = indices_or_slices.Length;
-                if (indicesLen == 1 && indices_or_slices[0] is int[] coordinates)
+                var indicesLen = indicesObjects.Length;
+                if (indicesLen == 1) 
                 {
-                    return GetData(coordinates);
+                    switch (indicesObjects[0])
+                    {
+                        case int[] coords:
+                            return GetData(coords);
+                        case NDArray[] nds:
+                            return this[nds];
+                        case object[] objs:
+                            return this[objs];
+                    }
                 }
 
                 int ints = 0;
                 int bools = 0;
-                foreach (var o in indices_or_slices)
+                bool foundNDArray = false;
+                foreach (var o in indicesObjects)
                 {
                     switch (o)
                     {
                         case NDArray _:
-                            goto _foundNDArray;
+                        case int[] _:
+                            foundNDArray = true;
+                            continue;
                         case int _:
                             ints++;
-                            break;
+                            continue;
                         case bool @bool:
                             bools++;
-                            break;
+                            continue;
                         case string _:
                         case Slice _:
-                            goto _slice;
+                            continue;
 
-                        default: throw new ArgumentException($"Unsupported indexing type: '{(o?.GetType()?.Name ?? "null")}'");
+                        default: throw new ArgumentException($"Unsupported indexing type: '{(o?.GetType()?.Name ?? "nu l")}'");
                     }
                 }
 
                 if (ints == indicesLen)
-                    return new NDArray(Storage.GetData(indices_or_slices.Cast<int>().ToArray()));
+                    return new NDArray(Storage.GetData(indicesObjects.Cast<int>().ToArray()));
 
                 if (bools == indicesLen)
                 {
                     if (indicesLen != 1)
-                        return this[np.array(indices_or_slices.Cast<bool>()).MakeGeneric<bool>()];
+                        return this[np.array(indicesObjects.Cast<bool>()).MakeGeneric<bool>()];
 
-                    var @bool = (bool)indices_or_slices[0];
+                    var @bool = (bool)indicesObjects[0];
 
                     if (!@bool)
                         return new NDArray(NPTypeCode.Int32); //return empty
@@ -104,30 +102,81 @@ namespace NumSharp
                     return np.expand_dims(this, 0); //equivalent to [np.newaxis]
                 }
 
-                _slice:
-                if (indicesLen == 1 && indices_or_slices[0] is string slicesStr)
+                if (indicesLen == 1 && indicesObjects[0] is string slicesStr)
                     return new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr)));
 
-                var slices = indices_or_slices.Select(x =>
+                if (!foundNDArray)
                 {
-                    switch (x)
+                    var slices = indicesObjects.Select(x =>
                     {
-                        case Slice o: return o;
-                        case int o: return Slice.Index(o);
-                        case string o: return new Slice(o);
-                        default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
+                        switch (x)
+                        {
+                            case Slice o: return o;
+                            case int o: return Slice.Index(o);
+                            case string o: return new Slice(o);
+                            case bool o: return o ? Slice.All : Slice.Index(0); //TODO: verify this
+                            case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
+                            default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
+                        }
+                    }).ToArray();
+
+
+                    return new NDArray(Storage.GetView(slices));
+                }
+
+                NDArray _toIndexes(object idx, int i)
+                {
+                    switch (idx)
+                    {
+                        case Slice o:
+                            if (o.IsIndex)
+                                return NDArray.Scalar<int>(o.Start);
+
+                            if (o == Slice.All)
+                                return np.arange(shape[i]);//TODO: is it?
+
+                            if (o.IsEllipsis)
+                            {
+                                //TODO:
+                            }
+
+                            if (o.IsNewAxis)
+                            {
+                                //TODO:
+                            }
+
+                            return np.arange(o.Start ?? 0, o.Stop ?? shape[i], o.Step); //TODO: this is likely to be wrong!
+                        case int o: return NDArray.Scalar<int>(o);
+                        case string o: return _toIndexes(new Slice(o), i);
+                        case bool o: return o ? _toIndexes(Slice.NewAxis, i) : new NDArray<int>();
+                        case IConvertible o: return NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture));
+                        case int[] o: return np.array(o, copy: false); //we dont copy, pinning will be freed automatically after we done indexing.
+                        case NDArray nd:
+                            if (nd.typecode == NPTypeCode.Boolean)
+                            {
+                                //TODO: mask
+                            }
+                            
+                            return nd;
+                        default: throw new ArgumentException($"Unsupported slice type: '{(idx?.GetType()?.Name ?? "null")}'");
                     }
-                }).ToArray();
+                }
 
-                return new NDArray(Storage.GetView(slices));
+                var indices = new List<NDArray>();
 
-                _foundNDArray:
-                return _extract_indices(indices_or_slices.Select(nd => (NDArray)nd).ToArray(), false, null);
+                //handle ndarray indexing
+                for (int i = 0; i < indicesLen; i++)
+                {
+                    indices.Add(_toIndexes(indicesObjects[i], i));
+                    //TODO: here we need to handle 
+                }
+
+                return retrieve_indices(this, indices.ToArray());
             }
             set
             {
-                var indicesLen = indices_or_slices.Length;
-                if (indicesLen  == 1 && indices_or_slices[0] is int[] coordinates)
+                var indicesLen = indicesObjects.Length;
+                if (indicesLen == 1 && indicesObjects[0] is int[] coordinates)
                 {
                     Storage.GetData(coordinates).SetData(value);
                     return;
@@ -137,7 +186,7 @@ namespace NumSharp
                 int bools = 0;
                 for (int i = 0; i < indicesLen; i++)
                 {
-                    var o = indices_or_slices[i];
+                    var o = indicesObjects[i];
                     switch (o)
                     {
                         case NDArray _:
@@ -157,7 +206,7 @@ namespace NumSharp
 
                 if (ints == indicesLen)
                 {
-                    Storage.SetData(value, indices_or_slices.Cast<int>().ToArray());
+                    Storage.SetData(value, indicesObjects.Cast<int>().ToArray());
                     return;
                 }
 
@@ -166,7 +215,7 @@ namespace NumSharp
                     if (indicesLen != 1) ;
                     //TODO: setter version of return this[np.array(indices_or_slices.Cast<bool>()).MakeGeneric<bool>()];
 
-                    var @bool = (bool)indices_or_slices[0];
+                    var @bool = (bool)indicesObjects[0];
 
                     if (!@bool)
                         return;
@@ -175,14 +224,14 @@ namespace NumSharp
                     return;
                 }
 
-                _slice:
-                if (indicesLen == 1 && indices_or_slices[0] is string slicesStr)
+_slice:
+                if (indicesLen == 1 && indicesObjects[0] is string slicesStr)
                 {
                     Storage.GetView(Slice.ParseSlices(slicesStr)).SetData(value);
                     return;
                 }
 
-                var slices = indices_or_slices.Select(x =>
+                var slices = indicesObjects.Select(x =>
                 {
                     switch (x)
                     {
@@ -321,15 +370,29 @@ namespace NumSharp
         /// <param name="slice"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
-            var dim = shape.Dimensions[axis];
-            var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
-            return np.arange(slice_def.Start, slice_def.Start+slice_def.Step*slice_def.Count, slice.Step).MakeGeneric<int>();
+            return GetIndicesFromSlice(shape.dimensions, slice, axis);
         }
 
         /// <summary>
-        /// Slice the array with Python slice notation like this: ":, 2:7:1, ..., np.newaxis"
+        /// Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
+        /// </summary>
+        /// <param name="shape"></param>
+        /// <param name="slice"></param>
+        /// <param name="axis"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static NDArray<int> GetIndicesFromSlice(int[] shape, Slice slice, int axis)
+        {
+            var dim = shape[axis];
+            var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
+            return np.arange(slice_def.Start, slice_def.Start + slice_def.Step * slice_def.Count, slice.Step).MakeGeneric<int>();
+        }
+
+        /// <summary>
+        ///     Slice the array with Python slice notation like this: ":, 2:7:1, ..., np.newaxis"
         /// </summary>
         /// <param name="slice">A string containing slice notations for every dimension, delimited by comma</param>
         /// <returns>A sliced view</returns>
