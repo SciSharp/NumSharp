@@ -314,6 +314,25 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        /// Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
+        /// </summary>
+        /// <param name="shape"></param>
+        /// <param name="slice"></param>
+        /// <param name="axis"></param>
+        /// <returns></returns>
+        private static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
+        {
+            var dim = shape.Dimensions[axis];
+            var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
+            return np.arange(slice_def.Start, slice_def.Start+slice_def.Step*slice_def.Count, slice.Step).MakeGeneric<int>();
+        }
+
+        /// <summary>
+        /// Slice the array with Python slice notation like this: ":, 2:7:1, ..., np.newaxis"
+        /// </summary>
+        /// <param name="slice">A string containing slice notations for every dimension, delimited by comma</param>
+        /// <returns>A sliced view</returns>
         public NDArray this[string slice]
         {
             get => new NDArray(Storage.GetView(Slice.ParseSlices(slice)));

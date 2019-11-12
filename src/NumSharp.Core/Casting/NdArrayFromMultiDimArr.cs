@@ -25,41 +25,57 @@ namespace NumSharp
         /// <summary>
         ///     Creates an NDArray out of given array of type <typeparamref name="T"/>
         /// </summary>
-        /// <param name="dotNetArray"></param>
-        public static NDArray FromMultiDimArray<T>(Array dotNetArray)
+        /// <param name="ndarray"></param>
+        /// <param name="copy">true for making </param>
+        public static NDArray FromMultiDimArray<T>(Array ndarray, bool copy = true) where T : unmanaged
         {
-            if (dotNetArray.GetType().GetElementType().IsArray)
-                throw new Exception("Jagged arrays are not allowed here!");
+            if (ndarray == null)
+                throw new ArgumentNullException(nameof(ndarray));
 
-            switch (dotNetArray.Rank)
+            var elem = ndarray.GetType().GetElementType();
+            if (elem == null || elem.IsArray)
+                throw new ArgumentException("Given array is not a multi-dimensional array (e.g. T[,,]).");
+
+            if (elem != typeof(T))
+                throw new ArgumentException("T constraint must match the element type of the given array.");
+
+            switch (ndarray.Rank)
             {
                 case 1:
-                    return np.array((T[])dotNetArray);
+                    return np.array((T[])ndarray, copy);
                 case 2:
-                    return np.array((T[,])dotNetArray);
+                    return np.array((T[,])ndarray, copy);
                 case 3:
-                    return np.array((T[,,])dotNetArray);
+                    return np.array((T[,,])ndarray, copy);
                 case 4:
-                    return np.array((T[,,,])dotNetArray);
+                    return np.array((T[,,,])ndarray, copy);
                 case 5:
-                    return np.array((T[,,,,])dotNetArray);
+                    return np.array((T[,,,,])ndarray, copy);
                 case 6:
-                    return np.array((T[,,,,,])dotNetArray);
+                    return np.array((T[,,,,,])ndarray, copy);
                 case 7:
-                    return np.array((T[,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,])ndarray, copy);
                 case 8:
-                    return np.array((T[,,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,,])ndarray, copy);
                 case 9:
-                    return np.array((T[,,,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,,,])ndarray, copy);
                 case 10:
-                    return np.array((T[,,,,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,,,,])ndarray, copy);
                 case 11:
-                    return np.array((T[,,,,,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,,,,,])ndarray, copy);
                 case 12:
-                    return np.array((T[,,,,,,,,,,,])dotNetArray);
+                    return np.array((T[,,,,,,,,,,,])ndarray, copy);
+                case 13:
+                    return np.array((T[,,,,,,,,,,,,])ndarray, copy);
+                case 14:
+                    return np.array((T[,,,,,,,,,,,,,])ndarray, copy); 
+                case 15:
+                    return np.array((T[,,,,,,,,,,,,,,])ndarray, copy);
+                case 16:
+                    return np.array((T[,,,,,,,,,,,,,,,])ndarray, copy);
             }
 
-            throw new NotImplementedException("FromMultiDimArray<T>(Array dotNetArray)");
+            throw new NotSupportedException();
         }
     }
 }
