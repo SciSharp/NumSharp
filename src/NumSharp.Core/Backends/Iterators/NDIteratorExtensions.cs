@@ -7,12 +7,25 @@ namespace NumSharp
 {
     public static class NDIteratorExtensions
     {
+
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="nd"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="nd">The ndarray to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NDIterator<T> AsIterator<T>(this NDArray nd, bool autoreset = false) where T : unmanaged
         {
             return new NDIterator<T>(nd, autoreset);
         }
 
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="nd"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="nd">The ndarray to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
         public static NDIterator AsIterator(this NDArray nd, bool autoreset = false)
         {
 #if _REGEN
@@ -53,6 +66,12 @@ namespace NumSharp
 #endif
         }
 
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="nd"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="us">The ndarray to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
         public static NDIterator AsIterator(this UnmanagedStorage us, bool autoreset = false)
         {
 #if _REGEN
@@ -93,6 +112,12 @@ namespace NumSharp
 #endif
         }
 
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="arr"/> as if it were shaped like <paramref name="shape"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="arr">The IArraySlice to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
         public static NDIterator AsIterator(this IArraySlice arr, Shape shape)
         {
 #if _REGEN
@@ -133,6 +158,13 @@ namespace NumSharp
 #endif
         }
 
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="arr"/> as if it were shaped like <paramref name="shape"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="arr">The IArraySlice to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
+        /// <param name="shape">The original shape, non-broadcasted, to represent this iterator.</param>
         public static NDIterator AsIterator(this IArraySlice arr, Shape shape, bool autoreset)
         {
 #if _REGEN
@@ -172,7 +204,14 @@ namespace NumSharp
 
 #endif
         }
-
+        /// <summary>
+        ///     Creates a new iterator to iterate given <paramref name="arr"/> as if it were shaped like <paramref name="shape"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="arr">The IArraySlice to iterate.</param>
+        /// <param name="autoreset">Should this iterator loop forever?</param>
+        /// <param name="shape">The original shape, non-broadcasted.</param>
+        /// <param name="broadcastShape">The broadcasted shape of <paramref name="shape"/></param>
         public static NDIterator AsIterator(this IArraySlice arr, Shape shape, Shape broadcastShape, bool autoReset)
         {
 #if _REGEN

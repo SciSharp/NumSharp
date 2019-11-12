@@ -13,13 +13,49 @@ namespace NumSharp
         private int index;
         public readonly IMemoryBlock Block;
         public readonly IteratorType Type;
+
+        /// <summary>
+        ///     The shape this iterator iterates
+        /// </summary>
         public Shape Shape; //TODO! is there a performance difference if this shape is readonly or not?
+
+        /// <summary>
+        ///     The broadcasted version of <see cref="Shape"/>.
+        /// </summary>
+        /// <remarks>Might be null when iterating a non-broadcasted class</remarks>
         public Shape? BroadcastedShape; //TODO! is there a performance difference if this shape is readonly or not?
+
+        /// <summary>
+        ///     Does this iterator resets automatically when it finishes?
+        /// </summary>
+        /// <remarks>When this is true, <see cref="HasNext"/> always returns true.</remarks>
         public bool AutoReset;
+
+        /// <summary>
+        ///     The size of this iterator.
+        /// </summary>
         public int size;
+
+        /// <summary>
+        ///     Returns a function that when called, moves to next iteration and return the next value.
+        /// </summary>
+        /// <remarks>Make sure to check <see cref="HasNext"/> first.</remarks>
         public Func<TOut> MoveNext;
+
+        /// <summary>
+        ///     Returns a function that when called, moves to next iteration and return a reference to the next value.
+        /// </summary>
+        /// <remarks>Make sure to check <see cref="HasNext"/> first.</remarks>
         public MoveNextReferencedDelegate<TOut> MoveNextReference;
+
+        /// <summary>
+        ///     Returns a function that when called, checks if there is a next element in this iterator.
+        /// </summary>
         public Func<bool> HasNext;
+
+        /// <summary>
+        ///     Resets internal pointer/counter.
+        /// </summary>
         public Action Reset;
 
         public NDIterator(IMemoryBlock block, Shape shape, Shape? broadcastedShape, bool autoReset = false)
@@ -119,7 +155,7 @@ namespace NumSharp
             //non auto-resetting.
             var localBlock = Block;
             Shape shape = Shape;
-            if (Shape.IsSliced || Shape.IsBroadcasted)
+            if (!Shape.IsContiguous)
             {
                 //Shape is sliced, not auto-resetting
                 switch (Type)
@@ -226,20 +262,16 @@ namespace NumSharp
                         break;
 
                     case IteratorType.Vector:
-                        MoveNext = () => *((TOut*)localBlock.Address + index++);
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + index++);
-                        Reset = () => index = 0;
-                        HasNext = () => index < Shape.size;
-                        break;
-
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementor(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () => *((TOut*)localBlock.Address + iterator.Next());
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>(((TOut*)localBlock.Address + iterator.Next()));
-                        Reset = () => iterator.Reset();
-                        HasNext = () => iterator.HasNext;
-                        break;
+                    {
+                            MoveNext = () => *((TOut*)localBlock.Address + index++);
+                            MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + index++);
+                            Reset = () => index = 0;
+                            HasNext = () => index < Shape.size;
+
+                            break;
+                        }
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -250,7 +282,7 @@ namespace NumSharp
         {
             var localBlock = Block;
             Shape shape = Shape;
-            if (Shape.IsSliced || Shape.IsBroadcasted)
+            if (!Shape.IsContiguous)
             {
                 //Shape is sliced, auto-resetting
                 switch (Type)
@@ -338,14 +370,14 @@ namespace NumSharp
                         var size = Shape.size;
                         MoveNext = () =>
                         {
-                            var ret = *((TOut*)localBlock.Address + (index++));
+                            var ret = *((TOut*)localBlock.Address + index++);
                             if (index >= size)
                                 index = 0;
                             return ret;
                         };
                         MoveNextReference = () =>
                         {
-                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + (index++));
+                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + index++);
                             if (index >= size)
                                 index = 0;
                             return ref ret;
