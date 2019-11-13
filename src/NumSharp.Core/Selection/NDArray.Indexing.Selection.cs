@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -111,43 +112,26 @@ namespace NumSharp
             var srcShape = source.Shape;
             var ndsCount = indices.Length;
             bool isSubshaped = ndsCount != source.ndim;
-
+            NDArray idxs;
+            int[] indicesImpliedShape = null;
             //preprocess indices -----------------------------------------------------------------------------------------------
             //handle non-flat indices and detect if broadcasting required
             if (indices.Length == 1)
             {
                 //fast-lane for 1-d.
-                var idxs = indices[0];
-
+                idxs = indices[0];
                 //TODO what does this check even test if (nd.shape[0] > source.shape[0])
                 //TODO what does this check even test     throw new ArgumentOutOfRangeException($"index {nd.size - 1} is out of bounds for axis 0 with size {nd.shape[0]}");
 
                 if (idxs.Shape.IsEmpty)
                     return new NDArray<T>();
 
-                //resolve retShape
-                if (!isSubshaped)
-                {
-                    retShape = (int[])idxs.shape.Clone();
-                }
-                else
-                {
-                    retShape = new int[idxs.ndim + srcShape.NDim - ndsCount];
-                    for (int i = 0; i < idxs.ndim; i++)
-                        retShape[i] = idxs.shape[i];
-
-
-                    subShape = new int[srcShape.NDim - ndsCount];
-                    for (int dst_i = idxs.ndim, src_i = ndsCount, i = 0; src_i < srcShape.NDim; dst_i++, src_i++, i++)
-                    {
-                        retShape[dst_i] = srcShape[src_i];
-                        subShape[i] = srcShape[src_i];
-                    }
-                }
-
                 //handle non-flat index
                 if (idxs.ndim != 1)
+                {
+                    indicesImpliedShape = idxs.shape;
                     idxs = idxs.flat;
+                }
 
                 //handle non-int32 index
                 if (idxs.typecode != NPTypeCode.Int32)
@@ -157,6 +141,7 @@ namespace NumSharp
             }
             else
             {
+                idxs = indices[0];
                 bool broadcastRequired = false;
                 for (int i = 0; i < indices.Length; i++)
                 {
@@ -180,14 +165,26 @@ namespace NumSharp
                     indices = np.broadcast_arrays(indices);
                     indicesSize = indices[0].size;
                 }
-
-                //resolve retShape
-                var idxs = indices[0];
-                if (!isSubshaped)
+                               
+                //handle non-flat shapes post (possibly) broadcasted
+                for (int i = 0; i < indices.Length; i++)
                 {
-                    retShape = (int[])idxs.shape.Clone();
+                    var nd = indices[i];
+                    if (nd.ndim != 1) {
+                        indicesImpliedShape = nd.shape;
+                        indices[i] = nd = nd.flat;
+                    }
                 }
-                else
+            }
+
+            //resolve retShape
+            if (!isSubshaped)
+            {
+                retShape = indicesImpliedShape ?? (int[])idxs.shape.Clone();
+            }
+            else
+            {
+                if (indicesImpliedShape == null)
                 {
                     retShape = new int[idxs.ndim + srcShape.NDim - ndsCount];
                     for (int i = 0; i < idxs.ndim; i++)
@@ -200,14 +197,19 @@ namespace NumSharp
                         retShape[dst_i] = srcShape[src_i];
                         subShape[i] = srcShape[src_i];
                     }
-                }
-
-                //handle non-flat shapes post (possibly) broadcasted
-                for (int i = 0; i < indices.Length; i++)
+                } else
                 {
-                    var nd = indices[i];
-                    if (nd.ndim != 1)
-                        indices[i] = nd = nd.flat;
+
+                    retShape = indicesImpliedShape;
+
+                    subShape = new int[srcShape.NDim - ndsCount];
+                    for (int src_i = ndsCount, i = 0; src_i < srcShape.NDim; src_i++, i++)
+                    {
+                        subShape[i] = srcShape[src_i];
+                    }
+
+                    if (isSubshaped)
+                        retShape = Arrays.Concat(indicesImpliedShape, subShape);
                 }
             }
 
@@ -269,7 +271,7 @@ namespace NumSharp
                 Parallel.For(0, dst.size, i => *(dstAddr + i) = *(srcAddr + *(idxAddr + i))); //TODO linear might be faster. bench it.
 
                 if (retShape != null)
-                    return dst.reshape_unsafe(retShape);
+                    return dst.reshape(retShape);
 
                 return dst;
             }

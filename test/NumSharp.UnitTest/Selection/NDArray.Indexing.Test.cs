@@ -684,7 +684,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        public void IndexNDArray_Case4_Shaped()
+         public void IndexNDArray_Case4_Shaped()
         {
             var ret = x[np.array(new int[][] { new int[] { 1, 1 }, new int[] { 2, 3 }, })];
             ret.Array.Should().ContainInOrder(9, 9, 8, 7);
@@ -1298,6 +1298,24 @@ namespace NumSharp.UnitTest.Selection
         public void IndexNDArray_NewAxis_Case3()
         {
             np.arange(4).reshape(2, 2)[np.newaxis, np.arange(2)].Should().BeShaped(1, 2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case1()
+        {
+            np.arange(4).reshape(2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case2()
+        {
+            np.arange(8).reshape(2, 1, 2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1, 2, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case3()
+        {
+            np.arange(8).reshape(2, 1, 2, 1, 2)[0, Slice.Ellipsis].Should().BeShaped(1, 2, 1, 2);
         }
     }
 }

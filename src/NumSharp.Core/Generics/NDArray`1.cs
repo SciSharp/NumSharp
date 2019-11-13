@@ -25,7 +25,7 @@ using NumSharp.Utilities;
 // ReSharper disable once CheckNamespace
 namespace NumSharp.Generic
 {
-    public partial class NDArray<T> : NDArray where T : unmanaged
+    public partial class NDArray<TDType> : NDArray where TDType : unmanaged
     {
         /// <summary>
         ///     Creates a new <see cref="NDArray"/> with this storage.
@@ -33,8 +33,8 @@ namespace NumSharp.Generic
         /// <param name="storage"></param>
         protected internal NDArray(UnmanagedStorage storage) : base(storage)
         {
-            if (storage.DType != typeof(T))
-                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
+            if (storage.DType != typeof(TDType))
+                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(TDType).Name}", nameof(storage));
         }
 
         /// <summary>
@@ -43,8 +43,8 @@ namespace NumSharp.Generic
         /// <param name="storage"></param>
         protected internal NDArray(UnmanagedStorage storage, Shape shape) : base(storage, shape)
         {
-            if (storage.DType != typeof(T))
-                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
+            if (storage.DType != typeof(TDType))
+                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(TDType).Name}", nameof(storage));
         }
 
         /// <summary>
@@ -53,8 +53,8 @@ namespace NumSharp.Generic
         /// <param name="storage"></param>
         protected internal NDArray(UnmanagedStorage storage, ref Shape shape) : base(storage, ref shape)
         {
-            if (storage.DType != typeof(T))
-                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(T).Name}", nameof(storage));
+            if (storage.DType != typeof(TDType))
+                throw new ArgumentException($"Storage type must be the same as T. {storage.DType.Name} != {typeof(TDType).Name}", nameof(storage));
         }
 
         /// <summary>
@@ -64,7 +64,7 @@ namespace NumSharp.Generic
         /// <param name="dtype">Data type of elements</param>
         /// <param name="engine">The engine of this <see cref="NDArray"/></param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        protected internal NDArray(TensorEngine engine) : base(InfoOf<T>.NPTypeCode, engine) { }
+        protected internal NDArray(TensorEngine engine) : base(InfoOf<TDType>.NPTypeCode, engine) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -72,7 +72,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="dtype">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray() : base(InfoOf<T>.NPTypeCode) { }
+        public NDArray() : base(InfoOf<TDType>.NPTypeCode) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -81,7 +81,7 @@ namespace NumSharp.Generic
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(int size, bool fillZeros) : base(InfoOf<T>.NPTypeCode, size, fillZeros)
+        public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
         { }
 
         /// <summary>
@@ -95,8 +95,8 @@ namespace NumSharp.Generic
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Array values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
-            if (dtype != typeof(T))
-                throw new ArgumentException($"Array type must be the same as T. {dtype.Name} != {typeof(T).Name}", nameof(values));
+            if (dtype != typeof(TDType))
+                throw new ArgumentException($"Array type must be the same as T. {dtype.Name} != {typeof(TDType).Name}", nameof(values));
         }
 
         /// <summary>
@@ -111,8 +111,8 @@ namespace NumSharp.Generic
         public NDArray(IArraySlice values, Shape shape = default, char order = 'C') : base(values, shape, order)
         {
             var underlying = values.GetType().GenericTypeArguments[0];
-            if (underlying != typeof(T))
-                throw new ArgumentException($"Array type must be the same as T. {underlying.Name} != {typeof(T).Name}", nameof(values));
+            if (underlying != typeof(TDType))
+                throw new ArgumentException($"Array type must be the same as T. {underlying.Name} != {typeof(TDType).Name}", nameof(values));
         }
 
         /// <summary>
@@ -121,14 +121,14 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="shape">Shape of NDArray</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Shape shape) : base(InfoOf<T>.NPTypeCode, shape) { }
+        public NDArray(Shape shape) : base(InfoOf<TDType>.NPTypeCode, shape) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(int size) : base(InfoOf<T>.NPTypeCode, size) { }
+        public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -138,16 +138,16 @@ namespace NumSharp.Generic
         /// <param name="shape">Shape of NDArray</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Shape shape, bool fillZeros) : base(InfoOf<T>.NPTypeCode, shape, fillZeros) { }
+        public NDArray(Shape shape, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros) { }
 
         /// <summary>
         /// Array access to storage data - overridden on purpose
         /// </summary>
         /// <value></value>
-        protected internal new ArraySlice<T> Array
+        protected internal new ArraySlice<TDType> Array
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => Storage.GetData<T>();
+            get => Storage.GetData<TDType>();
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => Storage.ReplaceData(value);
         }
@@ -155,29 +155,29 @@ namespace NumSharp.Generic
         /// <summary>
         ///     Gets the address that this NDArray starts from.
         /// </summary>
-        protected internal new unsafe T* Address
+        protected internal new unsafe TDType* Address
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => (T*)Storage.Address;
+            get => (TDType*)Storage.Address;
         }
 
-        public new T this[params int[] indices]
+        public new TDType this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
 
-                return Storage.GetValue<T>(indices);
+                return Storage.GetValue<TDType>(indices);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(T).Name}> to a non-scalar indices", nameof(indices));
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
 
-                Storage.SetValue<T>(value, indices);
+                Storage.SetValue<TDType>(value, indices);
             }
         }
 
@@ -185,12 +185,12 @@ namespace NumSharp.Generic
         /// slicing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        public new NDArray<T> this[string slice]
+        public new NDArray<TDType> this[string slice]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                return base[slice].MakeGeneric<T>();
+                return base[slice].MakeGeneric<TDType>();
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -204,16 +204,16 @@ namespace NumSharp.Generic
         /// slicing of generic - overridden on purpose
         /// </summary>
         /// <value></value>
-        public new NDArray<T> this[params Slice[] slices]
+        public new NDArray<TDType> this[params Slice[] slices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => base[slices].MakeGeneric<T>();
+            get => base[slices].MakeGeneric<TDType>();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => base[slices] = value;
         }
 
-        public new T GetAtIndex(int index)
+        public new TDType GetAtIndex(int index)
         {
             unsafe
             {
@@ -221,11 +221,38 @@ namespace NumSharp.Generic
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator ArraySlice<T>(NDArray<T> nd) => nd.Array;
+
+        /// <summary>
+        ///     A 1-D iterator over the array.
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html</remarks>
+        public new NDArray<TDType> flat
+        {
+            get
+            {
+                return base.flat.MakeGeneric<TDType>();
+            }
+        }
+
+        /// <summary>
+        ///     The transposed array. <br></br>
+        ///     Same as self.transpose().
+        /// </summary>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html</remarks>
+        public new NDArray<TDType> T
+        {
+            get
+            {
+                return transpose().MakeGeneric<TDType>();
+            }
+        }
+
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator NDArray<T>(T[] tArray) => new NDArray(tArray).MakeGeneric<T>();
+        public static implicit operator ArraySlice<TDType>(NDArray<TDType> nd) => nd.Array;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static explicit operator NDArray<TDType>(TDType[] tArray) => new NDArray(tArray).MakeGeneric<TDType>();
 
     }
 }

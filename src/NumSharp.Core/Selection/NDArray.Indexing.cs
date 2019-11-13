@@ -58,20 +58,20 @@ namespace NumSharp
                             return this[nds];
                         case object[] objs:
                             return this[objs];
+                        case string slicesStr:
+                            return new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr)));
                     }
                 }
 
                 int ints = 0;
                 int bools = 0;
-                bool foundNDArray = false;
                 foreach (var o in indicesObjects)
                 {
                     switch (o)
                     {
                         case NDArray _:
                         case int[] _:
-                            foundNDArray = true;
-                            continue;
+                            goto _NDArrayFound;
                         case int _:
                             ints++;
                             continue;
@@ -86,9 +86,11 @@ namespace NumSharp
                     }
                 }
 
+                //handle all ints
                 if (ints == indicesLen)
                     return new NDArray(Storage.GetData(indicesObjects.Cast<int>().ToArray()));
 
+                //handle all booleans
                 if (bools == indicesLen)
                 {
                     if (indicesLen != 1)
@@ -102,76 +104,106 @@ namespace NumSharp
                     return np.expand_dims(this, 0); //equivalent to [np.newaxis]
                 }
 
-                if (indicesLen == 1 && indicesObjects[0] is string slicesStr)
-                    return new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr)));
-
-                if (!foundNDArray)
+                //handle regular slices
+                var slices = indicesObjects.Select(x =>
                 {
-                    var slices = indicesObjects.Select(x =>
+                    switch (x)
                     {
-                        switch (x)
-                        {
-                            case Slice o: return o;
-                            case int o: return Slice.Index(o);
-                            case string o: return new Slice(o);
-                            case bool o: return o ? Slice.All : Slice.Index(0); //TODO: verify this
-                            case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
-                            default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
-                        }
-                    }).ToArray();
+                        case Slice o: return o;
+                        case int o: return Slice.Index(o);
+                        case string o: return new Slice(o);
+                        case bool o: return o ? Slice.All : Slice.Index(0); //TODO: verify this
+                        case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
+                        default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
+                    }
+                }).ToArray();
 
+                return new NDArray(Storage.GetView(slices));
 
-                    return new NDArray(Storage.GetView(slices));
-                }
-
-                NDArray _toIndexes(object idx, int i)
+                //handle complex ndarrays indexing
+                _NDArrayFound:
+                var @this = this.Storage;
+                var indices = new List<NDArray>();
+               // bool foundNewAxis = false;
+                int countNewAxes = 0;
+                //handle ndarray indexing
+                for (int i = 0; i < indicesLen; i++)
                 {
+                    var idx = indicesObjects[i];
+                    _recuse:
                     switch (idx)
                     {
                         case Slice o:
-                            if (o.IsIndex)
-                                return NDArray.Scalar<int>(o.Start);
-
-                            if (o == Slice.All)
-                                return np.arange(shape[i]);//TODO: is it?
 
                             if (o.IsEllipsis)
                             {
-                                //TODO:
+                                indicesObjects = ExpandEllipsis(indicesObjects).ToArray();
+                                continue;
                             }
 
                             if (o.IsNewAxis)
                             {
                                 //TODO:
+                                //TODO: currently we just swallow them.
+                                //countNewAxes++;
+                                //foundNewAxis = true;
+                                continue;
                             }
 
-                            return np.arange(o.Start ?? 0, o.Stop ?? shape[i], o.Step); //TODO: this is likely to be wrong!
-                        case int o: return NDArray.Scalar<int>(o);
-                        case string o: return _toIndexes(new Slice(o), i);
-                        case bool o: return o ? _toIndexes(Slice.NewAxis, i) : new NDArray<int>();
-                        case IConvertible o: return NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture));
-                        case int[] o: return np.array(o, copy: false); //we dont copy, pinning will be freed automatically after we done indexing.
+                            indices.Add(GetIndicesFromSlice(@this.Shape.dimensions, o, i));
+                            continue;
+                        case int o:
+                            indices.Add(NDArray.Scalar<int>(o));
+                            continue;
+                        case string o:
+                            idx = new Slice(o);
+                            goto _recuse;
+                        case bool o:
+                            if (o)
+                            {
+                                idx = Slice.NewAxis;
+                                goto _recuse;
+                            } else
+                                return new NDArray<int>(); //false bool causes nullification of return.
+                            continue;
+                        case IConvertible o:
+                            indices.Add(NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture)));
+                            continue;
+                        case int[] o:
+                            indices.Add(np.array(o, copy: false)); //we dont copy, pinning will be freed automatically after we done indexing.
+                            continue;
                         case NDArray nd:
                             if (nd.typecode == NPTypeCode.Boolean)
                             {
-                                //TODO: mask
+                                //TODO: mask only specific axis??? find a unit test to check it against.
+                                throw new Exception("if (nd.typecode == NPTypeCode.Boolean)");
                             }
-                            
-                            return nd;
+                            indices.Add(nd);
+                            continue;
                         default: throw new ArgumentException($"Unsupported slice type: '{(idx?.GetType()?.Name ?? "null")}'");
                     }
                 }
 
-                var indices = new List<NDArray>();
+                var ret = retrieve_indices(new NDArray(@this), indices.ToArray());
 
-                //handle ndarray indexing
-                for (int i = 0; i < indicesLen; i++)
-                {
-                    indices.Add(_toIndexes(indicesObjects[i], i));
-                    //TODO: here we need to handle 
-                }
+                //if (foundNewAxis)
+                //{
+                //    var targettedAxis = indices.Count - 1;
+                //    var axisOffset = this.ndim - targettedAxis;
+                //    var retShape = ret.Shape;
+                //    for (int i = 0; i < indicesLen; i++)
+                //    {
+                //        if (!(indicesObjects[i] is Slice slc) || !slc.IsNewAxis)
+                //            continue;
+                //        
+                //        var axis = Math.Max(0, Math.Min(i - axisOffset, ret.ndim));
+                //        retShape = retShape.ExpandDimension(axis);
+                //    }
+                //
+                //    ret = ret.reshape(retShape);
+                //}
 
-                return retrieve_indices(this, indices.ToArray());
+                return ret;
             }
             set
             {
@@ -224,7 +256,7 @@ namespace NumSharp
                     return;
                 }
 
-_slice:
+                _slice:
                 if (indicesLen == 1 && indicesObjects[0] is string slicesStr)
                 {
                     Storage.GetView(Slice.ParseSlices(slicesStr)).SetData(value);
@@ -261,6 +293,27 @@ _slice:
         public NDArray GetIndices(NDArray @out, params NDArray[] indices)
         {
             return _extract_indices(indices, false, @out);
+        }
+
+        private IEnumerable<object> ExpandEllipsis(object[] ndarrays)
+        {
+            // count dimensions without counting ellipsis or newaxis
+            var count = ndarrays.OfType<Slice>().Count(slice=>!(slice.IsNewAxis || slice.IsEllipsis));
+
+            // expand 
+            for (int i = 0; i < ndarrays.Length; i++)
+            {
+                var obj = ndarrays[i];
+                
+                if (obj is Slice slice && slice.IsEllipsis)
+                {
+                    for (int j = 0; j < ndim - count; j++)
+                        yield return Slice.All;
+                    continue;
+                }
+
+                yield return obj;
+            }
         }
 
         private NDArray _extract_indices(NDArray[] mindices, bool isCollapsed, NDArray @out)
