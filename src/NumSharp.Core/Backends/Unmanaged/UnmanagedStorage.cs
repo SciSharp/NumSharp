@@ -83,7 +83,17 @@ namespace NumSharp.Backends
         /// storage shape for outside representation
         /// </summary>
         /// <value>numpys equal shape</value>
-        public Shape Shape => _shape;
+        public Shape Shape
+        {
+            get
+            {
+                return _shape;
+            }
+            set
+            {
+                this.Reshape(ref value);
+            }
+        }
 
         /// <summary>
         ///     Spans <see cref="Address"/> &lt;-&gt; <see cref="Count"/>
