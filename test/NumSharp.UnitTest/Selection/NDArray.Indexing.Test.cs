@@ -797,7 +797,7 @@ namespace NumSharp.UnitTest.Selection
             Console.WriteLine(a.Shape);
             var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
             ret.Should().BeShaped(3, 1, 2, 2);
-            ret[1, 0, 0].Should().BeOfValues(4,5).And.BeShaped(2);
+            ret[1, 0, 0].Should().BeOfValues(4, 5).And.BeShaped(2);
             //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
             //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
             //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
@@ -1173,7 +1173,7 @@ namespace NumSharp.UnitTest.Selection
         private NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<int>)methods.FirstOrDefault(m=>m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
+            return (NDArray<int>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
         }
 
 
@@ -1265,12 +1265,12 @@ namespace NumSharp.UnitTest.Selection
                 ret.Should().BeShaped(2, 2).And.BeOfValues(4, 6, 24, 26);
             }
         }
-        
+
         [TestMethod]
         public void GetIndicesFromSlice_Test()
         {
             GetIndicesFromSlice((3, 4, 3), new Slice("::2"), 1).Should().BeOfValues(0, 2).And.BeShaped(2);
-            GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2,1,0);
+            GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2, 1, 0);
         }
 
         [TestMethod]
@@ -1280,6 +1280,24 @@ namespace NumSharp.UnitTest.Selection
             var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
             print(t);
             t.Should().AllBeEquivalentTo(0);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case1()
+        {
+            np.arange(8).reshape(2, 2, 2)[0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case2()
+        {
+            np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case3()
+        {
+            np.arange(4).reshape(2, 2)[np.newaxis, np.arange(2)].Should().BeShaped(1, 2, 2);
         }
     }
 }
