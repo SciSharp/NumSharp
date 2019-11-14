@@ -11,14 +11,14 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        private static unsafe NDArray retrieve_indices(NDArray src, NDArray[] indices)
+        private static unsafe NDArray retrieve_indices(NDArray src, NDArray[] indices, NDArray @out)
         {
 #if _REGEN
             #region Compute
 		    switch (src.typecode)
 		    {
 			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return retrieve_indices<#2>(src.MakeGeneric<#2>(), nds);
+			    case NPTypeCode.#1: return retrieve_indices<#2>(src.MakeGeneric<#2>(), indices, @out);
 			    %
 			    default:
 				    throw new NotSupportedException();
@@ -27,39 +27,36 @@ namespace NumSharp
 #else
 
             #region Compute
-
-            switch (src.typecode)
-            {
-                case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices);
-                case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices);
-                case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices);
-                case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices);
-                case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices);
-                case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices);
-                case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices);
-                case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices);
-                case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices);
-                case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices);
-                case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices);
-                case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices);
-                default:
-                    throw new NotSupportedException();
-            }
-
+		    switch (src.typecode)
+		    {
+			    case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, @out);
+			    case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, @out);
+			    case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, @out);
+			    case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, @out);
+			    case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, @out);
+			    case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, @out);
+			    case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, @out);
+			    case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, @out);
+			    case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, @out);
+			    case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, @out);
+			    case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, @out);
+			    case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, @out);
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
         }
 
         //TODO: this
-        private static unsafe NDArray set_indices(NDArray src, NDArray[] nds, NDArray dst)
+        private static unsafe NDArray set_indices(NDArray src, NDArray[] indices, NDArray dst)
         {
 #if _REGEN
             #region Compute
 		    switch (src.typecode)
 		    {
 			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return retrieve_indices<#2>(src.MakeGeneric<#2>(), nds);
+			    case NPTypeCode.#1: return retrieve_indices<#2>(src.MakeGeneric<#2>(), indices, dst);
 			    %
 			    default:
 				    throw new NotSupportedException();
@@ -68,38 +65,35 @@ namespace NumSharp
 #else
 
             #region Compute
-
             switch (src.typecode)
-            {
-                //TODO: ....
-                case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), nds);
-                case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), nds);
-                case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), nds);
-                case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), nds);
-                case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), nds);
-                case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), nds);
-                case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), nds);
-                case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), nds);
-                case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), nds);
-                case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), nds);
-                case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), nds);
-                case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), nds);
-                default:
-                    throw new NotSupportedException();
-            }
-
+		    {
+			    case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, dst);
+			    case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, dst);
+			    case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, dst);
+			    case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, dst);
+			    case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, dst);
+			    case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, dst);
+			    case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, dst);
+			    case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, dst);
+			    case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, dst);
+			    case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, dst);
+			    case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, dst);
+			    case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, dst);
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
         }
 
-        private static unsafe NDArray<T> retrieve_indices<T>(NDArray<T> source, NDArray[] indices) where T : unmanaged
+        private static unsafe NDArray<T> retrieve_indices<T>(NDArray<T> source, NDArray[] indices, NDArray @out) where T : unmanaged
         {
             if (source == null)
                 throw new ArgumentNullException(nameof(source));
 
             if (indices == null)
                 throw new ArgumentNullException(nameof(indices));
+
             if (indices.Length == 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(indices));
 
@@ -213,6 +207,11 @@ namespace NumSharp
                 }
             }
 
+            //when -----------------------------------------
+            //indices point to an ndarray
+            if (isSubshaped && (!source.Shape.IsContiguous || (!(@out is null) && !@out.Shape.IsContiguous)))
+                return retriever_indices_nd_nonlinear(source, indices, ndsCount, retShape: retShape, subShape: subShape, @out);
+
             //by now all indices are flat, relative indices, might be subshaped, might be non-linear ---------------
             //we flatten to linear absolute points -----------------------------------------------------------------
             var computedOffsets = new NDArray<int>(Shape.Vector(indicesSize), false);
@@ -224,7 +223,7 @@ namespace NumSharp
             //figure out the largest possible abosulte offset
             int largestOffset;
             if (srcShape.IsContiguous)
-                largestOffset = source.size;
+                largestOffset = source.size - 1;
             else
             {
                 var largestIndices = (int[])source.shape.Clone();
@@ -277,10 +276,8 @@ namespace NumSharp
             }
             else
             {
-                //indices point to an ndarray
-                if (source.Shape.IsContiguous)
-                    return retriever_indices_nd(source, computedOffsets, ndsCount, retShape: retShape, subShape: subShape);
-                return retriever_indices_nd_nonlinear(source, indices, ndsCount, retShape: retShape, subShape: subShape);
+                //non linear is handled before calculating computedOffsets
+                return retriever_indices_nd(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, @out);
             }
         }
 
@@ -293,7 +290,7 @@ namespace NumSharp
         /// <param name="retShape"></param>
         /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="src"/>.</param>
         /// <returns></returns>
-        private static unsafe NDArray<T> retriever_indices_nd<T>(NDArray<T> src, NDArray<int> offsets, int ndsCount, int[] retShape, int[] subShape) where T : unmanaged
+        private static unsafe NDArray<T> retriever_indices_nd<T>(NDArray<T> src, NDArray<int> offsets, NDArray[] indices, int ndsCount, int[] retShape, int[] subShape, NDArray @out) where T : unmanaged
         {
             //facts:
             //indices are always offsetted to 
@@ -309,16 +306,27 @@ namespace NumSharp
             var offsetsSize = offsets.size;
             T* srcAddr = src.Address;
 
-            var dst = new NDArray<T>(retShape, false);
-            T* dstAddr = dst.Address;
-            int copySize = subShapeSize * InfoOf<T>.Size;
-
-            for (int i = 0; i < offsetsSize; i++) //TODO: Parallel for
+            NDArray dst;
+            if (@out is null)
+                dst = new NDArray<T>(retShape, false);
+            else
             {
-                Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize);
+                //compare computed retShape vs given @out
+                if (!retShape.SequenceEqual(@out.shape))
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
+                if (@out.dtype != typeof(T))
+                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.Name}'");
+
+                dst = @out;
             }
 
-            return dst;
+            T* dstAddr = (T*)dst.Address;
+            int copySize = subShapeSize * InfoOf<T>.Size;
+
+            Parallel.For(0, offsetsSize, i =>       
+                Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize));
+
+            return dst.MakeGeneric<T>();
         }
 
         /// <summary>
@@ -331,7 +339,7 @@ namespace NumSharp
         /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="source"/>.</param>
         /// <returns></returns>
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        private static unsafe NDArray<T> retriever_indices_nd_nonlinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, int[] retShape, int[] subShape) where T : unmanaged
+        private static unsafe NDArray<T> retriever_indices_nd_nonlinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, int[] retShape, int[] subShape, NDArray @out) where T : unmanaged
         {
             //facts:
             //indices are always offsetted to 
@@ -341,11 +349,25 @@ namespace NumSharp
             var size = indices[0].size; //first is ok because they are broadcasted t oeac
             T* srcAddr = source.Address;
 
-            var dst = new NDArray(InfoOf<T>.NPTypeCode, retShape, false);
+            NDArray dst;
+            if (@out is null)
+                dst = new NDArray<T>(retShape, false);
+            else
+            {
+                //compare computed retShape vs given @out
+                if (!retShape.SequenceEqual(@out.shape))
+                    throw new ArgumentException($"Given @out NDArray is expected to be shaped [{string.Join(", ", retShape)}] but is instead [{string.Join(", ", @out.shape)}]");
+                if (@out.dtype != typeof(T))
+                    throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.Name}'");
+
+                dst = @out;
+            }
+
             T* dstAddr = (T*)dst.Address;
 
             var srcDims = indices.Length;
             var indexGetters = PrepareIndexGetters(source.Shape, indices);
+
             //compute coordinates
             Parallel.For(0, size, i => //TODO: make parallel.for
             {

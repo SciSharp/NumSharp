@@ -1032,7 +1032,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexSelecton_2D_from_1D()
         {
-            //>>> x = np.arange(10,1,-1)
+            //>>> x = np.arange(10, 1, -1)
             //>>> x
             //array([10,  9,  8,  7,  6,  5,  4,  3,  2])
             //>>> x[np.array([[1, 1],[2, 3]])]
@@ -1041,7 +1041,7 @@ namespace NumSharp.UnitTest.Selection
             //>>>
 
             var x = np.arange(10, 1, -1);
-            x[np.array(new int[,] { { 1, 1 }, { 2, 3 } })].Should().BeOfValues(1, 1, 2, 3).And.BeShaped(2, 2);
+            x[np.array(new int[,] { { 1, 1 }, { 2, 3 } })].Should().BeOfValues(9, 9, 8, 7).And.BeShaped(2, 2);
         }
 
 
