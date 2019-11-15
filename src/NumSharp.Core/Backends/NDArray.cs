@@ -306,8 +306,6 @@ namespace NumSharp
             {
                 if (ndim == 1 || Shape.IsScalar) //because it is already flat, there is no need to clone even if it is already sliced.
                     return new NDArray(Storage);
-                if (this.Shape.IsBroadcasted)
-                    return this.reshape_broadcast(new int[] {size}, this.Shape.BroadcastInfo?.OriginalShape);
                 return this.reshape(size);
             }
         }
