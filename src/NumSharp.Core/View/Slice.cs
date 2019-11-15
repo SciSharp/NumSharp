@@ -6,50 +6,50 @@ using System.Text.RegularExpressions;
 
 namespace NumSharp
 {
-    /// <summary>
-    /// NDArray can be indexed using slicing
-    /// A slice is constructed by start:stop:step notation
-    /// 
-    /// Examples: 
-    /// 
-    /// a[start:stop]  # items start through stop-1
-    /// a[start:]      # items start through the rest of the array
-    /// a[:stop]       # items from the beginning through stop-1
-    /// 
-    /// The key point to remember is that the :stop value represents the first value that is not 
-    /// in the selected slice. So, the difference between stop and start is the number of elements 
-    /// selected (if step is 1, the default).
-    /// 
-    /// There is also the step value, which can be used with any of the above:
-    /// a[:]           # a copy of the whole array
-    /// a[start:stop:step] # start through not past stop, by step
-    /// 
-    /// The other feature is that start or stop may be a negative number, which means it counts 
-    /// from the end of the array instead of the beginning. So:
-    /// a[-1]    # last item in the array
-    /// a[-2:]   # last two items in the array
-    /// a[:-2]   # everything except the last two items
-    /// Similarly, step may be a negative number:
-    /// 
-    /// a[::- 1]    # all items in the array, reversed
-    /// a[1::- 1]   # the first two items, reversed
-    /// a[:-3:-1]  # the last two items, reversed
-    /// a[-3::- 1]  # everything except the last two items, reversed
-    /// 
-    /// NumSharp is kind to the programmer if there are fewer items than 
-    /// you ask for. For example, if you  ask for a[:-2] and a only contains one element, you get an 
-    /// empty list instead of an error.Sometimes you would prefer the error, so you have to be aware 
-    /// that this may happen.
-    /// 
-    /// Adapted from Greg Hewgill's answer on Stackoverflow: https://stackoverflow.com/questions/509211/understanding-slice-notation
-    /// 
-    /// Note: special IsIndex == true
-    /// It will pick only a single value at Start in this dimension effectively reducing the Shape of the sliced matrix by 1 dimension. 
-    /// It can be used to reduce an N-dimensional array/matrix to a (N-1)-dimensional array/matrix
-    /// 
-    /// Example:
-    /// a=[[1, 2], [3, 4]]
-    /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector
+    /// <summary>                                                                                                                                         <br></br>
+    /// NDArray can be indexed using slicing                                                                                                              <br></br>
+    /// A slice is constructed by start:stop:step notation                                                                                                <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// Examples:                                                                                                                                         <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// a[start:stop]  # items start through stop-1                                                                                                       <br></br>
+    /// a[start:]      # items start through the rest of the array                                                                                        <br></br>
+    /// a[:stop]       # items from the beginning through stop-1                                                                                          <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// The key point to remember is that the :stop value represents the first value that is not                                                          <br></br>
+    /// in the selected slice. So, the difference between stop and start is the number of elements                                                        <br></br>
+    /// selected (if step is 1, the default).                                                                                                             <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// There is also the step value, which can be used with any of the above:                                                                            <br></br>
+    /// a[:]           # a copy of the whole array                                                                                                        <br></br>
+    /// a[start:stop:step] # start through not past stop, by step                                                                                         <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// The other feature is that start or stop may be a negative number, which means it counts                                                           <br></br>
+    /// from the end of the array instead of the beginning. So:                                                                                           <br></br>
+    /// a[-1]    # last item in the array                                                                                                                 <br></br>
+    /// a[-2:]   # last two items in the array                                                                                                            <br></br>
+    /// a[:-2]   # everything except the last two items                                                                                                   <br></br>
+    /// Similarly, step may be a negative number:                                                                                                         <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// a[::- 1]    # all items in the array, reversed                                                                                                    <br></br>
+    /// a[1::- 1]   # the first two items, reversed                                                                                                       <br></br>
+    /// a[:-3:-1]  # the last two items, reversed                                                                                                         <br></br>
+    /// a[-3::- 1]  # everything except the last two items, reversed                                                                                      <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// NumSharp is kind to the programmer if there are fewer items than                                                                                  <br></br>
+    /// you ask for. For example, if you  ask for a[:-2] and a only contains one element, you get an                                                      <br></br>
+    /// empty list instead of an error.Sometimes you would prefer the error, so you have to be aware                                                      <br></br>
+    /// that this may happen.                                                                                                                             <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// Adapted from Greg Hewgill's answer on Stackoverflow: https://stackoverflow.com/questions/509211/understanding-slice-notation                      <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// Note: special IsIndex == true                                                                                                                     <br></br>
+    /// It will pick only a single value at Start in this dimension effectively reducing the Shape of the sliced matrix by 1 dimension.                   <br></br>
+    /// It can be used to reduce an N-dimensional array/matrix to a (N-1)-dimensional array/matrix                                                        <br></br>
+    ///                                                                                                                                                   <br></br>
+    /// Example:                                                                                                                                          <br></br>
+    /// a=[[1, 2], [3, 4]]                                                                                                                                <br></br>
+    /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector                                                                              <br></br>
     /// </summary>
     [DebuggerStepThrough]
     public class Slice
