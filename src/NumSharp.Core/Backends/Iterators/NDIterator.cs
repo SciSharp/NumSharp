@@ -155,7 +155,7 @@ namespace NumSharp
             //non auto-resetting.
             var localBlock = Block;
             Shape shape = Shape;
-            if (!Shape.IsContiguous)
+            if (!Shape.IsContiguous || Shape.ModifiedStrides)
             {
                 //Shape is sliced, not auto-resetting
                 switch (Type)
@@ -282,7 +282,7 @@ namespace NumSharp
         {
             var localBlock = Block;
             Shape shape = Shape;
-            if (!Shape.IsContiguous)
+            if (!Shape.IsContiguous || Shape.ModifiedStrides)
             {
                 //Shape is sliced, auto-resetting
                 switch (Type)

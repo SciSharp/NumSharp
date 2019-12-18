@@ -1291,13 +1291,19 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_NewAxis_Case2()
         {
-            np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 1, 2).And.BeOfValues(0, 1);
+            np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
         }
 
         [TestMethod]
         public void IndexNDArray_NewAxis_Case3()
         {
             np.arange(4).reshape(2, 2)[np.newaxis, np.arange(2)].Should().BeShaped(1, 2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Ellipsis_Case1()
+        {
+            np.arange(4).reshape(2, 2)["..., newaxis"].Should().BeShaped(2, 2, 1);
         }
 
         [TestMethod]

@@ -26,8 +26,8 @@ namespace NumSharp.UnitTest.Indexing
         {
             var x = np.arange(9).reshape(3, 3);
             var ret = np.nonzero(x);
-            ret[0].Should().BeOfValues(0, 1, 2, 2);
-            ret[1].Should().BeOfValues(0, 1, 0, 1);
+            ret[0].Should().BeOfValues(0,0,1,1,1,2,2,2);
+            ret[1].Should().BeOfValues(1,2,0,1,2,0,1,2);
         }
 
     }

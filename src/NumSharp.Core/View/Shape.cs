@@ -17,6 +17,11 @@ namespace NumSharp
         internal BroadcastInfo BroadcastInfo;
 
         /// <summary>
+        ///     Does this Shape have modified strides, usually in scenarios like np.transpose.
+        /// </summary>
+        public bool ModifiedStrides;
+
+        /// <summary>
         ///     True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
         /// </summary>
         public bool IsSliced
@@ -194,7 +199,8 @@ namespace NumSharp
             this.strides = (int[])other.strides.Clone();
             this.IsScalar = other.IsScalar;
             this.ViewInfo = other.ViewInfo?.Clone();
-            this.BroadcastInfo = other.BroadcastInfo;
+            this.BroadcastInfo = other.BroadcastInfo?.Clone();
+            this.ModifiedStrides = other.ModifiedStrides;
         }
 
         public Shape(int[] dims, int[] strides)
@@ -233,6 +239,7 @@ namespace NumSharp
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
             BroadcastInfo = null;
+            ModifiedStrides = false;
         }
 
         public Shape(int[] dims, int[] strides, Shape originalShape)
@@ -271,6 +278,7 @@ namespace NumSharp
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
             BroadcastInfo = new BroadcastInfo() { OriginalShape = originalShape };
+            ModifiedStrides = false;
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -315,6 +323,7 @@ namespace NumSharp
             IsScalar = _hashCode == int.MinValue;
             ViewInfo = null;
             BroadcastInfo = null;
+            ModifiedStrides = false;
         }
 
         /// <summary>
@@ -345,6 +354,25 @@ namespace NumSharp
                 for (int idx = strides.Length - 1; idx >= 1; idx--)
                     strides[idx - 1] = strides[idx] * dimensions[idx];
             }
+        }
+
+
+        [MethodImpl((MethodImplOptions)768)]
+        private void _computeStrides(int axis)
+        {
+            if (dimensions.Length == 0)
+                return;
+
+            if (axis == 0)
+                strides[0] = strides[1] * dimensions[1];
+            else
+                unchecked
+                {
+                    if (axis == strides.Length - 1)
+                        strides[strides.Length - 1] = 1;
+                    else
+                        strides[axis - 1] = strides[axis] * dimensions[axis];
+                }
         }
 
         public int this[int dim]
@@ -1138,25 +1166,25 @@ namespace NumSharp
 
         #region Implicit Operators
 
-        public static explicit operator int[] (Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
+        public static explicit operator int[](Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
         public static explicit operator int(Shape shape) => shape.Size;
         public static explicit operator Shape(int dim) => Shape.Vector(dim);
 
-        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
+        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => Shape.Matrix(dims.Item1, dims.Item2);
 
-        public static explicit operator (int, int, int) (Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
+        public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);
 
-        public static explicit operator (int, int, int, int) (Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
+        public static explicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4);
 
-        public static explicit operator (int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5);
 
-        public static explicit operator (int, int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
 
         #endregion
@@ -1290,50 +1318,6 @@ namespace NumSharp
         #endregion
 
         /// <summary>
-        ///     Expands a specific <paramref name="axis"/> with 1 dimension.
-        /// </summary>
-        /// <param name="axis"></param>
-        /// <returns></returns>
-        [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
-        internal Shape ExpandDimension(int axis)
-        {
-            Shape ret;
-            if (IsScalar)
-            {
-                ret = Vector(1);
-                ret.strides[0] = 0;
-            }
-            else
-            {
-                ret = Clone(true, true, false);
-            }
-
-            var dimensions = ret.dimensions;
-            var strides = ret.strides;
-            // Allow negative axis specification
-            if (axis < 0)
-            {
-                axis = dimensions.Length + 1 + axis;
-                if (axis < 0)
-                {
-                    throw new ArgumentException($"Effective axis {axis} is less than 0");
-                }
-            }
-
-            Arrays.Insert(ref dimensions, axis, 1);
-            Arrays.Insert(ref strides, axis, 0);
-            ret.dimensions = dimensions;
-            ret.strides = strides;
-            if (IsSliced)
-            {
-                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
-            }
-
-            ret.ComputeHashcode();
-            return ret;
-        }
-
-        /// <summary>
         ///     Translates coordinates with negative indices, e.g:<br></br>
         ///     np.arange(9)[-1] == np.arange(9)[8]<br></br>
         ///     np.arange(9)[-2] == np.arange(9)[7]<br></br>
@@ -1354,6 +1338,14 @@ namespace NumSharp
             return coords;
         }
 
+        /// <summary>
+        ///     Flag this shape as stride-modified.
+        /// </summary>
+        /// <param name="value"></param>
+        public void SetStridesModified(bool value)
+        {
+            ModifiedStrides = value;
+        }
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 

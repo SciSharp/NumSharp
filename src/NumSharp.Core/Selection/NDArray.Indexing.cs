@@ -171,6 +171,7 @@ namespace NumSharp
 
             int ints = 0;
             int bools = 0;
+            bool foundSlices = false;
             for (var i = 0; i < indicesObjects.Length; i++)
             {
                 switch (indicesObjects[i])
@@ -227,11 +228,12 @@ namespace NumSharp
 
             //handle complex ndarrays indexing
             _NDArrayFound:
-            var @this = this.Storage;
+            var @this = this;
             var indices = new List<NDArray>();
-            // bool foundNewAxis = false;
+            bool foundNewAxis = false;
             int countNewAxes = 0;
             //handle ndarray indexing
+            bool hasCustomExpandedSlice = false; //use for premature slicing detection
             for (int i = 0; i < indicesLen; i++)
             {
                 var idx = indicesObjects[i];
@@ -243,6 +245,7 @@ namespace NumSharp
                         if (o.IsEllipsis)
                         {
                             indicesObjects = ExpandEllipsis(indicesObjects).ToArray();
+                            //TODO: i think we need to set here indicesLen = indicesObjects.Length
                             continue;
                         }
 
@@ -250,23 +253,25 @@ namespace NumSharp
                         {
                             //TODO:
                             //TODO: currently we just swallow them.
-                            //countNewAxes++;
-                            //foundNewAxis = true;
+                            countNewAxes++;
+                            foundNewAxis = true;
                             continue;
                         }
 
-                        indices.Add(GetIndicesFromSlice(@this.Shape.dimensions, o, i));
+                        hasCustomExpandedSlice = true;
+                        indices.Add(GetIndicesFromSlice(@this.Shape.dimensions, o, i - countNewAxes));
                         continue;
                     case int o:
                         indices.Add(NDArray.Scalar<int>(o));
                         continue;
                     case string o:
-                        idx = new Slice(o);
+                        indicesObjects[i] = idx = new Slice(o);
+
                         goto _recuse;
                     case bool o:
                         if (o)
                         {
-                            idx = Slice.NewAxis;
+                            indicesObjects[i] = idx = Slice.NewAxis;
                             goto _recuse;
                         } else
                             return new NDArray<int>(); //false bool causes nullification of return.
@@ -289,24 +294,58 @@ namespace NumSharp
                 }
             }
 
-            var ret = retrieve_indices(new NDArray(@this), indices.ToArray(), null);
+            var indicesArray = indices.ToArray();
 
-            //if (foundNewAxis)
-            //{
-            //    var targettedAxis = indices.Count - 1;
-            //    var axisOffset = this.ndim - targettedAxis;
-            //    var retShape = ret.Shape;
-            //    for (int i = 0; i < indicesLen; i++)
-            //    {
-            //        if (!(indicesObjects[i] is Slice slc) || !slc.IsNewAxis)
-            //            continue;
-            //        
-            //        var axis = Math.Max(0, Math.Min(i - axisOffset, ret.ndim));
-            //        retShape = retShape.ExpandDimension(axis);
-            //    }
-            //
-            //    ret = ret.reshape(retShape);
-            //}
+            //handle premature slicing when the shapes cant be broadcasted together
+            if (hasCustomExpandedSlice && !np.are_broadcastable(indicesArray))
+            {
+                var ndim = indicesObjects.Length;
+                var prematureSlices = new Slice[ndim];
+                var dims = @this.shape;
+                for (int i = 0; i < ndim; i++)
+                {
+                    if (indicesObjects[i] is Slice slice)
+                    {
+                        prematureSlices[i] = slice;
+                        //todo: we might need this in the future indicesObjects[i] = Slice.All;
+                    } else
+                    {
+                        prematureSlices[i] = Slice.All;
+                    }
+                }
+
+                @this = @this[prematureSlices];
+
+                //updated premature axes
+                dims = @this.shape;
+                for (int i = 0; i < ndim; i++)
+                {
+                    if (prematureSlices[i] != Slice.All)
+                    {
+                        indicesArray[i] = GetIndicesFromSlice(dims, Slice.All, i);
+                    }
+                }
+            }
+
+            //TODO: we can use a slice as null indice instead of expanding it, then we use PrepareIndexGetters to actually simulate that.
+            var ret = retrieve_indices(@this, indicesArray, null);
+
+            if (foundNewAxis)
+            {
+                var targettedAxis = indices.Count - 1;
+                var axisOffset = this.ndim - targettedAxis;
+                var retShape = ret.Shape;
+                for (int i = 0; i < indicesLen; i++)
+                {
+                    if (!(indicesObjects[i] is Slice slc) || !slc.IsNewAxis)
+                        continue;
+                    
+                    var axis = Math.Max(0, Math.Min(i - axisOffset, ret.ndim));
+                    retShape = retShape.ExpandDimension(axis);
+                }
+            
+                ret = ret.reshape(retShape);
+            }
 
             return ret;
         }
@@ -333,27 +372,27 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
+        ///     Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
         /// </summary>
         /// <param name="shape"></param>
         /// <param name="slice"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
+        internal static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             return GetIndicesFromSlice(shape.dimensions, slice, axis);
         }
 
         /// <summary>
-        /// Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
+        ///     Converts a slice to indices for the special case where slices are mixed with NDArrays in this[...]
         /// </summary>
         /// <param name="shape"></param>
         /// <param name="slice"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static NDArray<int> GetIndicesFromSlice(int[] shape, Slice slice, int axis)
+        internal static NDArray<int> GetIndicesFromSlice(int[] shape, Slice slice, int axis)
         {
             var dim = shape[axis];
             var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices

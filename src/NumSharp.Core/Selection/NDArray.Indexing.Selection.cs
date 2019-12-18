@@ -27,23 +27,23 @@ namespace NumSharp
 #else
 
             #region Compute
-		    switch (src.typecode)
-		    {
-			    case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, @out);
-			    case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, @out);
-			    case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, @out);
-			    case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, @out);
-			    case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, @out);
-			    case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, @out);
-			    case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, @out);
-			    case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, @out);
-			    case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, @out);
-			    case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, @out);
-			    case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, @out);
-			    case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, @out);
-			    default:
-				    throw new NotSupportedException();
-		    }
+            switch (src.typecode)
+            {
+                case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, @out);
+                case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, @out);
+                case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, @out);
+                case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, @out);
+                case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, @out);
+                case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, @out);
+                case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, @out);
+                case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, @out);
+                case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, @out);
+                case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, @out);
+                case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, @out);
+                case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, @out);
+                default:
+                    throw new NotSupportedException();
+            }
             #endregion
 #endif
         }
@@ -66,22 +66,22 @@ namespace NumSharp
 
             #region Compute
             switch (src.typecode)
-		    {
-			    case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, dst);
-			    case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, dst);
-			    case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, dst);
-			    case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, dst);
-			    case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, dst);
-			    case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, dst);
-			    case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, dst);
-			    case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, dst);
-			    case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, dst);
-			    case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, dst);
-			    case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, dst);
-			    case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, dst);
-			    default:
-				    throw new NotSupportedException();
-		    }
+            {
+                case NPTypeCode.Boolean: return retrieve_indices<bool>(src.MakeGeneric<bool>(), indices, dst);
+                case NPTypeCode.Byte: return retrieve_indices<byte>(src.MakeGeneric<byte>(), indices, dst);
+                case NPTypeCode.Int16: return retrieve_indices<short>(src.MakeGeneric<short>(), indices, dst);
+                case NPTypeCode.UInt16: return retrieve_indices<ushort>(src.MakeGeneric<ushort>(), indices, dst);
+                case NPTypeCode.Int32: return retrieve_indices<int>(src.MakeGeneric<int>(), indices, dst);
+                case NPTypeCode.UInt32: return retrieve_indices<uint>(src.MakeGeneric<uint>(), indices, dst);
+                case NPTypeCode.Int64: return retrieve_indices<long>(src.MakeGeneric<long>(), indices, dst);
+                case NPTypeCode.UInt64: return retrieve_indices<ulong>(src.MakeGeneric<ulong>(), indices, dst);
+                case NPTypeCode.Char: return retrieve_indices<char>(src.MakeGeneric<char>(), indices, dst);
+                case NPTypeCode.Double: return retrieve_indices<double>(src.MakeGeneric<double>(), indices, dst);
+                case NPTypeCode.Single: return retrieve_indices<float>(src.MakeGeneric<float>(), indices, dst);
+                case NPTypeCode.Decimal: return retrieve_indices<decimal>(src.MakeGeneric<decimal>(), indices, dst);
+                default:
+                    throw new NotSupportedException();
+            }
             #endregion
 #endif
         }
@@ -158,13 +158,15 @@ namespace NumSharp
                 {
                     indices = np.broadcast_arrays(indices);
                     indicesSize = indices[0].size;
+                    idxs = indices[0];
                 }
-                               
+
                 //handle non-flat shapes post (possibly) broadcasted
                 for (int i = 0; i < indices.Length; i++)
                 {
                     var nd = indices[i];
-                    if (nd.ndim != 1) {
+                    if (nd.ndim != 1)
+                    {
                         indicesImpliedShape = nd.shape;
                         indices[i] = nd = nd.flat;
                     }
@@ -191,7 +193,8 @@ namespace NumSharp
                         retShape[dst_i] = srcShape[src_i];
                         subShape[i] = srcShape[src_i];
                     }
-                } else
+                }
+                else
                 {
 
                     retShape = indicesImpliedShape;
@@ -323,7 +326,7 @@ namespace NumSharp
             T* dstAddr = (T*)dst.Address;
             int copySize = subShapeSize * InfoOf<T>.Size;
 
-            Parallel.For(0, offsetsSize, i =>       
+            Parallel.For(0, offsetsSize, i =>
                 Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize));
 
             return dst.MakeGeneric<T>();
@@ -399,27 +402,56 @@ namespace NumSharp
                 var idxs = indices[i];
                 var dimensionSize = srcShape[i];
                 var idxAddr = (int*)idxs.Address;
-                if (idxs.Shape.IsContiguous)
+
+                if (idxs is null)
                 {
-                    indexGetters[i] = idx =>
+                    if (idxs.Shape.IsContiguous)
                     {
-                        var val = idxAddr[idx];
-                        if (val < 0)
-                            return dimensionSize + val;
-                        return val;
-                    };
+                        indexGetters[i] = idx =>
+                        {
+                            return idx;
+                        };
+                    }
+                    else
+                    {
+                        //we are basically flatten the shape.
+                        var flatSrcShape = new Shape(srcShape.size);
+                        if (srcShape.IsBroadcasted)
+                        {
+                            if (srcShape.IsSliced)
+                                flatSrcShape.ViewInfo = new ViewInfo() { ParentShape = srcShape.BroadcastInfo.OriginalShape, Slices = null };
+                        }
+                        else if (srcShape.IsSliced)
+                            // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+                            flatSrcShape.ViewInfo = new ViewInfo() { ParentShape = srcShape, Slices = null };
+
+                        indexGetters[i] = flatSrcShape.GetOffset_1D;
+                    }
                 }
                 else
                 {
-                    idxs = idxs.flat;
-                    Func<int, int> offset = idxs.Shape.GetOffset_1D;
-                    indexGetters[i] = idx =>
+                    if (idxs.Shape.IsContiguous)
                     {
-                        var val = idxAddr[offset(idx)];
-                        if (val < 0)
-                            return dimensionSize + val;
-                        return val;
-                    };
+                        indexGetters[i] = idx =>
+                        {
+                            var val = idxAddr[idx];
+                            if (val < 0)
+                                return dimensionSize + val;
+                            return val;
+                        };
+                    }
+                    else
+                    {
+                        idxs = idxs.flat;
+                        Func<int, int> offset = idxs.Shape.GetOffset_1D;
+                        indexGetters[i] = idx =>
+                        {
+                            var val = idxAddr[offset(idx)];
+                            if (val < 0)
+                                return dimensionSize + val;
+                            return val;
+                        };
+                    }
                 }
             }
 

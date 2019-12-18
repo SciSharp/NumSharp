@@ -80,9 +80,8 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// storage shape for outside representation
+        ///     The shape representing the data in this storage.
         /// </summary>
-        /// <value>numpys equal shape</value>
         public Shape Shape
         {
             get
@@ -94,6 +93,11 @@ namespace NumSharp.Backends
                 this.Reshape(ref value);
             }
         }
+
+        /// <summary>
+        ///     The shape representing the data in this storage.
+        /// </summary>
+        public ref Shape ShapeReference => ref _shape;
 
         /// <summary>
         ///     Spans <see cref="Address"/> &lt;-&gt; <see cref="Count"/>
@@ -1307,7 +1311,7 @@ namespace NumSharp.Backends
             if (typeof(T) != _dtype)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (!Shape.IsContiguous)
+            if (!Shape.IsContiguous || Shape.ModifiedStrides)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
                 MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);

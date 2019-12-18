@@ -77,7 +77,7 @@ namespace NumSharp
                 UnmanagedStorage src = Storage.GetData(indices);
                 Debug.Assert(src.Shape.NDim == 1);
 
-                if (!Shape.IsContiguous)
+                if (!Shape.IsContiguous || Shape.ModifiedStrides)
                 {
                     //this works faster than cloning.
                     var ret = new string('\0', src.Count);

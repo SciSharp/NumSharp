@@ -156,7 +156,7 @@ namespace NumSharp.Backends
             if (!typeof(T).IsValidNPType())
                 throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
 
-            if (Shape.IsSliced || Shape.IsBroadcasted)
+            if (!Shape.IsContiguous || Shape.ModifiedStrides)
                 return CloneData<T>();
 
             var internalArray = InternalArray;
