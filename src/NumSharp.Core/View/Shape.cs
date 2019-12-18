@@ -49,7 +49,7 @@ namespace NumSharp
         ///     0: Row major<br></br>
         ///     1: Column major
         /// </summary>
-        internal char layout;
+        internal const char layout = 'C';
 
         internal int _hashCode;
         internal int size;
@@ -103,8 +103,8 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape { dimensions = new int[] { length }, strides = new int[] { 1 }, layout = 'C', size = length };
-            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
+            var shape = new Shape { dimensions = new int[] { length }, strides = new int[] { 1 }, size = length };
+            shape._hashCode = (/*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
             return shape;
         }
 
@@ -118,12 +118,12 @@ namespace NumSharp
             {
                 dimensions = new[] { length },
                 strides = new int[] { 1 },
-                layout = 'C',
+                //layout = 'C',
                 size = length,
                 ViewInfo = viewInfo
             };
 
-            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
+            shape._hashCode = (/*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
             return shape;
         }
 
@@ -133,11 +133,11 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Matrix(int rows, int cols)
         {
-            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, layout = 'C', size = rows * cols };
+            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, size = rows * cols };
 
             unchecked
             {
-                int hash = (shape.layout * 397);
+                int hash = (/*shape.layout*/ layout * 397);
                 int size = 1;
                 foreach (var v in shape.dimensions)
                 {
@@ -187,7 +187,7 @@ namespace NumSharp
                 return;
             }
 
-            this.layout = other.layout;
+            //this.layout = other.layout;
             this._hashCode = other._hashCode;
             this.size = other.size;
             this.dimensions = (int[])other.dimensions.Clone();
@@ -208,7 +208,7 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            layout = 'C';
+            //layout = 'C';
             size = 1;
             unchecked
             {
@@ -246,7 +246,7 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            layout = 'C';
+            //layout = 'C';
             size = 1;
             unchecked
             {
@@ -289,7 +289,7 @@ namespace NumSharp
             unchecked
             {
                 size = 1;
-                layout = 'C';
+                //layout = 'C';
                 if (dims.Length > 0)
                 {
                     int hash = (layout * 397);
@@ -305,18 +305,11 @@ namespace NumSharp
                     _hashCode = int.MinValue; //scalar's hashcode is int.minvalue
 
                 if (dims.Length != 0)
-                    if (layout == 'C')
-                    {
-                        strides[strides.Length - 1] = 1;
-                        for (int i = strides.Length - 1; i >= 1; i--)
-                            strides[i - 1] = strides[i] * dims[i];
-                    }
-                    else
-                    {
-                        strides[0] = 1;
-                        for (int idx = 1; idx < strides.Length; idx++)
-                            strides[idx] = strides[idx - 1] * dims[idx - 1];
-                    }
+                {
+                    strides[strides.Length - 1] = 1;
+                    for (int i = strides.Length - 1; i >= 1; i--)
+                        strides[i - 1] = strides[i] * dims[i];
+                }
             }
 
             IsScalar = _hashCode == int.MinValue;
@@ -348,18 +341,9 @@ namespace NumSharp
 
             unchecked
             {
-                if (layout == 'C')
-                {
-                    strides[strides.Length - 1] = 1;
-                    for (int idx = strides.Length - 1; idx >= 1; idx--)
-                        strides[idx - 1] = strides[idx] * dimensions[idx];
-                }
-                else
-                {
-                    strides[0] = 1;
-                    for (int idx = 1; idx < strides.Length; idx++)
-                        strides[idx] = strides[idx - 1] * dimensions[idx - 1];
-                }
+                strides[strides.Length - 1] = 1;
+                for (int idx = strides.Length - 1; idx >= 1; idx--)
+                    strides[idx - 1] = strides[idx] * dimensions[idx];
             }
         }
 
@@ -952,7 +936,8 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public void ChangeTensorLayout(char order = 'C')
         {
-            layout = order;
+            return; //currently this does nothing.
+            //layout = order;
             _computeStrides();
             ComputeHashcode();
         }
@@ -1279,7 +1264,7 @@ namespace NumSharp
             if ((dimensions == null && other.dimensions != null) || (dimensions != null && other.dimensions == null)) //they are empty.
                 return false;
 
-            if (size != other.size || layout != other.layout || dimensions.Length != other.dimensions.Length)
+            if (size != other.size /*|| layout != other.layout*/ || dimensions.Length != other.dimensions.Length)
                 return false;
 
             // ReSharper disable once LoopCanBeConvertedToQuery

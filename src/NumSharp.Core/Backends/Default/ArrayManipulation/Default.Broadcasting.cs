@@ -253,7 +253,7 @@ namespace NumSharp.Backends
                 nd = ogiter.NDim;
                 it.BroadcastInfo = new BroadcastInfo(ogiter);
                 it.size = tmp;
-                it.layout = 'C';
+                //it.layout = 'C';
                 //if (nd != 0)
                 //{
                 //    it->factors[mit.nd - 1] = 1;
