@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -287,7 +288,7 @@ namespace NumSharp.Backends
             return ret;
         }
 
-        private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
+        //private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
 
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
@@ -305,7 +306,7 @@ namespace NumSharp.Backends
             if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
             {
                 left = rightShape; //copy right
-                left.strides = _zeros[left.strides.Length]; //zero strides
+                left.strides = new int[left.strides.Length]; //zero strides
                 left.BroadcastInfo = new BroadcastInfo(leftShape);
                 return (left, rightShape);
             }
@@ -313,7 +314,7 @@ namespace NumSharp.Backends
             else if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
             {
                 right = leftShape; //copy left
-                right.strides = _zeros[right.strides.Length]; //zero strides
+                right.strides = new int[right.strides.Length]; //zero strides
                 right.BroadcastInfo = new BroadcastInfo(rightShape);
                 return (leftShape, right);
             }
