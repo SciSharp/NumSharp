@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -28,6 +29,20 @@ namespace NumSharp
                 return null;
             
             return this as NDArray<T> ?? new NDArray<T>(Storage);
+        }
+
+        /// <summary>
+        ///     Tries to cast to <see cref="NDArray{T}"/>, otherwise calls <see cref="NDArray{T}.astype"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the generic</typeparam>
+        /// <returns>This NDArray as a generic version.</returns>
+        /// <exception cref="InvalidOperationException">When <typeparamref name="T"/> != <see cref="dtype"/></exception>
+        public NDArray<T> AsOrMakeGeneric<T>() where T : unmanaged
+        {
+            if (typeof(T) != dtype)
+                return new NDArray<T>(this.astype(InfoOf<T>.NPTypeCode, copy: true));
+
+            return new NDArray<T>(Storage);
         }
     }
 }
