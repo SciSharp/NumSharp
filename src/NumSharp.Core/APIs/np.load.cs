@@ -380,6 +380,14 @@ namespace NumSharp
                 return typeof(Int32);
             if (typeCode == "i8")
                 return typeof(Int64);
+            if (typeCode == "u1")
+                return typeof(Byte);
+            if (typeCode == "u2")
+                return typeof(UInt16);
+            if (typeCode == "u4")
+                return typeof(UInt32);
+            if (typeCode == "u8")
+                return typeof(UInt64);
             if (typeCode == "f4")
                 return typeof(Single);
             if (typeCode == "f8")

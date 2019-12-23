@@ -252,6 +252,12 @@ namespace NumSharp
                 return "<f4";
             if (type == typeof(Double))
                 return "<f8";
+            if (type == typeof(UInt16))
+                return "<u2";
+            if (type == typeof(UInt32))
+                return "<u4";
+            if (type == typeof(UInt64))
+                return "<u8";
             if (type == typeof(String))
                 return "|S" + bytes;
 
@@ -301,12 +307,15 @@ namespace NumSharp
 
         public static void Save_Npz(Dictionary<string, Array> arrays, Stream stream, CompressionLevel compression = DEFAULT_COMPRESSION, bool leaveOpen = false)
         {
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: leaveOpen))
             {
                 foreach (KeyValuePair<string, Array> p in arrays)
                 {
                     var entry = zip.CreateEntry(p.Key, compression);
-                    Save(p.Value, entry.Open());
+                    using (Stream s = entry.Open())
+                    {
+                        Save(p.Value, s);
+                    }
                 }
             }
         }
@@ -316,7 +325,11 @@ namespace NumSharp
             using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: leaveOpen))
             {
                 var entry = zip.CreateEntry("arr_0");
-                Save(array, entry.Open());
+                using (Stream s = entry.Open())
+                {
+                    Save(array, s);
+                }
+                
             }
         }
 
