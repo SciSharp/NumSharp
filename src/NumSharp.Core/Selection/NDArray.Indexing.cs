@@ -38,6 +38,29 @@ namespace NumSharp
             }
         }
 
+
+        /// <summary>
+        ///     Slice the array with Python slice notation like this: ":, 2:7:1, ..., np.newaxis"
+        /// </summary>
+        /// <param name="slice">A string containing slice notations for every dimension, delimited by comma</param>
+        /// <returns>A sliced view</returns>
+        public NDArray this[string slice]
+        {
+            get => new NDArray(Storage.GetView(Slice.ParseSlices(slice)));
+            set => Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
+        }
+
+
+        /// <summary>
+        ///     Slice the array with Python slice notation like this: ":, 2:7:1, ..., np.newaxis"
+        /// </summary>
+        /// <param name="slice">A string containing slice notations for every dimension, delimited by comma</param>
+        /// <returns>A sliced view</returns>
+        public NDArray this[params Slice[] slice]
+        {
+            get => new NDArray(Storage.GetView(slice));
+            set => Storage.GetView(slice).SetData(value);
+        }
         /// <summary>
         ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
         /// </summary>
