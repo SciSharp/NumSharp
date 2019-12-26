@@ -21,7 +21,7 @@ namespace NumSharp
             get => retrieve_indices(this, np.nonzero(mask), null);
             set
             {
-                throw new NotImplementedException("Setter is not implemnted yet");
+                throw new NotImplementedException("Setter is not implemented yet");
             }
         }
     }
