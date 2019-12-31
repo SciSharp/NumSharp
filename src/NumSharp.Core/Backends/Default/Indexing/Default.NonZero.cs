@@ -62,6 +62,7 @@ namespace NumSharp.Backends
             Debug.Assert(size > 0);
 #if _REGEN
             #region Compute
+            Func<int[], int> getOffset = x.Shape.GetOffset;
             switch (x.typecode) {
                 %foreach supported_dtypes, supported_dtypes_lowercase%
                 case NPTypeCode.#1: {
@@ -71,7 +72,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(#2)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -83,8 +84,8 @@ namespace NumSharp.Backends
             }
             #endregion
 #else
-
             #region Compute
+            Func<int[], int> getOffset = x.Shape.GetOffset;
             switch (x.typecode) {
                 case NPTypeCode.Boolean: {
                     var incr = new NDCoordinatesIncrementor(x.shape);
@@ -93,8 +94,8 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
-                        if (src[offset])
+                        offset = getOffset(coords);
+                        if (!(src[offset] == default(bool)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
 
@@ -107,7 +108,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(byte)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -121,7 +122,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(short)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -135,7 +136,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(ushort)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -149,7 +150,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(int)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -163,7 +164,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(uint)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -177,7 +178,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(long)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -191,7 +192,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(ulong)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -205,7 +206,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(char)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -219,7 +220,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(double)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -233,7 +234,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(float)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
@@ -247,7 +248,7 @@ namespace NumSharp.Backends
                     int offset;
                     do
                     {
-                        offset = x.Shape.GetOffset(coords);
+                        offset = getOffset(coords);
                         if (!(src[offset] == default(decimal)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
