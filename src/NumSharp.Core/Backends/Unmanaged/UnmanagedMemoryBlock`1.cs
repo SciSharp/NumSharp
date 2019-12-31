@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Unmanaged.Memory;
@@ -461,12 +462,6 @@ namespace NumSharp.Backends.Unmanaged
             return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
-        /// <summary>
-        ///     
-        /// </summary>
-        /// <param name="length">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <param name="manager"></param>
-        /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
         public static UnmanagedMemoryBlock<T> FromPool(StackedMemoryPool manager)
         {

@@ -18,7 +18,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
         public NDArray this[NDArray<bool> mask]
         {
-            get => retrieve_indices(this, np.nonzero(mask), null);
+            get => retrieve_indices(this, np.nonzero(mask), null, true);
             set
             {
                 throw new NotImplementedException("Setter is not implemented yet");

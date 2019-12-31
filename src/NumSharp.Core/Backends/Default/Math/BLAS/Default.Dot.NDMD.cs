@@ -6,6 +6,13 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+
+#if MINIMAL
+        public static NDArray DotNDMD(in NDArray lhs, in NDArray rhs)
+        {
+            return null;    
+        }
+#else
         public static NDArray DotNDMD(in NDArray lhs, in NDArray rhs)
         {
             if (lhs.Shape[-1] != rhs.Shape[-2])
@@ -15868,5 +15875,6 @@ namespace NumSharp.Backends
             return ret;
 #endif
         }
+#endif
     }
 }

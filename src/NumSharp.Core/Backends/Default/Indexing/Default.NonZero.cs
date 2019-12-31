@@ -4,15 +4,9 @@ using NumSharp.Utilities;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
-using System;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Diagnostics;
 using NumSharp.Backends;
-using NumSharp.Generic;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {

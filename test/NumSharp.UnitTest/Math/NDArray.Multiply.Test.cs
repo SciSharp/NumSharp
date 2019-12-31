@@ -19,7 +19,6 @@ namespace NumSharp.UnitTest
 
             AssertAreEqual(new int[] {0, 2, 4}, nd2.Data<int>());
         }
-
         [TestMethod]
         public void UInt16MultiplyTest1()
         {

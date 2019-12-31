@@ -11,7 +11,12 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         #region 22matmul
-
+#if MINIMAL
+        protected static NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
+        {
+            return null;
+        }
+#else
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [MethodImpl((MethodImplOptions)768)]
@@ -36,7 +41,7 @@ namespace NumSharp.Backends
             NDArray result = @out ?? new NDArray(np._FindCommonArrayType(left.GetTypeCode, right.GetTypeCode), Shape.Matrix(rows, othercolumns));
 
 #if _REGEN
-            #region Compute
+#region Compute
             switch (result.typecode)
             {
 	            %foreach supported_numericals,supported_numericals_lowercase%
@@ -78,10 +83,10 @@ namespace NumSharp.Backends
                 }
                 %
             }
-            #endregion
+#endregion
 #else
 
-            #region Compute
+#region Compute
             switch (result.typecode)
             {
                 case NPTypeCode.Byte: { 
@@ -19907,12 +19912,13 @@ namespace NumSharp.Backends
                     break;
                 }
             }
-            #endregion
+#endregion
 #endif
 
             return result;
         }
 
-        #endregion
+#endif
+#endregion
     }
 }

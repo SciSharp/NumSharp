@@ -1460,8 +1460,9 @@ namespace NumSharp.UnitTest.Selection
             //(1, 1, 8)
             //[[[0 1 2 3 4 5 6 7]]]
             var a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8));
-            print(a[np.arange(1) + 1, Slice.All]);
-            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 1, 8).And.BeOfValues(0,1,2,3,4,5,6,7);
+            var b = a[np.arange(1) + 1, Slice.All];
+            print(b);
+            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0,1,2,3,4,5,6,7);
         }
 
 

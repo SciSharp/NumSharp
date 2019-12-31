@@ -9,7 +9,7 @@
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
-    <Configurations>Debug;Release;Publish</Configurations>
+    <Configurations>Debug;Release;Publish;Debug-Minimal</Configurations>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -29,7 +29,15 @@
     <DefineConstants>TRACE;DEBUG;NETCORE;</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|AnyCPU'">
+    <DefineConstants>TRACE;DEBUG;NETCORE;</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|x64'">
     <DefineConstants>DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
 
