@@ -11,10 +11,9 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Support for np.newaxis and ellipsis (...) slicing. Added: np.transpose, np.swapaxes, ndarray.T, np.moveaxis, np.rollaxis, np.size, np.copyto, np.ceil, np.arccos, np.floor, np.modf, np.square, np.round, np.sign, np.arcsin, np.arctan, np.random.beta, np.random.gamma, np.random.bernoulli, np.random.binomial, np.random.lognormal, np.random.normal, np.random.poisson, np.random.chisquare, np.random.geometric.
-Performance optimization for np.array, np.linspace, Randomizer class and all np.random.* methods.</PackageReleaseNotes>
-    <AssemblyVersion>0.20.4</AssemblyVersion>
-    <FileVersion>0.20.4</FileVersion>
+    <PackageReleaseNotes>Rewrite of the NDArray's getter mechanism. Added np.nonzero, np.maximum, np.minimum, np.all, np.any. np.clip: Added @out argument. Added NPTypeCode.Float as an alias to NPTypeCode.Single.</PackageReleaseNotes>
+    <AssemblyVersion>0.20.5</AssemblyVersion>
+    <FileVersion>0.20.5</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -24,7 +23,7 @@ Performance optimization for np.array, np.linspace, Randomizer class and all np.
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.20.4</Version>
+    <Version>0.20.5</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
