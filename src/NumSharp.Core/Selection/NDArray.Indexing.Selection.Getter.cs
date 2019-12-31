@@ -572,8 +572,8 @@ namespace NumSharp
             var indexGetters = PrepareIndexGetters(source.Shape, indices);
 
             //compute coordinates
-            for (int i = 0; i < size; i++)
-                //Parallel.For(0, size, i => //TODO: make parallel.for
+            //for (int i = 0; i < size; i++)
+            Parallel.For(0, size, i => //TODO: make parallel.for
             {
                 int* index = stackalloc int[srcDims];
 
@@ -588,11 +588,10 @@ namespace NumSharp
                 //assign
                 ret[i] = from;
 #else
-                dst[i] = source[index, srcDims];
+                ret[i] = source[index, srcDims];
 #endif
-            }
-
-            //});
+            });
+            //}
 
             return ret.flat.reshape(retShape).MakeGeneric<T>();
         }
