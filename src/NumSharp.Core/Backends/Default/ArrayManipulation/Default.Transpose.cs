@@ -165,6 +165,8 @@ namespace NumSharp.Backends
                 src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
             }
 
+            src.ShapeReference.SetStridesModified(true);
+
             //Linear copy of all the sliced items.
 
             var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));

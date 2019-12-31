@@ -46,6 +46,7 @@ namespace NumSharp
 
         /// <summary>A floating point type representing values ranging from approximately 1.5 x 10 -45 to 3.4 x 10 38 with a precision of 7 digits.</summary>
         Single = 13, // 0x0000000D
+        Float = 13, // 0x0000000D
 
         /// <summary>A floating point type representing values ranging from approximately 5.0 x 10 -324 to 1.7 x 10 308 with a precision of 15-16 digits.</summary>
         Double = 14, // 0x0000000E

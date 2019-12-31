@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -253,7 +254,7 @@ namespace NumSharp.Backends
                 nd = ogiter.NDim;
                 it.BroadcastInfo = new BroadcastInfo(ogiter);
                 it.size = tmp;
-                it.layout = 'C';
+                //it.layout = 'C';
                 //if (nd != 0)
                 //{
                 //    it->factors[mit.nd - 1] = 1;
@@ -287,7 +288,7 @@ namespace NumSharp.Backends
             return ret;
         }
 
-        private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
+        //private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
 
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
@@ -305,7 +306,7 @@ namespace NumSharp.Backends
             if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
             {
                 left = rightShape; //copy right
-                left.strides = _zeros[left.strides.Length]; //zero strides
+                left.strides = new int[left.strides.Length]; //zero strides
                 left.BroadcastInfo = new BroadcastInfo(leftShape);
                 return (left, rightShape);
             }
@@ -313,7 +314,7 @@ namespace NumSharp.Backends
             else if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
             {
                 right = leftShape; //copy left
-                right.strides = _zeros[right.strides.Length]; //zero strides
+                right.strides = new int[right.strides.Length]; //zero strides
                 right.BroadcastInfo = new BroadcastInfo(rightShape);
                 return (leftShape, right);
             }
@@ -461,6 +462,119 @@ namespace NumSharp.Backends
                 arrays[i] = new NDArray(arrays[i].Storage, shapes[i]);
 
             return arrays;
+        }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public unsafe static bool AreBroadcastable(params Shape[] shapes)
+        {
+            if (shapes.Length <= 1)
+                return true;
+
+            int i, nd, k, j, tmp;
+
+            int len = shapes.Length;
+
+            tmp = 0;
+            /* Discover the broadcast number of dimensions */
+            //Gets the largest ndim of all iterators
+            nd = 0;
+            for (i = 0; i < len; i++)
+                nd = Math.Max(nd, shapes[i].NDim);
+
+            //this is the shared shape aka the target broadcast
+            var mit = stackalloc int[nd];
+
+            /* Discover the broadcast shape in each dimension */
+            for (i = 0; i < nd; i++)
+            {
+                mit[i] = 1;
+                for (int targetIndex = 0; targetIndex < len; targetIndex++)
+                {
+                    Shape target = shapes[targetIndex];
+                    /* This prepends 1 to shapes not already equal to nd */
+                    k = i + target.NDim - nd;
+                    if (k >= 0)
+                    {
+                        tmp = target.dimensions[k];
+                        if (tmp == 1)
+                        {
+                            continue;
+                        }
+
+                        if (mit[i] == 1)
+                        {
+                            mit[i] = tmp;
+                        }
+                        else if (mit[i] != tmp)
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public unsafe static bool AreBroadcastable(params int[][] shapes)
+        {
+            if (shapes.Length <= 1)
+                return true;
+
+            int i, nd, k, j, tmp;
+
+            int len = shapes.Length;
+
+            tmp = 0;
+            /* Discover the broadcast number of dimensions */
+            //Gets the largest ndim of all iterators
+            nd = 0;
+            for (i = 0; i < len; i++)
+                nd = Math.Max(nd, shapes[i].Length);
+
+            //this is the shared shape aka the target broadcast
+            var mit = stackalloc int[nd];
+
+            /* Discover the broadcast shape in each dimension */
+            for (i = 0; i < nd; i++)
+            {
+                mit[i] = 1;
+                for (int targetIndex = 0; targetIndex < len; targetIndex++)
+                {
+                    int[] target = shapes[targetIndex];
+                    /* This prepends 1 to shapes not already equal to nd */
+                    k = i + target.Length - nd;
+                    if (k >= 0)
+                    {
+                        tmp = target[k];
+                        if (tmp == 1)
+                        {
+                            continue;
+                        }
+
+                        if (mit[i] == 1)
+                        {
+                            mit[i] = tmp;
+                        }
+                        else if (mit[i] != tmp)
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        public static bool AreBroadcastable(params NDArray[] arrays)
+        {
+            if (arrays.Length <= 1)
+                return true;
+
+            return AreBroadcastable(arrays.Select(r => r.shape).ToArray());
         }
     }
 }

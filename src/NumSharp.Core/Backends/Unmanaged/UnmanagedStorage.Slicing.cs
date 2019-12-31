@@ -96,6 +96,10 @@ namespace NumSharp.Backends
             if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
+            //handle broadcasted shape
+            if (_shape.IsBroadcasted)
+                return Clone().Alias(_shape.Slice(slices));
+
             return Alias(_shape.Slice(slices));
         }
 

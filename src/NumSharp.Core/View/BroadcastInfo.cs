@@ -5,11 +5,16 @@ namespace NumSharp
     public class BroadcastInfo : ICloneable
     {
         /// <summary>
-        ///     The unbroadcasted shape.
+        ///     The original shape prior to broadcasting.
         /// </summary>
         public Shape OriginalShape;
 
-        public Shape? UnbroadcastShape; //lazyloaded
+        /// <summary>
+        ///     Represents a shape with the same number of dimensions that the broadcasted ones are set to dim of 1.
+        /// </summary>
+        /// <remarks>This shape is lazyloaded during runtime when calling Shape.GetOffset and other methods.</remarks>
+
+        public Shape? UnreducedBroadcastedShape; //lazyloaded
 
         public BroadcastInfo() { }
 

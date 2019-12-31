@@ -62,7 +62,6 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt32(1, 3) == 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void MaskSetter()
         {
@@ -75,7 +74,6 @@ namespace NumSharp.UnitTest.Selection
             nd.Should().BeOfValues(-2, 2, -2, 4, -2, 6);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Compare()
         {
@@ -686,7 +684,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        public void IndexNDArray_Case4_Shaped()
+         public void IndexNDArray_Case4_Shaped()
         {
             var ret = x[np.array(new int[][] { new int[] { 1, 1 }, new int[] { 2, 3 }, })];
             ret.Array.Should().ContainInOrder(9, 9, 8, 7);
@@ -696,10 +694,9 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case5_Shaped()
         {
-            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] { new int[] { 0, 1 }, new int[] { 1, 3 }, })];
+            var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] { new int[] { 0, 1 }, new int[] { 1, 1 }, })];
             Console.WriteLine((string)ret);
-            ret.Array.Cast<int>().Should().ContainInOrder(0, 1, 1, 3);
-            ret.shape.Should().ContainInOrder(2, 2);
+            ret.Should().BeShaped(2, 2, 5).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9);
         }
 
         [TestMethod]
@@ -707,11 +704,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[] { 0, 1, 1 })];
             Console.WriteLine((string)ret);
-            ret.shape.Should().ContainInOrder(3, 5);
-            ret[1, 0].GetValue(0).Should().Be(5);
-            ret[1, 4].GetValue(0).Should().Be(9);
-            ret[2, 0].GetValue(0).Should().Be(5);
-            ret[2, 4].GetValue(0).Should().Be(9);
+            ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9).And.BeShaped(3, 5);
         }
 
         [TestMethod]
@@ -774,19 +767,15 @@ namespace NumSharp.UnitTest.Selection
             ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexNDArray_Case12_Multi()
         {
-            var a = np.arange(27).reshape(1, 3, 3, 1, 3);
+            var a = np.arange(16).reshape(2, 2, 2, 2);
             Console.WriteLine((string)a);
             Console.WriteLine(a.Shape);
-            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 2 }];
-            ret.shape.Should().ContainInOrder(3, 3, 1, 3);
-            ret.GetValue(2, 0, 0, 2).Should().Be(20);
-            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
-            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
-            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
+            ret.Should().BeShaped(3, 2, 2);
+            ret.GetValue(1, 0, 0).Should().Be(4);
         }
 
         [TestMethod]
@@ -797,6 +786,21 @@ namespace NumSharp.UnitTest.Selection
             ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
             ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
             ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_Case14_Multi()
+        {
+            var a = np.arange(16).reshape(2, 2, 1, 2, 2);
+            Console.WriteLine((string)a);
+            Console.WriteLine(a.Shape);
+            var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
+            ret.Should().BeShaped(3, 1, 2, 2);
+            ret[1, 0, 0].Should().BeOfValues(4, 5).And.BeShaped(2);
+            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
         [TestMethod]
@@ -1025,11 +1029,10 @@ namespace NumSharp.UnitTest.Selection
             sliced.Should().BeShaped(3).And.NotBeSliced();
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexSelecton_2D_from_1D()
         {
-            //>>> x = np.arange(10,1,-1)
+            //>>> x = np.arange(10, 1, -1)
             //>>> x
             //array([10,  9,  8,  7,  6,  5,  4,  3,  2])
             //>>> x[np.array([[1, 1],[2, 3]])]
@@ -1038,7 +1041,7 @@ namespace NumSharp.UnitTest.Selection
             //>>>
 
             var x = np.arange(10, 1, -1);
-            x[np.array(new int[,] { { 1, 1 }, { 2, 3 } })].Should().BeOfValues(1, 1, 2, 3).And.BeShaped(2, 2);
+            x[np.array(new int[,] { { 1, 1 }, { 2, 3 } })].Should().BeOfValues(9, 9, 8, 7).And.BeShaped(2, 2);
         }
 
 
@@ -1053,7 +1056,6 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4), np.array(0, 1, 2)].Should().BeOfValues(0, 15, 30).And.BeShaped(3);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void IndexSelecton_IndexArray_plus_Scalar_from_2D()
         {
@@ -1077,7 +1079,6 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4)].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19, 20, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(3, 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_2D_over_2D()
         {
@@ -1089,7 +1090,6 @@ namespace NumSharp.UnitTest.Selection
             y[y > 20].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(14);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_1D_over_2D()
         {
@@ -1104,7 +1104,6 @@ namespace NumSharp.UnitTest.Selection
             y[b[":, 5"]].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(2, 7);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Masking_2D_over_3D()
         {
@@ -1138,7 +1137,6 @@ namespace NumSharp.UnitTest.Selection
             a[Slice.All, "1:2", 0].Should().BeOfValues(3, 12, 21).And.BeShaped(3, 1);
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Combining_IndexArrays_with_Slices()
         {
@@ -1152,7 +1150,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Combining_MaskArrays_with_Slices()
         {
@@ -1175,15 +1172,311 @@ namespace NumSharp.UnitTest.Selection
         // use this as a proxy for the private static method GetIndicesFromSlice of NDArray
         private NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
-            var method = typeof(NDArray).GetMethod("GetIndicesFromSlice", BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<int>)method.Invoke(null, new object[] { shape, slice, axis });
+            var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
+            return (NDArray<int>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_1d_indexed_by_2d()
+        {
+            var nd = np.arange(12);
+            var ret = nd[np.arange(9).reshape(3, 3)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8).And.BeShaped(3, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_1d_indexed_by_2d_1d()
+        {
+            var nd = np.arange(24).reshape(6, 4);
+            var ret = nd[np.arange(4).reshape(2, 2), NDArray.Scalar(1)];
+            print(ret);
+
+            ret.Should().BeOfValues(1, 5, 9, 13).And.BeShaped(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_indexed_by_1d()
+        {
+            var nd = np.arange(2 * 4).reshape(4, 2);
+            var ret = nd[np.array(0, 2)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 1, 4, 5).And.BeShaped(2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_indexed_by_1d_1d()
+        {
+            var nd = np.arange(2 * 4).reshape(4, 2);
+            var ret = nd[np.array(0, 2), np.array(0, 1)];
+            print(ret);
+
+            ret.Should().BeOfValues(0, 5).And.BeShaped(2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_2d_and_2dsliced_indexed_by_1dsliced_1dsliced()
+        {
+            Test(np.arange(2 * 4).reshape(4, 2));
+            Test(np.arange(2 * 4 * 2).reshape(2, 4, 2)[":1:"].reshape(4, 2));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1, 2)["::2"], np.array(0, 1, 2)[":2"]];
+                print(ret);
+
+                ret.Should().BeOfValues(0, 5).And.BeShaped(2);
+            }
+        }
+
+        [TestMethod]
+        public void IndexNDArray_sliced2dreshaped_indexed_by_1d_1d()
+        {
+            Test(np.arange(2 * 2 * 4)["::2"].reshape(2, 4));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1), np.array(1, 2)];
+                print(ret);
+
+                ret.Should().BeShaped(2).And.BeOfValues(2, 12);
+            }
+        }
+
+        [TestMethod]
+        public void IndexNDArray_sliced3dreshaped_indexed_by_1d_1d()
+        {
+            Test(np.arange(2 * 2 * 4 * 2)["::2"].reshape(2, 4, 2));
+
+            void Test(NDArray nd)
+            {
+                print(nd);
+                print(nd.Shape.IsSliced);
+                var ret = nd[np.array(0, 1), np.array(1, 2)];
+                print(ret);
+
+                ret.Should().BeShaped(2, 2).And.BeOfValues(4, 6, 24, 26);
+            }
         }
 
         [TestMethod]
         public void GetIndicesFromSlice_Test()
         {
             GetIndicesFromSlice((3, 4, 3), new Slice("::2"), 1).Should().BeOfValues(0, 2).And.BeShaped(2);
-            GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2,1,0);
+            GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2, 1, 0);
+        }
+
+        [TestMethod]
+        public void GetCoordinates_Broadcasted()
+        {
+            var nd = np.broadcast_to(np.array(1), (2, 2, 2));
+            var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
+            print(t);
+            t.Should().AllBeEquivalentTo(0);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case1()
+        {
+            np.arange(8).reshape(2, 2, 2)[0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case2()
+        {
+            np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Case3()
+        {
+            np.arange(4).reshape(2, 2)[np.newaxis, np.arange(2)].Should().BeShaped(1, 2, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_NewAxis_Ellipsis_Case1()
+        {
+            np.arange(4).reshape(2, 2)["..., newaxis"].Should().BeShaped(2, 2, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case1()
+        {
+            np.arange(4).reshape(2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case2()
+        {
+            np.arange(8).reshape(2, 1, 2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1, 2, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Ellipsis_Case3()
+        {
+            np.arange(8).reshape(2, 1, 2, 1, 2)[0, Slice.Ellipsis].Should().BeShaped(1, 2, 1, 2);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case1()
+        {
+            var a = np.arange(8).reshape(2,4);
+            a["1, :"] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2,4).And.BeOfValues(0,1,2,3,0,1,2,3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case2()
+        {
+            var a = np.arange(8).reshape(2, 4);
+            a[1, np.arange(4)] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case3()
+        {
+            var a = np.arange(8).reshape(2, 4);
+            a[np.array(1), np.arange(4)] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case4()
+        {
+            var a = np.arange(8).reshape(2, 4);
+            a["1:2", np.arange(4)] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case5()
+        {
+            var a = np.arange(8).reshape(2, 4);
+            a["1:2", Slice.All] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case6()
+        {
+            var a = np.arange(8).reshape(2, 4);
+            a[Slice.Index(1), Slice.All] = np.arange(4);
+            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case7_Boolean()
+        {
+            var a = np.arange(8);
+            a[true] = 1;
+            a.Should().AllValuesBe(8).And.BeShaped(8);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Set_Case8_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+
+            new Action(() =>
+            {
+                a[Slice.Index(1), Slice.All] = np.arange(0, 4, -1);
+                //ValueError: 
+            }).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case1_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a[0].Should().BeShaped(4).And.BeOfValues(0, 1, 2, 3);
+            a[1].Should().BeShaped(4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case2_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a["0:1"].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case3_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a["0:1, :"].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case4_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            var g = a["0:1:-1, :"];
+            g.Should().BeShaped();
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case5_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a[Slice.Index(0)].Should().BeShaped(4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case6_Broadcasted()
+        {
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a[new Slice(0, 1), Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case7_Broadcasted()
+        {
+            //TODO: this produces incorrect return shape
+            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
+            //a = a[[1], :]
+            //
+            //(1, 4)
+            //[[0 1 2 3]]
+            var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
+            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case7()
+        {
+            //TODO: this produces incorrect return shape
+            //a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8)) # np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
+            //a = a[np.arange(1) + 1, :]
+            //
+            //(1, 1, 8)
+            //[[[0 1 2 3 4 5 6 7]]]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8));
+            var b = a[np.arange(1) + 1, Slice.All];
+            print(b);
+            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0,1,2,3,4,5,6,7);
+        }
+
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case8_Broadcasted()
+        {
+            //TODO: this produces incorrect return shape
+            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
+            //a = a[[1], :]
+            //
+            //(1, 4)
+            //[[0 1 2 3]]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
+            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
     }
 }

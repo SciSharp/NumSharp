@@ -32,7 +32,7 @@ namespace NumSharp
 
             this.entries = new Dictionary<string, ZipArchiveEntry>();
             foreach (var entry in archive.Entries)
-                this.entries[entry.Name] = entry;
+                this.entries[entry.FullName] = entry;
 
             this.arrays = new Dictionary<string, T>();
         }
@@ -79,13 +79,15 @@ namespace NumSharp
         private T OpenEntry(ZipArchiveEntry entry)
         {
             T array;
-            if (arrays.TryGetValue(entry.Name, out array))
+            if (arrays.TryGetValue(entry.FullName, out array))
                 return array;
 
-            Stream s = entry.Open();
-            array = Load_Npz(s);
-            arrays[entry.Name] = array;
-            return array;
+            using (Stream s = entry.Open())
+            {
+                array = Load_Npz(s);
+                arrays[entry.FullName] = array;
+                return array;
+            }
         }
 
         protected virtual T Load_Npz(Stream s)
@@ -111,13 +113,13 @@ namespace NumSharp
         public IEnumerator<KeyValuePair<string, T>> GetEnumerator()
         {
             foreach (var entry in archive.Entries)
-                yield return new KeyValuePair<string, T>(entry.Name, OpenEntry(entry));
+                yield return new KeyValuePair<string, T>(entry.FullName, OpenEntry(entry));
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
             foreach (var entry in archive.Entries)
-                yield return new KeyValuePair<string, T>(entry.Name, OpenEntry(entry));
+                yield return new KeyValuePair<string, T>(entry.FullName, OpenEntry(entry));
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()

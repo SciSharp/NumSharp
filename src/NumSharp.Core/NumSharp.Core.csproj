@@ -32,7 +32,7 @@ Performance optimization for np.array, np.linspace, Randomizer class and all np.
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <DelaySign>false</DelaySign>
-    <Configurations>Debug;Release;Publish</Configurations>
+    <Configurations>Debug;Release;Publish;Debug-Minimal</Configurations>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -49,10 +49,18 @@ Performance optimization for np.array, np.linspace, Randomizer class and all np.
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DefineConstants>DEBUG;NETSTANDARD</DefineConstants>
     <NoWarn>1701;1702;IDE1006;0029</NoWarn>
     <DocumentationFile></DocumentationFile>
     <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|AnyCPU'">
+    <DefineConstants>DEBUG;MINIMAL</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <WarningLevel>3</WarningLevel>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -60,6 +68,13 @@ Performance optimization for np.array, np.linspace, Randomizer class and all np.
     <NoWarn>1701;1702;IDE1006;0029</NoWarn>
     <DocumentationFile />
     <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|x64'">
+    <DefineConstants>TRACE;DEBUG;BIT64</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

@@ -17,6 +17,11 @@ namespace NumSharp
         internal BroadcastInfo BroadcastInfo;
 
         /// <summary>
+        ///     Does this Shape have modified strides, usually in scenarios like np.transpose.
+        /// </summary>
+        public bool ModifiedStrides;
+
+        /// <summary>
         ///     True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
         /// </summary>
         public bool IsSliced
@@ -49,7 +54,7 @@ namespace NumSharp
         ///     0: Row major<br></br>
         ///     1: Column major
         /// </summary>
-        internal char layout;
+        internal const char layout = 'C';
 
         internal int _hashCode;
         internal int size;
@@ -103,8 +108,8 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape { dimensions = new int[] { length }, strides = new int[] { 1 }, layout = 'C', size = length };
-            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
+            var shape = new Shape { dimensions = new int[] { length }, strides = new int[] { 1 }, size = length };
+            shape._hashCode = (/*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
             return shape;
         }
 
@@ -118,12 +123,12 @@ namespace NumSharp
             {
                 dimensions = new[] { length },
                 strides = new int[] { 1 },
-                layout = 'C',
+                //layout = 'C',
                 size = length,
                 ViewInfo = viewInfo
             };
 
-            shape._hashCode = (shape.layout * 397) ^ (length * 397) * (length * 397);
+            shape._hashCode = (/*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
             return shape;
         }
 
@@ -133,11 +138,11 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Matrix(int rows, int cols)
         {
-            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, layout = 'C', size = rows * cols };
+            var shape = new Shape { dimensions = new[] { rows, cols }, strides = new int[] { cols, 1 }, size = rows * cols };
 
             unchecked
             {
-                int hash = (shape.layout * 397);
+                int hash = (/*shape.layout*/ layout * 397);
                 int size = 1;
                 foreach (var v in shape.dimensions)
                 {
@@ -187,14 +192,15 @@ namespace NumSharp
                 return;
             }
 
-            this.layout = other.layout;
+            //this.layout = other.layout;
             this._hashCode = other._hashCode;
             this.size = other.size;
             this.dimensions = (int[])other.dimensions.Clone();
             this.strides = (int[])other.strides.Clone();
             this.IsScalar = other.IsScalar;
             this.ViewInfo = other.ViewInfo?.Clone();
-            this.BroadcastInfo = other.BroadcastInfo;
+            this.BroadcastInfo = other.BroadcastInfo?.Clone();
+            this.ModifiedStrides = other.ModifiedStrides;
         }
 
         public Shape(int[] dims, int[] strides)
@@ -208,7 +214,7 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            layout = 'C';
+            //layout = 'C';
             size = 1;
             unchecked
             {
@@ -233,6 +239,7 @@ namespace NumSharp
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
             BroadcastInfo = null;
+            ModifiedStrides = false;
         }
 
         public Shape(int[] dims, int[] strides, Shape originalShape)
@@ -246,7 +253,7 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            layout = 'C';
+            //layout = 'C';
             size = 1;
             unchecked
             {
@@ -271,6 +278,7 @@ namespace NumSharp
             IsScalar = size == 1 && dims.Length == 0;
             ViewInfo = null;
             BroadcastInfo = new BroadcastInfo() { OriginalShape = originalShape };
+            ModifiedStrides = false;
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -289,7 +297,7 @@ namespace NumSharp
             unchecked
             {
                 size = 1;
-                layout = 'C';
+                //layout = 'C';
                 if (dims.Length > 0)
                 {
                     int hash = (layout * 397);
@@ -305,23 +313,17 @@ namespace NumSharp
                     _hashCode = int.MinValue; //scalar's hashcode is int.minvalue
 
                 if (dims.Length != 0)
-                    if (layout == 'C')
-                    {
-                        strides[strides.Length - 1] = 1;
-                        for (int i = strides.Length - 1; i >= 1; i--)
-                            strides[i - 1] = strides[i] * dims[i];
-                    }
-                    else
-                    {
-                        strides[0] = 1;
-                        for (int idx = 1; idx < strides.Length; idx++)
-                            strides[idx] = strides[idx - 1] * dims[idx - 1];
-                    }
+                {
+                    strides[strides.Length - 1] = 1;
+                    for (int i = strides.Length - 1; i >= 1; i--)
+                        strides[i - 1] = strides[i] * dims[i];
+                }
             }
 
             IsScalar = _hashCode == int.MinValue;
             ViewInfo = null;
             BroadcastInfo = null;
+            ModifiedStrides = false;
         }
 
         /// <summary>
@@ -348,19 +350,29 @@ namespace NumSharp
 
             unchecked
             {
-                if (layout == 'C')
-                {
-                    strides[strides.Length - 1] = 1;
-                    for (int idx = strides.Length - 1; idx >= 1; idx--)
-                        strides[idx - 1] = strides[idx] * dimensions[idx];
-                }
-                else
-                {
-                    strides[0] = 1;
-                    for (int idx = 1; idx < strides.Length; idx++)
-                        strides[idx] = strides[idx - 1] * dimensions[idx - 1];
-                }
+                strides[strides.Length - 1] = 1;
+                for (int idx = strides.Length - 1; idx >= 1; idx--)
+                    strides[idx - 1] = strides[idx] * dimensions[idx];
             }
+        }
+
+
+        [MethodImpl((MethodImplOptions)768)]
+        private void _computeStrides(int axis)
+        {
+            if (dimensions.Length == 0)
+                return;
+
+            if (axis == 0)
+                strides[0] = strides[1] * dimensions[1];
+            else
+                unchecked
+                {
+                    if (axis == strides.Length - 1)
+                        strides[strides.Length - 1] = 1;
+                    else
+                        strides[axis - 1] = strides[axis] * dimensions[axis];
+                }
         }
 
         public int this[int dim]
@@ -652,35 +664,7 @@ namespace NumSharp
             }
 
             var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted;
-            if (!bi.UnbroadcastShape.HasValue)
-            {
-                if (bi.OriginalShape.IsScalar)
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                    {
-                        unreducedBroadcasted.dimensions[i] = 1;
-                        unreducedBroadcasted.strides[i] = 0;
-                    }
-                }
-                else
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
-                    {
-                        if (strides[j] == 0)
-                        {
-                            unreducedBroadcasted.dimensions[i] = 1;
-                            unreducedBroadcasted.strides[i] = 0;
-                        }
-                    }
-                }
-
-                bi.UnbroadcastShape = unreducedBroadcasted;
-            }
-            else
-                unreducedBroadcasted = bi.UnbroadcastShape.Value;
+            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
 
             orig_strides = unreducedBroadcasted.strides;
             offset = 0;
@@ -750,35 +734,8 @@ namespace NumSharp
             }
 
             var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted;
-            if (!bi.UnbroadcastShape.HasValue)
-            {
-                if (bi.OriginalShape.IsScalar)
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                    {
-                        unreducedBroadcasted.dimensions[i] = 1;
-                        unreducedBroadcasted.strides[i] = 0;
-                    }
-                }
-                else
-                {
-                    unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                    for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
-                    {
-                        if (strides[j] == 0)
-                        {
-                            unreducedBroadcasted.dimensions[i] = 1;
-                            unreducedBroadcasted.strides[i] = 0;
-                        }
-                    }
-                }
+            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
 
-                bi.UnbroadcastShape = unreducedBroadcasted;
-            }
-            else
-                unreducedBroadcasted = bi.UnbroadcastShape.Value;
 
             orig_strides = unreducedBroadcasted.strides;
             offset = 0;
@@ -828,7 +785,7 @@ namespace NumSharp
             {
                 indicies = (int[])indicies.Clone(); //we must copy because we make changes to it.
                 Shape unreducedBroadcasted;
-                if (!BroadcastInfo.UnbroadcastShape.HasValue)
+                if (!BroadcastInfo.UnreducedBroadcastedShape.HasValue)
                 {
                     unreducedBroadcasted = this.Clone(true, false, false);
                     for (int i = 0; i < unreducedBroadcasted.NDim; i++)
@@ -837,10 +794,10 @@ namespace NumSharp
                             unreducedBroadcasted.dimensions[i] = 1;
                     }
 
-                    BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                    BroadcastInfo.UnreducedBroadcastedShape = unreducedBroadcasted;
                 }
                 else
-                    unreducedBroadcasted = BroadcastInfo.UnbroadcastShape.Value;
+                    unreducedBroadcasted = BroadcastInfo.UnreducedBroadcastedShape.Value;
 
                 //unbroadcast indices
                 for (int i = 0; i < dim; i++)
@@ -900,13 +857,13 @@ namespace NumSharp
 
             if (strides.Length == 1)
                 coords = new int[] { offset };
-            else if (layout == 'C')
+
+            int counter = offset;
+            coords = new int[strides.Length];
+            int stride;
+            for (int i = 0; i < strides.Length; i++)
             {
-                int counter = offset;
-                coords = new int[strides.Length];
-                int stride;
-                for (int i = 0; i < strides.Length; i++)
-                {
+                unchecked { 
                     stride = strides[i];
                     if (stride == 0)
                     {
@@ -919,47 +876,29 @@ namespace NumSharp
                     }
                 }
             }
-            else
-            {
-                int counter = offset;
-                coords = new int[strides.Length];
-                int stride;
-                for (int i = strides.Length - 1; i >= 0; i--)
-                {
-                    stride = strides[i];
-                    if (stride == 0)
-                    {
-                        coords[i] = 0;
-                    }
-                    else
-                    {
-                        coords[i] = counter / stride;
-                        counter -= coords[i] * stride;
-                    }
-                }
-            }
+
             return coords;
         }
 
         /// <summary>
-        /// Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.
-        /// Note: this is the inverse operation of GetOffset
-        /// Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]
-        /// The absolute indices in a are:
-        /// [0, 1, 2,
-        ///  3, 4, 5]
-        /// The absolute indices in b are:
-        /// [1, 2,
-        ///  4, 5]
-        /// Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.
-        ///
-        /// Examples:
-        /// a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]
-        /// b.GetCoordinatesFromAbsoluteIndex(1) returns [0, 0]
-        /// b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape
+        ///     Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.<br></br>
+        ///     Note: this is the inverse operation of GetOffset<br></br>
+        ///     Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]<br></br>
+        ///     The absolute indices in a are:<br></br>
+        ///     [0, 1, 2,<br></br>
+        ///      3, 4, 5]<br></br>
+        ///     The absolute indices in b are:<br></br>
+        ///     [1, 2,<br></br>
+        ///      4, 5]<br></br>
+        ///     <br></br>
+        ///     <br></br>
+        ///     Examples:<br></br>
+        ///     a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]<br></br>
+        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [0, 0]<br></br>
+        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape<br></br>
         /// </summary>
         /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
-        /// <returns></returns>
+        /// <remarks>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public int[] GetCoordinatesFromAbsoluteIndex(int offset)
         {
@@ -1007,7 +946,8 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public void ChangeTensorLayout(char order = 'C')
         {
-            layout = order;
+            return; //currently this does nothing.
+            //layout = order;
             _computeStrides();
             ComputeHashcode();
         }
@@ -1090,6 +1030,40 @@ namespace NumSharp
             return l.ToArray();
         }
 
+        private Shape resolveUnreducedBroadcastedShape()
+        {
+            var bi = BroadcastInfo;
+            if (bi.UnreducedBroadcastedShape.HasValue)
+                return bi.UnreducedBroadcastedShape.Value;
+
+            Shape unreducedBroadcasted;
+            var vi = ViewInfo;
+            if (bi.OriginalShape.IsScalar)
+            {
+                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                for (int i = 0; i < unreducedBroadcasted.NDim; i++)
+                {
+                    unreducedBroadcasted.dimensions[i] = 1;
+                    unreducedBroadcasted.strides[i] = 0;
+                }
+            }
+            else
+            {
+                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
+                for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
+                {
+                    if (strides[j] == 0)
+                    {
+                        unreducedBroadcasted.dimensions[i] = 1;
+                        unreducedBroadcasted.strides[i] = 0;
+                    }
+                }
+            }
+
+            bi.UnreducedBroadcastedShape = unreducedBroadcasted;
+            return unreducedBroadcasted;
+        }
+
         /// <summary>
         ///     Recalculate hashcode from current dimension and layout.
         /// </summary>
@@ -1116,8 +1090,7 @@ namespace NumSharp
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape
-Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
+        public Shape Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
         [MethodImpl((MethodImplOptions)768)]
         public Shape Slice(params Slice[] input_slices)
@@ -1175,25 +1148,25 @@ Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_
 
         #region Implicit Operators
 
-        public static explicit operator int[] (Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
+        public static explicit operator int[](Shape shape) => (int[])shape.dimensions.Clone(); //we clone to avoid any changes
         public static implicit operator Shape(int[] dims) => new Shape(dims);
 
         public static explicit operator int(Shape shape) => shape.Size;
         public static explicit operator Shape(int dim) => Shape.Vector(dim);
 
-        public static explicit operator (int, int) (Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
+        public static explicit operator (int, int)(Shape shape) => shape.dimensions.Length == 2 ? (shape.dimensions[0], shape.dimensions[1]) : (0, 0);
         public static implicit operator Shape((int, int) dims) => Shape.Matrix(dims.Item1, dims.Item2);
 
-        public static explicit operator (int, int, int) (Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
+        public static explicit operator (int, int, int)(Shape shape) => shape.dimensions.Length == 3 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2]) : (0, 0, 0);
         public static implicit operator Shape((int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3);
 
-        public static explicit operator (int, int, int, int) (Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
+        public static explicit operator (int, int, int, int)(Shape shape) => shape.dimensions.Length == 4 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3]) : (0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4);
 
-        public static explicit operator (int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 5 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4]) : (0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5);
 
-        public static explicit operator (int, int, int, int, int, int) (Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
+        public static explicit operator (int, int, int, int, int, int)(Shape shape) => shape.dimensions.Length == 6 ? (shape.dimensions[0], shape.dimensions[1], shape.dimensions[2], shape.dimensions[3], shape.dimensions[4], shape.dimensions[5]) : (0, 0, 0, 0, 0, 0);
         public static implicit operator Shape((int, int, int, int, int, int) dims) => new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
 
         #endregion
@@ -1301,7 +1274,7 @@ Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_
             if ((dimensions == null && other.dimensions != null) || (dimensions != null && other.dimensions == null)) //they are empty.
                 return false;
 
-            if (size != other.size || layout != other.layout || dimensions.Length != other.dimensions.Length)
+            if (size != other.size /*|| layout != other.layout*/ || dimensions.Length != other.dimensions.Length)
                 return false;
 
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -1327,50 +1300,6 @@ Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_
         #endregion
 
         /// <summary>
-        ///     Expands a specific <paramref name="axis"/> with 1 dimension.
-        /// </summary>
-        /// <param name="axis"></param>
-        /// <returns></returns>
-        [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
-        internal Shape ExpandDimension(int axis)
-        {
-            Shape ret;
-            if (IsScalar)
-            {
-                ret = Vector(1);
-                ret.strides[0] = 0;
-            }
-            else
-            {
-                ret = Clone(true, true, false);
-            }
-
-            var dimensions = ret.dimensions;
-            var strides = ret.strides;
-            // Allow negative axis specification
-            if (axis < 0)
-            {
-                axis = dimensions.Length + 1 + axis;
-                if (axis < 0)
-                {
-                    throw new ArgumentException($"Effective axis {axis} is less than 0");
-                }
-            }
-
-            Arrays.Insert(ref dimensions, axis, 1);
-            Arrays.Insert(ref strides, axis, 0);
-            ret.dimensions = dimensions;
-            ret.strides = strides;
-            if (IsSliced)
-            {
-                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
-            }
-
-            ret.ComputeHashcode();
-            return ret;
-        }
-
-        /// <summary>
         ///     Translates coordinates with negative indices, e.g:<br></br>
         ///     np.arange(9)[-1] == np.arange(9)[8]<br></br>
         ///     np.arange(9)[-2] == np.arange(9)[7]<br></br>
@@ -1391,6 +1320,14 @@ Slice(string slicing_notation) => this.Slice(NumSharp.Slice.ParseSlices(slicing_
             return coords;
         }
 
+        /// <summary>
+        ///     Flag this shape as stride-modified.
+        /// </summary>
+        /// <param name="value"></param>
+        public void SetStridesModified(bool value)
+        {
+            ModifiedStrides = value;
+        }
 
         public override string ToString() => "(" + string.Join(", ", dimensions) + ")";
 

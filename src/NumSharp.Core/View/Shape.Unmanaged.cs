@@ -133,7 +133,7 @@ namespace NumSharp
                 }
 
                 Shape unreducedBroadcasted;
-                if (!BroadcastInfo.UnbroadcastShape.HasValue)
+                if (!BroadcastInfo.UnreducedBroadcastedShape.HasValue)
                 {
                     unreducedBroadcasted = this.Clone(true, false, false);
                     for (int i = 0; i < unreducedBroadcasted.NDim; i++)
@@ -142,10 +142,10 @@ namespace NumSharp
                             unreducedBroadcasted.dimensions[i] = 1;
                     }
 
-                    BroadcastInfo.UnbroadcastShape = unreducedBroadcasted;
+                    BroadcastInfo.UnreducedBroadcastedShape = unreducedBroadcasted;
                 }
                 else
-                    unreducedBroadcasted = BroadcastInfo.UnbroadcastShape.Value;
+                    unreducedBroadcasted = BroadcastInfo.UnreducedBroadcastedShape.Value;
 
                 //unbroadcast indices
                 for (int i = 0; i < dim; i++)
@@ -251,7 +251,7 @@ namespace NumSharp
 
             var orig_strides = vi.OriginalShape.strides;
             Shape unreducedBroadcasted;
-            if (!bi.UnbroadcastShape.HasValue)
+            if (!bi.UnreducedBroadcastedShape.HasValue)
             {
                 if (bi.OriginalShape.IsScalar)
                 {
@@ -275,10 +275,10 @@ namespace NumSharp
                     }
                 }
 
-                bi.UnbroadcastShape = unreducedBroadcasted;
+                bi.UnreducedBroadcastedShape = unreducedBroadcasted;
             }
             else
-                unreducedBroadcasted = bi.UnbroadcastShape.Value;
+                unreducedBroadcasted = bi.UnreducedBroadcastedShape.Value;
 
             orig_strides = unreducedBroadcasted.strides;
             offset = 0;

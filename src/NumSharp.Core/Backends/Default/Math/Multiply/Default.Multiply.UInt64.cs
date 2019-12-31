@@ -20,6 +20,12 @@ namespace NumSharp.Backends
     //v2
     public partial class DefaultEngine
     {
+#if MINIMAL
+        public unsafe NDArray MultiplyUInt64(in NDArray lhs, in NDArray rhs)
+        {
+            return null;
+        }
+#else
         [MethodImpl((MethodImplOptions)768)]
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
@@ -8255,5 +8261,6 @@ namespace NumSharp.Backends
 #endif
             }
         }
+#endif
     }
 }

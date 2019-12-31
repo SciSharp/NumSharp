@@ -159,5 +159,11 @@ namespace NumSharp
 
         #endregion
 
+
+        #region Indexing
+
+        public abstract NDArray<int>[] NonZero(in NDArray a);
+
+        #endregion
     }
 }

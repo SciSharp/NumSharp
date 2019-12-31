@@ -119,7 +119,7 @@ namespace NumSharp.UnitTest.Manipulation
             a[0, 2].Should().BeScalar(2);
         }
 
-        [TestMethod]
+        [TestMethod, Ignore("Broadcasting and then using -1 during resahping is not supported (has TODO).")]
         public void Case2_Slice_Broadcast()
         {
             //alloc
@@ -133,7 +133,11 @@ namespace NumSharp.UnitTest.Manipulation
             a.Should().BeShaped(2, 2, 2).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
             b.Should().BeShaped(2, 2, 2);
             //reshape
-            new Action(() => a.reshape(1, -1)).Should().Throw<NotSupportedException>().WithMessage("Reshaping an already broadcasted shape is not supported.");
+            a = a.reshape(1, -1);
+            var t = a.ToString(false);
+            a.Should().BeShaped(1, 8);
+            a = a.reshape(-1, 2);
+            a.Should().BeShaped(1, 8);
         }
 
         [TestMethod]
