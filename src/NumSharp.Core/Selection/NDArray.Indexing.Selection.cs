@@ -12,7 +12,7 @@ namespace NumSharp
 {
     public partial class NDArray
     {
-        protected IEnumerable<object> ExpandEllipsis(object[] ndarrays)
+        protected static IEnumerable<object> ExpandEllipsis(object[] ndarrays, int ndim)
         {
             // count dimensions without counting ellipsis or newaxis
             var count = ndarrays.OfType<Slice>().Count(slice => !(slice.IsNewAxis || slice.IsEllipsis));

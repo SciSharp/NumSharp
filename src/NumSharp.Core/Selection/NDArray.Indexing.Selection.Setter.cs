@@ -142,7 +142,7 @@ namespace NumSharp
 
                         if (o.IsEllipsis)
                         {
-                            indicesObjects = ExpandEllipsis(indicesObjects).ToArray();
+                            indicesObjects = ExpandEllipsis(indicesObjects, @this.ndim).ToArray();
                             //TODO: i think we need to set here indicesLen = indicesObjects.Length
                             continue;
                         }
