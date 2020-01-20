@@ -83,6 +83,15 @@ namespace NumSharp.UnitTest.Selection
             nd.Should().BeOfValues(99, 99, 99, 3, 4, 5, 99, 99, 99, 9, 10, 11, 99, 99, 99);
         }
 
+        [Ignore("to do fix")]
+        [TestMethod]
+        public void MaskSetter3D()
+        {
+            var nd = np.arange(30).reshape(2, 3, 5);
+            var mask = new NDArray(new bool[] { true, true, false, false, true, true }).reshape(2, 3).MakeGeneric<bool>();
+            nd[mask] = 99;
+        }
+
         [TestMethod]
         public void Compare()
         {
