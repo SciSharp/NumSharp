@@ -9,11 +9,11 @@
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental library for scientific computing with .NET providing a similar API to python's numpy scientific library. NumSharp has full N-D, broadcasting and axis support.  If you want to use .NET to get started with machine learning, NumSharp will be your best tool.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
-    <Copyright>2020 © SciSharp STACK Team</Copyright>
+    <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes></PackageReleaseNotes>
-    <AssemblyVersion>0.20.6</AssemblyVersion>
-    <FileVersion>0.20.6</FileVersion>
+    <PackageReleaseNotes>Rewrite of the NDArray's getter mechanism. Added np.nonzero, np.maximum, np.minimum, np.all, np.any. np.clip: Added @out argument. Added NPTypeCode.Float as an alias to NPTypeCode.Single.</PackageReleaseNotes>
+    <AssemblyVersion>0.20.5</AssemblyVersion>
+    <FileVersion>0.20.5</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -23,7 +23,7 @@
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.20.6</Version>
+    <Version>0.20.5</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
