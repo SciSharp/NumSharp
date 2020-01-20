@@ -11,7 +11,8 @@
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2020 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes></PackageReleaseNotes>
+    <PackageReleaseNotes>np.logical_or
+np.logical_and</PackageReleaseNotes>
     <AssemblyVersion>0.20.6</AssemblyVersion>
     <FileVersion>0.20.6</FileVersion>
     <RepositoryType>git</RepositoryType>
