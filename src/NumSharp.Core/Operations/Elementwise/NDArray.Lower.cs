@@ -2,6 +2,11 @@
 {
     public partial class NDArray
     {
+        public static NumSharp.Generic.NDArray<bool> operator <(NDArray lhs, NDArray rhs)
+        {
+            return rhs > lhs;
+        }
+
         public static NumSharp.Generic.NDArray<bool> operator <(NDArray np, int obj)
         {
             return (np < (System.Object)obj);
