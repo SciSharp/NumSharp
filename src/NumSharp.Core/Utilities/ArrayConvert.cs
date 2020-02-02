@@ -152,23 +152,17 @@ namespace NumSharp.Utilities
 
             switch (returnType.GetTypeCode())
             {
-#if _REGEN
+#if _REGEN1
                 %foreach supported_dtypes %
                 case NPTypeCode.#1: return To#1(sourceArray);
                 %
 #else
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
-                case NPTypeCode.Int16: return ToInt16(sourceArray);
-                case NPTypeCode.UInt16: return ToUInt16(sourceArray);
                 case NPTypeCode.Int32: return ToInt32(sourceArray);
-                case NPTypeCode.UInt32: return ToUInt32(sourceArray);
                 case NPTypeCode.Int64: return ToInt64(sourceArray);
-                case NPTypeCode.UInt64: return ToUInt64(sourceArray);
-                case NPTypeCode.Char: return ToChar(sourceArray);
-                case NPTypeCode.Double: return ToDouble(sourceArray);
                 case NPTypeCode.Single: return ToSingle(sourceArray);
-                case NPTypeCode.Decimal: return ToDecimal(sourceArray);
+                case NPTypeCode.Double: return ToDouble(sourceArray);
 #endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to {returnType?.Name}.");
@@ -186,7 +180,7 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
+#if _REGEN1
                 %foreach supported_dtypes %
                 case NPTypeCode.#1: return To#1(sourceArray);
                 %
@@ -194,16 +188,10 @@ namespace NumSharp.Utilities
 
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
-                case NPTypeCode.Int16: return ToInt16(sourceArray);
-                case NPTypeCode.UInt16: return ToUInt16(sourceArray);
                 case NPTypeCode.Int32: return ToInt32(sourceArray);
-                case NPTypeCode.UInt32: return ToUInt32(sourceArray);
                 case NPTypeCode.Int64: return ToInt64(sourceArray);
-                case NPTypeCode.UInt64: return ToUInt64(sourceArray);
-                case NPTypeCode.Char: return ToChar(sourceArray);
-                case NPTypeCode.Double: return ToDouble(sourceArray);
                 case NPTypeCode.Single: return ToSingle(sourceArray);
-                case NPTypeCode.Decimal: return ToDecimal(sourceArray);
+                case NPTypeCode.Double: return ToDouble(sourceArray);
 #endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to NPTypeCode.{typeCode}.");
@@ -226,7 +214,7 @@ namespace NumSharp.Utilities
 
         #region From NonGeneric
 
-#if _REGEN
+#if _REGEN1
         %foreach all_dtypes%
 
         public static #1[] To#1(Array sourceArray)
@@ -243,26 +231,12 @@ namespace NumSharp.Utilities
                     return To#1((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return To#1((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return To#1((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return To#1((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return To#1((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return To#1((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return To#1((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return To#1((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return To#1((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return To#1((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return To#1((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return To#1((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return To#1((String[]) sourceArray);
                 default:
@@ -286,26 +260,12 @@ namespace NumSharp.Utilities
                     return ToBoolean((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToBoolean((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToBoolean((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToBoolean((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToBoolean((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToBoolean((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToBoolean((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToBoolean((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToBoolean((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToBoolean((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToBoolean((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToBoolean((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToBoolean((String[]) sourceArray);
                 default:
@@ -327,110 +287,14 @@ namespace NumSharp.Utilities
                     return ToByte((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToByte((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToByte((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToByte((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToByte((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToByte((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToByte((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToByte((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToByte((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToByte((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToByte((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToByte((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToByte((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static Int16[] ToInt16(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToInt16((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToInt16((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToInt16((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToInt16((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToInt16((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToInt16((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToInt16((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToInt16((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToInt16((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToInt16((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToInt16((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToInt16((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToInt16((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static UInt16[] ToUInt16(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToUInt16((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToUInt16((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToUInt16((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToUInt16((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToUInt16((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToUInt16((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToUInt16((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToUInt16((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToUInt16((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToUInt16((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToUInt16((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToUInt16((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToUInt16((String[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -450,69 +314,14 @@ namespace NumSharp.Utilities
                     return ToInt32((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt32((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToInt32((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToInt32((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToInt32((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToInt32((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToInt32((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToInt32((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToInt32((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToInt32((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToInt32((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToInt32((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToInt32((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static UInt32[] ToUInt32(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToUInt32((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToUInt32((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToUInt32((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToUInt32((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToUInt32((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToUInt32((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToUInt32((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToUInt32((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToUInt32((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToUInt32((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToUInt32((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToUInt32((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToUInt32((String[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -532,151 +341,14 @@ namespace NumSharp.Utilities
                     return ToInt64((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt64((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToInt64((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToInt64((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToInt64((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToInt64((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToInt64((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToInt64((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToInt64((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToInt64((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToInt64((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToInt64((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToInt64((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static UInt64[] ToUInt64(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToUInt64((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToUInt64((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToUInt64((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToUInt64((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToUInt64((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToUInt64((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToUInt64((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToUInt64((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToUInt64((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToUInt64((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToUInt64((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToUInt64((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToUInt64((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static Char[] ToChar(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToChar((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToChar((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToChar((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToChar((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToChar((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToChar((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToChar((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToChar((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToChar((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToChar((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToChar((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToChar((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToChar((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static Double[] ToDouble(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToDouble((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToDouble((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToDouble((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToDouble((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToDouble((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToDouble((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToDouble((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToDouble((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToDouble((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToDouble((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToDouble((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToDouble((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToDouble((String[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -696,26 +368,12 @@ namespace NumSharp.Utilities
                     return ToSingle((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToSingle((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToSingle((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToSingle((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToSingle((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToSingle((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToSingle((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToSingle((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToSingle((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToSingle((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToSingle((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToSingle((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToSingle((String[]) sourceArray);
                 default:
@@ -723,7 +381,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        public static Decimal[] ToDecimal(Array sourceArray)
+        public static Double[] ToDouble(Array sourceArray)
         {
             if (sourceArray == null)
             {
@@ -734,31 +392,17 @@ namespace NumSharp.Utilities
             switch (fromTypeCode)
             {
                 case NPTypeCode.Boolean:
-                    return ToDecimal((Boolean[]) sourceArray);
+                    return ToDouble((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
-                    return ToDecimal((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToDecimal((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToDecimal((UInt16[]) sourceArray);
+                    return ToDouble((Byte[]) sourceArray);
                 case NPTypeCode.Int32:
-                    return ToDecimal((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToDecimal((UInt32[]) sourceArray);
+                    return ToDouble((Int32[]) sourceArray);
                 case NPTypeCode.Int64:
-                    return ToDecimal((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToDecimal((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToDecimal((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToDecimal((Double[]) sourceArray);
+                    return ToDouble((Int64[]) sourceArray);
                 case NPTypeCode.Single:
-                    return ToDecimal((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToDecimal((Decimal[]) sourceArray);
+                    return ToDouble((Single[]) sourceArray);
                 case NPTypeCode.String:
-                    return ToDecimal((String[]) sourceArray);
+                    return ToDouble((String[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -778,69 +422,14 @@ namespace NumSharp.Utilities
                     return ToString((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToString((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToString((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToString((UInt16[]) sourceArray);
                 case NPTypeCode.Int32:
                     return ToString((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToString((UInt32[]) sourceArray);
                 case NPTypeCode.Int64:
                     return ToString((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToString((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToString((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToString((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToString((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToString((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToString((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public static Complex[] ToComplex(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
-
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return ToComplex((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToComplex((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return ToComplex((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return ToComplex((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return ToComplex((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return ToComplex((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return ToComplex((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return ToComplex((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return ToComplex((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return ToComplex((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return ToComplex((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return ToComplex((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return ToComplex((String[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -853,7 +442,7 @@ namespace NumSharp.Utilities
 
         #region To Same Type
 
-#if _REGEN
+#if _REGEN1
         %foreach all_dtypes%
         
         /// <summary>
@@ -878,6 +467,7 @@ namespace NumSharp.Utilities
 #else
 
 
+        
         /// <summary>
         ///     Converts <see cref="Boolean"/> array to a <see cref="Boolean"/> array.
         /// </summary>
@@ -889,14 +479,14 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new Boolean[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
+        
         /// <summary>
         ///     Converts <see cref="Byte"/> array to a <see cref="Byte"/> array.
         /// </summary>
@@ -908,52 +498,14 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new Byte[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
+        
         /// <summary>
         ///     Converts <see cref="Int32"/> array to a <see cref="Int32"/> array.
         /// </summary>
@@ -965,33 +517,14 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new Int32[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
+        
         /// <summary>
         ///     Converts <see cref="Int64"/> array to a <see cref="Int64"/> array.
         /// </summary>
@@ -1003,71 +536,14 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new Int64[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
+        
         /// <summary>
         ///     Converts <see cref="Single"/> array to a <see cref="Single"/> array.
         /// </summary>
@@ -1079,33 +555,33 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new Single[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
+        
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Decimal"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Double"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
+        /// <returns>Converted array of type Double</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Decimal[] sourceArray)
+        public static Double[] ToDouble(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
-            var output = new Decimal[length];
+            var output = new Double[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
         }
-
+        
         /// <summary>
         ///     Converts <see cref="String"/> array to a <see cref="String"/> array.
         /// </summary>
@@ -1117,28 +593,9 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-
+            
             var length = sourceArray.Length;
             var output = new String[length];
-            sourceArray.AsSpan().CopyTo(output);
-
-            return output;
-        }
-
-        /// <summary>
-        ///     Converts <see cref="Complex"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(Complex[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-
-            var length = sourceArray.Length;
-            var output = new Complex[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
@@ -1147,7 +604,7 @@ namespace NumSharp.Utilities
 
         #endregion
 
-#if _REGEN
+#if _REGEN1
         #region Compute
         %foreach forevery(supported_primitives, supported_primitives, true)%
         
@@ -1192,40 +649,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Boolean"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -1239,23 +662,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int32[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
             return output;
         }
         
@@ -1277,57 +683,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Boolean[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Boolean"/> array to a <see cref="Single"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -1345,19 +700,19 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Boolean"/> array to a <see cref="Decimal"/> array.
+        ///     Converts <see cref="Boolean"/> array to a <see cref="Double"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
+        /// <returns>Converted array of type Double</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Boolean[] sourceArray)
+        public static Double[] ToDouble(Boolean[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
             
             var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            var output = new Double[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
             return output;
         }
         
@@ -1396,40 +751,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Byte"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -1443,23 +764,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int32[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
             return output;
         }
         
@@ -1481,36 +785,19 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="UInt64"/> array.
+        ///     Converts <see cref="Byte"/> array to a <see cref="Single"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
+        /// <returns>Converted array of type Single</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Byte[] sourceArray)
+        public static Single[] ToSingle(Byte[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
             
             var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            var output = new Single[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
             return output;
         }
         
@@ -1532,454 +819,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Byte"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Byte"/> array to a <see cref="String"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static String[] ToString(Byte[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(UInt16[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -2025,57 +870,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Int32"/> array to a <see cref="Int64"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -2089,57 +883,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int64[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
             return output;
         }
         
@@ -2161,182 +904,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int32"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Double"/> array.
+        ///     Converts <see cref="Int32"/> array to a <see cref="Double"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(UInt32[] sourceArray)
+        public static Double[] ToDouble(Int32[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -2348,46 +921,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(UInt32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="String"/> array.
+        ///     Converts <see cref="Int32"/> array to a <see cref="String"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(UInt32[] sourceArray)
+        public static String[] ToString(Int32[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -2433,40 +972,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Int64"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -2480,74 +985,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int32[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
             return output;
         }
         
@@ -2569,19 +1006,19 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Int64"/> array to a <see cref="Decimal"/> array.
+        ///     Converts <see cref="Int64"/> array to a <see cref="Double"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
+        /// <returns>Converted array of type Double</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Int64[] sourceArray)
+        public static Double[] ToDouble(Int64[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
             
             var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            var output = new Double[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
             return output;
         }
         
@@ -2592,618 +1029,6 @@ namespace NumSharp.Utilities
         /// <returns>Converted array of type String</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static String[] ToString(Int64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Boolean"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Byte"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Int32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Int64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="String"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3249,40 +1074,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Single"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -3296,23 +1087,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int32[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
             return output;
         }
         
@@ -3334,40 +1108,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Single"/> array to a <see cref="Double"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -3381,23 +1121,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Double[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Single"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(Single[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
             return output;
         }
         
@@ -3419,12 +1142,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Boolean"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Boolean"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Boolean[] ToBoolean(Decimal[] sourceArray)
+        public static Boolean[] ToBoolean(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3436,12 +1159,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Byte"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Byte[] ToByte(Decimal[] sourceArray)
+        public static Byte[] ToByte(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3453,46 +1176,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Int32"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int32[] ToInt32(Decimal[] sourceArray)
+        public static Int32[] ToInt32(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3504,29 +1193,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Int64"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Int64"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int64[] ToInt64(Decimal[] sourceArray)
+        public static Int64[] ToInt64(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3538,63 +1210,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="UInt64"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Double"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Double[] ToDouble(Decimal[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Single"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Single"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(Decimal[] sourceArray)
+        public static Single[] ToSingle(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3606,12 +1227,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="String"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="String"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String[] ToString(Decimal[] sourceArray)
+        public static String[] ToString(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3657,40 +1278,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="Int16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Int16[] ToInt16(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="UInt16"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt16[] ToUInt16(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="String"/> array to a <see cref="Int32"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -3704,23 +1291,6 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Int32[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="UInt32"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt32[] ToUInt32(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
             return output;
         }
         
@@ -3742,36 +1312,19 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="UInt64"/> array.
+        ///     Converts <see cref="String"/> array to a <see cref="Single"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type UInt64</returns>
+        /// <returns>Converted array of type Single</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UInt64[] ToUInt64(String[] sourceArray)
+        public static Single[] ToSingle(String[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
             
             var length = sourceArray.Length;
-            var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="Char"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Char[] ToChar(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            var output = new Single[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
             return output;
         }
         
@@ -3791,40 +1344,6 @@ namespace NumSharp.Utilities
             Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
             return output;
         }
-        
-        /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="Single"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Single[] ToSingle(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="String"/> array to a <see cref="Decimal"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Decimal[] ToDecimal(String[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
-            return output;
-        }
         #endregion
 #endif
 
@@ -3832,7 +1351,7 @@ namespace NumSharp.Utilities
 
         #region Complex
 
-#if _REGEN
+#if _REGEN1
         %foreach supported_primitives%
         
         /// <summary>
@@ -3856,6 +1375,7 @@ namespace NumSharp.Utilities
 #else
 
 
+        
         
         /// <summary>
         ///     Converts <see cref="Boolean"/> array to a <see cref="Complex"/> array.
@@ -3894,66 +1414,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Int16"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(Int16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt16"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(UInt16[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Int32"/> array to a <see cref="Complex"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex[] ToComplex(Int32[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="UInt32"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(UInt32[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
@@ -3984,60 +1450,6 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="UInt64"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(UInt64[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Char"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(Char[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
-        ///     Converts <see cref="Double"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(Double[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
-            
-            var length = sourceArray.Length;
-            var output = new Complex[length];
-
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
-            return output;
-        }
-        
-        /// <summary>
         ///     Converts <see cref="Single"/> array to a <see cref="Complex"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -4056,12 +1468,12 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
-        ///     Converts <see cref="Decimal"/> array to a <see cref="Complex"/> array.
+        ///     Converts <see cref="Double"/> array to a <see cref="Complex"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Complex[] ToComplex(Decimal[] sourceArray)
+        public static Complex[] ToComplex(Double[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));

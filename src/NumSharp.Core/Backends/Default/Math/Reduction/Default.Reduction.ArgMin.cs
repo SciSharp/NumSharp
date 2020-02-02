@@ -43,7 +43,7 @@ namespace NumSharp.Backends
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
 
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -82,10 +82,9 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
-
             switch (arr.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
+		    {
+			    case NPTypeCode.Byte: 
                 {
                     int at;
                     do
@@ -109,67 +108,9 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                     break;
                 }
-
-                case NPTypeCode.Int16:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<short>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        short min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<ushort>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        ushort min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.Int32:
+			    case NPTypeCode.Int32: 
                 {
                     int at;
                     do
@@ -193,39 +134,9 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                     break;
                 }
-
-                case NPTypeCode.UInt32:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<uint>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        uint min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.Int64:
+			    case NPTypeCode.Int64: 
                 {
                     int at;
                     do
@@ -249,95 +160,9 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                     break;
                 }
-
-                case NPTypeCode.UInt64:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<ulong>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        ulong min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.Char:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<char>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        char min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.Double:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<double>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        double min = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val < min)
-                            {
-                                min = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt32(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                    break;
-                }
-
-                case NPTypeCode.Single:
+			    case NPTypeCode.Single: 
                 {
                     int at;
                     do
@@ -361,20 +186,18 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                     break;
                 }
-
-                case NPTypeCode.Decimal:
+			    case NPTypeCode.Double: 
                 {
                     int at;
                     do
                     {
-                        var iter = arr[slices].AsIterator<decimal>();
+                        var iter = arr[slices].AsIterator<double>();
                         var moveNext = iter.MoveNext;
                         var hasNext = iter.HasNext;
                         int idx = 1, maxAt = 0;
-                        decimal min = moveNext();
+                        double min = moveNext();
                         while (hasNext())
                         {
                             var val = moveNext();
@@ -389,16 +212,12 @@ namespace NumSharp.Backends
 
                         ret.SetInt32(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                     break;
                 }
-
-                default:
-                    throw new NotSupportedException();
-            }
-
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
 
             return ret;
@@ -413,7 +232,7 @@ namespace NumSharp.Backends
         {
             if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
                 return NDArray.Scalar(0);
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -447,10 +266,9 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
-
             switch (arr.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
+		    {
+			    case NPTypeCode.Byte: 
                 {
                     var iter = arr.AsIterator<byte>();
                     var moveNext = iter.MoveNext;
@@ -471,52 +289,7 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-
-                case NPTypeCode.Int16:
-                {
-                    var iter = arr.AsIterator<short>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    short min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    var iter = arr.AsIterator<ushort>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    ushort min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.Int32:
+			    case NPTypeCode.Int32: 
                 {
                     var iter = arr.AsIterator<int>();
                     var moveNext = iter.MoveNext;
@@ -537,30 +310,7 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-
-                case NPTypeCode.UInt32:
-                {
-                    var iter = arr.AsIterator<uint>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    uint min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.Int64:
+			    case NPTypeCode.Int64: 
                 {
                     var iter = arr.AsIterator<long>();
                     var moveNext = iter.MoveNext;
@@ -581,74 +331,7 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-
-                case NPTypeCode.UInt64:
-                {
-                    var iter = arr.AsIterator<ulong>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    ulong min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.Char:
-                {
-                    var iter = arr.AsIterator<char>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    char min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.Double:
-                {
-                    var iter = arr.AsIterator<double>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    double min = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val < min)
-                        {
-                            min = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-
-                case NPTypeCode.Single:
+			    case NPTypeCode.Single: 
                 {
                     var iter = arr.AsIterator<float>();
                     var moveNext = iter.MoveNext;
@@ -669,14 +352,13 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-
-                case NPTypeCode.Decimal:
+			    case NPTypeCode.Double: 
                 {
-                    var iter = arr.AsIterator<decimal>();
+                    var iter = arr.AsIterator<double>();
                     var moveNext = iter.MoveNext;
                     var hasNext = iter.HasNext;
                     int idx = 1, maxAt = 0;
-                    decimal min = moveNext();
+                    double min = moveNext();
                     while (hasNext())
                     {
                         var val = moveNext();
@@ -691,13 +373,10 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-
-                default:
-                    throw new NotSupportedException();
-            }
-
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
         }
     }

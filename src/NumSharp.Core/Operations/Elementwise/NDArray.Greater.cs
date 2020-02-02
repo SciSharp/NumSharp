@@ -9,7 +9,7 @@ namespace NumSharp
     {
         public static unsafe NumSharp.Generic.NDArray<bool> operator >(NDArray lhs, NDArray rhs)
         {
-#if _REGEN
+#if _REGEN1
             if(lhs.typecode != rhs.typecode)
             {
                 throw new NotImplementedException("please make sure operands have the same data type");
@@ -116,52 +116,6 @@ namespace NumSharp
                 return ret;
             }
 
-            else if (lhs.typecode == NPTypeCode.Int16)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(short*)lhs.Address > *(short*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (short*)lhs.Address;
-                var rhs_address = (short*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
-            else if (lhs.typecode == NPTypeCode.UInt16)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(ushort*)lhs.Address > *(ushort*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (ushort*)lhs.Address;
-                var rhs_address = (ushort*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
             else if (lhs.typecode == NPTypeCode.Int32)
             {
                 if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
@@ -170,29 +124,6 @@ namespace NumSharp
                 (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
                 var lhs_address = (int*)lhs.Address;
                 var rhs_address = (int*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
-            else if (lhs.typecode == NPTypeCode.UInt32)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(uint*)lhs.Address > *(uint*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (uint*)lhs.Address;
-                var rhs_address = (uint*)rhs.Address;
                 var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
                 Shape retShape = ret.Shape;
 
@@ -231,75 +162,6 @@ namespace NumSharp
                 return ret;
             }
 
-            else if (lhs.typecode == NPTypeCode.UInt64)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(ulong*)lhs.Address > *(ulong*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (ulong*)lhs.Address;
-                var rhs_address = (ulong*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
-            else if (lhs.typecode == NPTypeCode.Char)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(char*)lhs.Address > *(char*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (char*)lhs.Address;
-                var rhs_address = (char*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
-            else if (lhs.typecode == NPTypeCode.Double)
-            {
-                if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(double*)lhs.Address > *(double*)rhs.Address).MakeGeneric<bool>();
-
-                (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (double*)lhs.Address;
-                var rhs_address = (double*)rhs.Address;
-                var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
-                Shape retShape = ret.Shape;
-
-                //iterate
-                var ret_address = (bool*)ret.Address;
-                var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
-                int[] current = incr.Index;
-                do
-                {
-                    *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) > *(rhs_address + BroadcastedRightShape.GetOffset(current));
-                } while (incr.Next() != null);
-
-                return ret;
-            }
-
             else if (lhs.typecode == NPTypeCode.Single)
             {
                 if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
@@ -323,14 +185,14 @@ namespace NumSharp
                 return ret;
             }
 
-            else if (lhs.typecode == NPTypeCode.Decimal)
+            else if (lhs.typecode == NPTypeCode.Double)
             {
                 if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                    return NDArray.Scalar<bool>(*(decimal*)lhs.Address > *(decimal*)rhs.Address).MakeGeneric<bool>();
+                    return NDArray.Scalar<bool>(*(double*)lhs.Address > *(double*)rhs.Address).MakeGeneric<bool>();
 
                 (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-                var lhs_address = (decimal*)lhs.Address;
-                var rhs_address = (decimal*)rhs.Address;
+                var lhs_address = (double*)lhs.Address;
+                var rhs_address = (double*)rhs.Address;
                 var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
                 Shape retShape = ret.Shape;
 

@@ -426,7 +426,7 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
+#if _REGEN1
                 %foreach all_dtypes,all_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
@@ -436,76 +436,34 @@ namespace NumSharp.Utilities
                 default:
                     throw new NotImplementedException();
 #else
-                case NPTypeCode.Complex:
-                {
-                    return new Complex[length];
-                }
-
                 case NPTypeCode.Boolean:
                 {
                     return new bool[length];
                 }
-
                 case NPTypeCode.Byte:
                 {
                     return new byte[length];
                 }
-
-                case NPTypeCode.Int16:
-                {
-                    return new short[length];
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    return new ushort[length];
-                }
-
                 case NPTypeCode.Int32:
                 {
                     return new int[length];
                 }
-
-                case NPTypeCode.UInt32:
-                {
-                    return new uint[length];
-                }
-
                 case NPTypeCode.Int64:
                 {
                     return new long[length];
                 }
-
-                case NPTypeCode.UInt64:
-                {
-                    return new ulong[length];
-                }
-
-                case NPTypeCode.Char:
-                {
-                    return new char[length];
-                }
-
-                case NPTypeCode.Double:
-                {
-                    return new double[length];
-                }
-
                 case NPTypeCode.Single:
                 {
                     return new float[length];
                 }
-
-                case NPTypeCode.Decimal:
+                case NPTypeCode.Double:
                 {
-                    return new decimal[length];
+                    return new double[length];
                 }
-
                 case NPTypeCode.String:
                 {
                     return new string[length];
                 }
-
                 default:
                     throw new NotImplementedException();
 #endif
@@ -522,7 +480,7 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
+#if _REGEN1
                 %foreach all_dtypes,all_dtypes_lowercase%
                 case NPTypeCode.#1:
                 {
@@ -532,76 +490,34 @@ namespace NumSharp.Utilities
                 default:
                     throw new NotImplementedException();
 #else
-                case NPTypeCode.Complex:
-                {
-                    return new Complex[1] {(Complex)value};
-                }
-
                 case NPTypeCode.Boolean:
                 {
                     return new bool[1] {(Boolean)value};
                 }
-
                 case NPTypeCode.Byte:
                 {
                     return new byte[1] {(Byte)value};
                 }
-
-                case NPTypeCode.Int16:
-                {
-                    return new short[1] {(Int16)value};
-                }
-
-                case NPTypeCode.UInt16:
-                {
-                    return new ushort[1] {(UInt16)value};
-                }
-
                 case NPTypeCode.Int32:
                 {
                     return new int[1] {(Int32)value};
                 }
-
-                case NPTypeCode.UInt32:
-                {
-                    return new uint[1] {(UInt32)value};
-                }
-
                 case NPTypeCode.Int64:
                 {
                     return new long[1] {(Int64)value};
                 }
-
-                case NPTypeCode.UInt64:
-                {
-                    return new ulong[1] {(UInt64)value};
-                }
-
-                case NPTypeCode.Char:
-                {
-                    return new char[1] {(Char)value};
-                }
-
-                case NPTypeCode.Double:
-                {
-                    return new double[1] {(Double)value};
-                }
-
                 case NPTypeCode.Single:
                 {
                     return new float[1] {(Single)value};
                 }
-
-                case NPTypeCode.Decimal:
+                case NPTypeCode.Double:
                 {
-                    return new decimal[1] {(Decimal)value};
+                    return new double[1] {(Double)value};
                 }
-
                 case NPTypeCode.String:
                 {
                     return new string[1] {(String)value};
                 }
-
                 default:
                     throw new NotImplementedException();
 #endif

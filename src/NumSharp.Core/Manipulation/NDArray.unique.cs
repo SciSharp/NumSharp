@@ -23,25 +23,19 @@ namespace NumSharp
         {
             switch (typecode)
             {
-#if _REGEN
+#if _REGEN1
 	        %foreach supported_dtypes,supported_dtypes_lowercase%
 	        case NPTypeCode.#1: return unique<#2>();
             %
             default: throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return unique<bool>();
-                case NPTypeCode.Byte: return unique<byte>();
-                case NPTypeCode.Int16: return unique<short>();
-                case NPTypeCode.UInt16: return unique<ushort>();
-                case NPTypeCode.Int32: return unique<int>();
-                case NPTypeCode.UInt32: return unique<uint>();
-                case NPTypeCode.Int64: return unique<long>();
-                case NPTypeCode.UInt64: return unique<ulong>();
-                case NPTypeCode.Char: return unique<char>();
-                case NPTypeCode.Double: return unique<double>();
-                case NPTypeCode.Single: return unique<float>();
-                case NPTypeCode.Decimal: return unique<decimal>();
-                default: throw new NotSupportedException();
+	        case NPTypeCode.Boolean: return unique<bool>();
+	        case NPTypeCode.Byte: return unique<byte>();
+	        case NPTypeCode.Int32: return unique<int>();
+	        case NPTypeCode.Int64: return unique<long>();
+	        case NPTypeCode.Single: return unique<float>();
+	        case NPTypeCode.Double: return unique<double>();
+            default: throw new NotSupportedException();
 #endif
             }
         }

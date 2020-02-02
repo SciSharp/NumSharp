@@ -30,16 +30,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 #else
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Boolean)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int32)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt32)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Char)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
 #endif
         [DataTestMethod]
         public void MultiplyAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
@@ -252,8 +246,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
 
 #if _REGEN
-        %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
-        %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
+        %a = ["Boolean","Byte","Int32","Int64","Double","Single"]
+        %b = [true,"1",,"1","1L","1d","1f"]
         %foreach forevery(a,a,true), forevery(b,b,true)%
         [TestMethod]
         public void Multiply_#1_To_#2()
@@ -287,34 +281,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Boolean_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Boolean_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Boolean_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -329,38 +295,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Boolean_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Boolean_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Boolean_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -399,52 +337,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Boolean_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Byte_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Byte_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Byte_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -469,38 +365,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Byte_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Byte_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Byte_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -539,300 +407,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Byte_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int16_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt16_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Int32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -861,66 +435,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Int32_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int32_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int32_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Int32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int32_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -959,160 +477,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Int32_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt32_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Int64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1141,66 +505,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Int64_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int64_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Int64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int64_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Int64_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -1239,160 +547,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Int64_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_UInt64_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Double_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1421,52 +575,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Double_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Double_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Double_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Double_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -1491,38 +603,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Double_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Double_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Single) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Double_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -1561,52 +645,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Single_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Single_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Multiply_Single_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
             var right = np.ones(new Shape(5, 5), NPTypeCode.Int32) + 1;
-            var ret = left * right;
-            
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Multiply_Single_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)
@@ -1631,10 +673,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Multiply_Single_To_UInt64()
+        public void Multiply_Single_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64) + 1;
+            var right = np.ones(new Shape(5, 5), NPTypeCode.Double) + 1;
             var ret = left * right;
             
             for (int i = 0; i < ret.size; i++)

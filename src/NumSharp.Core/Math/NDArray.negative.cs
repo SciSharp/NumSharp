@@ -29,7 +29,7 @@ namespace NumSharp
                             *(out_addr + i) = !*(addr + i);
                         return @out;
                     }
-#if _REGEN
+#if _REGEN1
                     %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
 	                case NPTypeCode.#1:
 	                {
@@ -48,17 +48,6 @@ namespace NumSharp
 	                default:
 		                throw new NotSupportedException();
 #else
-	                case NPTypeCode.Int16:
-	                {
-                        var out_addr = (short*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
-                            if (val > 0)
-                                *(out_addr + i) = (short) -val;
-                        }
-                        return @out;
-	                }
 	                case NPTypeCode.Int32:
 	                {
                         var out_addr = (int*)@out.Address;
@@ -81,17 +70,6 @@ namespace NumSharp
                         }
                         return @out;
 	                }
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
-                            if (val > 0)
-                                *(out_addr + i) = -val;
-                        }
-                        return @out;
-	                }
 	                case NPTypeCode.Single:
 	                {
                         var out_addr = (float*)@out.Address;
@@ -103,9 +81,9 @@ namespace NumSharp
                         }
                         return @out;
 	                }
-	                case NPTypeCode.Decimal:
+	                case NPTypeCode.Double:
 	                {
-                        var out_addr = (decimal*)@out.Address;
+                        var out_addr = (double*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
                             var val = *(out_addr + i);
@@ -118,7 +96,6 @@ namespace NumSharp
 	                case NPTypeCode.UInt16:
 	                case NPTypeCode.UInt32:
 	                case NPTypeCode.UInt64:
-	                case NPTypeCode.Char:
 	                default:
 		                throw new NotSupportedException();
 #endif

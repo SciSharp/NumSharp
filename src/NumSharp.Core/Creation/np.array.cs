@@ -344,7 +344,7 @@ namespace NumSharp
             }
         }
 
-#if _REGEN
+#if _REGEN1
         %l = "data.GetLength("
         %r = ")"
         %foreach range(1,16)%
@@ -381,12 +381,12 @@ namespace NumSharp
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[] data, bool copy) where T : unmanaged
+        public static NDArray array<T>(T[] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.Length));
+            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0)));
         }
 
         /// <summary>

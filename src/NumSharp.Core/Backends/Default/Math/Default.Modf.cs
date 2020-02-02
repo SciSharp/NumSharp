@@ -28,54 +28,35 @@ namespace NumSharp.Backends
                         return @out;
 	                }
 	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (DecimalEx.Frac(*(out_addr + i))));
-                        return @out;
-	                }
 	                default:
 		                throw new NotSupportedException();
 #else
                     case NPTypeCode.Double:
-                    {
-                        var out_addr = (double*)@out.Address;
-                        var out1_addr = (double*)@out1.Address;
-                        Parallel.For(0, len, (i) =>
                         {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = Converts.ToDouble(*(out_addr + i) - trunc);
-                            *(out1_addr + i) = trunc;
-                        });
+                            var out_addr = (double*)@out.Address;
+                            var out1_addr = (double*)@out1.Address;
+                            Parallel.For(0, len, (i) =>
+                            {
+                                var trunc = Math.Truncate(*(out_addr + i));
+                                *(out_addr + i) = Converts.ToDouble(*(out_addr + i) - trunc);
+                                *(out1_addr + i) = trunc;
+                            });
 
-                        return (@out, @out1);
-                    }
+                            return (@out, @out1);
+                        }
                     case NPTypeCode.Single:
-                    {
-                        var out_addr = (float*)@out.Address;
-                        var out1_addr = (float*)@out1.Address;
-                        Parallel.For(0, len, (i) =>
                         {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = Converts.ToSingle(*(out_addr + i) - trunc);
-                            *(out1_addr + i) = Convert.ToSingle(trunc);
-                        });
+                            var out_addr = (float*)@out.Address;
+                            var out1_addr = (float*)@out1.Address;
+                            Parallel.For(0, len, (i) =>
+                            {
+                                var trunc = Math.Truncate(*(out_addr + i));
+                                *(out_addr + i) = Converts.ToSingle(*(out_addr + i) - trunc);
+                                *(out1_addr + i) = Convert.ToSingle(trunc);
+                            });
 
-                        return (@out, @out1);
-                    }
-                    case NPTypeCode.Decimal:
-                    {
-                        var out_addr = (decimal*)@out.Address;
-                        var out1_addr = (decimal*)@out1.Address;
-                        Parallel.For(0, len, (i) =>
-                        {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = *(out_addr + i) - trunc;
-                            *(out1_addr + i) = trunc;
-                        });
-
-                        return (@out, @out1);
-                    }
+                            return (@out, @out1);
+                        }
                     default:
                         throw new NotSupportedException();
 #endif

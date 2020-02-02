@@ -28,6 +28,7 @@ namespace NumSharp.UnitTest.APIs
             AssertAreEqual(rawData, loadedArray.Array);
         }
 
+        [Ignore("not support uint16")]
         [TestMethod]
         public void NumpyToFromFileTestUShort1()
         {

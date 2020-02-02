@@ -35,7 +35,7 @@ namespace NumSharp
                 var bytes = File.ReadAllBytes(file);
                 switch (dtype.GetTypeCode())
                 {
-#if _REGEN
+#if _REGEN1
 	                %foreach supported_dtypes, supported_dtypes_lowercase%
 	                case NPTypeCode.#1: return new NDArray(new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromBuffer(bytes, false)));
 	                %
@@ -44,16 +44,10 @@ namespace NumSharp
 #else
 	                case NPTypeCode.Boolean: return new NDArray(new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(bytes, false)));
 	                case NPTypeCode.Byte: return new NDArray(new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(bytes, false)));
-	                case NPTypeCode.Int16: return new NDArray(new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromBuffer(bytes, false)));
-	                case NPTypeCode.UInt16: return new NDArray(new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromBuffer(bytes, false)));
 	                case NPTypeCode.Int32: return new NDArray(new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromBuffer(bytes, false)));
-	                case NPTypeCode.UInt32: return new NDArray(new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromBuffer(bytes, false)));
 	                case NPTypeCode.Int64: return new NDArray(new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromBuffer(bytes, false)));
-	                case NPTypeCode.UInt64: return new NDArray(new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromBuffer(bytes, false)));
-	                case NPTypeCode.Char: return new NDArray(new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromBuffer(bytes, false)));
-	                case NPTypeCode.Double: return new NDArray(new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(bytes, false)));
 	                case NPTypeCode.Single: return new NDArray(new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromBuffer(bytes, false)));
-	                case NPTypeCode.Decimal: return new NDArray(new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromBuffer(bytes, false)));
+	                case NPTypeCode.Double: return new NDArray(new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(bytes, false)));
 	                default:
 		                throw new NotSupportedException();
 #endif
