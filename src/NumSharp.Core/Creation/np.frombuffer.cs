@@ -34,12 +34,10 @@ namespace NumSharp
         {
             if (dtype == ">u4")
             {
-                var size = bytes.Length / InfoOf<uint>.Size;
-                var ints = new uint[size];
+                var size = bytes.Length / InfoOf<int>.Size;
+                var ints = new int[size];
                 for (var index = 0; index < size; index++)
-                {
-                    ints[index] = (uint)(bytes[0] * 256 + bytes[1] + bytes[2] * 256 + bytes[3]);
-                }
+                    ints[index] = bytes[0] * 256 + bytes[1] + bytes[2] * 256 + bytes[3];
 
                 return new NDArray(ints);
             }
