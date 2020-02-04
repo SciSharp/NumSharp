@@ -1,82 +1,93 @@
-﻿namespace NumSharp
+﻿using NumSharp.Utilities;
+
+namespace NumSharp
 {
     public partial class NDArray
     {
         public static NumSharp.Generic.NDArray<bool> operator !=(NDArray np, object obj)
         {
-            return null;
-            // var boolTensor = new NDArray(typeof(bool),np.shape);
-            //bool[] bools = boolTensor.Storage.GetData() as bool[];
+            var boolTensor = new NDArray(typeof(bool), np.shape);
+            var bools = boolTensor.Storage.GetData();
 
-            //switch (np.Storage.GetData())
-            //{
-            //    case int[] values :
-            //    {
-            //        int value = (int) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case Int64[] values :
-            //    {
-            //        Int64 value = (Int64) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case float[] values :
-            //    {
-            //        float value = (float) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case double[] values :
-            //    {
-            //        double value = (double) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    case Complex[] values :
-            //    {
-            //        Complex value = (Complex) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }
-            //    /*case Quaternion[] values :
-            //    {
-            //        Quaternion value = (Quaternion) obj;                 
-            //        for(int idx =0; idx < bools.Length;idx++)
-            //        {
-            //            if ( values[idx] != value )
-            //                bools[idx] = true;
-            //        }
-            //        break;
-            //    }*/
-            //    default :
-            //    {
-            //        throw new IncorrectTypeException();
-            //    } 
-            //}
+            var npValues = np.Storage.GetData();
 
-            //return boolTensor.MakeGeneric<bool>();
+            switch (npValues.TypeCode)
+            {
+                case NPTypeCode.Int32:
+                    {
+                        int value = Converts.ToInt32(obj);
+                        int idx = 0;
+                        foreach (var npValue in npValues)
+                        {
+                            if ((int)npValue != value)
+                                bools[idx] = true;
+                            idx++;
+                        }
+                        break;
+                    }
+                case NPTypeCode.Int64:
+                    {
+                        long value = Converts.ToInt64(obj);
+                        int idx = 0;
+                        foreach (var npValue in npValues)
+                        {
+                            if ((long)npValue != value)
+                                bools[idx] = true;
+                            idx++;
+                        }
+                        break;
+                    }
+                case NPTypeCode.Float:
+                    {
+                        float value = Converts.ToSingle(obj);
+                        int idx = 0;
+                        foreach (var npValue in npValues)
+                        {
+                            if ((float)npValue != value)
+                                bools[idx] = true;
+                            idx++;
+                        }
+                        break;
+                    }
+                case NPTypeCode.Double:
+                    {
+                        double value = Converts.ToDouble(obj);
+                        int idx = 0;
+                        foreach (var npValue in npValues)
+                        {
+                            if ((double)npValue != value)
+                                bools[idx] = true;
+                            idx++;
+                        }
+                        break;
+                    }
+                /*case Complex[] values :
+                {
+                    Complex value = (Complex) obj;                 
+                    for(int idx =0; idx < bools.Length;idx++)
+                    {
+                        if ( values[idx] != value )
+                            bools[idx] = true;
+                    }
+                    break;
+                }*/
+                /*case Quaternion[] values :
+                {
+                    Quaternion value = (Quaternion) obj;                 
+                    for(int idx =0; idx < bools.Length;idx++)
+                    {
+                        if ( values[idx] != value )
+                            bools[idx] = true;
+                    }
+                    break;
+                }*/
+                default:
+                    {
+                        throw new IncorrectTypeException();
+                    }
+            }
+
+            return boolTensor.MakeGeneric<bool>();
         }
     }
 }
