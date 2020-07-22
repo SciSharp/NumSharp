@@ -13,7 +13,6 @@ namespace NumSharp.UnitTest.Operations
     public class NDArrayAndTest
     {
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void BoolTwo1D_NDArrayAND()
         {
@@ -25,7 +24,6 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new[] {true, false, false, false}, np3.Data<bool>()));
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void BoolTwo2D_NDArrayAND()
         {
@@ -43,15 +41,164 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(np3.Data<bool>(), np4));
         }
 
-        [Ignore("TODO: fix this test")]
         [TestMethod]
         public void Byte1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
 
-            var np3 = np1 & 2;
+            var np3 = np1 & (byte)2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new byte[] {0, 2, 2, 0}, np3.Data<byte>()));
+        }
+
+        [TestMethod]
+        public void Byte2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (byte)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new byte[] {0, 2, 2, 0, 0, 2}, np3.Data<byte>()));
+        }
+
+        [TestMethod]
+        public void UShort1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (ushort)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new ushort[] {0, 2, 2, 0}, np3.Data<ushort>()));
+        }
+
+        [TestMethod]
+        public void UShort2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (ushort)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new ushort[] {0, 2, 2, 0, 0, 2}, np3.Data<ushort>()));
+        }
+
+        [TestMethod]
+        public void UInt1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (uint)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new uint[] {0, 2, 2, 0}, np3.Data<uint>()));
+        }
+
+        [TestMethod]
+        public void UInt2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (uint)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new uint[] {0, 2, 2, 0, 0, 2}, np3.Data<uint>()));
+        }
+
+        [TestMethod]
+        public void ULong1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (ulong)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new ulong[] {0, 2, 2, 0}, np3.Data<ulong>()));
+        }
+
+        [TestMethod]
+        public void ULong2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (ulong)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new ulong[] {0, 2, 2, 0, 0, 2}, np3.Data<ulong>()));
+        }
+
+        [TestMethod]
+        public void Char1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (char)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new char[] {(char)0, (char)2, (char)2, (char)0 }, np3.Data<char>()));
+        }
+
+        [TestMethod]
+        public void Char2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (char)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new char[] { (char)0, (char)2, (char)2, (char)0, (char)0, (char)2 }, np3.Data<char>()));
+        }
+
+        [TestMethod]
+        public void Short1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (short)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new short[] {0, 2, 2, 0}, np3.Data<short>()));
+        }
+
+        [TestMethod]
+        public void Short2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (short)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new short[] {0, 2, 2, 0, 0, 2}, np3.Data<short>()));
+        }
+
+        [TestMethod]
+        public void Int1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & 2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {0, 2, 2, 0}, np3.Data<int>()));
+        }
+
+        [TestMethod]
+        public void Int2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & 2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new int[] {0, 2, 2, 0, 0, 2}, np3.Data<int>()));
+        }
+
+        [TestMethod]
+        public void Long1D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
+
+            var np3 = np1 & (long)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new long[] {0, 2, 2, 0}, np3.Data<long>()));
+        }
+
+        [TestMethod]
+        public void Long2D_NDArrayAND()
+        {
+            var np1 = new NDArray(new[] {1, 2, 3, 4, 5, 6}, new Shape(2, 3));
+
+            var np3 = np1 & (long)2;
+
+            Assert.IsTrue(Enumerable.SequenceEqual(new long[] {0, 2, 2, 0, 0, 2}, np3.Data<long>()));
         }
     }
 }
