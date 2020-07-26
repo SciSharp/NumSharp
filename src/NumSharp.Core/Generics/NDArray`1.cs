@@ -161,7 +161,7 @@ namespace NumSharp.Generic
             get => (TDType*)Storage.Address;
         }
 
-        public new TDType this[params int[] indices]
+        public TDType this[params int[] indices]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get

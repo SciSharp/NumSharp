@@ -8,7 +8,7 @@ namespace NumSharp.Utilities.Maths
     /// </summary>
     [SuppressMessage("ReSharper", "UnusedMember.Local")]
     [SuppressMessage("ReSharper", "ArrangeTypeMemberModifiers")]
-    internal class Operator
+    internal partial class Operator
     {
         //all other gen
 #if _REGEN //We manually fixed types that naturally do not match with casting.

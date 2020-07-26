@@ -169,7 +169,7 @@ namespace NumSharp
                 {
                     for (int jdx = 0; jdx < splitted[0].Length; jdx++)
                     {
-                        nd[idx, jdx] = (NDArray)Double.Parse(splitted[idx][jdx]);
+                        nd[idx, jdx] = (NDArray)double.Parse(splitted[idx][jdx]);
                     }
                 }
 
