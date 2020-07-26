@@ -72,6 +72,11 @@ namespace NumSharp
         public bool IsScalar;
 
         /// <summary>
+        ///     Is this shape a linear? (<see cref="IsBroadcasted"/>==false && <see cref="IsSliced"/>==false)
+        /// </summary>
+        public bool IsLinear => !IsBroadcasted && !IsSliced;
+
+        /// <summary>
         /// True if the shape is not initialized.
         /// Note: A scalar shape is not empty.
         /// </summary>
