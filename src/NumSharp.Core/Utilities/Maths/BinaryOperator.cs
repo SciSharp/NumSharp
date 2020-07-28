@@ -4,23 +4,23 @@ using System.Threading.Tasks;
 namespace NumSharp.Utilities.Maths
 {
     /// <summary>
-    /// Encapsulates the <see cref="BinaryOperator"/> operator caller data necessary to call the operator based on argument type codes.
+    /// Encapsulates the <see cref="BinaryOperator"/> operator data necessary to call the operator based on argument type codes.
     /// </summary>
     public abstract class BinaryOperator
     {
         /// <summary>
-        /// Gets the <see cref="BinaryOperator"/> operator caller type code signature key.
+        /// Gets the <see cref="BinaryOperator"/> operator type code signature key.
         /// </summary>
         public abstract (NPTypeCode, NPTypeCode) Key { get; }
 
         /// <summary>
-        /// Gets the <see cref="BinaryOperator"/> operator caller return type code.
+        /// Gets the <see cref="BinaryOperator"/> operator return type code.
         /// </summary>
         public abstract NPTypeCode ReturnCode { get; }
     }
 
     /// <summary>
-    /// Encapsulates the <see cref="BinaryOperator{TLElement, TRElement, TResult}"/> operator caller data necessary to call the operator based on argument type codes.
+    /// Encapsulates the <see cref="BinaryOperator{TLElement, TRElement, TResult}"/> operator data necessary to call the operator based on argument type codes.
     /// </summary>
     /// <typeparam name="TLElement">The type of a left operator operand.</typeparam>
     /// <typeparam name="TRElement">The type of a right operator operand.</typeparam>
@@ -33,7 +33,7 @@ namespace NumSharp.Utilities.Maths
         private readonly Func<TLElement, TRElement, TResult> _operator;
 
         /// <summary>
-        /// Creates the new instance of an  <see cref="BinaryOperator{TLElement, TRElement, TResult}"/> operator caller.
+        /// Creates the new instance of an  <see cref="BinaryOperator{TLElement, TRElement, TResult}"/> operator.
         /// </summary>
         /// <param name="operator">The operator delegate to invoke when operator is executed.</param>
         public BinaryOperator(Func<TLElement, TRElement, TResult> @operator)
@@ -42,12 +42,12 @@ namespace NumSharp.Utilities.Maths
         }
 
         /// <summary>
-        /// Gets the <see cref="BinaryOperator"/> operator caller type code signature key.
+        /// Gets the <see cref="BinaryOperator"/> operator type code signature key.
         /// </summary>
         public override (NPTypeCode, NPTypeCode) Key => (typeof(TLElement).GetTypeCode(), typeof(TRElement).GetTypeCode());
 
         /// <summary>
-        /// Gets the <see cref="BinaryOperator"/> operator caller return type code.
+        /// Gets the <see cref="BinaryOperator"/> operator return type code.
         /// </summary>
         public override NPTypeCode ReturnCode => typeof(TResult).GetTypeCode();
 

@@ -21,8 +21,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetTypeCode;
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinary.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinary.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, rhs, @operator);
         }
 
@@ -39,8 +39,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -57,8 +57,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -75,8 +75,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -93,8 +93,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -111,8 +111,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -129,8 +129,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -147,8 +147,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
 
@@ -165,8 +165,8 @@ namespace NumSharp
 
             var ltc = lhs.GetTypeCode;
             var rtc = rhs.GetType().GetTypeCode();
-            var @operator = Operator.OpBitwiseAnd.GetCaller(ltc, rtc);
-            var operation = OpBinaryLeft.GetCaller(ltc, rtc, @operator.ReturnCode);
+            var @operator = Operator.OpBitwiseAnd.Get(ltc, rtc);
+            var operation = OpBinaryLeft.Get(ltc, rtc, @operator.ReturnCode);
             return operation.Invoke(lhs, (ValueType)rhs, @operator);
         }
     }
