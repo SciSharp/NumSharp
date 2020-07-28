@@ -70,7 +70,7 @@ namespace NumSharp
 
             if (typeof(TLElement).GetTypeCode() != lhs.GetTypeCode)
                 throw new ArgumentException($"The left argument array type {lhs.GetTypeCode} does not match the expected type {typeof(TLElement).GetTypeCode()}.", nameof(lhs));
-            if (typeof(TLElement).GetTypeCode() != rhs.GetTypeCode)
+            if (typeof(TRElement).GetTypeCode() != rhs.GetTypeCode)
                 throw new ArgumentException($"The right argument array type {rhs.GetTypeCode} does not match the expected type {typeof(TLElement).GetTypeCode()}.", nameof(rhs));
 
             var (ls, rs) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
@@ -78,7 +78,7 @@ namespace NumSharp
             var result = new NDArray(np._FindCommonType(lhs, rhs), resultShape);
 
             if (typeof(TResult).GetTypeCode() != result.GetTypeCode)
-                throw new InvalidOperationException($"The resulting array type {lhs.GetTypeCode} does not match the expected type {typeof(TResult).GetTypeCode()}.");
+                throw new InvalidOperationException($"The resulting array type {result.GetTypeCode} does not match the expected type {typeof(TResult).GetTypeCode()}.");
 
             var lhsAddress = (TLElement*)lhs.Address;
             var rhsAddress = (TRElement*)rhs.Address;
