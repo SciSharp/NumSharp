@@ -97,5 +97,79 @@ namespace NumSharp.Utilities.Maths
         {
             return _operations.GetOrAdd((argl, argr, ret), Create);
         }
+
+        /// <summary>
+        /// Invokes the operation/operator combination on <see cref="NDArray"/> by matching an <see cref="BinaryOperator"/>.
+        /// </summary>
+        /// <param name="lhs">The left scalar operand to call the operator for.</param>
+        /// <param name="rhs">The right <see cref="NDArray"/> operand to call the operator for.</param>
+        /// <param name="operator">The <see cref="BinaryOperator"/> operator that maps the operator signature.</param>
+        /// <returns>The resulting <see cref="NDArray"/> returned.</returns>
+        public NDArray Invoke(ValueType lhs, NDArray rhs, BinaryOperatorIndex operators)
+        {
+            if (lhs is null)
+                throw new ArgumentNullException(nameof(lhs));
+
+            var rtc = lhs.GetType().GetTypeCode();
+            var ltc = rhs.GetTypeCode;
+
+            if (operators.Get(ltc, rtc) is BinaryOperator @operator)
+                if (Get(ltc, rtc, @operator.ReturnCode) is BinaryOperation operation)
+                    return operation.Invoke(lhs, rhs, @operator);
+                else
+                    throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}, {@operator.ReturnCode}.");
+            else
+                throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}.");
+        }
+
+        /// <summary>
+        /// Invokes the operation/operator combination on <see cref="NDArray"/> by matching an <see cref="BinaryOperator"/>.
+        /// </summary>
+        /// <param name="lhs">The left <see cref="NDArray"/> operand to call the operator for.</param>
+        /// <param name="rhs">The right scalar operand to call the operator for.</param>
+        /// <param name="operator">The <see cref="BinaryOperator"/> operator that maps the operator signature.</param>
+        /// <returns>The resulting <see cref="NDArray"/> returned.</returns>
+        public NDArray Invoke(NDArray lhs, ValueType rhs, BinaryOperatorIndex operators)
+        {
+            if (lhs is null)
+                throw new ArgumentNullException(nameof(lhs));
+
+            var ltc = lhs.GetTypeCode;
+            var rtc = rhs.GetType().GetTypeCode();
+
+            if (operators.Get(ltc, rtc) is BinaryOperator @operator)
+                if (Get(ltc, rtc, @operator.ReturnCode) is BinaryOperation operation)
+                    return operation.Invoke(lhs, rhs, @operator);
+                else
+                    throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}, {@operator.ReturnCode}.");
+            else
+                throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}.");
+        }
+
+        /// <summary>
+        /// Invokes the operation/operator combination for on <see cref="NDArray"/> by matching an <see cref="BinaryOperator"/>.
+        /// </summary>
+        /// <param name="lhs">The left <see cref="NDArray"/> operand to call the operator for.</param>
+        /// <param name="rhs">The right <see cref="NDArray"/> operand to call the operator for.</param>
+        /// <param name="operator">The <see cref="BinaryOperator"/> operator that maps the operator signature.</param>
+        /// <returns>The resulting <see cref="NDArray"/> returned.</returns>
+        public NDArray Invoke(NDArray lhs, NDArray rhs, BinaryOperatorIndex operators)
+        {
+            if (lhs is null)
+                throw new ArgumentNullException(nameof(lhs));
+            if (rhs is null)
+                throw new ArgumentNullException(nameof(rhs));
+
+            var ltc = lhs.GetTypeCode;
+            var rtc = rhs.GetTypeCode;
+
+            if (operators.Get(ltc, rtc) is BinaryOperator @operator)
+                if (Get(ltc, rtc, @operator.ReturnCode) is BinaryOperation operation)
+                    return operation.Invoke(lhs, rhs, @operator);
+                else
+                    throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}, {@operator.ReturnCode}.");
+            else
+                throw new InvalidOperationException($"The operation is not found for types: {lhs}, {rhs}.");
+        }
     }
 }
