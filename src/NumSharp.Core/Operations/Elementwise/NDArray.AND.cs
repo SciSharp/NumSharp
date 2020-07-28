@@ -20,7 +20,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, char rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, char rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -28,7 +28,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, byte rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, byte rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -36,7 +36,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, short rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, short rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -44,7 +44,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, ushort rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, ushort rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -52,7 +52,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, int rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, int rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -60,7 +60,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, uint rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, uint rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -68,7 +68,7 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, long rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, long rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
 
         /// <summary>
         /// Performs bitwise and operation on the elements of <see cref="NDArray"/> and the scalar values.
@@ -76,6 +76,6 @@ namespace NumSharp
         /// <param name="lhs">The left <see cref="NDArray"/> to pass to perform the operation on.</param>
         /// <param name="rhs">The right scalar value to pass to perform the operation on.</param>
         /// <returns>The resulting <see cref="NDArray{bool}"/> that contains the operation result.</returns>
-        public static NDArray operator &(NDArray lhs, ulong rhs) => OpBinary.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
+        public static NDArray operator &(NDArray lhs, ulong rhs) => OpBinaryLeft.Invoke(lhs, (ValueType)rhs, Operator.OpBitwiseAnd);
     }
 }
