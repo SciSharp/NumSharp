@@ -174,13 +174,114 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(expected, np3.Data<bool>()));
         }
 
-        public static readonly Type[] Types = new[]
+        [DataTestMethod]
+        // Boolean
+        [DataRow(new[] { true }, new[] { true }, new[] { true })]
+        [DataRow(new[] { true }, new[] { (char)1 }, new[] { (char)1 })]
+        [DataRow(new[] { true }, new[] { (byte)1 }, new[] { (byte)1 })]
+        [DataRow(new[] { true }, new[] { (short)1 }, new[] { (short)1 })]
+        [DataRow(new[] { true }, new[] { (ushort)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { true }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { true }, new[] { (uint)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { true }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { true }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+
+        // Char
+        [DataRow(new[] { (char)1 }, new[] { true }, new[] { (char)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (char)1 }, new[] { (char)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (byte)1 }, new[] { (byte)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (short)1 }, new[] { (short)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (ushort)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (uint)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (char)1 }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+
+        // Byte
+        [DataRow(new[] { (byte)1 }, new[] { true }, new[] { (byte)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (char)1 }, new[] { (byte)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (byte)1 }, new[] { (byte)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (short)1 }, new[] { (short)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (ushort)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (uint)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (byte)1 }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+
+        // Int16
+        [DataRow(new[] { (short)1 }, new[] { true }, new[] { (short)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (char)1 }, new[] { (short)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (byte)1 }, new[] { (short)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (short)1 }, new[] { (short)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (ushort)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (uint)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (short)1 }, new[] { (ulong)1 }, new[] { (double)1 })]
+
+        // UInt16
+        [DataRow(new[] { (ushort)1 }, new[] { true }, new[] { (ushort)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (char)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (byte)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (short)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (ushort)1 }, new[] { (ushort)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (uint)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (ushort)1 }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+
+        // Int32
+        [DataRow(new[] { (int)1 }, new[] { true }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (char)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (byte)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (short)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (ushort)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (int)1 }, new[] { (int)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (uint)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (int)1 }, new[] { (ulong)1 }, new[] { (double)1 })]
+
+        // Int32
+        [DataRow(new[] { (uint)1 }, new[] { true }, new[] { (uint)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (char)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (byte)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (short)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (ushort)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (int)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (uint)1 }, new[] { (uint)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (uint)1 }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+
+        // Int64
+        [DataRow(new[] { (long)1 }, new[] { true }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (char)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (byte)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (short)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (ushort)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (int)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (uint)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (long)1 }, new[] { (long)1 })]
+        [DataRow(new[] { (long)1 }, new[] { (ulong)1 }, new[] { (double)1 })]
+
+        // Int64
+        [DataRow(new[] { (ulong)1 }, new[] { true }, new[] { (ulong)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (char)1 }, new[] { (ulong)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (byte)1 }, new[] { (ulong)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (short)1 }, new[] { (double)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (ushort)1 }, new[] { (ulong)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (int)1 }, new[] { (double)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (uint)1 }, new[] { (ulong)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (long)1 }, new[] { (double)1 })]
+        [DataRow(new[] { (ulong)1 }, new[] { (ulong)1 }, new[] { (ulong)1 })]
+        public void NDArray_InputTypesAND(Array lhs, Array rhs, Array result)
         {
-            typeof(bool),
-            typeof(char), typeof(byte), typeof(short), typeof(ushort),
-            typeof(int), typeof(uint), typeof(long), typeof(ulong),
-            typeof(float), typeof(double),
-        };
+            var np1 = new NDArray(lhs, new Shape(1));
+            var np2 = new NDArray(rhs, new Shape(1));
+
+            var np3 = np1 & np2;
+
+            Assert.AreEqual(result.GetType().GetTypeCode(), np3.typecode);
+        }
 
         [TestMethod]
         public void Byte1D_NDArrayAND()
