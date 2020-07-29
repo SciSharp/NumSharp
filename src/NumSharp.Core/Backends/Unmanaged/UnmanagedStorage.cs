@@ -30,6 +30,7 @@ namespace NumSharp.Backends
         protected ArraySlice<#2> _array#1;
 #else
         protected ArraySlice<bool> _arrayBoolean;
+        protected ArraySlice<sbyte> _arraySByte;
         protected ArraySlice<byte> _arrayByte;
         protected ArraySlice<short> _arrayInt16;
         protected ArraySlice<ushort> _arrayUInt16;
@@ -242,6 +243,19 @@ namespace NumSharp.Backends
             }
         }
 
+        public UnmanagedStorage(sbyte scalar)
+        {
+            _dtype = typeof(SByte);
+            _typecode = InfoOf<sbyte>.NPTypeCode;
+            _shape = Shape.Scalar;
+            InternalArray = _arraySByte = ArraySlice.Scalar<sbyte>(scalar);
+            unsafe
+            {
+                Address = (byte*)_arraySByte.Address;
+                Count = _arraySByte.Count;
+            }
+        }
+
         public UnmanagedStorage(byte scalar)
         {
             _dtype = typeof(Byte);
@@ -414,6 +428,21 @@ namespace NumSharp.Backends
             unsafe
             {
                 Address = (byte*)_arrayBoolean.Address;
+                Count = values.Length;
+            }
+        }
+
+        public UnmanagedStorage(SByte[] values)
+        {
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+            _dtype = typeof(SByte);
+            _typecode = _dtype.GetTypeCode();
+            _shape = new Shape(values.Length);
+            InternalArray = _arraySByte = new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromArray(values));
+            unsafe
+            {
+                Address = (byte*)_arraySByte.Address;
                 Count = values.Length;
             }
         }
@@ -618,6 +647,14 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    InternalArray = _arraySByte = ArraySlice.FromArray<sbyte>((sbyte[])array);
+                    Address = (byte*)_arraySByte.Address;
+                    Count = _arraySByte.Count;
+                    break;
+                }
+
                 case NPTypeCode.Byte:
                 {
                     InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
@@ -741,6 +778,14 @@ namespace NumSharp.Backends
                     InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
                     Address = (byte*)_arrayBoolean.Address;
                     Count = _arrayBoolean.Count;
+                    break;
+                }
+
+                case NPTypeCode.SByte:
+                {
+                    InternalArray = _arraySByte = (ArraySlice<sbyte>)array;
+                    Address = (byte*)_arraySByte.Address;
+                    Count = _arraySByte.Count;
                     break;
                 }
 

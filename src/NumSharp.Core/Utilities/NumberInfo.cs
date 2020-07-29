@@ -23,6 +23,8 @@ namespace NumSharp.Utilities
                     return #1.MaxValue;
                 %
 #else
+                case NPTypeCode.SByte:
+                    return SByte.MaxValue;
                 case NPTypeCode.Byte:
                     return Byte.MaxValue;
                 case NPTypeCode.Int16:
@@ -68,6 +70,8 @@ namespace NumSharp.Utilities
                     return #1.MinValue;
                 %
 #else
+                case NPTypeCode.SByte:
+                    return SByte.MinValue;
                 case NPTypeCode.Byte:
                     return Byte.MinValue;
                 case NPTypeCode.Int16:

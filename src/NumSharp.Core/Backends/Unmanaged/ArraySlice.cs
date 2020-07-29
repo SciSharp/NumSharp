@@ -27,6 +27,7 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
                 case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
+                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSByte(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
                 case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
@@ -63,6 +64,7 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
                 case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
+                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSByte(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
                 case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
@@ -218,6 +220,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(copy ? (bool[])arr.Clone() : (bool[])arr));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromArray(copy ? (sbyte[])arr.Clone() : (sbyte[])arr));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(copy ? (byte[])arr.Clone() : (byte[])arr));
                 case NPTypeCode.Int16: return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(copy ? (short[])arr.Clone() : (short[])arr));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(copy ? (ushort[])arr.Clone() : (ushort[])arr));
@@ -256,6 +259,7 @@ namespace NumSharp.Backends.Unmanaged
 #else
 
                     case NPTypeCode.Boolean: return new ArraySlice<bool>(copy ? ((UnmanagedMemoryBlock<bool>)block).Clone() : (UnmanagedMemoryBlock<bool>)block);
+                    case NPTypeCode.SByte: return new ArraySlice<sbyte>(copy ? ((UnmanagedMemoryBlock<sbyte>)block).Clone() : (UnmanagedMemoryBlock<sbyte>)block);
                     case NPTypeCode.Byte: return new ArraySlice<byte>(copy ? ((UnmanagedMemoryBlock<byte>)block).Clone() : (UnmanagedMemoryBlock<byte>)block);
                     case NPTypeCode.Int16: return new ArraySlice<short>(copy ? ((UnmanagedMemoryBlock<short>)block).Clone() : (UnmanagedMemoryBlock<short>)block);
                     case NPTypeCode.UInt16: return new ArraySlice<ushort>(copy ? ((UnmanagedMemoryBlock<ushort>)block).Clone() : (UnmanagedMemoryBlock<ushort>)block);
@@ -281,6 +285,7 @@ namespace NumSharp.Backends.Unmanaged
         %
 #else
         public static ArraySlice<bool> FromArray(bool[] bools, bool copy = false) => new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(bools, copy));
+        public static ArraySlice<sbyte> FromArray(sbyte[] bytes, bool copy = false) => new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromArray(bytes, copy));
         public static ArraySlice<byte> FromArray(byte[] bytes, bool copy = false) => new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(bytes, copy));
         public static ArraySlice<short> FromArray(short[] shorts, bool copy = false) => new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromArray(shorts, copy));
         public static ArraySlice<ushort> FromArray(ushort[] ushorts, bool copy = false) => new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromArray(ushorts, copy));
@@ -306,6 +311,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, ((IConvertible)fill).ToSByte(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
@@ -338,6 +344,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, default));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, default));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, default));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, default));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, default));
@@ -367,6 +374,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count));
@@ -396,6 +404,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, ((IConvertible)fill).ToBoolean(CultureInfo.InvariantCulture)));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, ((IConvertible)fill).ToSByte(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, ((IConvertible)fill).ToByte(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, ((IConvertible)fill).ToInt16(CultureInfo.InvariantCulture)));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, ((IConvertible)fill).ToUInt16(CultureInfo.InvariantCulture)));
@@ -428,6 +437,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, default));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, default));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, default));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, default));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, default));
@@ -457,6 +467,7 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count));
                 case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count));
                 case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count));

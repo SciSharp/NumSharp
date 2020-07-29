@@ -68,6 +68,23 @@ namespace NumSharp
                         break;
                     }
 
+                    case NPTypeCode.SByte:
+                    {
+                        var addr = (sbyte*)x.Address;
+                        var addr_index0 = addr + transformOffset(0);
+                        sbyte tmp; //index 0
+                        sbyte* addr_swap;
+                        while (count-- > 1)
+                        {
+                            tmp = *addr_index0;
+                            addr_swap = addr + transformOffset(randomizer.Next(size));
+                            *addr_index0 = *addr_swap;
+                            *addr_swap = tmp;
+                        }
+
+                        break;
+                    }
+
                     case NPTypeCode.Byte:
                     {
                         var addr = (byte*)x.Address;

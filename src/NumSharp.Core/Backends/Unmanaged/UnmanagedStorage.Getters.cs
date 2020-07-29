@@ -217,6 +217,15 @@ namespace NumSharp.Backends
             => _arrayBoolean[_shape.GetOffset(indices)];
 
         /// <summary>
+        ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
+        public sbyte GetSByte(params int[] indices)
+            => _arraySByte[_shape.GetOffset(indices)];
+
+        /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>

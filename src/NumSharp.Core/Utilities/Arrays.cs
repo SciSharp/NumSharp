@@ -446,6 +446,11 @@ namespace NumSharp.Utilities
                     return new bool[length];
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    return new sbyte[length];
+                }
+
                 case NPTypeCode.Byte:
                 {
                     return new byte[length];
@@ -540,6 +545,11 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Boolean:
                 {
                     return new bool[1] {(Boolean)value};
+                }
+
+                case NPTypeCode.SByte:
+                {
+                    return new sbyte[1] {(SByte)value};
                 }
 
                 case NPTypeCode.Byte:

@@ -255,6 +255,7 @@ namespace NumSharp
             switch (src.typecode)
             {
                 case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
+                case NPTypeCode.SByte: return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
                 case NPTypeCode.Byte: return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
                 case NPTypeCode.Int16: return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
                 case NPTypeCode.UInt16: return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);

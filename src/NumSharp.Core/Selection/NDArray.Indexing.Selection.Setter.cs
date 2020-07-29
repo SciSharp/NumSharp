@@ -273,6 +273,9 @@ namespace NumSharp
                 case NPTypeCode.Boolean:
                     SetIndices<bool>(src.MakeGeneric<bool>(), indices, values);
                     break;
+                case NPTypeCode.SByte:
+                    SetIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, values);
+                    break;
                 case NPTypeCode.Byte:
                     SetIndices<byte>(src.MakeGeneric<byte>(), indices, values);
                     break;

@@ -158,6 +158,7 @@ namespace NumSharp.Utilities
                 %
 #else
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
+                case NPTypeCode.SByte: return ToSByte(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
                 case NPTypeCode.Int16: return ToInt16(sourceArray);
                 case NPTypeCode.UInt16: return ToUInt16(sourceArray);
@@ -193,6 +194,7 @@ namespace NumSharp.Utilities
 #else
 
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
+                case NPTypeCode.SByte: return ToSByte(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
                 case NPTypeCode.Int16: return ToInt16(sourceArray);
                 case NPTypeCode.UInt16: return ToUInt16(sourceArray);
@@ -241,6 +243,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return To#1((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return To#1((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return To#1((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -313,6 +317,49 @@ namespace NumSharp.Utilities
             }
         }
 
+        public static SByte[] ToSByte(Array sourceArray)
+        {
+            if (sourceArray == null)
+            {
+                throw new ArgumentNullException(nameof(sourceArray));
+            }
+
+            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
+            switch (fromTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return ToSByte((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToSByte((SByte[]) sourceArray);
+                case NPTypeCode.Byte:
+                    return ToSByte((Byte[]) sourceArray);
+                case NPTypeCode.Int16:
+                    return ToSByte((Int16[]) sourceArray);
+                case NPTypeCode.UInt16:
+                    return ToSByte((UInt16[]) sourceArray);
+                case NPTypeCode.Int32:
+                    return ToSByte((Int32[]) sourceArray);
+                case NPTypeCode.UInt32:
+                    return ToSByte((UInt32[]) sourceArray);
+                case NPTypeCode.Int64:
+                    return ToSByte((Int64[]) sourceArray);
+                case NPTypeCode.UInt64:
+                    return ToSByte((UInt64[]) sourceArray);
+                case NPTypeCode.Char:
+                    return ToSByte((Char[]) sourceArray);
+                case NPTypeCode.Double:
+                    return ToSByte((Double[]) sourceArray);
+                case NPTypeCode.Single:
+                    return ToSByte((Single[]) sourceArray);
+                case NPTypeCode.Decimal:
+                    return ToSByte((Decimal[]) sourceArray);
+                case NPTypeCode.String:
+                    return ToSByte((String[]) sourceArray);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
         public static Byte[] ToByte(Array sourceArray)
         {
             if (sourceArray == null)
@@ -325,6 +372,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToByte((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToByte((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToByte((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -366,6 +415,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToInt16((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt16((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt16((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -407,6 +458,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToUInt16((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt16((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToUInt16((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -448,6 +501,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToInt32((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt32((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt32((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -489,8 +544,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToUInt32((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return ToUInt32((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt32((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToUInt32((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -530,6 +585,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToInt64((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt64((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt64((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -571,6 +628,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToUInt64((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt64((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToUInt64((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -612,6 +671,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToChar((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToChar((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToChar((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -653,6 +714,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToDouble((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToDouble((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToDouble((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -694,6 +757,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToSingle((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToSingle((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToSingle((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -735,6 +800,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToDecimal((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToDecimal((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToDecimal((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -776,6 +843,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToString((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToString((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToString((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -817,6 +886,8 @@ namespace NumSharp.Utilities
             {
                 case NPTypeCode.Boolean:
                     return ToComplex((Boolean[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToComplex((SByte[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToComplex((Byte[]) sourceArray);
                 case NPTypeCode.Int16:
@@ -892,6 +963,25 @@ namespace NumSharp.Utilities
 
             var length = sourceArray.Length;
             var output = new Boolean[length];
+            sourceArray.AsSpan().CopyTo(output);
+
+            return output;
+        }
+
+        /// <summary>
+        ///     Converts <see cref="SByte"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        /// <remarks>Based on benchmark ArrayCopying</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(SByte[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+
+            var length = sourceArray.Length;
+            var output = new SByte[length];
             sourceArray.AsSpan().CopyTo(output);
 
             return output;
@@ -1173,6 +1263,23 @@ namespace NumSharp.Utilities
 
 
         #region Compute
+        
+        /// <summary>
+        ///     Converts <see cref="Boolean"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Boolean[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
         
         /// <summary>
         ///     Converts <see cref="Boolean"/> array to a <see cref="Byte"/> array.
@@ -1807,6 +1914,23 @@ namespace NumSharp.Utilities
         ///     Converts <see cref="UInt16"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(UInt16[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="UInt16"/> array to a <see cref="Byte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Byte[] ToByte(UInt16[] sourceArray)
@@ -2004,6 +2128,23 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Boolean[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="Int32"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Int32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
             return output;
         }
         
@@ -2212,6 +2353,23 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
+        ///     Converts <see cref="UInt32"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(UInt32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
         ///     Converts <see cref="UInt32"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -2412,6 +2570,23 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Boolean[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="Int64"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Int64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
             return output;
         }
         
@@ -2620,6 +2795,23 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
+        ///     Converts <see cref="UInt64"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(UInt64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
         ///     Converts <see cref="UInt64"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -2820,6 +3012,23 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Boolean[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="Char"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Char[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
             return output;
         }
         
@@ -3028,6 +3237,23 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
+        ///     Converts <see cref="Double"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Double[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
         ///     Converts <see cref="Double"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -3228,6 +3454,23 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Boolean[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="Single"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Single[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
             return output;
         }
         
@@ -3436,6 +3679,23 @@ namespace NumSharp.Utilities
         }
         
         /// <summary>
+        ///     Converts <see cref="Decimal"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(Decimal[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
         ///     Converts <see cref="Decimal"/> array to a <see cref="Byte"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
@@ -3636,6 +3896,23 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Boolean[length];
             Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="String"/> array to a <see cref="SByte"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type SByte</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static SByte[] ToSByte(String[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            Parallel.For(0, length, i=> output[i] = Converts.ToSByte(sourceArray[i]));
             return output;
         }
         
@@ -3864,6 +4141,24 @@ namespace NumSharp.Utilities
         /// <returns>Converted array of type Complex</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex[] ToComplex(Boolean[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            
+            var length = sourceArray.Length;
+            var output = new Complex[length];
+
+            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            return output;
+        }
+        
+        /// <summary>
+        ///     Converts <see cref="SByte"/> array to a <see cref="Complex"/> array.
+        /// </summary>
+        /// <param name="sourceArray">The array to convert</param>
+        /// <returns>Converted array of type Complex</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Complex[] ToComplex(SByte[] sourceArray)
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));

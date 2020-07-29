@@ -23,6 +23,9 @@ namespace NumSharp
         /// <summary>An integral type representing unsigned 16-bit integers with values between 0 and 65535. The set of possible values for the <see cref="F:System.TypeCode.Char"></see> type corresponds to the Unicode character set.</summary>
         Char = 4,
 
+        /// <summary>An integral type representing unsigned 8-bit integers with values between -128 and 127.</summary>
+        SByte = 5,
+
         /// <summary>An integral type representing unsigned 8-bit integers with values between 0 and 255.</summary>
         Byte = 6,
 
@@ -134,6 +137,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return typeof(Complex);
                 case NPTypeCode.Boolean: return typeof(bool);
+                case NPTypeCode.SByte: return typeof(sbyte);
                 case NPTypeCode.Byte: return typeof(byte);
                 case NPTypeCode.Int16: return typeof(short);
                 case NPTypeCode.UInt16: return typeof(ushort);
@@ -183,6 +187,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return InfoOf<Complex>.Size;
                 case NPTypeCode.Boolean: return 1;
+                case NPTypeCode.SByte: return 1;
                 case NPTypeCode.Byte: return 1;
                 case NPTypeCode.Int16: return 2;
                 case NPTypeCode.UInt16: return 2;
@@ -219,6 +224,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return true;
                 case NPTypeCode.Boolean: return false;
+                case NPTypeCode.SByte: return false;
                 case NPTypeCode.Byte: return false;
                 case NPTypeCode.Int16: return false;
                 case NPTypeCode.UInt16: return false;
@@ -255,6 +261,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return true;
+                case NPTypeCode.SByte: return true;
                 case NPTypeCode.Byte: return true;
                 case NPTypeCode.Int16: return false;
                 case NPTypeCode.UInt16: return true;
@@ -291,6 +298,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return false;
+                case NPTypeCode.SByte: return false;
                 case NPTypeCode.Byte: return false;
                 case NPTypeCode.Int16: return true;
                 case NPTypeCode.UInt16: return false;
@@ -328,6 +336,7 @@ namespace NumSharp
                 case NPTypeCode.Boolean: return -1;
                 
                 case NPTypeCode.String: return 0;
+                case NPTypeCode.SByte: return 0;
                 case NPTypeCode.Byte: return 0;
                 case NPTypeCode.Char: return 0;
 
@@ -369,6 +378,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Boolean: return 0;
                 case NPTypeCode.String: return 0;
+                case NPTypeCode.SByte: return 0;
                 case NPTypeCode.Byte: return 0;
                 case NPTypeCode.Char: return 0;
 
@@ -404,11 +414,10 @@ namespace NumSharp
                     return NPTypeCode.Boolean;
 
                 case NPY_TYPECHAR.NPY_BYTELTR:
-                    return NPTypeCode.Byte;
+                    return NPTypeCode.SByte;
 
                 case NPY_TYPECHAR.NPY_UBYTELTR:
-                    //case NPY_TYPECHAR.NPY_CHARLTR: //char has been deprecated in favor of string.
-                    return NPTypeCode.Char;
+                    return NPTypeCode.Byte;
 
                 case NPY_TYPECHAR.NPY_SHORTLTR:
                     return NPTypeCode.Int16;
@@ -454,8 +463,6 @@ namespace NumSharp
                 case NPY_TYPECHAR.NPY_COMPLEXLTR:
                     return NPTypeCode.Complex;
 
-                    return NPTypeCode.Decimal;
-
                 default:
                     throw new NotSupportedException($"NPY_TYPECHAR of type {typeCode} is not supported.");
             }
@@ -476,8 +483,10 @@ namespace NumSharp
                     return NPY_TYPECHAR.NPY_BOOLLTR;
                 case NPTypeCode.Char:
                     return NPY_TYPECHAR.NPY_CHARLTR;
-                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                     return NPY_TYPECHAR.NPY_BYTELTR;
+                case NPTypeCode.Byte:
+                    return NPY_TYPECHAR.NPY_UBYTELTR;
                 case NPTypeCode.Int16:
                     return NPY_TYPECHAR.NPY_SHORTLTR;
                 case NPTypeCode.UInt16:
@@ -541,6 +550,8 @@ namespace NumSharp
                     return "bool";
                 case NPTypeCode.Char:
                     return "uint8";
+                case NPTypeCode.SByte:
+                    return "int8";
                 case NPTypeCode.Byte:
                     return "uint8";
                 case NPTypeCode.Int16:
@@ -604,6 +615,7 @@ namespace NumSharp
 		    switch (typeCode)
 		    {
 			    case NPTypeCode.Boolean: return NPTypeCode.Int32;
+			    case NPTypeCode.SByte: return NPTypeCode.Int32;
 			    case NPTypeCode.Byte: return NPTypeCode.UInt32;
 			    case NPTypeCode.Int16: return NPTypeCode.Int32;
 			    case NPTypeCode.UInt16: return NPTypeCode.UInt32;
@@ -645,6 +657,7 @@ namespace NumSharp
 		    switch (typeCode)
 		    {
 			    case NPTypeCode.Boolean: return default(bool);
+			    case NPTypeCode.SByte: return default(sbyte);
 			    case NPTypeCode.Byte: return default(byte);
 			    case NPTypeCode.Int16: return default(short);
 			    case NPTypeCode.UInt16: return default(ushort);

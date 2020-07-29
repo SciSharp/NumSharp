@@ -44,6 +44,14 @@ namespace NumSharp
                 }
                 %
 #else
+                case NPTypeCode.SByte:
+                {
+                    var data = (ArraySlice<sbyte>)nd.Array;
+                    for (int i = 0; i < data.Count; i++)
+                        data[i] = Converts.ToSByte(randomizer.NextLong(low, high));
+                    
+                    break;
+                }
                 case NPTypeCode.Byte:
                 {
                     var data = (ArraySlice<byte>)nd.Array;

@@ -145,6 +145,8 @@ namespace NumSharp.Benchmark.Unmanaged
                         break;
                     case NPTypeCode.Char:
                         break;
+                    case NPTypeCode.SByte:
+                        break;
                     case NPTypeCode.Byte:
                         break;
                     case NPTypeCode.Int16:

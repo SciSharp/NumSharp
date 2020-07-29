@@ -363,6 +363,26 @@ namespace NumSharp.UnitTest.Utilities
                     }
                     break;
                 }
+			    case NPTypeCode.SByte: 
+                {
+                    var iter = Subject.AsIterator<sbyte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+                        
+                        var expected = Convert.ToSByte(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(expected == nextval)
+                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: Byte).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    }
+                    break;
+                }
 			    case NPTypeCode.Byte: 
                 {
                     var iter = Subject.AsIterator<byte>();
@@ -643,6 +663,22 @@ namespace NumSharp.UnitTest.Utilities
                     }
                     break;
                 }
+			    case NPTypeCode.SByte: 
+                {
+                    var iter = Subject.AsIterator<sbyte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    var expected = Convert.ToSByte(val);
+                    for (int i = 0; hasnext(); i++)
+                    {
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(expected == nextval)
+                            .FailWith($"Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Byte).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
+                    }
+                    break;
+                }
 			    case NPTypeCode.Byte: 
                 {
                     var iter = Subject.AsIterator<byte>();
@@ -887,6 +923,26 @@ namespace NumSharp.UnitTest.Utilities
 
                         Execute.Assertion
                             .ForCondition(expected==nextval)
+                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: Boolean).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    }
+                    break;
+                }
+			    case NPTypeCode.SByte: 
+                {
+                    var iter = Subject.AsIterator<sbyte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        Execute.Assertion
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+                        
+                        var expected = Convert.ToSByte(values[i]);
+                        var nextval = next();
+
+                        Execute.Assertion
+                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
                             .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: Boolean).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
                     }
                     break;

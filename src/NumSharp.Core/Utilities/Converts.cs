@@ -39,6 +39,8 @@ namespace NumSharp.Utilities
                     return (TOut)(object)((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
                 case NPTypeCode.Char:
                     return (TOut)(object)((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                case NPTypeCode.SByte:
+                    return (TOut)(object)((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Byte:
                     return (TOut)(object)((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Int16:
@@ -98,6 +100,8 @@ namespace NumSharp.Utilities
                     return ((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
                 case NPTypeCode.Char:
                     return ((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                case NPTypeCode.SByte:
+                    return ((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Byte:
                     return ((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Int16:
@@ -156,6 +160,8 @@ namespace NumSharp.Utilities
                     return ((IConvertible)value).ToBoolean(provider);
                 case NPTypeCode.Char:
                     return ((IConvertible)value).ToChar(provider);
+                case NPTypeCode.SByte:
+                    return ((IConvertible)value).ToSByte(provider);
                 case NPTypeCode.Byte:
                     return ((IConvertible)value).ToByte(provider);
                 case NPTypeCode.Int16:
@@ -241,6 +247,11 @@ namespace NumSharp.Utilities
                             Func<bool, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<bool, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<bool, byte> ret = Converts.ToByte;
@@ -303,6 +314,77 @@ namespace NumSharp.Utilities
                         }
                     }
                 }
+                case NPTypeCode.SByte:
+                {
+                    switch (InfoOf<TOut>.NPTypeCode)
+                    {
+                        case NPTypeCode.Boolean:
+                        {
+                            Func<sbyte, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<sbyte, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Int16:
+                        {
+                            Func<sbyte, short> ret = Converts.ToInt16;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.UInt16:
+                        {
+                            Func<sbyte, ushort> ret = Converts.ToUInt16;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Int32:
+                        {
+                            Func<sbyte, int> ret = Converts.ToInt32;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.UInt32:
+                        {
+                            Func<sbyte, uint> ret = Converts.ToUInt32;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Int64:
+                        {
+                            Func<sbyte, long> ret = Converts.ToInt64;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.UInt64:
+                        {
+                            Func<sbyte, ulong> ret = Converts.ToUInt64;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Char:
+                        {
+                            Func<sbyte, char> ret = Converts.ToChar;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Double:
+                        {
+                            Func<sbyte, double> ret = Converts.ToDouble;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Single:
+                        {
+                            Func<sbyte, float> ret = Converts.ToSingle;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.Decimal:
+                        {
+                            Func<sbyte, decimal> ret = Converts.ToDecimal;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        default:
+                        {
+                            var tout = typeof(TOut);
+                            return @in => (TOut)Convert.ChangeType(@in, tout);
+                        }
+                    }
+                }
                 case NPTypeCode.Byte:
                 {
                     switch (InfoOf<TOut>.NPTypeCode)
@@ -310,6 +392,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<byte, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<byte, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
@@ -383,6 +470,11 @@ namespace NumSharp.Utilities
                             Func<short, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<short, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<short, byte> ret = Converts.ToByte;
@@ -452,6 +544,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<ushort, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<ushort, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
@@ -525,6 +622,11 @@ namespace NumSharp.Utilities
                             Func<int, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<int, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<int, byte> ret = Converts.ToByte;
@@ -594,6 +696,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<uint, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<uint, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
@@ -667,6 +774,11 @@ namespace NumSharp.Utilities
                             Func<long, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<long, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<long, byte> ret = Converts.ToByte;
@@ -736,6 +848,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<ulong, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<ulong, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
@@ -809,6 +926,11 @@ namespace NumSharp.Utilities
                             Func<char, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<char, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<char, byte> ret = Converts.ToByte;
@@ -878,6 +1000,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<double, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<double, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
@@ -951,6 +1078,11 @@ namespace NumSharp.Utilities
                             Func<float, bool> ret = Converts.ToBoolean;
                             return (Func<TIn, TOut>)(object)ret;
                         }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<float, sbyte> ret = Converts.ToSByte;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
                         case NPTypeCode.Byte:
                         {
                             Func<float, byte> ret = Converts.ToByte;
@@ -1020,6 +1152,11 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Boolean:
                         {
                             Func<decimal, bool> ret = Converts.ToBoolean;
+                            return (Func<TIn, TOut>)(object)ret;
+                        }
+                        case NPTypeCode.SByte:
+                        {
+                            Func<decimal, sbyte> ret = Converts.ToSByte;
                             return (Func<TIn, TOut>)(object)ret;
                         }
                         case NPTypeCode.Byte:
