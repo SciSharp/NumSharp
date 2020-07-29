@@ -22,8 +22,8 @@ namespace NumSharp.Utilities.Maths
         /// </summary>
         private static readonly OperationTypeIndex s_types = new Type[]
         {
-            typeof(bool),
-            typeof(char), typeof(byte), typeof(short), typeof(ushort),
+            typeof(bool), typeof(char),
+            typeof(sbyte), typeof(byte), typeof(short), typeof(ushort),
             typeof(int), typeof(uint), typeof(long), typeof(ulong),
             typeof(float), typeof(double), typeof(decimal), typeof(Complex)
         }.ToDictionary(x => x.GetTypeCode());
