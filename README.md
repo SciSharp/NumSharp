@@ -7,10 +7,10 @@
 [![Badge](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu/#/en_US)
 
 **NumSharp** (NS) is a [NumPy](https://github.com/numpy/numpy) port to C# targetting .NET Standard.<a href="http://scisharpstack.org"><img src="https://github.com/SciSharp/SciSharp/blob/master/art/scisharp_badge.png" width="200" height="200" align="right" /></a><br>
-NumSharp is the fundamental package needed for scientific computing with C#.<br>
+NumSharp is the fundamental package needed for scientific computing with C# and F#.<br>
 
-Is it difficult to translate python machine learning code into C#? Because too many functions can’t be found in the corresponding code in the .NET SDK. 
-NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# code.
+Is it difficult to translate python machine learning code into .NET? Because too many functions can’t be found in the corresponding code in the .NET SDK. 
+NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# or F# code.
 Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
 
 [![comparision](docfx_project/images/python-csharp-comparision.png)](https://raw.githubusercontent.com/SciSharp/NumSharp/master/docfx_project/images/python-csharp-comparision.png)
