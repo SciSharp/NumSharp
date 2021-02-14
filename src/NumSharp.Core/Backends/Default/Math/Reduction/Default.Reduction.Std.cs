@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 
             //resolve the accumulator type
 
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -178,17 +178,15 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
-
             switch (arr.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
+		    {
+			    case NPTypeCode.Byte: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
@@ -199,19 +197,15 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -221,23 +215,19 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
@@ -248,117 +238,15 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -368,23 +256,19 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
@@ -395,68 +279,15 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -466,23 +297,19 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt64:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
@@ -493,166 +320,15 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<byte>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -662,23 +338,19 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Decimal:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
@@ -689,19 +361,15 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -711,4985 +379,885 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.Int16:
+			    case NPTypeCode.Int32: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt64:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Decimal:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<short>();
+                                    var iter = slice.AsIterator<int>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.UInt16:
+			    case NPTypeCode.Int64: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt64:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Decimal:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<ushort>();
+                                    var iter = slice.AsIterator<long>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.Int32:
+			    case NPTypeCode.Single: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt64:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Decimal:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<int>();
+                                    var iter = slice.AsIterator<float>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.UInt32:
+			    case NPTypeCode.Double: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.UInt64:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Decimal:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<uint>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Int64:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
+                                    var iter = slice.AsIterator<double>();
                                     var moveNext = iter.MoveNext;
                                     var hasNext = iter.HasNext;
                                     var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
 
                                     double sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-
                                 break;
                             }
                         }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<long>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.UInt64:
+			    case NPTypeCode.Decimal: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<ulong>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Char:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<char>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Double:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<double>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Single:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetByte(Converts.ToByte(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt32(Converts.ToInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt64(Converts.ToInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetSingle(Converts.ToSingle(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / (slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<float>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                                    double sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDecimal(Converts.ToDecimal(Math.Sqrt(sum / slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-                                break;
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
+		            {
+			            case NPTypeCode.Byte: 
+                        {                            
+                            if (ddof.HasValue) {
+                                var _ddof = (decimal) ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5699,17 +1267,14 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetByte(Converts.ToByte(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5719,8 +1284,7 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
@@ -5728,15 +1292,12 @@ namespace NumSharp.Backends
                                     ret.SetByte(Converts.ToByte(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
-
                             break;
                         }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
+			            case NPTypeCode.Int32: 
+                        {                            
+                            if (ddof.HasValue) {
+                                var _ddof = (decimal) ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5746,111 +1307,14 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetInt16(Converts.ToInt16(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt16(Converts.ToUInt16(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt32(Converts.ToInt32(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5860,8 +1324,7 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
@@ -5869,15 +1332,12 @@ namespace NumSharp.Backends
                                     ret.SetInt32(Converts.ToInt32(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
-
                             break;
                         }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
+			            case NPTypeCode.Int64: 
+                        {                            
+                            if (ddof.HasValue) {
+                                var _ddof = (decimal) ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5887,64 +1347,14 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt32(Converts.ToUInt32(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetInt64(Converts.ToInt64(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5954,8 +1364,7 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
@@ -5963,15 +1372,12 @@ namespace NumSharp.Backends
                                     ret.SetInt64(Converts.ToInt64(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
-
                             break;
                         }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
+			            case NPTypeCode.Single: 
+                        {                            
+                            if (ddof.HasValue) {
+                                var _ddof = (decimal) ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
@@ -5981,158 +1387,14 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetUInt64(Converts.ToUInt64(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetChar(Converts.ToChar(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
-                                        var a = moveNext() - xmean;
-                                        sum += a * a;
-                                    }
-
-                                    ret.SetDouble(Converts.ToDouble(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
-                                } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-
-                            break;
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                do
-                                {
-                                    var slice = arr[slices];
-                                    var iter = slice.AsIterator<decimal>();
-                                    var moveNext = iter.MoveNext;
-                                    var hasNext = iter.HasNext;
-                                    var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
-
-                                    decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
                                     ret.SetSingle(Converts.ToSingle(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -6142,8 +1404,7 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
@@ -6151,15 +1412,12 @@ namespace NumSharp.Backends
                                     ret.SetSingle(Converts.ToSingle(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
-
                             break;
                         }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
+			            case NPTypeCode.Double: 
+                        {                            
+                            if (ddof.HasValue) {
+                                var _ddof = (decimal) ddof.Value;
                                 do
                                 {
                                     var slice = arr[slices];
@@ -6169,17 +1427,14 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(DecimalEx.Sqrt(sum / ((decimal)slice.size - _ddof))), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            }
-                            else
-                            {
+                            } else {
                                 do
                                 {
                                     var slice = arr[slices];
@@ -6189,32 +1444,26 @@ namespace NumSharp.Backends
                                     var xmean = MeanElementwise<decimal>(slice, NPTypeCode.Double);
 
                                     decimal sum = 0;
-                                    while (hasNext())
-                                    {
+                                    while (hasNext()) {
                                         var a = moveNext() - xmean;
                                         sum += a * a;
                                     }
 
-                                    ret.SetDecimal(Converts.ToDecimal(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
+                                    ret.SetDouble(Converts.ToDouble(DecimalEx.Sqrt(sum / (decimal)slice.size)), iterIndex);
                                 } while (iterAxis.Next() != null && iterRet.Next() != null);
                             }
-
                             break;
                         }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
+			    default:
+				    throw new NotSupportedException();
 
-                default:
-                    throw new NotSupportedException();
-            }
-
+		    }
             #endregion
-
 #endif
 
             if (keepdims)
@@ -6234,7 +1483,7 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(0);
 
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -6331,17 +1580,15 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
-
             switch (arr.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
+		    {
+			    case NPTypeCode.Byte: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
@@ -6349,36 +1596,30 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (byte) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / arr.size);
+                                return (byte) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
@@ -6386,36 +1627,30 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (int) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / arr.size);
+                                return (int) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
@@ -6423,36 +1658,30 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (long) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / arr.size);
+                                return (long) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
@@ -6460,36 +1689,30 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (float) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / arr.size);
+                                return (float) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
@@ -6497,4031 +1720,695 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (double) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / arr.size);
+                                return (double) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.Int16:
+			    case NPTypeCode.Int32: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
+                                return (byte) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / arr.size);
+                                return (byte) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
+                                return (int) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / arr.size);
+                                return (int) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
+                                return (long) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / arr.size);
+                                return (long) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
+                                return (float) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / arr.size);
+                                return (float) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
+                                return (double) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / arr.size);
+                                return (double) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.UInt16:
+			    case NPTypeCode.Int64: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
+                                return (byte) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / arr.size);
+                                return (byte) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
+                                return (int) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / arr.size);
+                                return (int) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
+                                return (long) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / arr.size);
+                                return (long) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
+                                return (float) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / arr.size);
+                                return (float) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
+                                return (double) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / arr.size);
+                                return (double) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.Int32:
+			    case NPTypeCode.Single: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
+                                return (byte) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / arr.size);
+                                return (byte) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
+                                return (int) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / arr.size);
+                                return (int) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
+                                return (long) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / arr.size);
+                                return (long) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
+                                return (float) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / arr.size);
+                                return (float) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
+                                return (double) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / arr.size);
+                                return (double) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.UInt32:
+			    case NPTypeCode.Double: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
+                                return (byte) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (byte)Math.Sqrt(sum / arr.size);
+                                return (byte) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
+                                return (int) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (short)Math.Sqrt(sum / arr.size);
+                                return (int) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
+                                return (long) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (ushort)Math.Sqrt(sum / arr.size);
+                                return (long) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
+                                return (float) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (int)Math.Sqrt(sum / arr.size);
+                                return (float) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
+                                return (double) Math.Sqrt(sum / (arr.size - _ddof));
+                            } else {
+                                var iter = arr.AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
 
                                 double sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
 
-                                return (uint)Math.Sqrt(sum / arr.size);
+                                return (double) Math.Sqrt(sum / arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                case NPTypeCode.Int64:
+			    case NPTypeCode.Decimal: 
                 {
                     switch (retType)
-                    {
-                        case NPTypeCode.Byte:
+		            {
+			            case NPTypeCode.Byte: 
                         {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.UInt64:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Char:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Double:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Single:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (byte)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (short)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt16:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ushort)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (int)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt32:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (uint)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = ddof.Value;
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / (arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                                double sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)Math.Sqrt(sum / arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
-                    break;
-                }
-
-                case NPTypeCode.Decimal:
-                {
-                    switch (retType)
-                    {
-                        case NPTypeCode.Byte:
-                        {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = (decimal)ddof.Value;
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
@@ -10529,36 +2416,28 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (byte)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (byte) DecimalEx.Sqrt(sum / ((decimal) arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (byte)DecimalEx.Sqrt(sum / (decimal)arr.size);
+                                return (byte) DecimalEx.Sqrt(sum / (decimal) arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int16:
+			            case NPTypeCode.Int32: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = (decimal)ddof.Value;
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
@@ -10566,36 +2445,28 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (short)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (int) DecimalEx.Sqrt(sum / ((decimal) arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (short)DecimalEx.Sqrt(sum / (decimal)arr.size);
+                                return (int) DecimalEx.Sqrt(sum / (decimal) arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt16:
+			            case NPTypeCode.Int64: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = (decimal)ddof.Value;
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
@@ -10603,36 +2474,28 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (ushort)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (long) DecimalEx.Sqrt(sum / ((decimal) arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (ushort)DecimalEx.Sqrt(sum / (decimal)arr.size);
+                                return (long) DecimalEx.Sqrt(sum / (decimal) arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int32:
+			            case NPTypeCode.Single: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = (decimal)ddof.Value;
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
@@ -10640,36 +2503,28 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (int)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (float) DecimalEx.Sqrt(sum / ((decimal) arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (int)DecimalEx.Sqrt(sum / (decimal)arr.size);
+                                return (float) DecimalEx.Sqrt(sum / (decimal) arr.size);
                             }
                         }
-
-                        case NPTypeCode.UInt32:
+			            case NPTypeCode.Double: 
                         {
-                            if (ddof.HasValue)
-                            {
+                            if (ddof.HasValue) {
                                 var _ddof = (decimal)ddof.Value;
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
@@ -10677,267 +2532,34 @@ namespace NumSharp.Backends
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (uint)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
+                                return (double) DecimalEx.Sqrt(sum / ((decimal) arr.size - _ddof));
+                            } else {
                                 var iter = arr.AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
 
                                 decimal sum = 0;
-                                while (hasNext())
-                                {
+                                while (hasNext()) {
                                     var a = moveNext() - xmean;
                                     sum += a * a;
                                 }
-
-                                return (uint)DecimalEx.Sqrt(sum / (decimal)arr.size);
+                                return (double) DecimalEx.Sqrt(sum / (decimal) arr.size);
                             }
                         }
-
-                        case NPTypeCode.Int64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (long)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.UInt64:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (ulong)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Char:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (char)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Double:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (double)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Single:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (float)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        case NPTypeCode.Decimal:
-                        {
-                            if (ddof.HasValue)
-                            {
-                                var _ddof = (decimal)ddof.Value;
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
-                            }
-                            else
-                            {
-                                var iter = arr.AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Double);
-
-                                decimal sum = 0;
-                                while (hasNext())
-                                {
-                                    var a = moveNext() - xmean;
-                                    sum += a * a;
-                                }
-
-                                return (decimal)DecimalEx.Sqrt(sum / (decimal)arr.size);
-                            }
-                        }
-
-                        default:
-                            throw new NotSupportedException();
-                    }
-
+			            default:
+				            throw new NotSupportedException();
+		            }
                     break;
                 }
-
-                default:
-                    throw new NotSupportedException();
-            }
-
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
         }
     }

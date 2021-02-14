@@ -17,7 +17,7 @@ namespace NumSharp.Utilities
         
         #region Cached Converters
 
-#if _REGEN
+#if _REGEN1
         #region Compute
 		%foreach supported_dtypes,supported_dtypes_lowercase%
         /// <summary>
@@ -40,139 +40,62 @@ namespace NumSharp.Utilities
 #else
 
         #region Compute
-
         /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="bool"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        ///     Converts <typeparamref name="T"/> to <see cref="Boolean"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
-        /// <param name="obj">The object to convert to <see cref="bool"/></param>
-        /// <returns>A <see cref="bool"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool ToBoolean(T obj) => _toBoolean(obj);
-
-        private static readonly Func<T, bool> _toBoolean = Converts.FindConverter<T, bool>();
+        /// <param name="obj">The object to convert to <see cref="Boolean"/></param>
+        /// <returns>A <see cref="Boolean"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool ToBoolean(T obj) => _toBoolean(obj);
+		private static readonly Func<T, bool> _toBoolean = Converts.FindConverter<T, bool>();
 
         /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="Byte"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Byte"/></param>
         /// <returns>A <see cref="Byte"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static byte ToByte(T obj) => _toByte(obj);
-
-        private static readonly Func<T, byte> _toByte = Converts.FindConverter<T, byte>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="Int16"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="Int16"/></param>
-        /// <returns>A <see cref="Int16"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static short ToInt16(T obj) => _toInt16(obj);
-
-        private static readonly Func<T, short> _toInt16 = Converts.FindConverter<T, short>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="UInt16"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="UInt16"/></param>
-        /// <returns>A <see cref="UInt16"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ushort ToUInt16(T obj) => _toUInt16(obj);
-
-        private static readonly Func<T, ushort> _toUInt16 = Converts.FindConverter<T, ushort>();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static byte ToByte(T obj) => _toByte(obj);
+		private static readonly Func<T, byte> _toByte = Converts.FindConverter<T, byte>();
 
         /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="Int32"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Int32"/></param>
         /// <returns>A <see cref="Int32"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int ToInt32(T obj) => _toInt32(obj);
-
-        private static readonly Func<T, int> _toInt32 = Converts.FindConverter<T, int>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="UInt32"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="UInt32"/></param>
-        /// <returns>A <see cref="UInt32"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static uint ToUInt32(T obj) => _toUInt32(obj);
-
-        private static readonly Func<T, uint> _toUInt32 = Converts.FindConverter<T, uint>();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static int ToInt32(T obj) => _toInt32(obj);
+		private static readonly Func<T, int> _toInt32 = Converts.FindConverter<T, int>();
 
         /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="Int64"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Int64"/></param>
         /// <returns>A <see cref="Int64"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static long ToInt64(T obj) => _toInt64(obj);
-
-        private static readonly Func<T, long> _toInt64 = Converts.FindConverter<T, long>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="UInt64"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="UInt64"/></param>
-        /// <returns>A <see cref="UInt64"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong ToUInt64(T obj) => _toUInt64(obj);
-
-        private static readonly Func<T, ulong> _toUInt64 = Converts.FindConverter<T, ulong>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="Char"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="Char"/></param>
-        /// <returns>A <see cref="Char"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static char ToChar(T obj) => _toChar(obj);
-
-        private static readonly Func<T, char> _toChar = Converts.FindConverter<T, char>();
-
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="Double"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="Double"/></param>
-        /// <returns>A <see cref="Double"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static double ToDouble(T obj) => _toDouble(obj);
-
-        private static readonly Func<T, double> _toDouble = Converts.FindConverter<T, double>();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static long ToInt64(T obj) => _toInt64(obj);
+		private static readonly Func<T, long> _toInt64 = Converts.FindConverter<T, long>();
 
         /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="Single"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Single"/></param>
         /// <returns>A <see cref="Single"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float ToSingle(T obj) => _toSingle(obj);
-
-        private static readonly Func<T, float> _toSingle = Converts.FindConverter<T, float>();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static float ToSingle(T obj) => _toSingle(obj);
+		private static readonly Func<T, float> _toSingle = Converts.FindConverter<T, float>();
 
         /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="Decimal"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        ///     Converts <typeparamref name="T"/> to <see cref="Double"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
-        /// <param name="obj">The object to convert to <see cref="Decimal"/></param>
-        /// <returns>A <see cref="Decimal"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static decimal ToDecimal(T obj) => _toDecimal(obj);
-
-        private static readonly Func<T, decimal> _toDecimal = Converts.FindConverter<T, decimal>();
+        /// <param name="obj">The object to convert to <see cref="Double"/></param>
+        /// <returns>A <see cref="Double"/></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static double ToDouble(T obj) => _toDouble(obj);
+		private static readonly Func<T, double> _toDouble = Converts.FindConverter<T, double>();
 
         /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="String"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="String"/></param>
         /// <returns>A <see cref="String"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static String ToString(T obj) => _toString(obj);
-
-        private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static String ToString(T obj) => _toString(obj);
+		private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
         #endregion
-
 #endif
 
 #if _REGEN

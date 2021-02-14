@@ -49,16 +49,10 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 #else
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Boolean)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int32)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt32)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Char)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
 #endif
         [DataTestMethod]
         public void AddAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
@@ -269,8 +263,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
 
 #if _REGEN
-        %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
-        %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
+        %a = ["Boolean","Byte","Int32","Int64","Double","Single"]
+        %b = [true,"1","1","1L","1d","1f"]
         %foreach forevery(a,a,true), forevery(b,b,true)%
         [TestMethod]
         public void Add_#1_To_#2()
@@ -304,34 +298,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Boolean_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Boolean_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Boolean_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
@@ -346,20 +312,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Boolean_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Boolean_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
@@ -370,20 +322,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Boolean_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
                 Console.WriteLine(val);
             }
         }
@@ -416,20 +354,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Boolean_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Byte_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
@@ -440,34 +364,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Boolean)true);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Byte_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Byte_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
                 Console.WriteLine(val);
             }
         }
@@ -486,20 +382,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Byte_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Byte_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
@@ -510,20 +392,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Byte_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
                 Console.WriteLine(val);
             }
         }
@@ -556,300 +424,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Byte_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Byte)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Double)1d);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Single)1f);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int16_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Byte)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Double)1d);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Single)1f);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt16_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Int32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
@@ -878,48 +452,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Int32_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int32_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int32_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Int32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
@@ -930,20 +462,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int32_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
                 Console.WriteLine(val);
             }
         }
@@ -976,160 +494,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Int32_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Byte)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Double)1d);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Single)1f);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt32_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Int64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
@@ -1158,34 +522,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Int64_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int64_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Int64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
@@ -1196,34 +532,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int64_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Int64_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
                 Console.WriteLine(val);
             }
         }
@@ -1256,160 +564,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Int64_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Boolean()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Byte()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Byte);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Byte)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Int32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Double()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Double);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Double)1d);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Single()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Single);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Single)1f);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_UInt64_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Double_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
@@ -1438,34 +592,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Double_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Double_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Double_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
@@ -1476,20 +602,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Double_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
                 Console.WriteLine(val);
             }
         }
@@ -1508,20 +620,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Double_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Double_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
@@ -1532,20 +630,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Single)1f);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Double_To_Decimal()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Double);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Decimal);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Decimal)1m);
                 Console.WriteLine(val);
             }
         }
@@ -1578,34 +662,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
         [TestMethod]
-        public void Add_Single_To_Int16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Single_To_UInt16()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt16);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt16)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
         public void Add_Single_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
@@ -1616,48 +672,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             {
                 var val = ret.GetAtIndex(i);
                 val.Should().Be((Int32)1);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Single_To_UInt32()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt32);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt32)1u);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Single_To_Int64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.Int64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((Int64)1L);
-                Console.WriteLine(val);
-            }
-        }
-        [TestMethod]
-        public void Add_Single_To_UInt64()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.Single);
-            var right = np.ones(new Shape(5, 5), NPTypeCode.UInt64);
-            var ret = left + right;
-
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                val.Should().Be((UInt64)1UL);
                 Console.WriteLine(val);
             }
         }

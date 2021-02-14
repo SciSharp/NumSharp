@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         public override NDArray<int>[] NonZero(in NDArray nd)
         {
-#if _REGEN
+#if _REGEN1
             #region Compute
 		    switch (nd.typecode)
 		    {
@@ -37,16 +37,10 @@ namespace NumSharp.Backends
 		    {
 			    case NPTypeCode.Boolean: return nonzeros<bool>(nd.MakeGeneric<bool>());
 			    case NPTypeCode.Byte: return nonzeros<byte>(nd.MakeGeneric<byte>());
-			    case NPTypeCode.Int16: return nonzeros<short>(nd.MakeGeneric<short>());
-			    case NPTypeCode.UInt16: return nonzeros<ushort>(nd.MakeGeneric<ushort>());
 			    case NPTypeCode.Int32: return nonzeros<int>(nd.MakeGeneric<int>());
-			    case NPTypeCode.UInt32: return nonzeros<uint>(nd.MakeGeneric<uint>());
 			    case NPTypeCode.Int64: return nonzeros<long>(nd.MakeGeneric<long>());
-			    case NPTypeCode.UInt64: return nonzeros<ulong>(nd.MakeGeneric<ulong>());
-			    case NPTypeCode.Char: return nonzeros<char>(nd.MakeGeneric<char>());
-			    case NPTypeCode.Double: return nonzeros<double>(nd.MakeGeneric<double>());
 			    case NPTypeCode.Single: return nonzeros<float>(nd.MakeGeneric<float>());
-			    case NPTypeCode.Decimal: return nonzeros<decimal>(nd.MakeGeneric<decimal>());
+			    case NPTypeCode.Double: return nonzeros<double>(nd.MakeGeneric<double>());
 			    default:
 				    throw new NotSupportedException();
 		    }
@@ -60,7 +54,7 @@ namespace NumSharp.Backends
             var nonzeroCoords = new List<int[]>(x.size / 3);
             var size = x.size;
             Debug.Assert(size > 0);
-#if _REGEN
+#if _REGEN1
             #region Compute
             Func<int[], int> getOffset = x.Shape.GetOffset;
             switch (x.typecode) {
@@ -115,34 +109,6 @@ namespace NumSharp.Backends
 
                     break;
                 }
-                case NPTypeCode.Int16: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (short*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(short)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
-                case NPTypeCode.UInt16: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (ushort*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(ushort)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
                 case NPTypeCode.Int32: {
                     var incr = new NDCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
@@ -152,20 +118,6 @@ namespace NumSharp.Backends
                     {
                         offset = getOffset(coords);
                         if (!(src[offset] == default(int)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
-                case NPTypeCode.UInt32: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (uint*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(uint)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
 
@@ -185,48 +137,6 @@ namespace NumSharp.Backends
 
                     break;
                 }
-                case NPTypeCode.UInt64: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (ulong*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(ulong)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
-                case NPTypeCode.Char: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (char*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(char)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
-                case NPTypeCode.Double: {
-                    var incr = new NDCoordinatesIncrementor(x.shape);
-                    var coords = incr.Index;
-                    var src = (double*)x.Address;
-                    int offset;
-                    do
-                    {
-                        offset = getOffset(coords);
-                        if (!(src[offset] == default(double)))
-                            nonzeroCoords.Add(coords.CloneArray());
-                    } while (incr.Next() != null);
-
-                    break;
-                }
                 case NPTypeCode.Single: {
                     var incr = new NDCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
@@ -241,15 +151,15 @@ namespace NumSharp.Backends
 
                     break;
                 }
-                case NPTypeCode.Decimal: {
+                case NPTypeCode.Double: {
                     var incr = new NDCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
-                    var src = (decimal*)x.Address;
+                    var src = (double*)x.Address;
                     int offset;
                     do
                     {
                         offset = getOffset(coords);
-                        if (!(src[offset] == default(decimal)))
+                        if (!(src[offset] == default(double)))
                             nonzeroCoords.Add(coords.CloneArray());
                     } while (incr.Next() != null);
 

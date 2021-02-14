@@ -46,7 +46,7 @@ namespace NumSharp
         public abstract NDArray Negate(in NDArray nd);
 
         public abstract NDArray Dot(in NDArray x, in NDArray y);
-        public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
+        public abstract NDArray MatMul(NDArray lhs, NDArray rhs);
 
         public abstract NDArray Abs(in NDArray nd, Type dtype);
         public abstract NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null);

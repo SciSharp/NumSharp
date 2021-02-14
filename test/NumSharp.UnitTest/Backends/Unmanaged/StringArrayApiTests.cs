@@ -21,5 +21,16 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
             NDArray.AsStringArray(nd).SequenceEqual(strArray);
         }
+
+        [TestMethod]
+        public void ShuffleStringArray()
+        {
+            var nd = np.array(strArray);
+
+            var random_index = np.arange(strArray.Length);
+            var rng = np.random.RandomState();
+            rng.shuffle(random_index);
+            nd = nd[random_index];
+        }
     }
 }

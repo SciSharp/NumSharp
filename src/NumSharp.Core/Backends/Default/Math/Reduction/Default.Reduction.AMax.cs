@@ -62,7 +62,7 @@ namespace NumSharp.Backends
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
 
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -114,215 +114,11 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                byte max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<byte>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Int16: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
+                                    max = (byte) Math.Max((byte)moveNext(), max);
 
                                 ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -330,29 +126,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                int max = moveNext();
+                                int max = (int)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (int) Math.Max((int)moveNext(), max);
 
                                 ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -360,59 +141,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = moveNext();
+                                long max = (long)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (long) Math.Max((long)moveNext(), max);
 
                                 ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -420,158 +156,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = moveNext();
+                                float max = (float)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (float) Math.Max((float)moveNext(), max);
 
                                 ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<short>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt16: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -579,44 +171,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = arr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                double max = moveNext();
+                                double max = (double)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (double) Math.Max((double)moveNext(), max);
 
                                 ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ushort>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -638,39 +200,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
+                                    max = (byte) Math.Max((byte)moveNext(), max);
 
                                 ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -679,202 +211,13 @@ namespace NumSharp.Backends
                             do
                             {
                                 var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<int>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt32: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
+                                    max = (int) Math.Max((int)moveNext(), max);
 
                                 ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -882,59 +225,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                long max = moveNext();
+                                long max = (long)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (long) Math.Max((long)moveNext(), max);
 
                                 ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<uint>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -942,29 +240,29 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = moveNext();
+                                float max = (float)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (float) Math.Max((float)moveNext(), max);
 
                                 ret.SetSingle(Converts.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = arr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = moveNext();
+                                double max = (double)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (double) Math.Max((double)moveNext(), max);
 
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -986,39 +284,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
+                                    max = (byte) Math.Max((byte)moveNext(), max);
 
                                 ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1031,24 +299,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
+                                    max = (int) Math.Max((int)moveNext(), max);
 
                                 ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1057,232 +310,13 @@ namespace NumSharp.Backends
                             do
                             {
                                 var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<long>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt64: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((long)moveNext(), max);
+                                    max = (long) Math.Max((long)moveNext(), max);
 
                                 ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1290,377 +324,29 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<ulong>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Char: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max(moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                float max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetSingle(Converts.ToSingle(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<char>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                decimal max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Double: 
-                {
-                    switch (ret.GetTypeCode)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                byte max = (byte)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
-
-                                ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                int max = (int)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
-
-                                ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                long max = (long)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((long)moveNext(), max);
-
-                                ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float max = (float)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((float)moveNext(), max);
+                                    max = (float) Math.Max((float)moveNext(), max);
 
                                 ret.SetSingle(Converts.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = arr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                double max = (double)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((decimal)moveNext(), max);
+                                    max = (double) Math.Max((double)moveNext(), max);
 
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1682,39 +368,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
+                                    max = (byte) Math.Max((byte)moveNext(), max);
 
                                 ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1727,24 +383,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
+                                    max = (int) Math.Max((int)moveNext(), max);
 
                                 ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1757,54 +398,9 @@ namespace NumSharp.Backends
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((long)moveNext(), max);
+                                    max = (long) Math.Max((long)moveNext(), max);
 
                                 ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<float>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = moveNext();
-                                while (hasNext())
-                                    max = Math.Max(moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1815,26 +411,26 @@ namespace NumSharp.Backends
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                float max = moveNext();
+                                float max = (float)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (float) Math.Max((float)moveNext(), max);
 
                                 ret.SetSingle(Converts.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
                             do
                             {
                                 var iter = arr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = (decimal)moveNext();
+                                double max = (double)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((decimal)moveNext(), max);
+                                    max = (double) Math.Max((double)moveNext(), max);
 
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1843,7 +439,7 @@ namespace NumSharp.Backends
 		            }
                     break;
                 }
-			    case NPTypeCode.Decimal: 
+			    case NPTypeCode.Double: 
                 {
                     switch (ret.GetTypeCode)
 		            {
@@ -1851,44 +447,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte max = (byte)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((byte)moveNext(), max);
+                                    max = (byte) Math.Max((byte)moveNext(), max);
 
                                 ret.SetByte(Converts.ToByte(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                short max = (short)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((short)moveNext(), max);
-
-                                ret.SetInt16(Converts.ToInt16(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ushort max = (ushort)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ushort)moveNext(), max);
-
-                                ret.SetUInt16(Converts.ToUInt16(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1896,29 +462,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int max = (int)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((int)moveNext(), max);
+                                    max = (int) Math.Max((int)moveNext(), max);
 
                                 ret.SetInt32(Converts.ToInt32(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                uint max = (uint)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((uint)moveNext(), max);
-
-                                ret.SetUInt32(Converts.ToUInt32(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1926,59 +477,14 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long max = (long)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((long)moveNext(), max);
+                                    max = (long) Math.Max((long)moveNext(), max);
 
                                 ret.SetInt64(Converts.ToInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                ulong max = (ulong)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((ulong)moveNext(), max);
-
-                                ret.SetUInt64(Converts.ToUInt64(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                char max = (char)moveNext();
-                                while (hasNext())
-                                    max = (char) Math.Max((char)moveNext(), max);
-
-                                ret.SetChar(Converts.ToChar(max), iterIndex);
-                            } while (iterAxis.Next() != null && iterRet.Next() != null);
-                            break;
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            do
-                            {
-                                var iter = arr[slices].AsIterator<decimal>();
-                                var moveNext = iter.MoveNext;
-                                var hasNext = iter.HasNext;
-                                double max = (double)moveNext();
-                                while (hasNext())
-                                    max = Math.Max((double)moveNext(), max);
-
-                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -1986,29 +492,29 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float max = (float)moveNext();
                                 while (hasNext())
-                                    max = Math.Max((float)moveNext(), max);
+                                    max = (float) Math.Max((float)moveNext(), max);
 
                                 ret.SetSingle(Converts.ToSingle(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = arr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
-                                decimal max = moveNext();
+                                double max = (double)moveNext();
                                 while (hasNext())
-                                    max = Math.Max(moveNext(), max);
+                                    max = (double) Math.Max((double)moveNext(), max);
 
-                                ret.SetDecimal(Converts.ToDecimal(max), iterIndex);
+                                ret.SetDouble(Converts.ToDouble(max), iterIndex);
                             } while (iterAxis.Next() != null && iterRet.Next() != null);
                             break;
                         }
@@ -2040,7 +546,7 @@ namespace NumSharp.Backends
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
 
             var retType = typeCode ?? arr.GetTypeCode;
-#if _REGEN
+#if _REGEN1
             #region Compute
             switch (arr.GetTypeCode)
 		    {
@@ -2086,381 +592,55 @@ namespace NumSharp.Backends
                             var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            byte max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<byte>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Int16: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
+                                max = (byte) Math.Max((byte)moveNext(), max);
 
                             return Converts.ToByte(max);
                         }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<short>();
+                            var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            int max = moveNext();
+                            int max = (int)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (int) Math.Max((int)moveNext(), max);
 
                             return Converts.ToInt32(max);
                         }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<short>();
+                            var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = moveNext();
+                            long max = (long)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (long) Math.Max((long)moveNext(), max);
 
                             return Converts.ToInt64(max);
                         }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<short>();
+                            var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = moveNext();
+                            float max = (float)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (float) Math.Max((float)moveNext(), max);
 
                             return Converts.ToSingle(max);
                         }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<short>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt16: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
-                            while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
 			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<ushort>();
+                            var iter = arr.AsIterator<byte>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            double max = moveNext();
+                            double max = (double)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (double) Math.Max((double)moveNext(), max);
 
                             return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<ushort>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2478,249 +658,53 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
+                                max = (byte) Math.Max((byte)moveNext(), max);
 
                             return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
                         }
 			            case NPTypeCode.Int32: 
                         {
                             var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<int>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt32: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
-                            while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<uint>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
+                                max = (int) Math.Max((int)moveNext(), max);
 
                             return Converts.ToInt32(max);
                         }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<uint>();
+                            var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            long max = moveNext();
+                            long max = (long)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (long) Math.Max((long)moveNext(), max);
 
                             return Converts.ToInt64(max);
                         }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<uint>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<uint>();
+                            var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = moveNext();
+                            float max = (float)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (float) Math.Max((float)moveNext(), max);
 
                             return Converts.ToSingle(max);
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<uint>();
+                            var iter = arr.AsIterator<int>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = moveNext();
+                            double max = (double)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (double) Math.Max((double)moveNext(), max);
 
-                            return Converts.ToDecimal(max);
+                            return Converts.ToDouble(max);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -2738,31 +722,9 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
+                                max = (byte) Math.Max((byte)moveNext(), max);
 
                             return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -2771,476 +733,42 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
+                                max = (int) Math.Max((int)moveNext(), max);
 
                             return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
                         }
 			            case NPTypeCode.Int64: 
                         {
                             var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<long>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.UInt64: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
-                            while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
-                            while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = Math.Max((long)moveNext(), max);
+                                max = (long) Math.Max((long)moveNext(), max);
 
                             return Converts.ToInt64(max);
                         }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<ulong>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Char: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
-                            while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max(moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            float max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToSingle(max);
-                        }
-			            case NPTypeCode.Decimal: 
-                        {
-                            var iter = arr.AsIterator<char>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            decimal max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDecimal(max);
-                        }
-			            default:
-				            throw new NotSupportedException();
-		            }
-                    break;
-                }
-			    case NPTypeCode.Double: 
-                {
-                    switch (retType)
-		            {
-			            case NPTypeCode.Byte: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            byte max = (byte)moveNext();
-                            while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
-
-                            return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
-			            case NPTypeCode.Int32: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            int max = (int)moveNext();
-                            while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
-
-                            return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
-			            case NPTypeCode.Int64: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            long max = (long)moveNext();
-                            while (hasNext())
-                                max = Math.Max((long)moveNext(), max);
-
-                            return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<double>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
-			            case NPTypeCode.Single: 
-                        {
-                            var iter = arr.AsIterator<double>();
+                            var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             float max = (float)moveNext();
                             while (hasNext())
-                                max = Math.Max((float)moveNext(), max);
+                                max = (float) Math.Max((float)moveNext(), max);
 
                             return Converts.ToSingle(max);
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<double>();
+                            var iter = arr.AsIterator<long>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            double max = (double)moveNext();
                             while (hasNext())
-                                max = Math.Max((decimal)moveNext(), max);
+                                max = (double) Math.Max((double)moveNext(), max);
 
-                            return Converts.ToDecimal(max);
+                            return Converts.ToDouble(max);
                         }
 			            default:
 				            throw new NotSupportedException();
@@ -3258,31 +786,9 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
+                                max = (byte) Math.Max((byte)moveNext(), max);
 
                             return Converts.ToByte(max);
-                        }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
                         }
 			            case NPTypeCode.Int32: 
                         {
@@ -3291,20 +797,9 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
+                                max = (int) Math.Max((int)moveNext(), max);
 
                             return Converts.ToInt32(max);
-                        }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
                         }
 			            case NPTypeCode.Int64: 
                         {
@@ -3313,194 +808,95 @@ namespace NumSharp.Backends
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = Math.Max((long)moveNext(), max);
+                                max = (long) Math.Max((long)moveNext(), max);
 
                             return Converts.ToInt64(max);
-                        }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<float>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = moveNext();
-                            while (hasNext())
-                                max = Math.Max(moveNext(), max);
-
-                            return Converts.ToDouble(max);
                         }
 			            case NPTypeCode.Single: 
                         {
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            float max = moveNext();
+                            float max = (float)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (float) Math.Max((float)moveNext(), max);
 
                             return Converts.ToSingle(max);
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
                             var iter = arr.AsIterator<float>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = (decimal)moveNext();
+                            double max = (double)moveNext();
                             while (hasNext())
-                                max = Math.Max((decimal)moveNext(), max);
+                                max = (double) Math.Max((double)moveNext(), max);
 
-                            return Converts.ToDecimal(max);
+                            return Converts.ToDouble(max);
                         }
 			            default:
 				            throw new NotSupportedException();
 		            }
                     break;
                 }
-			    case NPTypeCode.Decimal: 
+			    case NPTypeCode.Double: 
                 {
                     switch (retType)
 		            {
 			            case NPTypeCode.Byte: 
                         {
-                            var iter = arr.AsIterator<decimal>();
+                            var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             byte max = (byte)moveNext();
                             while (hasNext())
-                                max = Math.Max((byte)moveNext(), max);
+                                max = (byte) Math.Max((byte)moveNext(), max);
 
                             return Converts.ToByte(max);
                         }
-			            case NPTypeCode.Int16: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            short max = (short)moveNext();
-                            while (hasNext())
-                                max = Math.Max((short)moveNext(), max);
-
-                            return Converts.ToInt16(max);
-                        }
-			            case NPTypeCode.UInt16: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ushort max = (ushort)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ushort)moveNext(), max);
-
-                            return Converts.ToUInt16(max);
-                        }
 			            case NPTypeCode.Int32: 
                         {
-                            var iter = arr.AsIterator<decimal>();
+                            var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             int max = (int)moveNext();
                             while (hasNext())
-                                max = Math.Max((int)moveNext(), max);
+                                max = (int) Math.Max((int)moveNext(), max);
 
                             return Converts.ToInt32(max);
                         }
-			            case NPTypeCode.UInt32: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            uint max = (uint)moveNext();
-                            while (hasNext())
-                                max = Math.Max((uint)moveNext(), max);
-
-                            return Converts.ToUInt32(max);
-                        }
 			            case NPTypeCode.Int64: 
                         {
-                            var iter = arr.AsIterator<decimal>();
+                            var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             long max = (long)moveNext();
                             while (hasNext())
-                                max = Math.Max((long)moveNext(), max);
+                                max = (long) Math.Max((long)moveNext(), max);
 
                             return Converts.ToInt64(max);
                         }
-			            case NPTypeCode.UInt64: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            ulong max = (ulong)moveNext();
-                            while (hasNext())
-                                max = Math.Max((ulong)moveNext(), max);
-
-                            return Converts.ToUInt64(max);
-                        }
-			            case NPTypeCode.Char: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            char max = (char)moveNext();
-                            while (hasNext())
-                                max = (char) Math.Max((char)moveNext(), max);
-
-                            return Converts.ToChar(max);
-                        }
-			            case NPTypeCode.Double: 
-                        {
-                            var iter = arr.AsIterator<decimal>();
-                            var moveNext = iter.MoveNext;
-                            var hasNext = iter.HasNext;
-                            double max = (double)moveNext();
-                            while (hasNext())
-                                max = Math.Max((double)moveNext(), max);
-
-                            return Converts.ToDouble(max);
-                        }
 			            case NPTypeCode.Single: 
                         {
-                            var iter = arr.AsIterator<decimal>();
+                            var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
                             float max = (float)moveNext();
                             while (hasNext())
-                                max = Math.Max((float)moveNext(), max);
+                                max = (float) Math.Max((float)moveNext(), max);
 
                             return Converts.ToSingle(max);
                         }
-			            case NPTypeCode.Decimal: 
+			            case NPTypeCode.Double: 
                         {
-                            var iter = arr.AsIterator<decimal>();
+                            var iter = arr.AsIterator<double>();
                             var moveNext = iter.MoveNext;
                             var hasNext = iter.HasNext;
-                            decimal max = moveNext();
+                            double max = (double)moveNext();
                             while (hasNext())
-                                max = Math.Max(moveNext(), max);
+                                max = (double) Math.Max((double)moveNext(), max);
 
-                            return Converts.ToDecimal(max);
+                            return Converts.ToDouble(max);
                         }
 			            default:
 				            throw new NotSupportedException();

@@ -125,29 +125,23 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if _REGEN
+#if _REGEN1
 	            %foreach all_dtypes,all_dtypes_lowercase%
 	            case NPTypeCode.#1: return typeof(#2);
 	            %
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Complex: return typeof(Complex);
-                case NPTypeCode.Boolean: return typeof(bool);
-                case NPTypeCode.Byte: return typeof(byte);
-                case NPTypeCode.Int16: return typeof(short);
-                case NPTypeCode.UInt16: return typeof(ushort);
-                case NPTypeCode.Int32: return typeof(int);
-                case NPTypeCode.UInt32: return typeof(uint);
-                case NPTypeCode.Int64: return typeof(long);
-                case NPTypeCode.UInt64: return typeof(ulong);
+	            case NPTypeCode.Boolean: return typeof(bool);
+	            case NPTypeCode.Byte: return typeof(byte);
                 case NPTypeCode.Char: return typeof(char);
-                case NPTypeCode.Double: return typeof(double);
-                case NPTypeCode.Single: return typeof(float);
-                case NPTypeCode.Decimal: return typeof(decimal);
-                case NPTypeCode.String: return typeof(string);
-                default:
-                    throw new NotSupportedException();
+                case NPTypeCode.Int32: return typeof(int);
+	            case NPTypeCode.Int64: return typeof(long);
+	            case NPTypeCode.Single: return typeof(float);
+	            case NPTypeCode.Double: return typeof(double);
+	            case NPTypeCode.String: return typeof(string);
+	            default:
+		            throw new NotSupportedException();
 #endif
             }
         }
@@ -588,7 +582,7 @@ namespace NumSharp
         /// <returns>dtype in case when statistics are computed like <see cref="np.sum"/></returns>
         public static NPTypeCode GetAccumulatingType(this NPTypeCode typeCode)
         {
-#if _REGEN
+#if _REGEN1
             #region Compute
 		    switch (typeCode)
 		    {
@@ -603,18 +597,11 @@ namespace NumSharp
             #region Compute
 		    switch (typeCode)
 		    {
-			    case NPTypeCode.Boolean: return NPTypeCode.Int32;
-			    case NPTypeCode.Byte: return NPTypeCode.UInt32;
-			    case NPTypeCode.Int16: return NPTypeCode.Int32;
-			    case NPTypeCode.UInt16: return NPTypeCode.UInt32;
-			    case NPTypeCode.Int32: return NPTypeCode.Int32;
-			    case NPTypeCode.UInt32: return NPTypeCode.UInt32;
-			    case NPTypeCode.Int64: return NPTypeCode.Int64;
-			    case NPTypeCode.UInt64: return NPTypeCode.UInt64;
-			    case NPTypeCode.Char: return NPTypeCode.UInt32;
-			    case NPTypeCode.Double: return NPTypeCode.Double;
-			    case NPTypeCode.Single: return NPTypeCode.Single;
-			    case NPTypeCode.Decimal: return NPTypeCode.Decimal;
+			    case NPTypeCode.Boolean: return NPTypeCode.Byte;
+			    case NPTypeCode.Byte: return NPTypeCode.Int32;
+			    case NPTypeCode.Int32: return NPTypeCode.Int64;
+			    case NPTypeCode.Int64: return NPTypeCode.Single;
+			    case NPTypeCode.Single: return NPTypeCode.Double;
 			    default:
 				    throw new NotSupportedException();
 		    }
@@ -629,7 +616,7 @@ namespace NumSharp
         /// </summary>
         public static ValueType GetDefaultValue(this NPTypeCode typeCode)
         {
-#if _REGEN
+#if _REGEN1
             #region Compute
 		    switch (typeCode)
 		    {
@@ -646,16 +633,10 @@ namespace NumSharp
 		    {
 			    case NPTypeCode.Boolean: return default(bool);
 			    case NPTypeCode.Byte: return default(byte);
-			    case NPTypeCode.Int16: return default(short);
-			    case NPTypeCode.UInt16: return default(ushort);
 			    case NPTypeCode.Int32: return default(int);
-			    case NPTypeCode.UInt32: return default(uint);
 			    case NPTypeCode.Int64: return default(long);
-			    case NPTypeCode.UInt64: return default(ulong);
-			    case NPTypeCode.Char: return default(char);
-			    case NPTypeCode.Double: return default(double);
 			    case NPTypeCode.Single: return default(float);
-			    case NPTypeCode.Decimal: return default(decimal);
+			    case NPTypeCode.Double: return default(double);
 			    default:
 				    throw new NotSupportedException();
 		    }

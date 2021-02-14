@@ -104,7 +104,7 @@ namespace NumSharp
         }
 
 
-#if _REGEN
+#if _REGEN1
         %pre = "arrays.Item"
         %foreach range(2,8)%
         /// <summary>

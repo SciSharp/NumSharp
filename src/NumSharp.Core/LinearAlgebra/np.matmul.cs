@@ -10,6 +10,6 @@
         /// <returns>The matrix product of the inputs. This is a scalar only when both x1, x2 are 1-d vectors.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
         public static NDArray matmul(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Matmul(x1, x2);
+            => x1.TensorEngine.MatMul(x1, x2);
     }
 }

@@ -184,26 +184,19 @@ namespace NumSharp
             {
                 switch (code)
                 {
-#if _REGEN
+#if _REGEN1
 	                %foreach all_dtypes%
 	                case NPTypeCode.#1: return new DType(typeof(#1));
 	                %
 	                default:
 		                throw new NotSupportedException();
 #else
-                    case NPTypeCode.Complex: return new DType(typeof(Complex));
 	                case NPTypeCode.Boolean: return new DType(typeof(Boolean));
 	                case NPTypeCode.Byte: return new DType(typeof(Byte));
-	                case NPTypeCode.Int16: return new DType(typeof(Int16));
-	                case NPTypeCode.UInt16: return new DType(typeof(UInt16));
 	                case NPTypeCode.Int32: return new DType(typeof(Int32));
-	                case NPTypeCode.UInt32: return new DType(typeof(UInt32));
 	                case NPTypeCode.Int64: return new DType(typeof(Int64));
-	                case NPTypeCode.UInt64: return new DType(typeof(UInt64));
-	                case NPTypeCode.Char: return new DType(typeof(Char));
-	                case NPTypeCode.Double: return new DType(typeof(Double));
 	                case NPTypeCode.Single: return new DType(typeof(Single));
-	                case NPTypeCode.Decimal: return new DType(typeof(Decimal));
+	                case NPTypeCode.Double: return new DType(typeof(Double));
 	                case NPTypeCode.String: return new DType(typeof(String));
 	                default:
 		                throw new NotSupportedException();

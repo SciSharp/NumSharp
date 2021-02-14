@@ -125,6 +125,27 @@ namespace NumSharp
             return nd.GetAtIndex<ulong>(0);
         }
 
+        // byte operators
+        public static implicit operator NDArray(byte d) => NDArray.Scalar<byte>(d);
+
+        public static implicit operator byte(NDArray nd)
+        {
+            if (nd.ndim != 0)
+                throw new IncorrectShapeException();
+
+            return nd.GetAtIndex<byte>(0);
+        }
+
+        public void Deconstruct(out byte b, out byte g, out byte r)
+        {
+            if (ndim == 0)
+                throw new IncorrectShapeException();
+
+            b = GetAtIndex<byte>(0);
+            g = GetAtIndex<byte>(1);
+            r = GetAtIndex<byte>(2);
+        }
+
         //char operators
         public static implicit operator NDArray(char d) => NDArray.Scalar<char>(d);
 
@@ -171,7 +192,5 @@ namespace NumSharp
 #endif
 
         public static implicit operator NDArray(Complex d) => NDArray.Scalar<Complex>(d);
-
-        public static explicit operator string(NDArray d) => d.ToString(false);
     }
 }

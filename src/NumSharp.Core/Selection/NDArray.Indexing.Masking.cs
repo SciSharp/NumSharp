@@ -23,7 +23,18 @@ namespace NumSharp
             get => FetchIndices(this, np.nonzero(mask), null, true);
             set
             {
-                throw new NotImplementedException("Setter is not implemented yet");
+                if(mask.ndim == 1)
+                {
+                    for (int i = 0; i < mask.size; i++)
+                    {
+                        if (mask.GetBoolean(i))
+                            this[i] = value;
+                    }
+                }
+                else
+                {
+                    throw new NotImplementedException("Setter is not implemented yet");
+                }
             }
         }
     }

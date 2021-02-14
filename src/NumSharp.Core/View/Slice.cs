@@ -51,7 +51,6 @@ namespace NumSharp
     /// a=[[1, 2], [3, 4]]                                                                                                                                <br></br>
     /// a[:, 1] returns the second column of that 2x2 matrix as a 1-D vector                                                                              <br></br>
     /// </summary>
-    [DebuggerStepThrough]
     public class Slice : IIndex
     {
         /// <summary>

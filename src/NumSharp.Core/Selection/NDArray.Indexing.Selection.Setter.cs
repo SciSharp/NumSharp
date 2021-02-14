@@ -253,7 +253,7 @@ namespace NumSharp
 
         protected static void SetIndices(NDArray src, NDArray[] indices, NDArray values)
         {
-#if _REGEN
+#if _REGEN1
             #region Compute
 		    switch (src.typecode)
 		    {
@@ -267,51 +267,18 @@ namespace NumSharp
 #else
 
             #region Compute
-
-            switch (src.typecode)
-            {
-                case NPTypeCode.Boolean:
-                    SetIndices<bool>(src.MakeGeneric<bool>(), indices, values);
-                    break;
-                case NPTypeCode.Byte:
-                    SetIndices<byte>(src.MakeGeneric<byte>(), indices, values);
-                    break;
-                case NPTypeCode.Int16:
-                    SetIndices<short>(src.MakeGeneric<short>(), indices, values);
-                    break;
-                case NPTypeCode.UInt16:
-                    SetIndices<ushort>(src.MakeGeneric<ushort>(), indices, values);
-                    break;
-                case NPTypeCode.Int32:
-                    SetIndices<int>(src.MakeGeneric<int>(), indices, values);
-                    break;
-                case NPTypeCode.UInt32:
-                    SetIndices<uint>(src.MakeGeneric<uint>(), indices, values);
-                    break;
-                case NPTypeCode.Int64:
-                    SetIndices<long>(src.MakeGeneric<long>(), indices, values);
-                    break;
-                case NPTypeCode.UInt64:
-                    SetIndices<ulong>(src.MakeGeneric<ulong>(), indices, values);
-                    break;
-                case NPTypeCode.Char:
-                    SetIndices<char>(src.MakeGeneric<char>(), indices, values);
-                    break;
-                case NPTypeCode.Double:
-                    SetIndices<double>(src.MakeGeneric<double>(), indices, values);
-                    break;
-                case NPTypeCode.Single:
-                    SetIndices<float>(src.MakeGeneric<float>(), indices, values);
-                    break;
-                case NPTypeCode.Decimal:
-                    SetIndices<decimal>(src.MakeGeneric<decimal>(), indices, values);
-                    break;
-                default:
-                    throw new NotSupportedException();
-            }
-
+		    switch (src.typecode)
+		    {
+			    case NPTypeCode.Boolean: SetIndices<bool>(src.MakeGeneric<bool>(), indices, values); break;
+			    case NPTypeCode.Byte: SetIndices<byte>(src.MakeGeneric<byte>(), indices, values); break;
+			    case NPTypeCode.Int32: SetIndices<int>(src.MakeGeneric<int>(), indices, values); break;
+			    case NPTypeCode.Int64: SetIndices<long>(src.MakeGeneric<long>(), indices, values); break;
+			    case NPTypeCode.Single: SetIndices<float>(src.MakeGeneric<float>(), indices, values); break;
+			    case NPTypeCode.Double: SetIndices<double>(src.MakeGeneric<double>(), indices, values); break;
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
-
 #endif
         }
 

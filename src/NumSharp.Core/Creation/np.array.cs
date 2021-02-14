@@ -347,7 +347,7 @@ namespace NumSharp
 #if _REGEN
         %l = "data.GetLength("
         %r = ")"
-        %foreach range(1,16)%
+        %foreach range(1,8)%
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
@@ -381,12 +381,12 @@ namespace NumSharp
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[] data, bool copy) where T : unmanaged
+        public static NDArray array<T>(T[] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.Length));
+            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0)));
         }
 
         /// <summary>
@@ -520,158 +520,6 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(data));
 
             return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11), data.GetLength(12)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11), data.GetLength(12), data.GetLength(13)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11), data.GetLength(12), data.GetLength(13), data.GetLength(14)));
-        }
-
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[,,,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
-
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11), data.GetLength(12), data.GetLength(13), data.GetLength(14), data.GetLength(15)));
         }
 #endif
     }

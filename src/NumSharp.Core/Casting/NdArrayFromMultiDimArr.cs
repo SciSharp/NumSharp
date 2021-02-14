@@ -57,25 +57,9 @@ namespace NumSharp
                     return np.array((T[,,,,,,])ndarray, copy);
                 case 8:
                     return np.array((T[,,,,,,,])ndarray, copy);
-                case 9:
-                    return np.array((T[,,,,,,,,])ndarray, copy);
-                case 10:
-                    return np.array((T[,,,,,,,,,])ndarray, copy);
-                case 11:
-                    return np.array((T[,,,,,,,,,,])ndarray, copy);
-                case 12:
-                    return np.array((T[,,,,,,,,,,,])ndarray, copy);
-                case 13:
-                    return np.array((T[,,,,,,,,,,,,])ndarray, copy);
-                case 14:
-                    return np.array((T[,,,,,,,,,,,,,])ndarray, copy); 
-                case 15:
-                    return np.array((T[,,,,,,,,,,,,,,])ndarray, copy);
-                case 16:
-                    return np.array((T[,,,,,,,,,,,,,,,])ndarray, copy);
+                default:
+                    throw new NotSupportedException($"Too many dimensions {ndarray.Rank}");
             }
-
-            throw new NotSupportedException();
         }
     }
 }

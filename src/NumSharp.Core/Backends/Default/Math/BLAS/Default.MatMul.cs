@@ -11,7 +11,7 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
-        public override NDArray Matmul(NDArray lhs, NDArray rhs)
+        public override NDArray MatMul(NDArray lhs, NDArray rhs)
         {
             if (lhs.Shape.IsScalar || rhs.Shape.IsScalar)
                 throw new InvalidOperationException("Matmul can't handle scalar multiplication, use `*` or `np.dot(..)` instead");

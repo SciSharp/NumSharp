@@ -161,7 +161,7 @@ namespace NumSharp.UnitTest.Utilities
     //[DebuggerStepThrough]
     public class NDArrayAssertions : ReferenceTypeAssertions<NDArray, NDArrayAssertions>
     {
-         public NDArrayAssertions(NDArray instance)
+        public NDArrayAssertions(NDArray instance)
         {
             Subject = instance;
         }

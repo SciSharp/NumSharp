@@ -303,7 +303,7 @@ namespace NumSharp.Backends
             int i, nd, k, j, tmp;
 
             //is left a scalar
-            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
+            if (leftShape.IsScalar || leftShape.NDim == 0 && leftShape.size == 1)
             {
                 left = rightShape; //copy right
                 left.strides = new int[left.strides.Length]; //zero strides
@@ -311,7 +311,7 @@ namespace NumSharp.Backends
                 return (left, rightShape);
             }
             //is right a scalar
-            else if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
+            else if (rightShape.IsScalar || rightShape.NDim == 0 && rightShape.size == 1)
             {
                 right = leftShape; //copy left
                 right.strides = new int[right.strides.Length]; //zero strides

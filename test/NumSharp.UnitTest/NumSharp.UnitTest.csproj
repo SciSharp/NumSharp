@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!--<TargetFramework>net472</TargetFramework>-->
-    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
     <!--<TargetFramework>netstandard2.0</TargetFramework>-->
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -48,10 +48,6 @@
 	<DefineConstants>SIGNING</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
-    <PackageReference Include="System.Memory" Version="4.5.1" />
-  </ItemGroup>
-
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netstandard\d'))">      
     <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="2.0.1" />
@@ -59,9 +55,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="2.1.1" />
-    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
-    <PackageReference Include="System.Memory" Version="4.5.3" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="3.1.1" />
+    <PackageReference Include="System.Drawing.Common" Version="4.7.0" />
+    <PackageReference Include="System.Memory" Version="4.5.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -74,9 +70,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Codecov" Version="1.5.0" />
-    <PackageReference Include="FluentAssertions" Version="5.7.0" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.5.0" />
+    <PackageReference Include="Codecov" Version="1.12.2" />
+    <PackageReference Include="FluentAssertions" Version="5.10.3" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="OpenCover" Version="4.7.922" />
   </ItemGroup>
 
@@ -85,15 +81,10 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
-    <PackageReference Include="MSTest.TestAdapter" Version="2.0.0-beta4" />
-    <PackageReference Include="MSTest.TestFramework" Version="2.0.0-beta4" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.6.0-preview7.19362.9" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
-    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.7.1" />
+    <PackageReference Include="MSTest.TestAdapter" Version="2.1.2" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.1.2" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.7.1" />
   </ItemGroup>
 
 
@@ -105,30 +96,12 @@
 
 
   <ItemGroup>
-    <None Remove="NumSharp.Bitmap\resources\captcha-a.png" />
-    <None Remove="NumSharp.Bitmap\resources\captcha-b.png" />
-    <None Remove="NumSharp.Bitmap\resources\captcha-c.png" />
-    <None Remove="NumSharp.Bitmap\resources\captcha-d.png" />
-  </ItemGroup>
-
-
-  <ItemGroup>
-    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-a.png">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-b.png">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-c.png">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-    <EmbeddedResource Include="NumSharp.Bitmap\resources\captcha-d.png">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
-
-
-  <ItemGroup>
     <None Include="DataSample.cs" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Bitmap\NumSharp.Bitmap.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.csproj" />
   </ItemGroup>
 </Project>

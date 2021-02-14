@@ -76,16 +76,6 @@ namespace NumSharp.Benchmark.Unmanaged
             }
         }
 
-        [Benchmark]
-        public void NDArray()
-        {
-            for (int j = 0; j < iterations_large; j++)
-            {
-                var a = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(100)), new Shape(100));
-                a.Storage.InternalArray.DangerousFree();
-            }
-        }
-
         [Benchmark, MethodImpl(MethodImplOptions.NoOptimization)]
         public void Fixing()
         {
@@ -138,16 +128,6 @@ namespace NumSharp.Benchmark.Unmanaged
         }
 
         [Benchmark]
-        public void NDArray500k()
-        {
-            for (int j = 0; j < iterations_large; j++)
-            {
-                var a = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(500_000)), new Shape(500_000));
-                a.Storage.InternalArray.DangerousFree();
-            }
-        }
-
-        [Benchmark]
         public void MarshalAllocHGlobal500k()
         {
             for (int j = 0; j < iterations_large; j++)
@@ -186,16 +166,6 @@ namespace NumSharp.Benchmark.Unmanaged
             {
                 fixed (double* ptr = doubles1m)
                 { }
-            }
-        }
-
-        [Benchmark]
-        public void NDArray1m()
-        {
-            for (int j = 0; j < iterations_large; j++)
-            {
-                var a = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(1_000_000)), new Shape(1_000_000));
-                a.Storage.InternalArray.DangerousFree();
             }
         }
 

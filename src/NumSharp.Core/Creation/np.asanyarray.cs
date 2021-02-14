@@ -23,7 +23,7 @@ namespace NumSharp
                     ret = new NDArray(array);
                     break;
                 case string str:
-                    ret = str; //implicit cast located in NDArray.Implicit.Array
+                    ret = (NDArray)str; //implicit cast located in NDArray.Implicit.Array
                     break;
                 default:
                     var type = a.GetType();

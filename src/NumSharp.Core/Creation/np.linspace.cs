@@ -76,7 +76,7 @@ namespace NumSharp
 
             switch (ret.GetTypeCode)
             {
-#if _REGEN
+#if _REGEN1
 	            case NPTypeCode.Boolean:
 	            {
                     unsafe
@@ -102,7 +102,7 @@ namespace NumSharp
 	            default:
 		            throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean:
+	            case NPTypeCode.Boolean:
 	            {
                     unsafe
                     {
@@ -122,42 +122,12 @@ namespace NumSharp
 
                     return ret;
 	            }
-	            case NPTypeCode.Int16:
-	            {
-                    unsafe
-                    {
-                        var addr = (short*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToInt16(start + i * step));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.UInt16:
-	            {
-                    unsafe
-                    {
-                        var addr = (ushort*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt16(start + i * step));
-                    }
-
-                    return ret;
-	            }
 	            case NPTypeCode.Int32:
 	            {
                     unsafe
                     {
                         var addr = (int*)ret.Address;
                         Parallel.For(0, num, i => *(addr + i) = Converts.ToInt32(start + i * step));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.UInt32:
-	            {
-                    unsafe
-                    {
-                        var addr = (uint*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt32(start + i * step));
                     }
 
                     return ret;
@@ -172,36 +142,6 @@ namespace NumSharp
 
                     return ret;
 	            }
-	            case NPTypeCode.UInt64:
-	            {
-                    unsafe
-                    {
-                        var addr = (ulong*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt64(start + i * step));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Char:
-	            {
-                    unsafe
-                    {
-                        var addr = (char*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToChar(start + i * step));
-                    }
-
-                    return ret;
-	            }
-	            case NPTypeCode.Double:
-	            {
-                    unsafe
-                    {
-                        var addr = (double*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToDouble(start + i * step));
-                    }
-
-                    return ret;
-	            }
 	            case NPTypeCode.Single:
 	            {
                     unsafe
@@ -212,12 +152,12 @@ namespace NumSharp
 
                     return ret;
 	            }
-	            case NPTypeCode.Decimal:
+	            case NPTypeCode.Double:
 	            {
                     unsafe
                     {
-                        var addr = (decimal*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToDecimal(start + i * step));
+                        var addr = (double*)ret.Address;
+                        Parallel.For(0, num, i => *(addr + i) = Converts.ToDouble(start + i * step));
                     }
 
                     return ret;

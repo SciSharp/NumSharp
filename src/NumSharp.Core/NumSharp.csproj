@@ -5,33 +5,34 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-    <Authors>Eli Belash, Haiping Chen, Meinrad Recheis, Deepak Kumar Battini</Authors>
-    <PackageOutputPath>../../packages</PackageOutputPath>
+    <Authors>Haiping Chen, Eli Belash, Meinrad Recheis</Authors>
+    <PackageOutputPath>../packages</PackageOutputPath>
     <Description>NumSharp is the fundamental library for scientific computing with .NET providing a similar API to python's numpy scientific library. NumSharp has full N-D, broadcasting and axis support.  If you want to use .NET to get started with machine learning, NumSharp will be your best tool.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
-    <Copyright>2019 © SciSharp STACK Team</Copyright>
-    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
-    <PackageReleaseNotes>Rewrite of the NDArray's getter mechanism. Added np.nonzero, np.maximum, np.minimum, np.all, np.any. np.clip: Added @out argument. Added NPTypeCode.Float as an alias to NPTypeCode.Single.</PackageReleaseNotes>
-    <AssemblyVersion>0.20.5</AssemblyVersion>
-    <FileVersion>0.20.5</FileVersion>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
+    <RepositoryUrl>https://github.com/SciSharp</RepositoryUrl>
+    <PackageReleaseNotes></PackageReleaseNotes>
+    <AssemblyVersion>0.30.0</AssemblyVersion>
+    <FileVersion>0.30.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>8.0</LangVersion>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <PackageId>NumSharp</PackageId>
     <Product>NumSharp</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp</RootNamespace>
-    <Version>0.20.5</Version>
+    <Version>0.30.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>AnyCPU;x64;x86</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <DelaySign>false</DelaySign>
-    <Configurations>Debug;Release;Publish;Debug-Minimal</Configurations>
+    <Configurations>Debug;Release</Configurations>
+    <SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
@@ -48,13 +49,28 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>DEBUG;NETSTANDARD</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;NETSTANDARD</DefineConstants>
     <NoWarn>1701;1702;IDE1006;0029</NoWarn>
-    <DocumentationFile></DocumentationFile>
-    <PlatformTarget>x64</PlatformTarget>
+    <DocumentationFile>NumSharp.xml</DocumentationFile>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
+    <DefineConstants>TRACE;DEBUG;NETSTANDARD</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|AnyCPU'">
+    <DefineConstants>DEBUG;MINIMAL</DefineConstants>
+    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
+    <DocumentationFile />
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <WarningLevel>3</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|x86'">
     <DefineConstants>DEBUG;MINIMAL</DefineConstants>
     <NoWarn>1701;1702;IDE1006;0029</NoWarn>
     <DocumentationFile />
@@ -80,10 +96,20 @@
     <DocumentationFile></DocumentationFile>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+    <DocumentationFile />
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DocumentationFile />
     <Optimize>true</Optimize>
 	<SignAssembly>true</SignAssembly>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|x86'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+    <SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -144,8 +170,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Memory" Version="4.5.3" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.2" />
+    <PackageReference Include="System.Memory" Version="4.5.4" />
   </ItemGroup>
 
   <ItemGroup>

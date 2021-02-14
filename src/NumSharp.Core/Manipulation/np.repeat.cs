@@ -21,7 +21,7 @@ namespace NumSharp
             a = a.ravel();
             switch (a.GetTypeCode)
             {
-#if _REGEN
+#if _REGEN1
 	            %foreach supported_dtypes,supported_dtypes_lowercase%
 	            case NPTypeCode.#1:
 	            {
@@ -54,37 +54,10 @@ namespace NumSharp
                         ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
                     return ret;
 	            }
-	            case NPTypeCode.Int16:
-	            {
-		            var ret = new NDArray(NPTypeCode.Int16, Shape.Vector(size));
-                    var data = a.MakeGeneric<short>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
-	            case NPTypeCode.UInt16:
-	            {
-		            var ret = new NDArray(NPTypeCode.UInt16, Shape.Vector(size));
-                    var data = a.MakeGeneric<ushort>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
 	            case NPTypeCode.Int32:
 	            {
 		            var ret = new NDArray(NPTypeCode.Int32, Shape.Vector(size));
                     var data = a.MakeGeneric<int>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
-	            case NPTypeCode.UInt32:
-	            {
-		            var ret = new NDArray(NPTypeCode.UInt32, Shape.Vector(size));
-                    var data = a.MakeGeneric<uint>();
                     for (int i = 0; i < a.size; i++)
                     for (int j = 0; j < repeats; j++)
                         ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
@@ -99,33 +72,6 @@ namespace NumSharp
                         ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
                     return ret;
 	            }
-	            case NPTypeCode.UInt64:
-	            {
-		            var ret = new NDArray(NPTypeCode.UInt64, Shape.Vector(size));
-                    var data = a.MakeGeneric<ulong>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
-	            case NPTypeCode.Char:
-	            {
-		            var ret = new NDArray(NPTypeCode.Char, Shape.Vector(size));
-                    var data = a.MakeGeneric<char>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
-	            case NPTypeCode.Double:
-	            {
-		            var ret = new NDArray(NPTypeCode.Double, Shape.Vector(size));
-                    var data = a.MakeGeneric<double>();
-                    for (int i = 0; i < a.size; i++)
-                    for (int j = 0; j < repeats; j++)
-                        ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
-                    return ret;
-	            }
 	            case NPTypeCode.Single:
 	            {
 		            var ret = new NDArray(NPTypeCode.Single, Shape.Vector(size));
@@ -135,10 +81,10 @@ namespace NumSharp
                         ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));
                     return ret;
 	            }
-	            case NPTypeCode.Decimal:
+	            case NPTypeCode.Double:
 	            {
-		            var ret = new NDArray(NPTypeCode.Decimal, Shape.Vector(size));
-                    var data = a.MakeGeneric<decimal>();
+		            var ret = new NDArray(NPTypeCode.Double, Shape.Vector(size));
+                    var data = a.MakeGeneric<double>();
                     for (int i = 0; i < a.size; i++)
                     for (int j = 0; j < repeats; j++)
                         ret.itemset(new int[1] {i * repeats + j}, data.GetAtIndex(i));

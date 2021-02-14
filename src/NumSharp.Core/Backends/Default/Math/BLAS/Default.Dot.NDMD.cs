@@ -29,7 +29,7 @@ namespace NumSharp.Backends
             var ret = new NDArray(np._FindCommonArrayType(lhs.typecode, rhs.typecode), retShape);
 
             //TODO! we can optimize GetOffset here
-#if _REGEN
+#if _REGEN1
             %letters = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","aa","bb","cc","dd","ee","ff","gg","hh","ii","jj","kk","ll","mm","nn","oo","pp","qq","rr","ss","tt","uu","vv","ww","xx","yy","zz"]
             switch (lshape.Length) {
             %foreach range(2, 14)%

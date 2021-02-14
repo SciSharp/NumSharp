@@ -145,7 +145,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\NumSharp.Core\NumSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

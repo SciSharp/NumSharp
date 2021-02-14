@@ -13,7 +13,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html</remarks>
         public static bool any(NDArray a)
         {
-#if _REGEN
+#if _REGEN1
             #region Compute
 		    switch (a.typecode)
 		    {
@@ -27,23 +27,17 @@ namespace NumSharp
 #else
 
             #region Compute
-            switch (a.typecode)
-            {
-                case NPTypeCode.Boolean: return _any_linear<bool>(a.MakeGeneric<bool>());
-                case NPTypeCode.Byte: return _any_linear<byte>(a.MakeGeneric<byte>());
-                case NPTypeCode.Int16: return _any_linear<short>(a.MakeGeneric<short>());
-                case NPTypeCode.UInt16: return _any_linear<ushort>(a.MakeGeneric<ushort>());
-                case NPTypeCode.Int32: return _any_linear<int>(a.MakeGeneric<int>());
-                case NPTypeCode.UInt32: return _any_linear<uint>(a.MakeGeneric<uint>());
-                case NPTypeCode.Int64: return _any_linear<long>(a.MakeGeneric<long>());
-                case NPTypeCode.UInt64: return _any_linear<ulong>(a.MakeGeneric<ulong>());
-                case NPTypeCode.Char: return _any_linear<char>(a.MakeGeneric<char>());
-                case NPTypeCode.Double: return _any_linear<double>(a.MakeGeneric<double>());
-                case NPTypeCode.Single: return _any_linear<float>(a.MakeGeneric<float>());
-                case NPTypeCode.Decimal: return _any_linear<decimal>(a.MakeGeneric<decimal>());
-                default:
-                    throw new NotSupportedException();
-            }
+		    switch (a.typecode)
+		    {
+			    case NPTypeCode.Boolean: return _any_linear<bool>(a.MakeGeneric<bool>());
+			    case NPTypeCode.Byte: return _any_linear<byte>(a.MakeGeneric<byte>());
+			    case NPTypeCode.Int32: return _any_linear<int>(a.MakeGeneric<int>());
+			    case NPTypeCode.Int64: return _any_linear<long>(a.MakeGeneric<long>());
+			    case NPTypeCode.Single: return _any_linear<float>(a.MakeGeneric<float>());
+			    case NPTypeCode.Double: return _any_linear<double>(a.MakeGeneric<double>());
+			    default:
+				    throw new NotSupportedException();
+		    }
             #endregion
 #endif
         }

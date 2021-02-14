@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCast2()
         {
-            NDArray nd = "[1,2,3;4,5,6]";
+            NDArray nd = (NDArray)"[1,2,3;4,5,6]";
 
             var doubleMatr = new double[,] {{1, 2, 3}, {4, 5, 6}};
             for (int idx = 0; idx < doubleMatr.GetLength(0); idx++)
@@ -91,7 +91,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void StringCast3()
         {
-            NDArray nd = "[3,1,1,2]";
+            NDArray nd = (NDArray)"[3,1,1,2]";
             var intMatr = new double[] {3, 1, 1, 2};
 
             Assert.IsTrue(Enumerable.SequenceEqual(intMatr, nd.Data<double>()));

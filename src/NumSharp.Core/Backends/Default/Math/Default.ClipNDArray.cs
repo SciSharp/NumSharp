@@ -31,7 +31,7 @@ namespace NumSharp.Backends
                 {
                     switch (@out.GetTypeCode)
                     {
-#if _REGEN
+#if _REGEN1
                         %foreach except(supported_numericals),except(supported_numericals_lowercase)%
 	                    case NPTypeCode.#1:
 	                    {
@@ -53,8 +53,8 @@ namespace NumSharp.Backends
 	                    default:
 		                    throw new NotSupportedException();
 #else
-                        case NPTypeCode.Byte:
-                        {
+	                    case NPTypeCode.Byte:
+	                    {
                             var out_addr = (byte*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -68,41 +68,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Int16:
-                        {
-                            var out_addr = (short*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToInt16(_max.GetAtIndex(i));
-                                var minval = Converts.ToInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.UInt16:
-                        {
-                            var out_addr = (ushort*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt16(_max.GetAtIndex(i));
-                                var minval = Converts.ToUInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int32:
-                        {
+	                    }
+	                    case NPTypeCode.Int32:
+	                    {
                             var out_addr = (int*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -116,25 +84,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt32:
-                        {
-                            var out_addr = (uint*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt32(_max.GetAtIndex(i));
-                                var minval = Converts.ToUInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int64:
-                        {
+	                    }
+	                    case NPTypeCode.Int64:
+	                    {
                             var out_addr = (long*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -148,57 +100,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt64:
-                        {
-                            var out_addr = (ulong*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt64(_max.GetAtIndex(i));
-                                var minval = Converts.ToUInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Char:
-                        {
-                            var out_addr = (char*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToChar(_max.GetAtIndex(i));
-                                var minval = Converts.ToChar(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Double:
-                        {
-                            var out_addr = (double*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToDouble(_max.GetAtIndex(i));
-                                var minval = Converts.ToDouble(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                else if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Single:
-                        {
+	                    }
+	                    case NPTypeCode.Single:
+	                    {
                             var out_addr = (float*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -212,14 +116,14 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Decimal:
-                        {
-                            var out_addr = (decimal*)@out.Address;
+	                    }
+	                    case NPTypeCode.Double:
+	                    {
+                            var out_addr = (double*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var maxval = Converts.ToDecimal(_max.GetAtIndex(i));
-                                var minval = Converts.ToDecimal(_min.GetAtIndex(i));
+                                var maxval = Converts.ToDouble(_max.GetAtIndex(i));
+                                var minval = Converts.ToDouble(_min.GetAtIndex(i));
                                 var val = *(out_addr + i);
                                 if (val > maxval)
                                     val = maxval;
@@ -228,10 +132,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-
-                        default:
-                            throw new NotSupportedException();
+	                    }
+	                    default:
+		                    throw new NotSupportedException();
 #endif
                     }
                 }
@@ -241,7 +144,7 @@ namespace NumSharp.Backends
                 {
                     switch (@out.GetTypeCode)
                     {
-#if _REGEN
+#if _REGEN1
                         %foreach except(supported_numericals),except(supported_numericals_lowercase)%
 	                    case NPTypeCode.#1:
 	                    {
@@ -261,8 +164,8 @@ namespace NumSharp.Backends
 		                    throw new NotSupportedException();
 #else
 
-                        case NPTypeCode.Byte:
-                        {
+	                    case NPTypeCode.Byte:
+	                    {
                             var out_addr = (byte*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -273,35 +176,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Int16:
-                        {
-                            var out_addr = (short*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.UInt16:
-                        {
-                            var out_addr = (ushort*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToUInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int32:
-                        {
+	                    }
+	                    case NPTypeCode.Int32:
+	                    {
                             var out_addr = (int*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -312,22 +189,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt32:
-                        {
-                            var out_addr = (uint*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToUInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int64:
-                        {
+	                    }
+	                    case NPTypeCode.Int64:
+	                    {
                             var out_addr = (long*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -338,48 +202,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt64:
-                        {
-                            var out_addr = (ulong*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToUInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Char:
-                        {
-                            var out_addr = (char*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToChar(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Double:
-                        {
-                            var out_addr = (double*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var minval = Converts.ToDouble(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val < minval)
-                                    val = minval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Single:
-                        {
+	                    }
+	                    case NPTypeCode.Single:
+	                    {
                             var out_addr = (float*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -390,22 +215,22 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Decimal:
-                        {
-                            var out_addr = (decimal*)@out.Address;
+	                    }
+	                    case NPTypeCode.Double:
+	                    {
+                            var out_addr = (double*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var minval = Converts.ToDecimal(_min.GetAtIndex(i));
+                                var minval = Converts.ToDouble(_min.GetAtIndex(i));
                                 var val = *(out_addr + i);
                                 if (val < minval)
                                     val = minval;
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        default:
-                            throw new NotSupportedException();
+	                    }
+	                    default:
+		                    throw new NotSupportedException();
 #endif
                     }
                 }
@@ -416,7 +241,7 @@ namespace NumSharp.Backends
                 {
                     switch (@out.GetTypeCode)
                     {
-#if _REGEN
+#if _REGEN1
                         %foreach except(supported_numericals),except(supported_numericals_lowercase)%
 	                    case NPTypeCode.#1:
 	                    {
@@ -436,8 +261,8 @@ namespace NumSharp.Backends
 		                    throw new NotSupportedException();
 #else
 
-                        case NPTypeCode.Byte:
-                        {
+	                    case NPTypeCode.Byte:
+	                    {
                             var out_addr = (byte*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -448,35 +273,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Int16:
-                        {
-                            var out_addr = (short*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToInt16(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.UInt16:
-                        {
-                            var out_addr = (ushort*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt16(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int32:
-                        {
+	                    }
+	                    case NPTypeCode.Int32:
+	                    {
                             var out_addr = (int*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -487,22 +286,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt32:
-                        {
-                            var out_addr = (uint*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt32(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Int64:
-                        {
+	                    }
+	                    case NPTypeCode.Int64:
+	                    {
                             var out_addr = (long*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -513,48 +299,9 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.UInt64:
-                        {
-                            var out_addr = (ulong*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToUInt64(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Char:
-                        {
-                            var out_addr = (char*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToChar(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Double:
-                        {
-                            var out_addr = (double*)@out.Address;
-                            Parallel.For(0, len, i =>
-                            {
-                                var maxval = Converts.ToDouble(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
-                                if (val > maxval)
-                                    val = maxval;
-                                *(out_addr + i) = val;
-                            });
-                            return @out;
-                        }
-                        case NPTypeCode.Single:
-                        {
+	                    }
+	                    case NPTypeCode.Single:
+	                    {
                             var out_addr = (float*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
@@ -565,22 +312,22 @@ namespace NumSharp.Backends
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        case NPTypeCode.Decimal:
-                        {
-                            var out_addr = (decimal*)@out.Address;
+	                    }
+	                    case NPTypeCode.Double:
+	                    {
+                            var out_addr = (double*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var maxval = Converts.ToDecimal(_max.GetAtIndex(i));
+                                var maxval = Converts.ToDouble(_max.GetAtIndex(i));
                                 var val = *(out_addr + i);
                                 if (val > maxval)
                                     val = maxval;
                                 *(out_addr + i) = val;
                             });
                             return @out;
-                        }
-                        default:
-                            throw new NotSupportedException();
+	                    }
+	                    default:
+		                    throw new NotSupportedException();
 #endif
                     }
                 }

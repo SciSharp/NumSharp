@@ -53,7 +53,17 @@ namespace NumSharp
                     s.Append("\"");
                 }
                 else
-                    s.Append(string.Join(", ", this.AsIterator().Cast<object>().Select(v => v.ToString())));
+                {
+                    var items = this.AsIterator().Cast<object>();
+                    if (this.size <= 10)
+                        s.Append(string.Join(", ", items.Select(v => v.ToString())));
+                    else
+                    {
+                        s.Append(string.Join(", ", items.Take(5).Select(v => v.ToString())));
+                        s.Append(", ..., ");
+                        s.Append(string.Join(", ", items.Skip(this.size - 10).Select(v => v.ToString())));
+                    }
+                }
 
                 s.Append("]");
                 return;
@@ -62,15 +72,47 @@ namespace NumSharp
             var size = shape[0];
             s.Append("[");
 
-            for (int i = 0; i < size; i++)
+            if (size <= 10)
             {
-                var n_minus_one_dim_slice = this[i];
-                n_minus_one_dim_slice.PrettyPrint(s, flat);
-                if (i < size - 1)
+                for (int i = 0; i < size; i++)
                 {
-                    s.Append(", ");
-                    if (!flat)
-                        s.AppendLine();
+                    var n_minus_one_dim_slice = this[i];
+                    n_minus_one_dim_slice.PrettyPrint(s, flat);
+                    if (i < size - 1)
+                    {
+                        s.Append(", ");
+                        if (!flat)
+                            s.AppendLine();
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    var n_minus_one_dim_slice = this[i];
+                    n_minus_one_dim_slice.PrettyPrint(s, flat);
+                    if (i < size - 1)
+                    {
+                        s.Append(", ");
+                        if (!flat)
+                            s.AppendLine();
+                    }
+                }
+
+                s.Append(" ... ");
+                s.AppendLine();
+
+                for (int i = size - 5; i < size; i++)
+                {
+                    var n_minus_one_dim_slice = this[i];
+                    n_minus_one_dim_slice.PrettyPrint(s, flat);
+                    if (i < size - 1)
+                    {
+                        s.Append(", ");
+                        if (!flat)
+                            s.AppendLine();
+                    }
                 }
             }
 

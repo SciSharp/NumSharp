@@ -19,6 +19,11 @@ namespace NumSharp
             //return boolTensor.MakeGeneric<bool>();
         }
 
+        public static NDArray<byte> operator &(NDArray lhs, int rhs)
+        {
+            return null;
+        }
+
         public static NDArray<byte> operator &(NDArray lhs, byte rhs)
         {
             return null;
