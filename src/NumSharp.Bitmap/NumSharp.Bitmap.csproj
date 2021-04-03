@@ -10,8 +10,8 @@
     <Copyright>2019 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Added complicated shape and bbp inference mechanism. Added argument 'discardAlpha' to all methods.</PackageReleaseNotes>
-    <AssemblyVersion>0.20.4.0</AssemblyVersion>
-    <FileVersion>0.20.4.0</FileVersion>
+    <AssemblyVersion>0.30.0.0</AssemblyVersion>
+    <FileVersion>0.30.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -21,7 +21,7 @@
     <Product>NumSharp.Bitmap</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp.Bitmap</RootNamespace>
-    <Version>0.20.4</Version>
+    <Version>0.30.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
@@ -29,6 +29,7 @@
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <Configurations>Debug;Release;Publish;Debug-Minimal</Configurations>
+    <SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -141,7 +142,7 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
+    <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
   </ItemGroup>
 
   <ItemGroup>
