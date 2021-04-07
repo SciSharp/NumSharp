@@ -33,7 +33,7 @@ namespace NumSharp
 
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Subtract(in NDArray lhs, in NDArray rhs);
-        public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
+        public abstract NDArray Multiply(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Divide(in NDArray lhs, in NDArray rhs);
         public abstract NDArray Mod(in NDArray lhs, in NDArray rhs);
 
