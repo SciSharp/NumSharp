@@ -73,8 +73,8 @@ namespace NumSharp
                     throw new ArgumentOutOfRangeException(nameof(indices), "GetString(int[]) can only accept coordinates that point to a vector of chars.");
 
                 Debug.Assert(typecode == NPTypeCode.Char);
-
-                UnmanagedStorage src = Storage.GetData(indices);
+                throw new NotImplementedException("");
+                /*UnmanagedStorage src = Storage.GetData(indices);
                 Debug.Assert(src.Shape.NDim == 1);
 
                 if (!Shape.IsContiguous || Shape.ModifiedStrides)
@@ -91,7 +91,7 @@ namespace NumSharp
                 }
 
                 //new string always performs a copy, there is no need to keep reference to arr's unmanaged storage.
-                return new string((char*)src.Address, 0, src.Count);
+                return new string((char*)src.Address, 0, src.Count);*/
             }
         }
 

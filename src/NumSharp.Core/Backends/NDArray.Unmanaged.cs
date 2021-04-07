@@ -67,9 +67,9 @@ namespace NumSharp
             }
 
             /// <summary>
-            ///     Provides access to the internal <see cref="UnmanagedStorage"/>.
+            ///     Provides access to the internal <see cref="IStorage"/>.
             /// </summary>
-            public UnmanagedStorage Storage => _this.Storage;
+            public IStorage Storage => _this.Storage;
 
             /// <summary>
             ///     Provides access to the internal <see cref="Shape"/>.

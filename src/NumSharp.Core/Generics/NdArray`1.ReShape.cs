@@ -24,7 +24,7 @@ namespace NumSharp.Generic
         public new NDArray<TDType> reshape(ref Shape newShape)
         {
             var ret = Storage.Alias();
-            ret.Reshape(ref newShape, false);
+            ret.Reshape(newShape, false);
             return new NDArray<TDType>(ret) { TensorEngine = TensorEngine };
         }
 
@@ -65,7 +65,7 @@ namespace NumSharp.Generic
         public new NDArray<TDType> reshape_unsafe(ref Shape newShape)
         {
             var ret = Storage.Alias();
-            ret.Reshape(ref newShape, true);
+            ret.Reshape(newShape, true);
             return new NDArray<TDType>(ret) { TensorEngine = TensorEngine };
         }
 

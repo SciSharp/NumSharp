@@ -23,7 +23,7 @@ namespace NumSharp.Backends
     ///      - CloneData always create a clone of storage and return this as reference object<br></br>
     ///      - CloneData{T} clone storage and cast this clone <br></br>
     /// </remarks>
-    public partial class UnmanagedStorage : ICloneable
+    public partial class UnmanagedStorage : ICloneable, IStorage
     {
 #if _REGEN1
         %foreach supported_dtypes,supported_dtypes_lowercase%
@@ -110,6 +110,12 @@ namespace NumSharp.Backends
         /// </summary>
         public TensorEngine Engine { get; protected internal set; }
 
+        IArraySlice IStorage.InternalArray => throw new NotImplementedException();
+
+        int IStorage.Count => throw new NotImplementedException();
+
+        unsafe void* IStorage.Address => throw new NotImplementedException();
+
         public static UnmanagedStorage Scalar<T>(T value) where T : unmanaged => new UnmanagedStorage(ArraySlice.Scalar<T>(value));
 
         public static UnmanagedStorage Scalar(object value) => new UnmanagedStorage(ArraySlice.Scalar(value));
@@ -135,7 +141,7 @@ namespace NumSharp.Backends
         /// <param name="storage">The storage to take <see cref="InternalArray"/> from.</param>
         /// <param name="shape">The shape to represent this storage, can be a broadcast.</param>
         /// <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
-        public static UnmanagedStorage CreateBroadcastedUnsafe(UnmanagedStorage storage, Shape shape)
+        public static UnmanagedStorage CreateBroadcastedUnsafe(IStorage storage, Shape shape)
         {
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
@@ -1016,6 +1022,76 @@ namespace NumSharp.Backends
             }
 
             return ret;
+        }
+
+        public void Reshape(Shape shape)
+        {
+            throw new NotImplementedException();
+        }
+
+        IStorage IStorage.Alias(Shape shape)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Allocate(IArraySlice values, Shape shape)
+        {
+            throw new NotImplementedException();
+        }
+
+        IStorage IStorage.Cast(Type type)
+        {
+            throw new NotImplementedException();
+        }
+
+        IStorage IStorage.Clone()
+        {
+            throw new NotImplementedException();
+        }
+
+        int IStorage.GetInt64(params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void SetValue(ValueType value, params int[] indices)
+        {
+            throw new NotImplementedException();
+        }
+
+        IStorage IStorage.Cast(NPTypeCode typeCode)
+        {
+            throw new NotImplementedException();
+        }
+
+        IStorage IStorage.CastIfNecessary(NPTypeCode typeCode)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void CopyTo<T>(IMemoryBlock slice)
+        {
+            throw new NotImplementedException();
+        }
+
+        public unsafe void CopyTo<T>(void* address)
+        {
+            throw new NotImplementedException();
+        }
+
+        void IStorage.ExpandDimension(int axis)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Allocate(Shape shape)
+        {
+            throw new NotImplementedException();
+        }
+
+        public ReadOnlySpan<T> Read<T>()
+        {
+            throw new NotImplementedException();
         }
     }
 }

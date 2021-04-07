@@ -224,7 +224,7 @@ namespace NumSharp.Backends
             {
                 //ReSharper disable once RedundantCast
                 //this must be a void* so it'll go through a typed switch.
-                value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                // value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
             }
         }
 

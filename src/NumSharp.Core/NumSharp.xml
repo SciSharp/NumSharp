@@ -3177,20 +3177,20 @@
             </summary>
             <param name="address">The address to copy to.</param>
         </member>
-        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.UnmanagedStorage)">
+        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.IStorage)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>
             <param name="storage"></param>
         </member>
-        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape)">
+        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.IStorage,NumSharp.Shape)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>
             <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
             <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
         </member>
-        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape@)">
+        <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.IStorage,NumSharp.Shape@)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>
@@ -3397,8 +3397,8 @@
         </member>
         <member name="P:NumSharp.NDArray.Array">
             <summary>
-                Get: Gets internal storage array by calling <see cref="!:IStorage.GetData"/><br></br>
-                Set: Replace internal storage by calling <see cref="!:IStorage.ReplaceData(System.Array)"/>
+                Get: Gets internal storage array by calling <see cref="M:NumSharp.Backends.IStorage.GetData"/><br></br>
+                Set: Replace internal storage by calling <see cref="M:NumSharp.Backends.IStorage.ReplaceData(System.Array)"/>
             </summary>
             <remarks>Setting does not replace internal storage array.</remarks>
         </member>
@@ -3799,14 +3799,14 @@
         </member>
         <member name="P:NumSharp.NDArray._Unsafe.Array">
             <summary>
-                Get: Gets internal storage array by calling <see cref="!:IStorage.GetData"/><br></br>
-                Set: Replace internal storage by calling <see cref="!:IStorage.ReplaceData(System.Array)"/>
+                Get: Gets internal storage array by calling <see cref="M:NumSharp.Backends.IStorage.GetData"/><br></br>
+                Set: Replace internal storage by calling <see cref="M:NumSharp.Backends.IStorage.ReplaceData(System.Array)"/>
             </summary>
             <remarks>Setting does not replace internal storage array.</remarks>
         </member>
         <member name="P:NumSharp.NDArray._Unsafe.Storage">
             <summary>
-                Provides access to the internal <see cref="T:NumSharp.Backends.UnmanagedStorage"/>.
+                Provides access to the internal <see cref="T:NumSharp.Backends.IStorage"/>.
             </summary>
         </member>
         <member name="P:NumSharp.NDArray._Unsafe.Shape">
@@ -4787,11 +4787,6 @@
         </member>
         <!-- Badly formed XML comment ignored for member "M:NumSharp.Backends.DefaultEngine.normalize_axis_tuple(System.Int32[],System.Object,System.Boolean)" -->
         <!-- Badly formed XML comment ignored for member "M:NumSharp.Backends.DefaultEngine.normalize_axis_tuple(System.Int32,System.Object,System.Boolean)" -->
-        <member name="F:NumSharp.Backends.DefaultEngine.ParallelAbove">
-            <summary>
-                The threshold atwhich after n-items in an array, computation will use Parallel.For
-            </summary>
-        </member>
         <member name="M:NumSharp.Backends.DefaultEngine.NonZero(NumSharp.NDArray@)">
             <summary>
             Test whether all array elements evaluate to True.
@@ -4892,6 +4887,11 @@
         </member>
         <member name="M:NumSharp.Backends.DefaultEngine.MatMul(NumSharp.NDArray,NumSharp.NDArray)">
             <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
+        </member>
+        <member name="F:NumSharp.Backends.DefaultEngine.ParallelAbove">
+            <summary>
+                The threshold atwhich after n-items in an array, computation will use Parallel.For
+            </summary>
         </member>
         <member name="M:NumSharp.Backends.Unmanaged.ArraySlice.Scalar(System.Object)">
             <summary>
@@ -5609,7 +5609,7 @@
         </member>
         <member name="P:NumSharp.Backends.UnmanagedStorage.TypeCode">
             <summary>
-                The <see cref="T:NumSharp.NPTypeCode"/> of <see cref="!:IStorage.DType"/>.
+                The <see cref="T:NumSharp.NPTypeCode"/> of <see cref="P:NumSharp.Backends.IStorage.DType"/>.
             </summary>
         </member>
         <member name="P:NumSharp.Backends.UnmanagedStorage.DTypeSize">
@@ -5636,7 +5636,7 @@
         </member>
         <member name="P:NumSharp.Backends.UnmanagedStorage.Engine">
             <summary>
-                The engine that was used to create this <see cref="!:IStorage"/>.
+                The engine that was used to create this <see cref="T:NumSharp.Backends.IStorage"/>.
             </summary>
         </member>
         <member name="M:NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape)">
@@ -5647,7 +5647,7 @@
             <param name="shape">The shape to represent this storage, can be a broadcast.</param>
             <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
         </member>
-        <member name="M:NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape)">
+        <member name="M:NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe(NumSharp.Backends.IStorage,NumSharp.Shape)">
             <summary>
                 Wraps given <paramref name="storage"/> in <see cref="T:NumSharp.Backends.UnmanagedStorage"/> with a broadcasted shape.
             </summary>
@@ -5809,11 +5809,11 @@
         </member>
         <member name="M:NumSharp.Backends.UnmanagedStorage.GetValue(System.Int32[])">
             <summary>
-                Retrieves value of unspecified type (will figure using <see cref="!:IStorage.DType"/>).
+                Retrieves value of unspecified type (will figure using <see cref="P:NumSharp.Backends.IStorage.DType"/>).
             </summary>
             <param name="indices">The shape's indices to get.</param>
             <returns></returns>
-            <exception cref="T:System.NullReferenceException">When <see cref="!:IStorage.DType"/> is not <see cref="T:System.Object"/></exception>
+            <exception cref="T:System.NullReferenceException">When <see cref="P:NumSharp.Backends.IStorage.DType"/> is not <see cref="T:System.Object"/></exception>
         </member>
         <member name="M:NumSharp.Backends.UnmanagedStorage.GetData(System.Int32[])">
             <summary>
@@ -6156,7 +6156,7 @@
             </summary>
             <remarks>Stops at first iterator stop.</remarks>
         </member>
-        <member name="M:NumSharp.MultiIterator.Assign(NumSharp.Backends.UnmanagedStorage,NumSharp.Backends.UnmanagedStorage)">
+        <member name="M:NumSharp.MultiIterator.Assign(NumSharp.Backends.IStorage,NumSharp.Backends.IStorage)">
             <summary>
                 Assigns rhs values to lhs.
             </summary>
@@ -6174,7 +6174,7 @@
             </summary>
             <param name="broadcast"></param>
         </member>
-        <member name="M:NumSharp.MultiIterator.GetIterators``1(NumSharp.Backends.UnmanagedStorage,NumSharp.Backends.UnmanagedStorage,System.Boolean)">
+        <member name="M:NumSharp.MultiIterator.GetIterators``1(NumSharp.Backends.IStorage,NumSharp.Backends.IStorage,System.Boolean)">
             <summary>
                 Assigns rhs values to lhs.
             </summary>
@@ -6603,19 +6603,19 @@
             <param name="item"></param>
             <returns></returns>
         </member>
-        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage)">
+        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.IStorage)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>
             <param name="storage"></param>
         </member>
-        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape)">
+        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.IStorage,NumSharp.Shape)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>
             <param name="storage"></param>
         </member>
-        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape@)">
+        <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.IStorage,NumSharp.Shape@)">
             <summary>
                 Creates a new <see cref="T:NumSharp.NDArray"/> with this storage.
             </summary>

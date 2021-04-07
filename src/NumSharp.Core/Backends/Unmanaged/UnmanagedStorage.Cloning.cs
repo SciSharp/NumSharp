@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Creates an alias to this UnmanagedStorage.
         /// </summary>
-        public UnmanagedStorage Alias()
+        public IStorage Alias()
         {
             var r = new UnmanagedStorage();
             r._shape = _shape;

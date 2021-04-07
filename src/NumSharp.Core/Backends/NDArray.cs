@@ -48,7 +48,7 @@ namespace NumSharp
         ///     Creates a new <see cref="NDArray"/> with this storage.
         /// </summary>
         /// <param name="storage"></param>
-        public NDArray(UnmanagedStorage storage)
+        public NDArray(IStorage storage)
         {
             Storage = storage;
             tensorEngine = storage.Engine;
@@ -59,9 +59,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
         /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
-        protected internal NDArray(UnmanagedStorage storage, Shape shape)
+        protected internal NDArray(IStorage storage, Shape shape)
         {
-            Storage = storage.Alias(ref shape);
+            Storage = storage.Alias(shape);
             tensorEngine = storage.Engine;
         }
 
@@ -70,9 +70,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape to set for this NDArray, does not perform checks.</param>
         /// <remarks>Doesn't copy. Does not perform checks for <paramref name="shape"/>.</remarks>
-        protected internal NDArray(UnmanagedStorage storage, ref Shape shape)
+        protected internal NDArray(IStorage storage, ref Shape shape)
         {
-            Storage = storage.Alias(ref shape);
+            Storage = storage.Alias(shape);
             tensorEngine = storage.Engine;
         }
 
@@ -108,7 +108,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="dtype">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(Type dtype) : this(dtype, BackendFactory.GetEngine()) { }
+        public NDArray(Type dtype) : this(dtype, BackendFactory.GetEngine(dtype)) { }
 
         /// <summary>
         /// Constructor for init data type
@@ -116,7 +116,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="typeCode">Data type of elements</param>
         /// <remarks>This constructor does not call allocation/></remarks>
-        public NDArray(NPTypeCode typeCode) : this(typeCode, BackendFactory.GetEngine()) { }
+        public NDArray(NPTypeCode typeCode) : this(typeCode, BackendFactory.GetEngine(typeCode)) { }
 
         /// <summary>
         /// Constructor which takes .NET array
@@ -220,7 +220,7 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
         {
-            Storage.Allocate(shape, dtype, fillZeros);
+            Storage.Allocate(shape);
         }
 
         /// <summary>
@@ -233,7 +233,7 @@ namespace NumSharp
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(NPTypeCode dtype, Shape shape, bool fillZeros) : this(dtype)
         {
-            Storage.Allocate(shape, dtype, fillZeros);
+            Storage.Allocate(shape);
         }
 
         private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
@@ -337,15 +337,20 @@ namespace NumSharp
         /// <summary>
         /// The internal storage that stores data for this <see cref="NDArray"/>.
         /// </summary>
-        protected internal UnmanagedStorage Storage;
+        protected internal IStorage Storage;
 
         /// <summary>
         ///     The tensor engine that handles this <see cref="NDArray"/>.
         /// </summary>
         public TensorEngine TensorEngine
         {
-            [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
-            set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine());
+            [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine(Storage.TypeCode);
+            set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine(Storage.TypeCode));
+        }
+
+        public ReadOnlySpan<T> Read<T>() where T : unmanaged
+        {
+            return Storage.Read<T>();
         }
 
         /// <summary>
@@ -515,7 +520,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (int i = 0; i < ret.Length; i++)
             {
-                ret[i] = new NDArray(Storage.GetData(index));
+                // ret[i] = new NDArray(Storage.GetData(index));
                 iter.Next();
             }
 
