@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace NumSharp
 {
@@ -115,7 +117,6 @@ namespace NumSharp
             if (start > stop)
                 throw new Exception("parameters invalid, start is greater than stop.");
 
-
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
 
@@ -134,8 +135,11 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (float*)nd.Array.Address;
+                    Enumerable.Range(0, length).Select(i => *(addr + i) = start + i * step);
+
+                    /*var addr = (float*)nd.Array.Address;
                     for (int i = 0; i < length; i++)
-                        *(addr + i) = start + i * step;
+                        *(addr + i) = start + i * step;*/
                 }
             }
 
@@ -322,7 +326,7 @@ namespace NumSharp
             {
                 unsafe
                 {
-                    var addr = (int*)nd.Array.Address;
+                    var addr = (int*)nd.Storage.Address;
                     for (int i = 0; i < length; i++)
                         *(addr + i) = start + i * step;
                 }

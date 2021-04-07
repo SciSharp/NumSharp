@@ -425,17 +425,15 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int32: 
                 {
-                    var iter = Subject.AsIterator<int>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
+                    var iter = Subject.Read<int>();
                     for (int i = 0; i < values.Length; i++)
                     {
                         Execute.Assertion
-                            .ForCondition(hasnext())
+                            .ForCondition(i < values.Length)
                             .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
                         
                         var expected = Convert.ToInt32(values[i]);
-                        var nextval = next();
+                        var nextval = Convert.ToInt32(iter[i]);
 
                         Execute.Assertion
                             .ForCondition(expected == nextval)

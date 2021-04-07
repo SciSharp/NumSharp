@@ -59,7 +59,7 @@ namespace NumSharp.Backends
         ///     Set the shape of this storage without checking if sizes match.
         /// </summary>
         /// <remarks>Used during broadcasting</remarks>
-        protected internal void SetShapeUnsafe(Shape shape)
+        public void SetShapeUnsafe(Shape shape)
         {
             SetShapeUnsafe(ref shape);
         }
