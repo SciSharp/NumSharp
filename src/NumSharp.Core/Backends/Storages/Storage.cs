@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using NumSharp;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
@@ -13,7 +12,7 @@ namespace NumSharp.Backends
         public NPTypeCode DType { get; set; }
         public Shape Shape { get; set; }
         protected unsafe void* address;
-        public unsafe void* Address
+        public unsafe virtual void* Address
         {
             get => address;
             set => address = value;
@@ -24,7 +23,7 @@ namespace NumSharp.Backends
         public NPTypeCode TypeCode => DType;
         public virtual TensorEngine Engine => new DefaultEngine();
 
-        Type IStorage.DType => throw new NotImplementedException();
+        Type IStorage.DType => DType.AsType();
 
         public int DTypeSize => throw new NotImplementedException();
 

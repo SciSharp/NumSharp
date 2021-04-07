@@ -1,10 +1,23 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using NumSharp;
 
 namespace NumSharp.Backends
 {
     public class StorageOfInt32 : Storage
     {
+        int[] data;
+
+        public override unsafe void* Address
+        {
+            get
+            {
+                fixed (int* ptr = &data[0])
+                    return ptr;
+            }
+            set => base.Address = value;
+        }
+
         public StorageOfInt32()
         {
             DType = NPTypeCode.Int32;
@@ -23,9 +36,12 @@ namespace NumSharp.Backends
         {
             DType = NPTypeCode.Int32;
             Shape = shape ?? new Shape(x.Length);
-
-            fixed (int* ptr = &x[0])
-                address = ptr;
+            data = x;
+            // var handle = GCHandle.Alloc(x, GCHandleType.Pinned);
+            // address = handle.AddrOfPinnedObject().ToPointer();
+            // fixed (int* ptr = &x[0])
+            // address = ptr;
+            // handle.Free();
         }
 
         public override TensorEngine Engine => BackendFactory.GetEngine(DType);
