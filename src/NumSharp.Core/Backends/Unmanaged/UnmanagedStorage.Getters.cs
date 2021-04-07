@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         }
 
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe T GetAtIndex<T>(int index) => throw new NotImplementedException(""); // *((T*)Address + _shape.TransformOffset(index));
+        public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
 
         /// <summary>
         ///     Gets a subshape based on given <paramref name="indices"/>.
@@ -74,7 +74,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <remarks>Does not copy, returns a <see cref="Slice"/> or a memory slice</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public IStorage GetData(params int[] indices)
+        public UnmanagedStorage GetData(params int[] indices)
         {
             var this_shape = Shape;
 
@@ -104,7 +104,7 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <remarks>Does not copy, returns a <see cref="Slice"/> or a memory slice</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe IStorage GetData(int* dims, int ndims)
+        public unsafe UnmanagedStorage GetData(int* dims, int ndims)
         {
             var this_shape = Shape;
 

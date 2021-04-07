@@ -19,7 +19,7 @@ namespace NumSharp
             {
                 s.Append($"{Storage.GetAtIndex(0)}");
             }
-            else if (shape.Length == 1 && typecode == NPTypeCode.Char)
+            else if (shape.Length == 1 && Type.GetTypeCode(dtype) == TypeCode.Char)
             {
                 s.Append(string.Join("", GetData<char>()));
             }
@@ -54,7 +54,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    var items = Read<int>().ToArray();
+                    var items = this.AsIterator().Cast<object>();
                     if (this.size <= 10)
                         s.Append(string.Join(", ", items.Select(v => v.ToString())));
                     else

@@ -6,30 +6,6 @@ namespace NumSharp.Backends
     public class BackendFactory
     {
         [DebuggerNonUserCode]
-        public static TensorEngine GetEngine(Type type)
-        {
-            switch (type.Name)
-            {
-                case "Int32":
-                    return EngineCache<Int32Engine>.Value;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, null);
-            }
-        }
-
-        [DebuggerNonUserCode]
-        public static TensorEngine GetEngine(NPTypeCode type)
-        {
-            switch (type)
-            {
-                case NPTypeCode.Int32:
-                    return EngineCache<Int32Engine>.Value;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, null);
-            }
-        }
-
-        [DebuggerNonUserCode]
         public static TensorEngine GetEngine(BackendType backendType = BackendType.Default)
         {
             switch (backendType)

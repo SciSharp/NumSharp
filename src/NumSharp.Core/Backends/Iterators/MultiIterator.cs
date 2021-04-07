@@ -19,7 +19,7 @@ namespace NumSharp
         ///     Assigns rhs values to lhs.
         /// </summary>
         /// <remarks>Stops at first iterator stop.</remarks>
-        public static void Assign(IStorage lhs, IStorage rhs)
+        public static void Assign(UnmanagedStorage lhs, UnmanagedStorage rhs)
         {
 #if _REGEN1
             #region Compute
@@ -177,7 +177,7 @@ namespace NumSharp
         /// <summary>
         ///     Assigns rhs values to lhs.
         /// </summary>
-        public static (NDIterator<TOut>, NDIterator<TOut>) GetIterators<TOut>(IStorage lhs, IStorage rhs, bool broadcast) where TOut : unmanaged
+        public static (NDIterator<TOut>, NDIterator<TOut>) GetIterators<TOut>(UnmanagedStorage lhs, UnmanagedStorage rhs, bool broadcast) where TOut : unmanaged
         {
             if (broadcast)
             {
@@ -229,12 +229,12 @@ namespace NumSharp
                 #region Compute
 		        switch (lhs.TypeCode)
 		        {
-			        /*case NPTypeCode.Boolean: return ((NDIterator<TOut>)(object)new NDIterator<bool>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<bool>(false));
+			        case NPTypeCode.Boolean: return ((NDIterator<TOut>)(object)new NDIterator<bool>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<bool>(false));
 			        case NPTypeCode.Byte: return ((NDIterator<TOut>)(object)new NDIterator<byte>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<byte>(false));
 			        case NPTypeCode.Int32: return ((NDIterator<TOut>)(object)new NDIterator<int>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<int>(false));
 			        case NPTypeCode.Int64: return ((NDIterator<TOut>)(object)new NDIterator<long>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<long>(false));
 			        case NPTypeCode.Single: return ((NDIterator<TOut>)(object)new NDIterator<float>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<float>(false));
-			        case NPTypeCode.Double: return ((NDIterator<TOut>)(object)new NDIterator<double>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<double>(false));*/
+			        case NPTypeCode.Double: return ((NDIterator<TOut>)(object)new NDIterator<double>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<double>(false));
 			        default:
 				        throw new NotSupportedException();
 		        }

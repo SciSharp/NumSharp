@@ -12,12 +12,12 @@ namespace NumSharp
         /// <summary>
         ///     Get storage for given <paramref name="dtype"/>.
         /// </summary>
-        public abstract IStorage GetStorage(Type dtype);
+        public abstract UnmanagedStorage GetStorage(Type dtype);
 
         /// <summary>
         ///     Get storage for given <paramref name="typeCode"/>.
         /// </summary>
-        public abstract IStorage GetStorage(NPTypeCode typeCode);
+        public abstract UnmanagedStorage GetStorage(NPTypeCode typeCode);
 
         #endregion
 

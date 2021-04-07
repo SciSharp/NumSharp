@@ -24,7 +24,7 @@ namespace NumSharp
         public NDArray reshape(ref Shape newShape)
         {
             var ret = Storage.Alias();
-            ret.Reshape(newShape, false);
+            ret.Reshape(ref newShape, false);
             return new NDArray(ret) {TensorEngine = TensorEngine};
         }
 

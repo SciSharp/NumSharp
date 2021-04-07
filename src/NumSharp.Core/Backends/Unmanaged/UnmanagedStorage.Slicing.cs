@@ -12,10 +12,10 @@ namespace NumSharp.Backends
         #region Slicing
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public IStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
+        public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public IStorage GetView(params Slice[] slices)
+        public UnmanagedStorage GetView(params Slice[] slices)
         {
             if (slices == null)
                 throw new ArgumentNullException(nameof(slices));
@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
-        private IStorage GetViewInternal(params Slice[] slices)
+        private UnmanagedStorage GetViewInternal(params Slice[] slices)
         {
             // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
             //handle memory slice if possible
