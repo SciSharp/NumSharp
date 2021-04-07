@@ -39,7 +39,7 @@ namespace NumSharp.Backends
         protected ArraySlice<double> _arrayDouble;
 #endif
         public IArraySlice InternalArray;
-        public unsafe byte* Address;
+        public unsafe byte* Address { get; set; }
         public int Count;
 
         protected Type _dtype;
@@ -112,9 +112,9 @@ namespace NumSharp.Backends
 
         IArraySlice IStorage.InternalArray => throw new NotImplementedException();
 
-        int IStorage.Count => throw new NotImplementedException();
+        int IStorage.Count { get; set; }
 
-        unsafe void* IStorage.Address => throw new NotImplementedException();
+        unsafe void* IStorage.Address { get; set; }
 
         public static UnmanagedStorage Scalar<T>(T value) where T : unmanaged => new UnmanagedStorage(ArraySlice.Scalar<T>(value));
 
@@ -227,7 +227,7 @@ namespace NumSharp.Backends
         %
 #else
         public UnmanagedStorage(bool scalar)
-        {            
+        {
             _dtype = typeof(Boolean);
             _typecode = InfoOf<bool>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -240,7 +240,7 @@ namespace NumSharp.Backends
         }
 
         public UnmanagedStorage(byte scalar)
-        {            
+        {
             _dtype = typeof(Byte);
             _typecode = InfoOf<byte>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -253,7 +253,7 @@ namespace NumSharp.Backends
         }
 
         public UnmanagedStorage(int scalar)
-        {            
+        {
             _dtype = typeof(Int32);
             _typecode = InfoOf<int>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -266,7 +266,7 @@ namespace NumSharp.Backends
         }
 
         public UnmanagedStorage(long scalar)
-        {            
+        {
             _dtype = typeof(Int64);
             _typecode = InfoOf<long>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -279,7 +279,7 @@ namespace NumSharp.Backends
         }
 
         public UnmanagedStorage(float scalar)
-        {            
+        {
             _dtype = typeof(Single);
             _typecode = InfoOf<float>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -292,7 +292,7 @@ namespace NumSharp.Backends
         }
 
         public UnmanagedStorage(double scalar)
-        {            
+        {
             _dtype = typeof(Double);
             _typecode = InfoOf<double>.NPTypeCode;
             _shape = Shape.Scalar;
@@ -323,7 +323,7 @@ namespace NumSharp.Backends
         %
 #else
         public UnmanagedStorage(Boolean[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Boolean);
@@ -337,7 +337,7 @@ namespace NumSharp.Backends
             }
         }
         public UnmanagedStorage(Byte[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Byte);
@@ -351,7 +351,7 @@ namespace NumSharp.Backends
             }
         }
         public UnmanagedStorage(Int32[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int32);
@@ -365,7 +365,7 @@ namespace NumSharp.Backends
             }
         }
         public UnmanagedStorage(Int64[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Int64);
@@ -379,7 +379,7 @@ namespace NumSharp.Backends
             }
         }
         public UnmanagedStorage(Single[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Single);
@@ -393,7 +393,7 @@ namespace NumSharp.Backends
             }
         }
         public UnmanagedStorage(Double[] values)
-        {            
+        {
             if (values == null)
                 throw new ArgumentNullException(nameof(values));
             _dtype = typeof(Double);
@@ -435,47 +435,47 @@ namespace NumSharp.Backends
 #else
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                {
-                    InternalArray = _arrayBoolean = ArraySlice.FromArray<bool>((bool[])array);
-                    Address = (byte*) _arrayBoolean.Address;
-                    Count = _arrayBoolean.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayBoolean = ArraySlice.FromArray<bool>((bool[])array);
+                        Address = (byte*)_arrayBoolean.Address;
+                        Count = _arrayBoolean.Count;
+                        break;
+                    }
                 case NPTypeCode.Byte:
-                {
-                    InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
-                    Address = (byte*) _arrayByte.Address;
-                    Count = _arrayByte.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
+                        Address = (byte*)_arrayByte.Address;
+                        Count = _arrayByte.Count;
+                        break;
+                    }
                 case NPTypeCode.Int32:
-                {
-                    InternalArray = _arrayInt32 = ArraySlice.FromArray<int>((int[])array);
-                    Address = (byte*) _arrayInt32.Address;
-                    Count = _arrayInt32.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayInt32 = ArraySlice.FromArray<int>((int[])array);
+                        Address = (byte*)_arrayInt32.Address;
+                        Count = _arrayInt32.Count;
+                        break;
+                    }
                 case NPTypeCode.Int64:
-                {
-                    InternalArray = _arrayInt64 = ArraySlice.FromArray<long>((long[])array);
-                    Address = (byte*) _arrayInt64.Address;
-                    Count = _arrayInt64.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayInt64 = ArraySlice.FromArray<long>((long[])array);
+                        Address = (byte*)_arrayInt64.Address;
+                        Count = _arrayInt64.Count;
+                        break;
+                    }
                 case NPTypeCode.Single:
-                {
-                    InternalArray = _arraySingle = ArraySlice.FromArray<float>((float[])array);
-                    Address = (byte*) _arraySingle.Address;
-                    Count = _arraySingle.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arraySingle = ArraySlice.FromArray<float>((float[])array);
+                        Address = (byte*)_arraySingle.Address;
+                        Count = _arraySingle.Count;
+                        break;
+                    }
                 case NPTypeCode.Double:
-                {
-                    InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
-                    Address = (byte*) _arrayDouble.Address;
-                    Count = _arrayDouble.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
+                        Address = (byte*)_arrayDouble.Address;
+                        Count = _arrayDouble.Count;
+                        break;
+                    }
                 default:
                     throw new NotSupportedException();
 #endif
@@ -507,54 +507,54 @@ namespace NumSharp.Backends
 #else
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
-                {
-                    InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
-                    Address = (byte*) _arrayBoolean.Address;
-                    Count = _arrayBoolean.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
+                        Address = (byte*)_arrayBoolean.Address;
+                        Count = _arrayBoolean.Count;
+                        break;
+                    }
                 case NPTypeCode.Byte:
-                {
-                    InternalArray = _arrayByte = (ArraySlice<byte>)array;
-                    Address = _arrayByte.Address;
-                    Count = _arrayByte.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayByte = (ArraySlice<byte>)array;
+                        Address = _arrayByte.Address;
+                        Count = _arrayByte.Count;
+                        break;
+                    }
                 case NPTypeCode.Char:
-                {
-                    InternalArray = _arrayChar = (ArraySlice<char>)array;
-                    Address = (byte*)_arrayChar.Address;
-                    Count = _arrayChar.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayChar = (ArraySlice<char>)array;
+                        Address = (byte*)_arrayChar.Address;
+                        Count = _arrayChar.Count;
+                        break;
+                    }
                 case NPTypeCode.Int32:
-                {
-                    InternalArray = _arrayInt32 = (ArraySlice<int>)array;
-                    Address = (byte*) _arrayInt32.Address;
-                    Count = _arrayInt32.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayInt32 = (ArraySlice<int>)array;
+                        Address = (byte*)_arrayInt32.Address;
+                        Count = _arrayInt32.Count;
+                        break;
+                    }
                 case NPTypeCode.Int64:
-                {
-                    InternalArray = _arrayInt64 = (ArraySlice<long>)array;
-                    Address = (byte*) _arrayInt64.Address;
-                    Count = _arrayInt64.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayInt64 = (ArraySlice<long>)array;
+                        Address = (byte*)_arrayInt64.Address;
+                        Count = _arrayInt64.Count;
+                        break;
+                    }
                 case NPTypeCode.Single:
-                {
-                    InternalArray = _arraySingle = (ArraySlice<float>)array;
-                    Address = (byte*) _arraySingle.Address;
-                    Count = _arraySingle.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arraySingle = (ArraySlice<float>)array;
+                        Address = (byte*)_arraySingle.Address;
+                        Count = _arraySingle.Count;
+                        break;
+                    }
                 case NPTypeCode.Double:
-                {
-                    InternalArray = _arrayDouble = (ArraySlice<double>)array;
-                    Address = (byte*) _arrayDouble.Address;
-                    Count = _arrayDouble.Count;
-                    break;
-                }
+                    {
+                        InternalArray = _arrayDouble = (ArraySlice<double>)array;
+                        Address = (byte*)_arrayDouble.Address;
+                        Count = _arrayDouble.Count;
+                        break;
+                    }
                 default:
                     throw new NotSupportedException();
 #endif
@@ -807,47 +807,47 @@ namespace NumSharp.Backends
 
             #region Compute
 
-		    switch (TypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-			    {
-				    CopyTo<bool>((bool*)address);
-                    break;
-			    }
+            switch (TypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    {
+                        CopyTo<bool>((bool*)address);
+                        break;
+                    }
 
-			    case NPTypeCode.Byte:
-			    {
-				    CopyTo<byte>((byte*)address);
-                    break;
-			    }
+                case NPTypeCode.Byte:
+                    {
+                        CopyTo<byte>((byte*)address);
+                        break;
+                    }
 
-			    case NPTypeCode.Int32:
-			    {
-				    CopyTo<int>((int*)address);
-                    break;
-			    }
+                case NPTypeCode.Int32:
+                    {
+                        CopyTo<int>((int*)address);
+                        break;
+                    }
 
-			    case NPTypeCode.Int64:
-			    {
-				    CopyTo<long>((long*)address);
-                    break;
-			    }
+                case NPTypeCode.Int64:
+                    {
+                        CopyTo<long>((long*)address);
+                        break;
+                    }
 
-			    case NPTypeCode.Single:
-			    {
-				    CopyTo<float>((float*)address);
-                    break;
-			    }
+                case NPTypeCode.Single:
+                    {
+                        CopyTo<float>((float*)address);
+                        break;
+                    }
 
-			    case NPTypeCode.Double:
-			    {
-				    CopyTo<double>((double*)address);
-                    break;
-			    }
+                case NPTypeCode.Double:
+                    {
+                        CopyTo<double>((double*)address);
+                        break;
+                    }
 
-			    default:
-				    throw new NotSupportedException();
-		    }
+                default:
+                    throw new NotSupportedException();
+            }
 
             #endregion
 #endif
@@ -887,47 +887,47 @@ namespace NumSharp.Backends
 
             #region Compute
 
-		    switch (TypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-			    {
-				    CopyTo<bool>((bool*)block.Address);
-                    break;
-			    }
+            switch (TypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    {
+                        CopyTo<bool>((bool*)block.Address);
+                        break;
+                    }
 
-			    case NPTypeCode.Byte:
-			    {
-				    CopyTo<byte>((byte*)block.Address);
-                    break;
-			    }
+                case NPTypeCode.Byte:
+                    {
+                        CopyTo<byte>((byte*)block.Address);
+                        break;
+                    }
 
-			    case NPTypeCode.Int32:
-			    {
-				    CopyTo<int>((int*)block.Address);
-                    break;
-			    }
+                case NPTypeCode.Int32:
+                    {
+                        CopyTo<int>((int*)block.Address);
+                        break;
+                    }
 
-			    case NPTypeCode.Int64:
-			    {
-				    CopyTo<long>((long*)block.Address);
-                    break;
-			    }
+                case NPTypeCode.Int64:
+                    {
+                        CopyTo<long>((long*)block.Address);
+                        break;
+                    }
 
-			    case NPTypeCode.Single:
-			    {
-				    CopyTo<float>((float*)block.Address);
-                    break;
-			    }
+                case NPTypeCode.Single:
+                    {
+                        CopyTo<float>((float*)block.Address);
+                        break;
+                    }
 
-			    case NPTypeCode.Double:
-			    {
-				    CopyTo<double>((double*)block.Address);
-                    break;
-			    }
+                case NPTypeCode.Double:
+                    {
+                        CopyTo<double>((double*)block.Address);
+                        break;
+                    }
 
-			    default:
-				    throw new NotSupportedException();
-		    }
+                default:
+                    throw new NotSupportedException();
+            }
 
             #endregion
 #endif

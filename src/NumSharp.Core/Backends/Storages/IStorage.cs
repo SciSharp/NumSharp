@@ -8,12 +8,12 @@ namespace NumSharp.Backends
     public interface IStorage
     {
         void Allocate(Shape shape);
-        unsafe void* Address { get; }
+        unsafe void* Address { get; set; }
         unsafe ReadOnlySpan<T> Read<T>();
 
         Type DType { get; }
         Shape Shape { get; }
-        int Count { get; }
+        int Count { get; set; }
         int DTypeSize { get; }
         void Reshape(Shape shape);
         void Reshape(Shape shape, bool copy);

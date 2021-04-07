@@ -10,8 +10,8 @@ namespace ConsoleTest
             int i = 0;
             while (true)
             {
-                var nd1 = np.arange(10 * 1000);
-                var nd2 = np.arange(10 * 1000);
+                var nd1 = np.arange(10 * 1000).reshape(10, 1000);
+                var nd2 = np.arange(10 * 1000).reshape(10, 1000);
 
                 var nd3 = nd1 + nd2;
 

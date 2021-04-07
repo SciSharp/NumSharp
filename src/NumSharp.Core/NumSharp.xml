@@ -5630,7 +5630,7 @@
         </member>
         <member name="M:NumSharp.Backends.UnmanagedStorage.AsSpan``1">
             <summary>
-                Spans <see cref="F:NumSharp.Backends.UnmanagedStorage.Address"/> &lt;-&gt; <see cref="F:NumSharp.Backends.UnmanagedStorage.Count"/>
+                Spans <see cref="P:NumSharp.Backends.UnmanagedStorage.Address"/> &lt;-&gt; <see cref="F:NumSharp.Backends.UnmanagedStorage.Count"/>
             </summary>
             <remarks>This ignores completely slicing.</remarks>
         </member>

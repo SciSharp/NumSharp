@@ -13,7 +13,11 @@ namespace NumSharp.Backends
         public NPTypeCode DType { get; set; }
         public Shape Shape { get; set; }
         protected unsafe void* address;
-        public unsafe void* Address => address;
+        public unsafe void* Address
+        {
+            get => address;
+            set => address = value;
+        }
 
         public virtual void Allocate(Shape shape)
             => throw new NotImplementedException("");
@@ -26,9 +30,9 @@ namespace NumSharp.Backends
 
         public IArraySlice InternalArray => throw new NotImplementedException();
 
-        public int Count => throw new NotImplementedException();
+        public int Count { get; set; }
 
-        
+
 
         public static Storage Allocate<T>(T x) where T : unmanaged
         {
@@ -58,12 +62,12 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public IStorage Alias(Shape shape)
+        public virtual IStorage Alias(Shape shape)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("");
         }
 
-        public IStorage Alias()
+        public virtual IStorage Alias()
         {
             throw new NotImplementedException();
         }
@@ -263,9 +267,9 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public void Reshape(Shape shape, bool copy)
+        public void Reshape(Shape shape, bool copy = false)
         {
-            throw new NotImplementedException();
+            SetShapeUnsafe(Shape.Reshape(shape, copy));
         }
 
         public void CopyTo<T>(T[] array) where T : unmanaged
@@ -290,7 +294,115 @@ namespace NumSharp.Backends
 
         public IStorage GetView(params Slice[] slices)
         {
-            throw new NotImplementedException();
+            if (slices == null)
+                throw new ArgumentNullException(nameof(slices));
+            // deal with ellipsis and newaxis if any before continuing into GetViewInternal
+            int ellipsis_count = 0;
+            int newaxis_count = 0;
+            foreach (var slice in slices)
+            {
+                if (slice.IsEllipsis)
+                    ellipsis_count++;
+                if (slice.IsNewAxis)
+                    newaxis_count++;
+            }
+
+            // deal with ellipsis
+            if (ellipsis_count > 1)
+                throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");
+            else if (ellipsis_count == 1)
+                slices = ExpandEllipsis(slices).ToArray();
+
+            // deal with newaxis
+            if (newaxis_count > 0)
+            {
+                IStorage view = this;
+                for (var axis = 0; axis < slices.Length; axis++)
+                {
+                    var slice = slices[axis];
+                    if (slice.IsNewAxis)
+                    {
+                        slices[axis] = Slice.All;
+                        view = view.Alias(view.Shape.ExpandDimension(axis));
+                    }
+                }
+
+                throw new NotImplementedException("");
+                // return view.GetViewInternal(slices);
+            }
+
+            // slicing without newaxis
+            return GetViewInternal(slices);
+        }
+
+        IStorage GetViewInternal(params Slice[] slices)
+        {
+            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
+            //handle memory slice if possible
+            if (!Shape.IsSliced)
+            {
+                var indices = new int[slices.Length];
+                for (var i = 0; i < slices.Length; i++)
+                {
+                    var inputSlice = slices[i];
+                    if (!inputSlice.IsIndex)
+                    {
+                        //incase it is a trailing :, e.g. [2,2, :] in a shape (3,3,5,5) -> (5,5)
+                        if (i == slices.Length - 1 && inputSlice == Slice.All)
+                        {
+                            Array.Resize(ref indices, indices.Length - 1);
+                            goto _getdata;
+                        }
+
+                        goto _perform_slice;
+                    }
+
+                    indices[i] = inputSlice.Start.Value;
+                }
+
+_getdata:
+                throw new NotImplementedException("");
+                // return GetData(indices);
+            }
+
+//perform a regular slicing
+_perform_slice:
+
+// In case the slices selected are all ":"
+// ReSharper disable once ConvertIfStatementToReturnStatement
+            if (!Shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
+                return Alias();
+
+            //handle broadcasted shape
+            if (Shape.IsBroadcasted)
+                return Clone().Alias(Shape.Slice(slices));
+
+            return Alias(Shape.Slice(slices));
+        }
+
+        IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
+        {
+            // count dimensions without counting ellipsis or newaxis
+            var count = 0;
+            foreach (var slice in slices)
+            {
+                if (slice.IsNewAxis || slice.IsEllipsis)
+                    continue;
+                count++;
+            }
+
+            // expand 
+            foreach (var slice in slices)
+            {
+                if (slice.IsEllipsis)
+                {
+                    for (int i = 0; i < Shape.NDim - count; i++)
+                        yield return Slice.All;
+                    continue;
+                }
+
+                yield return slice;
+            }
         }
 
         public IStorage GetView(string slicing_notation)
@@ -320,7 +432,8 @@ namespace NumSharp.Backends
 
         public void SetShapeUnsafe(Shape shape)
         {
-            throw new NotImplementedException();
+            Shape = shape;
+            Count = Shape.size;
         }
     }
 }

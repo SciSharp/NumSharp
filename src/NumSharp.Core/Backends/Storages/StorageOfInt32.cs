@@ -29,5 +29,23 @@ namespace NumSharp.Backends
         }
 
         public override TensorEngine Engine => BackendFactory.GetEngine(DType);
+
+        public unsafe override IStorage Alias()
+        {
+            var r = new StorageOfInt32();
+            r.Shape = Shape;
+            r.Address = address;
+            r.Count = Shape.size; //incase shape is sliced
+            return r;
+        }
+
+        public unsafe override IStorage Alias(Shape shape)
+        {
+            var r = new StorageOfInt32();
+            r.Shape = shape;
+            r.Address = address;
+            r.Count = Shape.size; //incase shape is sliced
+            return r;
+        }
     }
 }
