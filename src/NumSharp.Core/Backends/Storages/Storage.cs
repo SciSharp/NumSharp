@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using NumSharp.Backends.Unmanaged;
@@ -25,7 +26,13 @@ namespace NumSharp.Backends
 
         Type IStorage.DType => DType.AsType();
 
-        public int DTypeSize => throw new NotImplementedException();
+        public int DTypeSize
+            => DType switch
+            {
+                NPTypeCode.String => IntPtr.Size,
+                NPTypeCode.Boolean => sizeof(bool),
+                _ => Marshal.SizeOf(DType.AsType())
+            };
 
         public IArraySlice InternalArray => throw new NotImplementedException();
 
@@ -34,22 +41,22 @@ namespace NumSharp.Backends
 
 
         public static Storage Allocate<T>(T x) where T : unmanaged
-        {
-            if (x is int int_x)
+            => x switch
             {
-                return new StorageOfInt32(int_x);
-            }
-            return null;
-        }
+                bool bool_x => new StorageOfBoolean(bool_x),
+                int int_x => new StorageOfInt32(int_x),
+                double double_x => new StorageOfDouble(double_x),
+                _ => throw new NotImplementedException("")
+            };
 
         public static Storage Allocate<T>(T[] x, Shape? shape = null) where T : unmanaged
-        {
-            if (x is int[] int_x)
+            => x switch
             {
-                return new StorageOfInt32(int_x, shape);
-            }
-            return null;
-        }
+                bool[] bool_x => new StorageOfBoolean(bool_x),
+                int[] int_x => new StorageOfInt32(int_x),
+                double[] double_x => new StorageOfDouble(double_x),
+                _ => throw new NotImplementedException("")
+            };
 
         public unsafe ReadOnlySpan<T> Read<T>()
         {
@@ -116,7 +123,7 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public ValueType GetAtIndex(int index)
+        public virtual ValueType GetAtIndex(int index)
         {
             throw new NotImplementedException();
         }

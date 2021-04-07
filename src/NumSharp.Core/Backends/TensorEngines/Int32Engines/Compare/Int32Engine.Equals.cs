@@ -14,7 +14,7 @@ namespace NumSharp.Backends
             (Shape leftshape, Shape rightshape) = Broadcast(lhs.Shape, rhs.Shape);
             var lhs_address = (int*)lhs.Address;
             var rhs_address = (int*)rhs.Address;
-            var ret = new NDArray<bool>(new Shape(leftshape.dimensions), true);
+            var ret = new NDArray<bool>(new Shape(leftshape.dimensions), false);
             Shape retShape = ret.Shape;
             var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
             var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;

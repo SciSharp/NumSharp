@@ -54,14 +54,48 @@ namespace NumSharp
                 }
                 else
                 {
-                    var items = Read<int>().ToArray();
                     if (this.size <= 10)
-                        s.Append(string.Join(", ", items.Select(v => v.ToString())));
+                    {
+                        switch (typecode)
+                        {
+                            case NPTypeCode.Boolean:
+                                s.Append(string.Join(", ", Read<bool>().ToArray().Select(v => v.ToString())));
+                                break;
+                            case NPTypeCode.Int32:
+                                s.Append(string.Join(", ", Read<int>().ToArray().Select(v => v.ToString())));
+                                break;
+                            case NPTypeCode.Double:
+                                s.Append(string.Join(", ", Read<double>().ToArray().Select(v => v.ToString())));
+                                break;
+                            default:
+                                break;
+                        }
+                    }
                     else
                     {
-                        s.Append(string.Join(", ", items.Take(5).Select(v => v.ToString())));
-                        s.Append(", ..., ");
-                        s.Append(string.Join(", ", items.Skip(this.size - 10).Select(v => v.ToString())));
+                        switch (typecode)
+                        {
+                            case NPTypeCode.Boolean:
+                                var items_bool = Read<bool>().ToArray();
+                                s.Append(string.Join(", ", items_bool.Take(5).Select(v => v.ToString())));
+                                s.Append(", ..., ");
+                                s.Append(string.Join(", ", items_bool.Skip(this.size - 10).Select(v => v.ToString())));
+                                break;
+                            case NPTypeCode.Int32:
+                                var items_int32 = Read<int>().ToArray();
+                                s.Append(string.Join(", ", items_int32.Take(5).Select(v => v.ToString())));
+                                s.Append(", ..., ");
+                                s.Append(string.Join(", ", items_int32.Skip(this.size - 10).Select(v => v.ToString())));
+                                break;
+                            case NPTypeCode.Double:
+                                var items_double = Read<double>().ToArray();
+                                s.Append(string.Join(", ", items_double.Take(5).Select(v => v.ToString())));
+                                s.Append(", ..., ");
+                                s.Append(string.Join(", ", items_double.Skip(this.size - 10).Select(v => v.ToString())));
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 }
 

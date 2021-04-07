@@ -8,14 +8,18 @@ namespace NumSharp.Backends
             => dtype.Name switch
             {
                 "Boolean" => new StorageOfBoolean(),
-                _ => new StorageOfInt32()
+                "Int32" => new StorageOfInt32(),
+                "Double" => new StorageOfDouble(),
+                _ => throw new NotImplementedException("")
             };
 
         public override IStorage GetStorage(NPTypeCode typeCode)
             => typeCode switch
             {
                 NPTypeCode.Boolean => new StorageOfBoolean(),
-                _ => new StorageOfInt32()
+                NPTypeCode.Int32 => new StorageOfInt32(),
+                NPTypeCode.Double => new StorageOfDouble(),
+                _ => throw new NotImplementedException("")
             };
     }
 }

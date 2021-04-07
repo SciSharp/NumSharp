@@ -53,7 +53,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NDArray Scalar<T>(T value) where T : unmanaged
         {
-            return new NDArray(UnmanagedStorage.Scalar(value));
+            return new NDArray(Backends.Storage.Allocate(value));
         }
 
         /// <summary>

@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Runtime.InteropServices;
-using NumSharp;
 
 namespace NumSharp.Backends
 {
@@ -37,11 +35,6 @@ namespace NumSharp.Backends
             DType = NPTypeCode.Boolean;
             Shape = shape ?? new Shape(x.Length);
             data = x;
-            // var handle = GCHandle.Alloc(x, GCHandleType.Pinned);
-            // address = handle.AddrOfPinnedObject().ToPointer();
-            // fixed (int* ptr = &x[0])
-            // address = ptr;
-            // handle.Free();
         }
 
         public override TensorEngine Engine => BackendFactory.GetEngine(DType);

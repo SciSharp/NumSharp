@@ -2,37 +2,37 @@
 
 namespace NumSharp.Backends
 {
-    public class StorageOfInt32 : Storage
+    public class StorageOfDouble : Storage
     {
-        int[] data;
+        double[] data;
 
         public override unsafe void* Address
         {
             get
             {
-                fixed (int* ptr = &data[0])
+                fixed (double* ptr = &data[0])
                     return ptr;
             }
             set => base.Address = value;
         }
 
-        public StorageOfInt32()
+        public StorageOfDouble()
         {
-            DType = NPTypeCode.Int32;
+            DType = NPTypeCode.Double;
         }
 
-        public StorageOfInt32(int x)
+        public StorageOfDouble(double x)
             => Init(new[] { x }, NumSharp.Shape.Scalar);
 
-        public StorageOfInt32(int[] x, Shape? shape = null)
+        public StorageOfDouble(double[] x, Shape? shape = null)
             => Init(x, shape);
 
         public override void Allocate(Shape shape)
-            => Init(new int[shape.Size], shape);
+            => Init(new double[shape.Size], shape);
 
-        unsafe void Init(int[] x, Shape? shape = null)
+        unsafe void Init(double[] x, Shape? shape = null)
         {
-            DType = NPTypeCode.Int32;
+            DType = NPTypeCode.Double;
             Shape = shape ?? new Shape(x.Length);
             data = x;
         }
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
 
         public unsafe override IStorage Alias()
         {
-            var r = new StorageOfInt32();
+            var r = new StorageOfDouble();
             r.Shape = Shape;
             r.Address = address;
             r.Count = Shape.size; //incase shape is sliced
@@ -50,19 +50,14 @@ namespace NumSharp.Backends
 
         public unsafe override IStorage Alias(Shape shape)
         {
-            var r = new StorageOfInt32();
+            var r = new StorageOfDouble();
             r.Shape = shape;
             r.Address = address;
             r.Count = Shape.size; //incase shape is sliced
             return r;
         }
 
-        public override IStorage Clone()
-        {
-            var x = new int[data.Length];
-            Buffer.BlockCopy(data, 0, x, 0, data.Length * sizeof(int));
-            var r = new StorageOfInt32(x, Shape);
-            return r;
-        }
+        public override ValueType GetAtIndex(int index)
+            => data[index];
     }
 }
