@@ -414,7 +414,7 @@ _perform_slice:
             throw new NotImplementedException();
         }
 
-        public IStorage Clone()
+        public virtual IStorage Clone()
         {
             throw new NotImplementedException();
         }

@@ -10,6 +10,8 @@ namespace NumSharp.Backends
         {
             switch (type.Name)
             {
+                case "Boolean":
+                    return EngineCache<BooleanEngine>.Value;
                 case "Int32":
                     return EngineCache<Int32Engine>.Value;
                 default:
@@ -22,6 +24,8 @@ namespace NumSharp.Backends
         {
             switch (type)
             {
+                case NPTypeCode.Boolean:
+                    return EngineCache<BooleanEngine>.Value;
                 case NPTypeCode.Int32:
                     return EngineCache<Int32Engine>.Value;
                 default:

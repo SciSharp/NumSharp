@@ -4,37 +4,37 @@ using NumSharp;
 
 namespace NumSharp.Backends
 {
-    public class StorageOfInt32 : Storage
+    public class StorageOfBoolean : Storage
     {
-        int[] data;
+        bool[] data;
 
         public override unsafe void* Address
         {
             get
             {
-                fixed (int* ptr = &data[0])
+                fixed (bool* ptr = &data[0])
                     return ptr;
             }
             set => base.Address = value;
         }
 
-        public StorageOfInt32()
+        public StorageOfBoolean()
         {
             DType = NPTypeCode.Int32;
         }
 
-        public StorageOfInt32(int x)
+        public StorageOfBoolean(bool x)
             => Init(new[] { x }, NumSharp.Shape.Scalar);
 
-        public StorageOfInt32(int[] x, Shape? shape = null)
+        public StorageOfBoolean(bool[] x, Shape? shape = null)
             => Init(x, shape);
 
         public override void Allocate(Shape shape)
-            => Init(new int[shape.Size], shape);
+            => Init(new bool[shape.Size], shape);
 
-        unsafe void Init(int[] x, Shape? shape = null)
+        unsafe void Init(bool[] x, Shape? shape = null)
         {
-            DType = NPTypeCode.Int32;
+            DType = NPTypeCode.Boolean;
             Shape = shape ?? new Shape(x.Length);
             data = x;
             // var handle = GCHandle.Alloc(x, GCHandleType.Pinned);
@@ -48,7 +48,7 @@ namespace NumSharp.Backends
 
         public unsafe override IStorage Alias()
         {
-            var r = new StorageOfInt32();
+            var r = new StorageOfBoolean();
             r.Shape = Shape;
             r.Address = address;
             r.Count = Shape.size; //incase shape is sliced
@@ -57,18 +57,10 @@ namespace NumSharp.Backends
 
         public unsafe override IStorage Alias(Shape shape)
         {
-            var r = new StorageOfInt32();
+            var r = new StorageOfBoolean();
             r.Shape = shape;
             r.Address = address;
             r.Count = Shape.size; //incase shape is sliced
-            return r;
-        }
-
-        public override IStorage Clone()
-        {
-            var x = new int[data.Length];
-            Buffer.BlockCopy(data, 0, x, 0, data.Length * sizeof(int));
-            var r = new StorageOfInt32(x, Shape);
             return r;
         }
     }

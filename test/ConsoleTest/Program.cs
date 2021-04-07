@@ -11,8 +11,9 @@ namespace ConsoleTest
             while (true)
             {
                 var nd1 = np.arange(1, 10 * 1000);
-                var nd2 = np.arange(1, 10 * 1000);
-                var nd3 = nd1 % nd2;
+                var nd2 = np.arange(2, 10 * 1000 + 1);
+
+                var nd3 = np.abs(nd1 - nd2);
 
                 // 1000 ms
                 i++;
