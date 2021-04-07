@@ -1,21 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
-using System.Threading.Tasks;
 using NumSharp.Utilities;
-using NumSharp.Utilities.Maths;
 
 namespace NumSharp.Backends
 {
-    public class Int32Engine : DefaultEngine
+    public partial class Int32Engine
     {
         public unsafe override NDArray Add(in NDArray lhs, in NDArray rhs)
         {
             //if return type is scalar
             var ret_type = np._FindCommonType(lhs, rhs);
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                return NDArray.Scalar(Converts.ChangeType(Operator.Add(*(int*)lhs.Address, *(int*)rhs.Address), ret_type));
+                return NDArray.Scalar(*(int*)lhs.Address + *(int*)rhs.Address);
 
             (Shape leftshape, Shape rightshape) = Broadcast(lhs.Shape, rhs.Shape);
             var lhs_address = (int*)lhs.Address;
@@ -29,7 +25,7 @@ namespace NumSharp.Backends
             if (leftLinear && rightLinear)
             {
                 var len = ret.size;
-                // Debug.Assert(leftshape.size == len && rightshape.size == len);
+                Debug.Assert(leftshape.size == len && rightshape.size == len);
                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var rval = *rhs_address;
