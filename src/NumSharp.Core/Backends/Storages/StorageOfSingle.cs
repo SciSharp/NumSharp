@@ -1,39 +1,54 @@
 ﻿using System;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
-    public class StorageOfDouble : Storage
+    public class StorageOfSingle : Storage
     {
-        double[] data;
+        float[] data;
 
         public override unsafe void* Address
         {
             get
             {
-                fixed (double* ptr = &data[0])
+                if (_address != null)
+                    return _address;
+
+                fixed (float* ptr = &data[0])
                     return ptr;
             }
             set => base.Address = value;
         }
 
-        public StorageOfDouble()
+        public StorageOfSingle()
         {
-            _typecode = NPTypeCode.Double;
+            _typecode = NPTypeCode.Single;
         }
 
-        public StorageOfDouble(double x)
+        public StorageOfSingle(float x)
             => Init(new[] { x }, NumSharp.Shape.Scalar);
 
-        public StorageOfDouble(double[] x, Shape? shape = null)
+        public StorageOfSingle(float[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
-            => Init(new double[shape.Size], shape);
+        public StorageOfSingle(IArraySlice x, Shape shape)
+            => _Allocate(shape, x);
 
-        unsafe void Init(double[] x, Shape? shape = null)
+        public override void Allocate(Shape shape)
+            => Init(new float[shape.Size], shape);
+
+        protected unsafe override void _Allocate(Shape shape, IArraySlice array)
         {
-            _typecode = NPTypeCode.Double;
-            Shape = shape ?? new Shape(x.Length);
+            _typecode = NPTypeCode.Single;
+            _internalArray = (ArraySlice<float>)array;
+            _shape = shape;
+            _address = _internalArray.Address;
+        }
+
+        unsafe void Init(float[] x, Shape? shape = null)
+        {
+            _typecode = NPTypeCode.Single;
+            _shape = shape ?? new Shape(x.Length);
             data = x;
         }
 

@@ -14,6 +14,8 @@ namespace NumSharp.Backends
                     return EngineCache<BooleanEngine>.Value;
                 case "Int32":
                     return EngineCache<Int32Engine>.Value;
+                case "Single":
+                    return EngineCache<SingleEngine>.Value;
                 case "Double":
                     return EngineCache<DoubleEngine>.Value;
                 default:
@@ -30,6 +32,8 @@ namespace NumSharp.Backends
                     return EngineCache<BooleanEngine>.Value;
                 case NPTypeCode.Int32:
                     return EngineCache<Int32Engine>.Value;
+                case NPTypeCode.Float:
+                    return EngineCache<SingleEngine>.Value;
                 case NPTypeCode.Double:
                     return EngineCache<DoubleEngine>.Value;
                 default:

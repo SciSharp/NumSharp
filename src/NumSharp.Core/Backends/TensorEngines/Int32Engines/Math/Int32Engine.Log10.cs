@@ -7,7 +7,7 @@ namespace NumSharp.Backends
 {
     public partial class Int32Engine
     {
-        public unsafe override NDArray Log(in NDArray nd, NPTypeCode? typeCode = null)
+        public unsafe override NDArray Log10(in NDArray nd, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
                 return nd.Clone();
@@ -18,7 +18,7 @@ namespace NumSharp.Backends
             var addr = (int*)nd.Address;
 
             for (int i = 0; i < len; i++)
-                *(out_addr + i) = Math.Log(*(addr + i));
+                *(out_addr + i) = Math.Log10(*(addr + i));
 
             return @out;
         }

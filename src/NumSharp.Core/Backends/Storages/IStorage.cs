@@ -8,6 +8,8 @@ namespace NumSharp.Backends
     public interface IStorage
     {
         void Allocate(Shape shape);
+        void Allocate(IArraySlice values, Shape shape, bool copy = false);
+
         unsafe void* Address { get; set; }
         unsafe ReadOnlySpan<T> Read<T>();
 
@@ -21,7 +23,7 @@ namespace NumSharp.Backends
         NPTypeCode TypeCode { get; }
         IStorage Alias(Shape shape);
         IStorage Alias();
-        void Allocate(IArraySlice values, Shape shape);
+        
         IStorage Cast(Type type);
         IStorage Cast(NPTypeCode typeCode);
         IStorage CastIfNecessary(NPTypeCode typeCode);

@@ -1,13 +1,11 @@
 ﻿using System;
-using System.Diagnostics;
 using NumSharp.Generic;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
-    public partial class Int32Engine
+    public partial class SingleEngine
     {
-        public unsafe override NDArray Log(in NDArray nd, NPTypeCode? typeCode = null)
+        public unsafe override NDArray Log2(in NDArray nd, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
                 return nd.Clone();
@@ -15,10 +13,10 @@ namespace NumSharp.Backends
             var @out = new NDArray<double>(nd.Shape, false);
             var len = @out.size;
             var out_addr = @out.Address;
-            var addr = (int*)nd.Address;
+            var addr = (float*)nd.Address;
 
             for (int i = 0; i < len; i++)
-                *(out_addr + i) = Math.Log(*(addr + i));
+                *(out_addr + i) = Math.Log(*(addr + i), 2d);
 
             return @out;
         }

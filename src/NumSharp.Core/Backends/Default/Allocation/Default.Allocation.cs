@@ -9,17 +9,12 @@ namespace NumSharp.Backends
             {
                 "Boolean" => new StorageOfBoolean(),
                 "Int32" => new StorageOfInt32(),
+                "Single" => new StorageOfSingle(),
                 "Double" => new StorageOfDouble(),
                 _ => throw new NotImplementedException("")
             };
 
         public override IStorage GetStorage(NPTypeCode typeCode)
-            => typeCode switch
-            {
-                NPTypeCode.Boolean => new StorageOfBoolean(),
-                NPTypeCode.Int32 => new StorageOfInt32(),
-                NPTypeCode.Double => new StorageOfDouble(),
-                _ => throw new NotImplementedException("")
-            };
+            => GetStorage(typeCode.AsType());
     }
 }

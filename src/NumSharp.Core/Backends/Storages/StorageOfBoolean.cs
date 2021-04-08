@@ -18,7 +18,7 @@ namespace NumSharp.Backends
 
         public StorageOfBoolean()
         {
-            DType = NPTypeCode.Int32;
+            _typecode = NPTypeCode.Int32;
         }
 
         public StorageOfBoolean(bool x)
@@ -32,18 +32,16 @@ namespace NumSharp.Backends
 
         unsafe void Init(bool[] x, Shape? shape = null)
         {
-            DType = NPTypeCode.Boolean;
+            _typecode = NPTypeCode.Boolean;
             Shape = shape ?? new Shape(x.Length);
             data = x;
         }
-
-        public override TensorEngine Engine => BackendFactory.GetEngine(DType);
 
         public unsafe override IStorage Alias()
         {
             var r = new StorageOfBoolean();
             r.Shape = Shape;
-            r.Address = address;
+            r.Address = _address;
             r.Count = Shape.size; //incase shape is sliced
             return r;
         }
@@ -52,7 +50,7 @@ namespace NumSharp.Backends
         {
             var r = new StorageOfBoolean();
             r.Shape = shape;
-            r.Address = address;
+            r.Address = _address;
             r.Count = Shape.size; //incase shape is sliced
             return r;
         }

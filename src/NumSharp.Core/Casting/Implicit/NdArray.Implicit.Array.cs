@@ -57,7 +57,6 @@ namespace NumSharp
             }
             else
             {
-
                 var nd = new NDArray(underlying);
                 switch (nd.GetTypeCode)
                 {

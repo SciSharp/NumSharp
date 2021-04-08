@@ -64,6 +64,9 @@ namespace NumSharp
                             case NPTypeCode.Int32:
                                 s.Append(string.Join(", ", Read<int>().ToArray().Select(v => v.ToString())));
                                 break;
+                            case NPTypeCode.Single:
+                                s.Append(string.Join(", ", Read<float>().ToArray().Select(v => v.ToString())));
+                                break;
                             case NPTypeCode.Double:
                                 s.Append(string.Join(", ", Read<double>().ToArray().Select(v => v.ToString())));
                                 break;
