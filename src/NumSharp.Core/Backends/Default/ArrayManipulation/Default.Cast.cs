@@ -18,7 +18,7 @@ namespace NumSharp.Backends
                 if (copy)
                     return new NDArray(dtype);
 
-                nd.Storage = new UnmanagedStorage(dtype);
+                nd.Storage = Backends.Storage.Allocate(dtype);
                 return nd;
             }
 
@@ -26,6 +26,7 @@ namespace NumSharp.Backends
             if (nd.Shape.IsScalar)
             {
                 var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
+
                 if (copy)
                     return ret;
 
@@ -58,12 +59,12 @@ namespace NumSharp.Backends
                     if (nd.Shape.IsSliced)
                         nd = clone();
 
-                    return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.CastTo(dtype), false), nd.Shape));
+                    return new NDArray(Backends.Storage.Allocate(ArraySlice.FromMemoryBlock(nd.Array.CastTo(dtype), false), nd.Shape));
                 }
                 else
                 {
                     var storage = nd.Shape.IsSliced ? nd.Storage.Clone() : nd.Storage;
-                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(storage.InternalArray.CastTo(dtype), false), storage.Shape);
+                    nd.Storage = Backends.Storage.Allocate(ArraySlice.FromMemoryBlock(storage.InternalArray.CastTo(dtype), false), storage.Shape);
                     return nd;
                 }
             }

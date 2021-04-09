@@ -23,7 +23,12 @@ namespace NumSharp
                 // Using this comparison allows less restrictive semantics,
                 // like comparing a scalar to an array
                 // we can use unmanaged access because the result of == op is never a slice.
-                var results = (this == obj);
+                var results = this == obj switch
+                {
+                    NDArray nd => nd,
+                    ValueType val => NDArray.Scalar(val),
+                    _ => np.asanyarray(obj)
+                };
                 var len = results.size;
                 var addr = results.Address;
 

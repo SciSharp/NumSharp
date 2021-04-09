@@ -6,40 +6,38 @@ namespace NumSharp.Backends
     public class BackendFactory
     {
         [DebuggerNonUserCode]
-        public static TensorEngine GetEngine(Type type)
-        {
-            switch (type.Name)
+        public static IStorage GetStorage(Type type)
+            => type.Name switch
             {
-                case "Boolean":
-                    return EngineCache<BooleanEngine>.Value;
-                case "Int32":
-                    return EngineCache<Int32Engine>.Value;
-                case "Single":
-                    return EngineCache<SingleEngine>.Value;
-                case "Double":
-                    return EngineCache<DoubleEngine>.Value;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, null);
-            }
-        }
+                "Boolean" => new StorageOfBoolean(),
+                "Byte" => new StorageOfByte(),
+                "Int32" => new StorageOfInt32(),
+                "Int64" => new StorageOfInt64(),
+                "Single" => new StorageOfSingle(),
+                "Double" => new StorageOfDouble(),
+                _ => throw new NotImplementedException("")
+            };
+
+        [DebuggerNonUserCode]
+        public static IStorage GetStorage(NPTypeCode typeCode)
+            => GetStorage(typeCode.AsType());
+
+        [DebuggerNonUserCode]
+        public static TensorEngine GetEngine(Type type)
+            => type.Name switch
+            {
+                "Boolean" => EngineCache<BooleanEngine>.Value,
+                "Byte" => EngineCache<ByteEngine>.Value,
+                "Int32" => EngineCache<Int32Engine>.Value,
+                "Int64" => EngineCache<Int64Engine>.Value,
+                "Single" => EngineCache<SingleEngine>.Value,
+                "Double" => EngineCache<DoubleEngine>.Value,
+                _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
+            };
 
         [DebuggerNonUserCode]
         public static TensorEngine GetEngine(NPTypeCode type)
-        {
-            switch (type)
-            {
-                case NPTypeCode.Boolean:
-                    return EngineCache<BooleanEngine>.Value;
-                case NPTypeCode.Int32:
-                    return EngineCache<Int32Engine>.Value;
-                case NPTypeCode.Float:
-                    return EngineCache<SingleEngine>.Value;
-                case NPTypeCode.Double:
-                    return EngineCache<DoubleEngine>.Value;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type), type, null);
-            }
-        }
+            => GetEngine(type.AsType());
 
         [DebuggerNonUserCode]
         public static TensorEngine GetEngine(BackendType backendType = BackendType.Default)

@@ -8,7 +8,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
-    public abstract class Storage : IStorage
+    public abstract partial class Storage : IStorage
     {
         protected Type _dtype => _typecode.AsType();
         public Type DType => _dtype;
@@ -44,11 +44,44 @@ namespace NumSharp.Backends
         public virtual void Allocate(Shape shape)
             => throw new NotImplementedException("");
 
+        public static IStorage Allocate(object x, NPTypeCode? typeCode = null)
+        {
+            if(!typeCode.HasValue || x.GetType() == typeCode.Value.AsType())
+            {
+                return x switch
+                {
+                    bool bool_x => new StorageOfBoolean(bool_x),
+                    byte byte_x => new StorageOfByte(byte_x),
+                    int int_x => new StorageOfInt32(int_x),
+                    long int_x => new StorageOfInt64(int_x),
+                    float float_x => new StorageOfSingle(float_x),
+                    double double_x => new StorageOfDouble(double_x),
+                    _ => throw new NotImplementedException("")
+                };
+            }
+            else
+            {
+                return typeCode switch
+                {
+                    NPTypeCode.Boolean => new StorageOfBoolean(Convert.ToBoolean(x)),
+                    NPTypeCode.Byte => new StorageOfByte(Convert.ToByte(x)),
+                    NPTypeCode.Int32 => new StorageOfInt32(Convert.ToInt32(x)),
+                    NPTypeCode.Int64 => new StorageOfInt64(Convert.ToInt64(x)),
+                    NPTypeCode.Single => new StorageOfSingle(Convert.ToSingle(x)),
+                    NPTypeCode.Double => new StorageOfDouble(Convert.ToDouble(x)),
+                    _ => throw new NotImplementedException("")
+                };
+            }
+        }
+
+
         public static IStorage Allocate<T>(T x) where T : unmanaged
             => x switch
             {
                 bool bool_x => new StorageOfBoolean(bool_x),
+                byte byte_x => new StorageOfByte(byte_x),
                 int int_x => new StorageOfInt32(int_x),
+                long int_x => new StorageOfInt64(int_x),
                 float float_x => new StorageOfSingle(float_x),
                 double double_x => new StorageOfDouble(double_x),
                 _ => throw new NotImplementedException("")
@@ -58,23 +91,34 @@ namespace NumSharp.Backends
             => x switch
             {
                 bool[] bool_x => new StorageOfBoolean(bool_x, shape),
+                byte[] byte_x => new StorageOfByte(byte_x),
                 int[] int_x => new StorageOfInt32(int_x, shape),
+                long[] int_x => new StorageOfInt64(int_x, shape),
                 float[] float_x => new StorageOfSingle(float_x, shape),
                 double[] double_x => new StorageOfDouble(double_x, shape),
                 _ => throw new NotImplementedException("")
             };
 
         public static IStorage Allocate(IArraySlice x, Shape shape)
-            => x.TypeCode switch
+        {
+            Storage storage = (Storage)BackendFactory.GetStorage(x.TypeCode);
+            storage.Allocate(x, shape);
+            return storage;
+        }
+
+        public static IStorage Allocate(ValueType x)
+            => x switch
             {
-                //NPTypeCode.Boolean => new StorageOfBoolean(x, shape),
-                //int[] int_x => new StorageOfInt32(int_x, shape),
-                NPTypeCode.Single => new StorageOfSingle(x, shape),
-                //double[] double_x => new StorageOfDouble(double_x, shape),
+                bool bool_x => new StorageOfBoolean(bool_x),
+                byte byte_x => new StorageOfByte(byte_x),
+                int int_x => new StorageOfInt32(int_x),
+                long long_x => new StorageOfInt64(long_x),
+                float float_x => new StorageOfSingle(float_x),
+                double double_x => new StorageOfDouble(double_x),
                 _ => throw new NotImplementedException("")
             };
 
-        public void Allocate(IArraySlice values, Shape shape, bool copy = false)
+        public unsafe void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
@@ -82,12 +126,10 @@ namespace NumSharp.Backends
             if (values.Count != shape.Size)
                 throw new ArgumentException($"values.Length does not match shape.Size", nameof(values));
 
-            _Allocate(shape, copy ? values.Clone() : values);
-        }
-
-        protected virtual void _Allocate(Shape shape, IArraySlice array)
-        {
-            throw new NotImplementedException("");
+            _shape = shape;
+            _address = values.Address;
+            _internalArray = values;
+            Count = Convert.ToInt32(values.Count);
         }
 
         public static unsafe IStorage Allocate<T>(T[,] x) where T : unmanaged
@@ -106,14 +148,14 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public virtual IStorage Alias(Shape shape)
+        public IStorage Alias()
         {
-            throw new NotImplementedException("");
+            return Storage.Allocate(_internalArray, _shape);
         }
 
-        public virtual IStorage Alias()
+        public IStorage Alias(Shape shape)
         {
-            throw new NotImplementedException();
+            return Storage.Allocate(_internalArray, shape);
         }
 
         public IStorage Cast(Type type)
@@ -122,56 +164,6 @@ namespace NumSharp.Backends
         }
 
         public ArraySlice<T> CloneData<T>() where T : unmanaged
-        {
-            throw new NotImplementedException();
-        }
-
-        public bool GetBoolean(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public byte GetByte(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public int GetInt32(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public int GetInt64(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public float GetSingle(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public double GetDouble(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public virtual ValueType GetAtIndex(int index)
-        {
-            throw new NotImplementedException();
-        }
-
-        public T GetAtIndex<T>(int index)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ValueType GetValue<T>(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ArraySlice<T> GetData<T>() where T : unmanaged
         {
             throw new NotImplementedException();
         }
@@ -192,61 +184,6 @@ namespace NumSharp.Backends
         }
 
         public void ReplaceData(IArraySlice values)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetAtIndex(object value, int index)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetBoolean(bool value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetByte(byte value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetInt32(int value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetInt64(long value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetSingle(float value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetDouble(double value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetData(IArraySlice value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetData(NDArray value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetValue(ValueType value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetValue(object value, params int[] indices)
         {
             throw new NotImplementedException();
         }
@@ -274,54 +211,6 @@ namespace NumSharp.Backends
         public void ReplaceData(NDArray nd)
         {
             throw new NotImplementedException();
-        }
-
-        public void SetData(object value, params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SetValue<T>(T value, params int[] indices) where T : unmanaged
-        {
-            throw new NotImplementedException();
-        }
-
-        T IStorage.GetValue<T>(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ValueType GetValue(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        public IArraySlice GetData()
-        {
-            throw new NotImplementedException();
-        }
-
-        public IStorage GetData(params int[] indices)
-        {
-            var this_shape = Shape;
-
-            // ReSharper disable once ConvertIfStatementToReturnStatement
-            indices = Shape.InferNegativeCoordinates(Shape.dimensions, indices);
-            if (this_shape.IsBroadcasted)
-            {
-                var (shape, offset) = this_shape.GetSubshape(indices);
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
-            }
-            else if (this_shape.IsSliced)
-            {
-                // in this case we can not get a slice of contiguous memory, so we slice
-                return GetView(indices.Select(Slice.Index).ToArray());
-            }
-            else
-            {
-                var (shape, offset) = this_shape.GetSubshape(indices);
-                return Storage.Allocate(_internalArray.Slice(offset, shape.Size), shape);
-            }
         }
 
         public void Reshape(Shape shape, bool copy = false)
@@ -466,24 +355,12 @@ _perform_slice:
             throw new NotImplementedException();
         }
 
-        public unsafe T[] ToArray<T>() where T : unmanaged
-        {
-            throw new NotImplementedException();
-        }
+        public T[] ToArray<T>() where T : unmanaged
+            => Read<T>().ToArray();
 
         public virtual IStorage Clone()
         {
-            throw new NotImplementedException();
-        }
-
-        public unsafe IStorage GetData(int* dims, int ndims)
-        {
-            throw new NotImplementedException();
-        }
-
-        IStorage IStorage.GetData(params int[] indices)
-        {
-            throw new NotImplementedException();
+            return Storage.Allocate(_internalArray, _shape);
         }
 
         public void SetShapeUnsafe(Shape shape)

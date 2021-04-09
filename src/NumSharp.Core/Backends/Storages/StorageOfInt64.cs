@@ -3,9 +3,9 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
-    public class StorageOfInt32 : Storage
+    public class StorageOfInt64 : Storage
     {
-        int[] data;
+        long[] data;
 
         public override unsafe void* Address
         {
@@ -14,29 +14,29 @@ namespace NumSharp.Backends
                 if (_address != null)
                     return _address;
 
-                fixed (int* ptr = &data[0])
+                fixed (long* ptr = &data[0])
                     return ptr;
             }
             set => base.Address = value;
         }
 
-        public StorageOfInt32()
+        public StorageOfInt64()
         {
-            _typecode = NPTypeCode.Int32;
+            _typecode = NPTypeCode.Int64;
         }
 
-        public StorageOfInt32(int x)
+        public StorageOfInt64(long x)
             => Init(new[] { x }, NumSharp.Shape.Scalar);
 
-        public StorageOfInt32(int[] x, Shape? shape = null)
+        public StorageOfInt64(long[] x, Shape? shape = null)
             => Init(x, shape);
 
         public override void Allocate(Shape shape)
-            => Init(new int[shape.Size], shape);
+            => Init(new long[shape.Size], shape);
 
-        unsafe void Init(int[] x, Shape? shape = null)
+        unsafe void Init(long[] x, Shape? shape = null)
         {
-            _typecode = NPTypeCode.Int32;
+            _typecode = NPTypeCode.Int64;
             Shape = shape ?? new Shape(x.Length);
             data = x;
             _internalArray = ArraySlice.FromArray(data);
@@ -44,6 +44,6 @@ namespace NumSharp.Backends
         }
 
         public override ValueType GetAtIndex(int index)
-            => data == null ? _internalArray.GetIndex<int>(index) : data[index];
+            => data[index];
     }
 }

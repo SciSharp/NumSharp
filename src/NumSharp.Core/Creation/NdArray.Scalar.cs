@@ -29,7 +29,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NDArray Scalar(object value)
         {
-            return new NDArray(UnmanagedStorage.Scalar(value));
+            return new NDArray(Backends.Storage.Allocate(value));
         }
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NDArray Scalar(ValueType value)
         {
-            return new NDArray(UnmanagedStorage.Scalar(value));
+            return new NDArray(Backends.Storage.Allocate(value));
         }
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NDArray Scalar(object value, NPTypeCode typeCode)
         {
-            return new NDArray(UnmanagedStorage.Scalar(value, typeCode));
+            return new NDArray(Backends.Storage.Allocate(value, typeCode));
         }
     }
 }

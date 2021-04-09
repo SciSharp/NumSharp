@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -10,6 +11,9 @@ namespace NumSharp.Backends
         {
             get
             {
+                if (_address != null)
+                    return _address;
+
                 fixed (bool* ptr = &data[0])
                     return ptr;
             }
@@ -18,7 +22,7 @@ namespace NumSharp.Backends
 
         public StorageOfBoolean()
         {
-            _typecode = NPTypeCode.Int32;
+            _typecode = NPTypeCode.Boolean;
         }
 
         public StorageOfBoolean(bool x)
@@ -35,24 +39,11 @@ namespace NumSharp.Backends
             _typecode = NPTypeCode.Boolean;
             Shape = shape ?? new Shape(x.Length);
             data = x;
+            _internalArray = ArraySlice.FromArray(data);
+            _address = _internalArray.Address;
         }
 
-        public unsafe override IStorage Alias()
-        {
-            var r = new StorageOfBoolean();
-            r.Shape = Shape;
-            r.Address = _address;
-            r.Count = Shape.size; //incase shape is sliced
-            return r;
-        }
-
-        public unsafe override IStorage Alias(Shape shape)
-        {
-            var r = new StorageOfBoolean();
-            r.Shape = shape;
-            r.Address = _address;
-            r.Count = Shape.size; //incase shape is sliced
-            return r;
-        }
+        public override ValueType GetAtIndex(int index)
+            => data[index];
     }
 }
