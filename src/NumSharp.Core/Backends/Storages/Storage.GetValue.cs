@@ -8,57 +8,33 @@ namespace NumSharp.Backends
     public abstract partial class Storage
     {
         public bool GetBoolean(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => (bool)_internalArray[_shape.GetOffset(indices)];
 
         public byte GetByte(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => (byte)_internalArray[_shape.GetOffset(indices)];
 
         public int GetInt32(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => (int)_internalArray[_shape.GetOffset(indices)];
 
-        public int GetInt64(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+        public long GetInt64(params int[] indices)
+            => (long)_internalArray[_shape.GetOffset(indices)];
 
         public float GetSingle(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => (float)_internalArray[_shape.GetOffset(indices)];
 
         public double GetDouble(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => (double)_internalArray[_shape.GetOffset(indices)];
 
-        public virtual ValueType GetAtIndex(int index)
-        {
-            throw new NotImplementedException();
-        }
+        public ValueType GetAtIndex(int index)
+            => (ValueType)_internalArray[index];
 
         public T GetAtIndex<T>(int index)
-            => Read<T>()[index];
+            => (T)_internalArray[index];
 
-        public ValueType GetValue<T>(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
-        T IStorage.GetValue<T>(params int[] indices)
-        {
-            var offset = _shape.GetOffset(indices);
-            return GetAtIndex<T>(offset);
-        }
+        public T GetValue<T>(params int[] indices) where T : unmanaged
+            => GetAtIndex<T>(_shape.GetOffset(indices));
 
         public ValueType GetValue(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
+            => GetAtIndex(_shape.GetOffset(indices));
     }
 }

@@ -10,6 +10,7 @@ namespace NumSharp.Backends
             => type.Name switch
             {
                 "Boolean" => new StorageOfBoolean(),
+                "Char" => new StorageOfChar(),
                 "Byte" => new StorageOfByte(),
                 "Int32" => new StorageOfInt32(),
                 "Int64" => new StorageOfInt64(),
@@ -27,6 +28,7 @@ namespace NumSharp.Backends
             => type.Name switch
             {
                 "Boolean" => EngineCache<BooleanEngine>.Value,
+                "Char" => EngineCache<ByteEngine>.Value,
                 "Byte" => EngineCache<ByteEngine>.Value,
                 "Int32" => EngineCache<Int32Engine>.Value,
                 "Int64" => EngineCache<Int64Engine>.Value,

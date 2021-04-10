@@ -150,12 +150,16 @@ namespace NumSharp.Backends
 
         public IStorage Alias()
         {
-            return Storage.Allocate(_internalArray, _shape);
+            return Alias(_shape);
         }
 
-        public IStorage Alias(Shape shape)
+        public unsafe IStorage Alias(Shape shape)
         {
-            return Storage.Allocate(_internalArray, shape);
+            var storage = BackendFactory.GetStorage(_typecode);
+            storage.SetInternalArray(_internalArray);
+            storage.Shape = shape;
+            storage.Count = shape.size;
+            return storage;
         }
 
         public IStorage Cast(Type type)
@@ -367,6 +371,13 @@ _perform_slice:
         {
             Shape = shape;
             Count = Shape.size;
+        }
+
+        public unsafe void SetInternalArray(IArraySlice array)
+        {
+            _internalArray = array;
+            _address = _internalArray.Address;
+            Count = Convert.ToInt32(array.Count);
         }
     }
 }

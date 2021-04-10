@@ -24,14 +24,10 @@ namespace NumSharp.Backends
         }
 
         public void SetAtIndex(object value, int index)
-        {
-            throw new NotImplementedException();
-        }
+            => _internalArray.SetIndex(index, value);
 
-        public virtual void SetAtIndex(ValueType value, int index)
-        {
-            throw new NotImplementedException();
-        }
+        public void SetAtIndex(ValueType value, int index)
+            => _internalArray.SetIndex(index, value);
 
         public void SetBoolean(bool value, params int[] indices)
         {

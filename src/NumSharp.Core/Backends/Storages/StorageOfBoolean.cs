@@ -5,21 +5,6 @@ namespace NumSharp.Backends
 {
     public class StorageOfBoolean : Storage
     {
-        bool[] data;
-
-        public override unsafe void* Address
-        {
-            get
-            {
-                if (_address != null)
-                    return _address;
-
-                fixed (bool* ptr = &data[0])
-                    return ptr;
-            }
-            set => base.Address = value;
-        }
-
         public StorageOfBoolean()
         {
             _typecode = NPTypeCode.Boolean;
@@ -37,13 +22,9 @@ namespace NumSharp.Backends
         unsafe void Init(bool[] x, Shape? shape = null)
         {
             _typecode = NPTypeCode.Boolean;
-            Shape = shape ?? new Shape(x.Length);
-            data = x;
-            _internalArray = ArraySlice.FromArray(data);
+            _shape = shape ?? new Shape(x.Length);
+            _internalArray = ArraySlice.FromArray(x);
             _address = _internalArray.Address;
         }
-
-        public override ValueType GetAtIndex(int index)
-            => data[index];
     }
 }

@@ -3,25 +3,25 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
-    public class StorageOfInt64 : Storage
+    public class StorageOfChar : Storage
     {
-        public StorageOfInt64()
+        public StorageOfChar()
         {
-            _typecode = NPTypeCode.Int64;
+            _typecode = NPTypeCode.Char;
         }
 
-        public StorageOfInt64(long x)
+        public StorageOfChar(char x)
             => Init(new[] { x }, NumSharp.Shape.Scalar);
 
-        public StorageOfInt64(long[] x, Shape? shape = null)
+        public StorageOfChar(char[] x, Shape? shape = null)
             => Init(x, shape);
 
         public override void Allocate(Shape shape)
-            => Init(new long[shape.Size], shape);
+            => Init(new char[shape.Size], shape);
 
-        unsafe void Init(long[] x, Shape? shape = null)
+        unsafe void Init(char[] x, Shape? shape = null)
         {
-            _typecode = NPTypeCode.Int64;
+            _typecode = NPTypeCode.Char;
             _shape = shape ?? new Shape(x.Length);
             _internalArray = ArraySlice.FromArray(x);
             _address = _internalArray.Address;

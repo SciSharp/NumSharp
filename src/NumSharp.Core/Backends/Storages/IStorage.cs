@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         unsafe ReadOnlySpan<T> Read<T>();
 
         Type DType { get; }
-        Shape Shape { get; }
+        Shape Shape { get; set; }
         int Count { get; set; }
         int DTypeSize { get; }
         void Reshape(Shape shape);
@@ -37,12 +37,14 @@ namespace NumSharp.Backends
         void ExpandDimension(int axis);
 
         IArraySlice InternalArray { get; }
+        void SetInternalArray(IArraySlice array);
+
         ArraySlice<T> CloneData<T>() where T : unmanaged;
         IArraySlice CloneData();
         bool GetBoolean(params int[] indices);
         byte GetByte(params int[] indices);
         int GetInt32(params int[] indices);
-        int GetInt64(params int[] indices);
+        long GetInt64(params int[] indices);
         float GetSingle(params int[] indices);
         double GetDouble(params int[] indices);
         ValueType GetAtIndex(int index);

@@ -1049,11 +1049,6 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        int IStorage.GetInt64(params int[] indices)
-        {
-            throw new NotImplementedException();
-        }
-
         public void SetValue(ValueType value, params int[] indices)
         {
             throw new NotImplementedException();
@@ -1090,6 +1085,11 @@ namespace NumSharp.Backends
         }
 
         public ReadOnlySpan<T> Read<T>()
+        {
+            throw new NotImplementedException();
+        }
+
+        void IStorage.SetInternalArray(IArraySlice array)
         {
             throw new NotImplementedException();
         }

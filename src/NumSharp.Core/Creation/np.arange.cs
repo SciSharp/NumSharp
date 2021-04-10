@@ -255,6 +255,11 @@ namespace NumSharp
             return arange(0, stop, 1);
         }
 
+        public static NDArray arange(long stop)
+        {
+            return arange(0, stop, 1);
+        }
+
         /// <summary>
         /// Return evenly spaced values within a given interval.
         /// 

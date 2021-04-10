@@ -5,21 +5,6 @@ namespace NumSharp.Backends
 {
     public class StorageOfSingle : Storage
     {
-        float[] data;
-
-        public override unsafe void* Address
-        {
-            get
-            {
-                if (_address != null)
-                    return _address;
-
-                fixed (float* ptr = &data[0])
-                    return ptr;
-            }
-            set => base.Address = value;
-        }
-
         public StorageOfSingle()
         {
             _typecode = NPTypeCode.Single;
@@ -38,12 +23,8 @@ namespace NumSharp.Backends
         {
             _typecode = NPTypeCode.Single;
             _shape = shape ?? new Shape(x.Length);
-            data = x;
-            _internalArray = ArraySlice.FromArray(data);
+            _internalArray = ArraySlice.FromArray(x);
             _address = _internalArray.Address;
         }
-
-        public override ValueType GetAtIndex(int index)
-            => data[index];
     }
 }
