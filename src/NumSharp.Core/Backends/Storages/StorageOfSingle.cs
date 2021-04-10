@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         public StorageOfSingle(float[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
+        public override void Allocate(Shape shape, Type dtype = null)
             => Init(new float[shape.Size], shape);
 
         unsafe void Init(float[] x, Shape? shape = null)

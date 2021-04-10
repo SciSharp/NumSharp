@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         public StorageOfByte(byte[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
+        public override void Allocate(Shape shape, Type dtype = null)
             => Init(new byte[shape.Size], shape);
 
         unsafe void Init(byte[] x, Shape? shape = null)

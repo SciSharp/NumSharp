@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         public StorageOfInt32(int[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
+        public override void Allocate(Shape shape, Type dtype = null)
             => Init(new int[shape.Size], shape);
 
         unsafe void Init(int[] x, Shape? shape = null)

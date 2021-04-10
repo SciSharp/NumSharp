@@ -7,7 +7,7 @@ namespace NumSharp.Backends
 {
     public interface IStorage
     {
-        void Allocate(Shape shape);
+        void Allocate(Shape shape, Type dtype = null);
         void Allocate(IArraySlice values, Shape shape, bool copy = false);
 
         unsafe void* Address { get; set; }
@@ -17,8 +17,8 @@ namespace NumSharp.Backends
         Shape Shape { get; set; }
         int Count { get; set; }
         int DTypeSize { get; }
-        void Reshape(Shape shape);
-        void Reshape(Shape shape, bool copy);
+        void Reshape(Shape shape, bool copy = false);
+        void Reshape(ref Shape shape, bool copy = false);
         TensorEngine Engine { get; }
         NPTypeCode TypeCode { get; }
         IStorage Alias(Shape shape);
@@ -28,15 +28,17 @@ namespace NumSharp.Backends
         IStorage Cast(NPTypeCode typeCode);
         IStorage CastIfNecessary(NPTypeCode typeCode);
 
-        void CopyTo<T>(T[] array) where T : unmanaged;
-        void CopyTo<T>(IMemoryBlock slice);
-        unsafe void CopyTo<T>(void* address);
-
+        bool CopyTo(IntPtr ptr);
+        bool CopyTo(IMemoryBlock block);
+        unsafe bool CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged;
+        unsafe bool CopyTo<T>(T* address) where T : unmanaged;
+        bool CopyTo<T>(T[] array) where T : unmanaged;
+        
         IStorage Clone();
 
         void ExpandDimension(int axis);
 
-        IArraySlice InternalArray { get; }
+        IArraySlice InternalArray { get; set; }
         void SetInternalArray(IArraySlice array);
 
         ArraySlice<T> CloneData<T>() where T : unmanaged;

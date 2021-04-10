@@ -38,7 +38,7 @@ namespace NumSharp.Backends
         protected ArraySlice<float> _arraySingle;
         protected ArraySlice<double> _arrayDouble;
 #endif
-        public IArraySlice InternalArray;
+        public IArraySlice InternalArray { get; set; }
         public unsafe byte* Address { get; set; }
         public int Count;
 
@@ -109,8 +109,6 @@ namespace NumSharp.Backends
         ///     The engine that was used to create this <see cref="IStorage"/>.
         /// </summary>
         public TensorEngine Engine { get; protected internal set; }
-
-        IArraySlice IStorage.InternalArray => throw new NotImplementedException();
 
         int IStorage.Count { get; set; }
 
@@ -771,19 +769,14 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Copies the entire contents of this storage to given address.
         /// </summary>
-        public void CopyTo(IntPtr ptr)
-        {
-            unsafe
-            {
-                CopyTo(ptr.ToPointer());
-            }
-        }
+        public unsafe bool CopyTo(IntPtr ptr)
+            => CopyTo(ptr.ToPointer());
 
         /// <summary>
         ///     Copies the entire contents of this storage to given address.
         /// </summary>
         /// <param name="address">The address to copy to.</param>
-        public unsafe void CopyTo(void* address)
+        public unsafe bool CopyTo(void* address)
         {
 #if _REGEN1
             #region Compute
@@ -851,13 +844,14 @@ namespace NumSharp.Backends
 
             #endregion
 #endif
+            return true;
         }
 
         /// <summary>
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
         /// <param name="block">The block to copy to.</param>
-        public unsafe void CopyTo(IMemoryBlock block)
+        public unsafe bool CopyTo(IMemoryBlock block)
         {
             if (block.TypeCode != _typecode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
@@ -931,13 +925,14 @@ namespace NumSharp.Backends
 
             #endregion
 #endif
+            return true;
         }
 
         /// <summary>
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
         /// <param name="block">The block to copy to.</param>
-        public unsafe void CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged
+        public unsafe bool CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged
         {
             if (block.TypeCode != _typecode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
@@ -945,14 +940,14 @@ namespace NumSharp.Backends
             if (Count > block.Count)
                 throw new ArgumentOutOfRangeException(nameof(block), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
 
-            CopyTo<T>(block.Address);
+            return CopyTo(block.Address);
         }
 
         /// <summary>
         ///     Copies the entire contents of this storage to given address.
         /// </summary>
         /// <param name="address">The address to copy to.</param>
-        public unsafe void CopyTo<T>(T* address) where T : unmanaged
+        public unsafe bool CopyTo<T>(T* address) where T : unmanaged
         {
             if (address == (T*)0)
                 throw new ArgumentNullException(nameof(address));
@@ -964,18 +959,19 @@ namespace NumSharp.Backends
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
                 MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
-                return;
+                return true;
             }
 
             var bytesCount = Count * InfoOf<T>.Size;
             Buffer.MemoryCopy(Address, address, bytesCount, bytesCount);
+            return true;
         }
 
         /// <summary>
         ///     Copies the entire contents of this storage to given array.
         /// </summary>
         /// <param name="array">The array to copy to.</param>
-        public unsafe void CopyTo<T>(T[] array) where T : unmanaged
+        public unsafe bool CopyTo<T>(T[] array) where T : unmanaged
         {
             if (array == null)
                 throw new ArgumentNullException(nameof(array));
@@ -991,6 +987,7 @@ namespace NumSharp.Backends
                 var bytesCount = Count * InfoOf<T>.Size;
                 Buffer.MemoryCopy(Address, dst, bytesCount, bytesCount);
             }
+            return true;
         }
 
         [MethodImpl((MethodImplOptions)512)]
@@ -1075,11 +1072,6 @@ namespace NumSharp.Backends
         }
 
         void IStorage.ExpandDimension(int axis)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Allocate(Shape shape)
         {
             throw new NotImplementedException();
         }

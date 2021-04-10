@@ -4,24 +4,24 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
-    public partial class Int32Engine
+    public partial class DoubleEngine
     {
         public unsafe override NDArray Divide(in NDArray lhs, in NDArray rhs)
         {
             //if return type is scalar
             var ret_type = np._FindCommonType(lhs, rhs);
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
-                return NDArray.Scalar(*(int*)lhs.Address / *(int*)rhs.Address);
+                return NDArray.Scalar(*(double*)lhs.Address / *(double*)rhs.Address);
 
             (Shape leftshape, Shape rightshape) = Broadcast(lhs.Shape, rhs.Shape);
-            var lhs_address = (int*)lhs.Address;
-            var rhs_address = (int*)rhs.Address;
+            var lhs_address = (double*)lhs.Address;
+            var rhs_address = (double*)rhs.Address;
             var retShape = leftshape.Clean();
             var ret = new NDArray(ret_type, retShape, false);
             var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
             var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
 
-            var ret_address = (int*)ret.Address;
+            var ret_address = (double*)ret.Address;
             if (leftLinear && rightLinear)
             {
                 var len = ret.size;

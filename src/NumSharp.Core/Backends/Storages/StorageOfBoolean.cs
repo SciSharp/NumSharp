@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         public StorageOfBoolean(bool[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
+        public override void Allocate(Shape shape, Type dtype = null)
             => Init(new bool[shape.Size], shape);
 
         unsafe void Init(bool[] x, Shape? shape = null)

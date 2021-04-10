@@ -16,7 +16,7 @@ namespace NumSharp.Backends
         public StorageOfChar(char[] x, Shape? shape = null)
             => Init(x, shape);
 
-        public override void Allocate(Shape shape)
+        public override void Allocate(Shape shape, Type dtype = null)
             => Init(new char[shape.Size], shape);
 
         unsafe void Init(char[] x, Shape? shape = null)

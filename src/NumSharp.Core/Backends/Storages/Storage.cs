@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -37,11 +38,15 @@ namespace NumSharp.Backends
             };
 
         protected IArraySlice _internalArray;
-        public IArraySlice InternalArray => _internalArray;
+        public IArraySlice InternalArray
+        {
+            get => _internalArray;
+            set => _internalArray = value;
+        }
 
         public int Count { get; set; }
 
-        public virtual void Allocate(Shape shape)
+        public virtual void Allocate(Shape shape, Type dtype = null)
             => throw new NotImplementedException("");
 
         public static IStorage Allocate(object x, NPTypeCode? typeCode = null)
@@ -143,9 +148,14 @@ namespace NumSharp.Backends
             return new ReadOnlySpan<T>(Address, Shape.Size);
         }
 
-        public void Reshape(Shape shape)
+        public void Reshape(Shape shape, bool copy = false)
         {
-            throw new NotImplementedException();
+            Reshape(ref shape, copy);
+        }
+
+        public void Reshape(ref Shape shape, bool copy = false)
+        {
+            SetShapeUnsafe(Shape.Reshape(shape, copy));
         }
 
         public IStorage Alias()
@@ -172,26 +182,6 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public void ReplaceData(Array values)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ReplaceData(Array values, Type dtype)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ReplaceData(Array values, NPTypeCode typeCode)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ReplaceData(IArraySlice values)
-        {
-            throw new NotImplementedException();
-        }
-
         public IStorage Cast(NPTypeCode typeCode)
         {
             throw new NotImplementedException();
@@ -207,39 +197,9 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public void ReplaceData(IArraySlice values, Type dtype)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ReplaceData(NDArray nd)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void Reshape(Shape shape, bool copy = false)
-        {
-            SetShapeUnsafe(Shape.Reshape(shape, copy));
-        }
-
-        public void CopyTo<T>(T[] array) where T : unmanaged
-        {
-            throw new NotImplementedException();
-        }
-
-        public void CopyTo<T>(IMemoryBlock slice)
-        {
-            throw new NotImplementedException();
-        }
-
-        public unsafe void CopyTo<T>(void* address)
-        {
-            throw new NotImplementedException();
-        }
-
         public void ExpandDimension(int axis)
         {
-            throw new NotImplementedException();
+            _shape = _shape.ExpandDimension(axis);
         }
 
         public IStorage GetView(params Slice[] slices)

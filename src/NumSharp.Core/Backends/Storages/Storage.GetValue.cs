@@ -1,10 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
+    /*
+     * Performance Rank
+     * 1. Super fast 10x than 2  
+     *  var span = nd.Read<int>();
+        for (int j = 0; j < size; j++)
+            span[j]
+
+     * 2. Faster
+     *  for (int j = 0; j < size; j++)
+     *      GetAtIndex<T>(j)
+     */
     public abstract partial class Storage
     {
         public bool GetBoolean(params int[] indices)
@@ -13,7 +23,7 @@ namespace NumSharp.Backends
         public byte GetByte(params int[] indices)
             => (byte)_internalArray[_shape.GetOffset(indices)];
 
-        public int GetInt32(params int[] indices)
+        public virtual int GetInt32(params int[] indices)
             => (int)_internalArray[_shape.GetOffset(indices)];
 
         public long GetInt64(params int[] indices)

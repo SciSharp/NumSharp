@@ -18,10 +18,8 @@ namespace NumSharp.Backends
             throw new NotImplementedException();
         }
 
-        public virtual void SetValue<T>(T value, params int[] indices) where T : unmanaged
-        {
-            throw new NotImplementedException();
-        }
+        public unsafe void SetValue<T>(T value, params int[] indices) where T : unmanaged
+            => *((T*) _address + _shape.GetOffset(indices)) = value;
 
         public void SetAtIndex(object value, int index)
             => _internalArray.SetIndex(index, value);

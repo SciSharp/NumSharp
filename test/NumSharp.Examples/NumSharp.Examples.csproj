@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj" />
   </ItemGroup>
 
 </Project>

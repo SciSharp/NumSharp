@@ -3240,7 +3240,7 @@
             <param name="shape"></param>
             <param name="order"></param>
             <returns>Array with values</returns>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape,System.Char)">
             <summary>
@@ -3251,7 +3251,7 @@
             <param name="shape"></param>
             <param name="order"></param>
             <returns>Array with values</returns>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(System.Type,NumSharp.Shape)">
             <summary>
@@ -3260,7 +3260,7 @@
             </summary>
             <param name="dtype">internal data type</param>
             <param name="shape">Shape of NDArray</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(System.Type,System.Int32)">
             <summary>
@@ -3268,7 +3268,7 @@
             </summary>
             <param name="dtype">Internal data type</param>
             <param name="size">The size as a single dimension shape</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(System.Type,System.Int32,System.Boolean)">
             <summary>
@@ -3277,7 +3277,7 @@
             <param name="dtype">Internal data type</param>
             <param name="size">The size as a single dimension shape</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(NumSharp.NPTypeCode,NumSharp.Shape)">
             <summary>
@@ -3286,7 +3286,7 @@
             </summary>
             <param name="dtype">internal data type</param>
             <param name="shape">Shape of NDArray</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(NumSharp.NPTypeCode,System.Int32)">
             <summary>
@@ -3294,7 +3294,7 @@
             </summary>
             <param name="dtype">Internal data type</param>
             <param name="size">The size as a single dimension shape</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(NumSharp.NPTypeCode,System.Int32,System.Boolean)">
             <summary>
@@ -3303,7 +3303,7 @@
             <param name="dtype">Internal data type</param>
             <param name="size">The size as a single dimension shape</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(System.Type,NumSharp.Shape,System.Boolean)">
             <summary>
@@ -3313,7 +3313,7 @@
             <param name="dtype">internal data type</param>
             <param name="shape">Shape of NDArray</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.NDArray.#ctor(NumSharp.NPTypeCode,NumSharp.Shape,System.Boolean)">
             <summary>
@@ -3323,7 +3323,7 @@
             <param name="dtype">internal data type</param>
             <param name="shape">Shape of NDArray</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="P:NumSharp.NDArray.dtype">
             <summary>
@@ -4893,6 +4893,23 @@
                 The threshold atwhich after n-items in an array, computation will use Parallel.For
             </summary>
         </member>
+        <member name="M:NumSharp.Backends.Storage.CopyTo(System.IntPtr)">
+            <summary>
+                Copies the entire contents of this storage to given address.
+            </summary>
+        </member>
+        <member name="M:NumSharp.Backends.Storage.CopyTo(NumSharp.Backends.Unmanaged.IMemoryBlock)">
+            <summary>
+                Copies the entire contents of this storage to given address (using <see cref="P:NumSharp.Backends.Storage.Count"/>).
+            </summary>
+            <param name="block">The block to copy to.</param>
+        </member>
+        <member name="M:NumSharp.Backends.Storage.CopyTo``1(NumSharp.Backends.Unmanaged.IMemoryBlock{``0})">
+            <summary>
+                Copies the entire contents of this storage to given address (using <see cref="P:NumSharp.Backends.Storage.Count"/>).
+            </summary>
+            <param name="block">The block to copy to.</param>
+        </member>
         <member name="M:NumSharp.Backends.Unmanaged.ArraySlice.Scalar(System.Object)">
             <summary>
                 Wrap a <see cref="!:val"/> inside <see cref="T:NumSharp.Backends.Unmanaged.ArraySlice`1"/>.
@@ -5596,7 +5613,7 @@
         </member>
         <member name="M:NumSharp.Backends.UnmanagedStorage.Clone">
             <summary>
-                Perform a complete copy of this <see cref="T:NumSharp.Backends.UnmanagedStorage"/> and <see cref="F:NumSharp.Backends.UnmanagedStorage.InternalArray"/>.
+                Perform a complete copy of this <see cref="T:NumSharp.Backends.UnmanagedStorage"/> and <see cref="P:NumSharp.Backends.UnmanagedStorage.InternalArray"/>.
             </summary>
             <remarks>If shape is sliced, discards any slicing properties but copies only the sliced data</remarks>
         </member>
@@ -5651,7 +5668,7 @@
             <summary>
                 Wraps given <paramref name="storage"/> in <see cref="T:NumSharp.Backends.UnmanagedStorage"/> with a broadcasted shape.
             </summary>
-            <param name="storage">The storage to take <see cref="F:NumSharp.Backends.UnmanagedStorage.InternalArray"/> from.</param>
+            <param name="storage">The storage to take <see cref="P:NumSharp.Backends.UnmanagedStorage.InternalArray"/> from.</param>
             <param name="shape">The shape to represent this storage, can be a broadcast.</param>
             <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
         </member>
@@ -6645,7 +6662,7 @@
             <param name="dtype">Internal data type</param>
             <param name="size">The size as a single dimension shape</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.Generic.NDArray`1.#ctor(System.Array,NumSharp.Shape,System.Char)">
             <summary>
@@ -6656,7 +6673,7 @@
             <param name="shape"></param>
             <param name="order"></param>
             <returns>Array with values</returns>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape,System.Char)">
             <summary>
@@ -6667,7 +6684,7 @@
             <param name="shape"></param>
             <param name="order"></param>
             <returns>Array with values</returns>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Shape)">
             <summary>
@@ -6675,14 +6692,14 @@
             type and shape are given.
             </summary>
             <param name="shape">Shape of NDArray</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.Generic.NDArray`1.#ctor(System.Int32)">
             <summary>
                 Constructor which initialize elements with length of <paramref name="size"/>
             </summary>
             <param name="size">The size as a single dimension shape</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="M:NumSharp.Generic.NDArray`1.#ctor(NumSharp.Shape,System.Boolean)">
             <summary>
@@ -6692,7 +6709,7 @@
             <param name="dtype">internal data type</param>
             <param name="shape">Shape of NDArray</param>
             <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
-            <remarks>This constructor calls <see cref="!:IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+            <remarks>This constructor calls <see cref="M:NumSharp.Backends.IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         </member>
         <member name="P:NumSharp.Generic.NDArray`1.Array">
             <summary>

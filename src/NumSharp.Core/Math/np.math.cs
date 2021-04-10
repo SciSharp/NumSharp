@@ -7,11 +7,24 @@ namespace NumSharp
     {
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.add.html</remarks>
         public static NDArray add(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Add(x1, x2);
+        {
+            var (y1, y2) = CastOperandsIfNeeded(x1, x2);
+            return y1.TensorEngine.Add(y1, y2);
+        }
+
+        static (NDArray, NDArray) CastOperandsIfNeeded(in NDArray x1, in NDArray x2)
+        {
+            var retType = _FindCommonType(x1, x2);
+            return (x1.typecode == retType ? x1 : x1.astype(retType),
+                x2.typecode == retType ? x2 : x2.astype(retType));
+        }
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.divide.html</remarks>
         public static NDArray divide(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Divide(x1, x2);
+        {
+            var (y1, y2) = CastOperandsIfNeeded(x1, x2);
+            return y1.TensorEngine.Divide(y1, y2);
+        }
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.true_divide.html</remarks>
         public static NDArray true_divide(in NDArray x1, in NDArray x2) 

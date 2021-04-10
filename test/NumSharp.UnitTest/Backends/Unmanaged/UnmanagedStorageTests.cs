@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             var src = np.arange(10).astype(NPTypeCode.Int32).Storage;
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
-            //src.CopyTo(dst.Address);
+            src.CopyTo(dst.Address);
 
             for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             var src = np.arange(20).astype(NPTypeCode.Int32)["0:10"].Storage;
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
-            //src.CopyTo(dst.Address);
+            src.CopyTo(dst.Address);
 
             for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
             var src = np.arange(20).astype(NPTypeCode.Int32)["0:10"].Storage;
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
-            //src.CopyTo(dst.Address);
+            src.CopyTo(dst.Address);
 
             for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             var src = np.arange(10).astype(NPTypeCode.Int32).Storage;
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
-            //src.CopyTo(dst);
+            src.CopyTo(dst);
 
             for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             var src = np.arange(20).astype(NPTypeCode.Int32)["0:10"].Storage;
             var dst = new ArraySlice<int>(new UnmanagedMemoryBlock<int>(10, -1));
-            //src.CopyTo(dst);
+            src.CopyTo(dst);
 
             for (int i = 0; i < dst.Count; i++)
                 dst[i].Should().Be(i);
