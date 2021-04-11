@@ -9,6 +9,9 @@ namespace NumSharp.Backends
     {
         public unsafe override NDArray Exp(in NDArray nd, NPTypeCode? typeCode = null)
         {
+            if (typeCode.HasValue && typeCode < NPTypeCode.Double)
+                throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {nameof(Sin)}");
+
             if (nd.size == 0)
                 return nd.Clone();
 

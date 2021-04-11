@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.Utilities
         }
     }
 
-    [DebuggerStepThrough]
+    // [DebuggerStepThrough]
     public class ShapeAssertions : ReferenceTypeAssertions<Shape, ShapeAssertions>
     {
         public ShapeAssertions(Shape instance)
@@ -158,7 +158,7 @@ namespace NumSharp.UnitTest.Utilities
         }
     }
 
-    //[DebuggerStepThrough]
+    [DebuggerStepThrough]
     public class NDArrayAssertions : ReferenceTypeAssertions<NDArray, NDArrayAssertions>
     {
         public NDArrayAssertions(NDArray instance)
@@ -166,7 +166,7 @@ namespace NumSharp.UnitTest.Utilities
             Subject = instance;
         }
 
-        public NDArrayAssertions(UnmanagedStorage instance)
+        public NDArrayAssertions(IStorage instance)
         {
             Subject = new NDArray(instance);
         }
@@ -694,14 +694,13 @@ namespace NumSharp.UnitTest.Utilities
                     var iter = Subject.AsIterator<int>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
-                    var expected = Convert.ToInt32(val);
                     for (int i = 0; hasnext(); i++)
                     {
                         var nextval = next();
 
                         Execute.Assertion
-                            .ForCondition(expected == nextval)
-                            .FailWith($"Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int32).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
+                            .ForCondition(val.Equals(nextval))
+                            .FailWith($"Expected NDArray's {2}th value to be {0}, but found {1} (dtype: Int32).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", val, nextval, i);
                     }
                     break;
                 }

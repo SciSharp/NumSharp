@@ -108,7 +108,7 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
 
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
+            return new NDArray(Storage.Allocate(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
         }
     }
 }

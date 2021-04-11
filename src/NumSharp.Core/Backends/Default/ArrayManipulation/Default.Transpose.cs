@@ -153,8 +153,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            throw new NotImplementedException("");
-            /*IStorage src;
+            IStorage src;
             if (nd.Shape.IsContiguous)
                 src = nd.Storage.Alias(nd.Shape.Clone());
             else
@@ -166,14 +165,14 @@ namespace NumSharp.Backends
                 src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
             }
 
-            // src.ShapeReference.SetStridesModified(true);
+            src.ShapeReference.SetStridesModified(true);
 
             //Linear copy of all the sliced items.
 
-            var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
+            var dst = Storage.Allocate(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
             MultiIterator.Assign(dst, src);
 
-            return new NDArray(dst);*/
+            return new NDArray(dst);
         }
     }
 }

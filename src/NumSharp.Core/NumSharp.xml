@@ -4910,6 +4910,22 @@
             </summary>
             <param name="block">The block to copy to.</param>
         </member>
+        <member name="M:NumSharp.Backends.Storage.SetInternalArray(System.Array)">
+            <summary>
+                Replace internal storage array with given array.
+            </summary>
+            <param name="array">The array to set as internal storage</param>
+            <exception cref="T:System.InvalidCastException">When type of <paramref name="array"/> does not match <see cref="P:NumSharp.Backends.Storage.DType"/> of this storage</exception>
+        </member>
+        <member name="M:NumSharp.Backends.Storage._ChangeTypeOfArray(System.Array,System.Type)">
+            <summary>
+                Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
+            </summary>
+            <param name="sourceArray">The array to change his type</param>
+            <param name="to_dtype">The type to change to.</param>
+            <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
+            <returns>Returns <see cref="!:sourceArray"/> or new array with changed type to <see cref="!:to_dtype"/></returns>
+        </member>
         <member name="M:NumSharp.Backends.Unmanaged.ArraySlice.Scalar(System.Object)">
             <summary>
                 Wrap a <see cref="!:val"/> inside <see cref="T:NumSharp.Backends.Unmanaged.ArraySlice`1"/>.

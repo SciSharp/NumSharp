@@ -31,7 +31,7 @@ namespace NumSharp.Backends
             if (this_shape.IsBroadcasted)
             {
                 var (shape, offset) = this_shape.GetSubshape(indices);
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
+                return Storage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
             }
             else if (this_shape.IsSliced)
             {

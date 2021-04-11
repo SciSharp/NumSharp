@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -16,6 +17,7 @@ namespace NumSharp.Backends
 
         protected Shape _shape;
         public Shape Shape { get => _shape; set => _shape = value; }
+        public ref Shape ShapeReference => ref _shape;
 
         protected unsafe void* _address;
         public unsafe virtual void* Address
@@ -143,6 +145,19 @@ namespace NumSharp.Backends
             return Allocate(array, new Shape(Enumerable.Range(0, 2).Select(i => x.GetLength(i)).ToArray()));
         }
 
+        public static IStorage CreateBroadcastedUnsafe(IArraySlice arraySlice, Shape shape)
+        {
+            if (shape.IsEmpty)
+                throw new ArgumentNullException(nameof(shape));
+            Storage storage = (Storage)BackendFactory.GetStorage(arraySlice.TypeCode);
+            storage.Shape = shape;
+            storage.SetInternalArray(arraySlice);
+            return storage;
+        }
+
+        public static IStorage CreateBroadcastedUnsafe(IStorage storage, Shape shape)
+            => CreateBroadcastedUnsafe(storage.InternalArray, shape);
+
         public unsafe ReadOnlySpan<T> Read<T>()
         {
             return new ReadOnlySpan<T>(Address, Shape.Size);
@@ -249,7 +264,7 @@ namespace NumSharp.Backends
         {
             // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
             //handle memory slice if possible
-            if (!Shape.IsSliced)
+            if (!_shape.IsSliced)
             {
                 var indices = new int[slices.Length];
                 for (var i = 0; i < slices.Length; i++)
@@ -279,14 +294,14 @@ _perform_slice:
 
 // In case the slices selected are all ":"
 // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (!Shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
+            if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
             //handle broadcasted shape
-            if (Shape.IsBroadcasted)
-                return Clone().Alias(Shape.Slice(slices));
+            if (_shape.IsBroadcasted)
+                return Clone().Alias(_shape.Slice(slices));
 
-            return Alias(Shape.Slice(slices));
+            return Alias(_shape.Slice(slices));
         }
 
         IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
@@ -338,6 +353,43 @@ _perform_slice:
             _internalArray = array;
             _address = _internalArray.Address;
             Count = Convert.ToInt32(array.Count);
+        }
+
+        /// <summary>
+        ///     Replace internal storage array with given array.
+        /// </summary>
+        /// <param name="array">The array to set as internal storage</param>
+        /// <exception cref="InvalidCastException">When type of <paramref name="array"/> does not match <see cref="DType"/> of this storage</exception>
+        protected unsafe void SetInternalArray(Array array)
+        {
+            _internalArray = _typecode switch
+            {
+                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                NPTypeCode.Boolean => ArraySlice.FromArray<bool>((bool[])array),
+                NPTypeCode.Byte => ArraySlice.FromArray<byte>((byte[])array),
+                NPTypeCode.Int32 => ArraySlice.FromArray<int>((int[])array),
+                NPTypeCode.Int64 => ArraySlice.FromArray<long>((long[])array),
+                NPTypeCode.Single => ArraySlice.FromArray<float>((float[])array),
+                NPTypeCode.Double => ArraySlice.FromArray<double>((double[])array),
+                _ => throw new NotSupportedException()
+            };
+
+            _address = _internalArray.Address;
+            Count = Convert.ToInt32(array.Length);
+        }
+
+        /// <summary>
+        ///     Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
+        /// </summary>
+        /// <param name="sourceArray">The array to change his type</param>
+        /// <param name="to_dtype">The type to change to.</param>
+        /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
+        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
+        protected static Array _ChangeTypeOfArray(Array sourceArray, Type to_dtype)
+        {
+            if (to_dtype == sourceArray.GetType().GetElementType()) return sourceArray;
+            return ArrayConvert.To(sourceArray, to_dtype);
         }
     }
 }

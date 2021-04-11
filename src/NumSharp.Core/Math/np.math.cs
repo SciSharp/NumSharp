@@ -32,11 +32,17 @@ namespace NumSharp
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
         public static NDArray multiply(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Multiply(x1, x2);
+        {
+            var (y1, y2) = CastOperandsIfNeeded(x1, x2);
+            return y1.TensorEngine.Multiply(y1, y2);
+        }
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.subtract.html</remarks>
         public static NDArray subtract(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Subtract(x1, x2);
+        {
+            var (y1, y2) = CastOperandsIfNeeded(x1, x2);
+            return y1.TensorEngine.Subtract(y1, y2);
+        }
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mod.html</remarks>
         public static NDArray mod(in NDArray x1, in NDArray x2)

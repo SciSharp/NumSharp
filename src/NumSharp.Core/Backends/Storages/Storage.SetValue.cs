@@ -27,34 +27,34 @@ namespace NumSharp.Backends
         public void SetAtIndex(ValueType value, int index)
             => _internalArray.SetIndex(index, value);
 
-        public void SetBoolean(bool value, params int[] indices)
+        public unsafe void SetBoolean(bool value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((bool*)Address + _shape.GetOffset(indices)) = value;
         }
 
-        public void SetByte(byte value, params int[] indices)
+        public unsafe void SetByte(byte value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((byte*)Address + _shape.GetOffset(indices)) = value;
         }
 
-        public void SetInt32(int value, params int[] indices)
+        public unsafe void SetInt32(int value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((int*)Address + _shape.GetOffset(indices)) = value;
         }
 
-        public void SetInt64(long value, params int[] indices)
+        public unsafe void SetInt64(long value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((long*)Address + _shape.GetOffset(indices)) = value;
         }
 
-        public void SetSingle(float value, params int[] indices)
+        public unsafe void SetSingle(float value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((float*)Address + _shape.GetOffset(indices)) = value;
         }
 
-        public void SetDouble(double value, params int[] indices)
+        public unsafe void SetDouble(double value, params int[] indices)
         {
-            throw new NotImplementedException();
+            *((double*)Address + _shape.GetOffset(indices)) = value;
         }
     }
 }

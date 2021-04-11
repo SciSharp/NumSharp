@@ -54,11 +54,13 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }, new Shape(new int[] { 5, 4 }));
 
         [TestMethod]
-        public void Exp_Sliced()
+        public unsafe void Exp_Sliced()
         {
             var a = np.arange(1.0, 81.0);
             a = a.reshape(5, 4, 4);
             var b = a[":, :, 0"];
+            var display = b.ToString();
+            var addr = b.Address;
             var ret = np.exp(b);
 
             for (int i = 0; i < ret.size; i++)

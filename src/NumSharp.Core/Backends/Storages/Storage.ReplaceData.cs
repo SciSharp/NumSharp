@@ -31,7 +31,13 @@ namespace NumSharp.Backends
 
         public void ReplaceData(Array values)
         {
-            throw new NotImplementedException();
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            SetInternalArray(_ChangeTypeOfArray(values, _dtype));
+
+            if (_shape.IsEmpty)
+                _shape = new Shape(values.Length);
         }
 
         public void ReplaceData(Array values, Type dtype)

@@ -15,6 +15,7 @@ namespace NumSharp.Backends
 
         Type DType { get; }
         Shape Shape { get; set; }
+        ref Shape ShapeReference { get; }
         int Count { get; set; }
         int DTypeSize { get; }
         void Reshape(Shape shape, bool copy = false);

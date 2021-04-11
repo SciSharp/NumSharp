@@ -107,7 +107,7 @@ namespace NumSharp
 
         public static explicit operator string(NDArray nd)
         {
-            return UTF8Encoding.UTF8.GetString(nd.GetData<byte>().ToArray());
+            return UTF8Encoding.UTF8.GetString(nd.astype(np.@byte).ToArray<byte>());
         }
 
         public static explicit operator NDArray(string str)

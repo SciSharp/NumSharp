@@ -21,7 +21,7 @@ namespace NumSharp
 
             var list = new NDArray[len];
             for (i = 0; i < len; i++) 
-                list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i]));
+                list[i] = new NDArray(Storage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i]));
 
             return list;
         }
@@ -36,8 +36,8 @@ namespace NumSharp
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
             var (leftShape, rightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
-            return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),
-                new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape)));
+            return (new NDArray(Storage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),
+                new NDArray(Storage.CreateBroadcastedUnsafe(rhs.Storage, rightShape)));
         }
     }
 }
