@@ -12,7 +12,7 @@ namespace NumSharp
             return y1.TensorEngine.Add(y1, y2);
         }
 
-        static (NDArray, NDArray) CastOperandsIfNeeded(in NDArray x1, in NDArray x2)
+        public static (NDArray, NDArray) CastOperandsIfNeeded(in NDArray x1, in NDArray x2)
         {
             var retType = _FindCommonType(x1, x2);
             return (x1.typecode == retType ? x1 : x1.astype(retType),
@@ -40,7 +40,10 @@ namespace NumSharp
 
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mod.html</remarks>
         public static NDArray mod(in NDArray x1, in NDArray x2)
-            => x1.TensorEngine.Mod(x1, x2);
+        {
+            var (y1, y2) = CastOperandsIfNeeded(x1, x2);
+            return y1.TensorEngine.Mod(y1, y2);
+        }
 
         public static NDArray mod(in NDArray x1, in float x2)
             => x1.TensorEngine.Mod(x1, x2);

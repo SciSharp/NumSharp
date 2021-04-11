@@ -12,6 +12,9 @@ namespace NumSharp.Backends
             if (nd.size == 0)
                 return nd.Clone();
 
+            if (typeCode.HasValue && typeCode < NPTypeCode.Double)
+                throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {nameof(Sin)}");
+
             var @out = new NDArray<double>(nd.Shape, false);
             var len = @out.size;
             var out_addr = @out.Address;

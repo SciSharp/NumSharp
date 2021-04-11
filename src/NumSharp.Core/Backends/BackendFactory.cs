@@ -7,17 +7,22 @@ namespace NumSharp.Backends
     {
         [DebuggerNonUserCode]
         public static IStorage GetStorage(Type type)
-            => type.Name switch
-            {
-                "Boolean" => new StorageOfBoolean(),
-                "Char" => new StorageOfChar(),
-                "Byte" => new StorageOfByte(),
-                "Int32" => new StorageOfInt32(),
-                "Int64" => new StorageOfInt64(),
-                "Single" => new StorageOfSingle(),
-                "Double" => new StorageOfDouble(),
-                _ => throw new NotImplementedException("")
-            };
+        {
+            if (type.IsArray)
+                return GetStorage(type.GetElementType());
+            else
+                return type.Name switch
+                {
+                    "Boolean" => new StorageOfBoolean(),
+                    "Char" => new StorageOfChar(),
+                    "Byte" => new StorageOfByte(),
+                    "Int32" => new StorageOfInt32(),
+                    "Int64" => new StorageOfInt64(),
+                    "Single" => new StorageOfSingle(),
+                    "Double" => new StorageOfDouble(),
+                    _ => throw new NotImplementedException("")
+                };
+        }
 
         [DebuggerNonUserCode]
         public static IStorage GetStorage(NPTypeCode typeCode)
@@ -25,17 +30,23 @@ namespace NumSharp.Backends
 
         [DebuggerNonUserCode]
         public static TensorEngine GetEngine(Type type)
-            => type.Name switch
-            {
-                "Boolean" => EngineCache<BooleanEngine>.Value,
-                "Char" => EngineCache<ByteEngine>.Value,
-                "Byte" => EngineCache<ByteEngine>.Value,
-                "Int32" => EngineCache<Int32Engine>.Value,
-                "Int64" => EngineCache<Int64Engine>.Value,
-                "Single" => EngineCache<SingleEngine>.Value,
-                "Double" => EngineCache<DoubleEngine>.Value,
-                _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
-            };
+        {
+            if (type.IsArray)
+                return GetEngine(type.GetElementType());
+            else
+                return type.Name switch
+                {
+                    "Boolean" => EngineCache<BooleanEngine>.Value,
+                    "Char" => EngineCache<ByteEngine>.Value,
+                    "Byte" => EngineCache<ByteEngine>.Value,
+                    "Int32" => EngineCache<Int32Engine>.Value,
+                    "Int64" => EngineCache<Int64Engine>.Value,
+                    "Single" => EngineCache<SingleEngine>.Value,
+                    "Double" => EngineCache<DoubleEngine>.Value,
+                    _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
+                };
+        }
+            
 
         [DebuggerNonUserCode]
         public static TensorEngine GetEngine(NPTypeCode type)
