@@ -42,17 +42,29 @@ namespace NumSharp.Backends
 
         public void ReplaceData(Array values, Type dtype)
         {
-            throw new NotImplementedException();
+            if (values == null)
+                throw new ArgumentNullException(nameof(values));
+
+            if (dtype == null)
+                throw new ArgumentNullException(nameof(dtype));
+
+            var changedArray = _ChangeTypeOfArray(values, dtype);
+            //first try to convert to dtype only then we apply changes.
+            _typecode = _dtype.GetTypeCode();
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{dtype.Name} as a dtype is not supported.");
+            SetInternalArray(changedArray);
         }
 
         public void ReplaceData(Array values, NPTypeCode typeCode)
-        {
-            throw new NotImplementedException();
-        }
+            => ReplaceData(values, typeCode.AsType());
 
         public void ReplaceData(IArraySlice values)
         {
-            throw new NotImplementedException();
+            SetInternalArray(values);
+
+            if (_shape.IsEmpty)
+                _shape = new Shape((int)values.Count); //TODO! when long index, remove cast int
         }
     }
 }

@@ -35,11 +35,21 @@ namespace NumSharp.Backends
         public double GetDouble(params int[] indices)
             => (double)_internalArray[_shape.GetOffset(indices)];
 
-        public ValueType GetAtIndex(int index)
-            => (ValueType)_internalArray[index];
+        public unsafe ValueType GetAtIndex(int index)
+            => _typecode switch
+            {
+                NPTypeCode.Boolean => *((bool*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Byte => *((byte*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Char => *((char*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Int32 => *((int*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Int64 => *((long*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Single => *((float*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Double => *((double*)Address + _shape.TransformOffset(index)),
+                _ => throw new NotSupportedException()
+            };
 
-        public T GetAtIndex<T>(int index)
-            => (T)_internalArray[index];
+        public unsafe T GetAtIndex<T>(int index) where T : unmanaged
+            => *((T*)Address + _shape.TransformOffset(index));
 
         public T GetValue<T>(params int[] indices) where T : unmanaged
             => GetAtIndex<T>(_shape.GetOffset(indices));

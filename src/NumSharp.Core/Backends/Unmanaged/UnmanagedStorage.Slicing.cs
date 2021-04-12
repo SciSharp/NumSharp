@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
-        private IStorage GetViewInternal(params Slice[] slices)
+        public IStorage GetViewInternal(params Slice[] slices)
         {
             // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
             //handle memory slice if possible

@@ -20,7 +20,7 @@ namespace NumSharp
             {
                 s.Append($"{Storage.GetAtIndex(0)}");
             }
-            else if (shape.Length == 1 && typecode == NPTypeCode.Char)
+            else if (shape.Length == 1 && Type.GetTypeCode(dtype) == TypeCode.Char)
             {
                 s.Append(string.Join("", GetData<char>()));
             }
@@ -55,78 +55,14 @@ namespace NumSharp
                 }
                 else
                 {
-                    if (this.size <= 10)
-                    {
-                        switch (typecode)
-                        {
-                            case NPTypeCode.Boolean:
-                                s.Append(string.Join(", ", Read<bool>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Byte:
-                                s.Append(string.Join(", ", Read<byte>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Char:
-                                s.Append(string.Join(", ", Read<char>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Int32:
-                                s.Append(string.Join(", ", Read<int>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Int64:
-                                s.Append(string.Join(", ", Read<long>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Single:
-                                s.Append(string.Join(", ", Read<float>().ToArray().Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Double:
-                                s.Append(string.Join(", ", Read<double>().ToArray().Select(v => v.ToString())));
-                                break;
-                            default:
-                                break;
-                        }
-                    }
+                    var items = this.AsIterator().Cast<object>();
+                    if (this.size <= previewCount * 2)
+                        s.Append(string.Join(", ", items.Select(v => v.ToString())));
                     else
                     {
-                        switch (typecode)
-                        {
-                            case NPTypeCode.Boolean:
-                                var items_bool = Read<bool>().ToArray();
-                                s.Append(string.Join(", ", items_bool.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_bool.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Byte:
-                                var items_byte = Read<byte>().ToArray();
-                                s.Append(string.Join(", ", items_byte.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_byte.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Char:
-                                var items_char = Read<char>().ToArray();
-                                s.Append(string.Join(", ", items_char.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_char.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Int32:
-                                var items_int32 = Read<int>().ToArray();
-                                s.Append(string.Join(", ", items_int32.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_int32.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Single:
-                                var items_float = Read<float>().ToArray();
-                                s.Append(string.Join(", ", items_float.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_float.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            case NPTypeCode.Double:
-                                var items_double = Read<double>().ToArray();
-                                s.Append(string.Join(", ", items_double.Take(previewCount).Select(v => v.ToString())));
-                                s.Append(", ..., ");
-                                s.Append(string.Join(", ", items_double.Skip(this.size - previewCount * 2).Select(v => v.ToString())));
-                                break;
-                            default:
-                                break;
-                        }
+                        s.Append(string.Join(", ", items.Take(previewCount).Select(v => v.ToString())));
+                        s.Append(", ..., ");
+                        s.Append(string.Join(", ", items.Skip(this.size - previewCount).Select(v => v.ToString())));
                     }
                 }
 
@@ -137,7 +73,7 @@ namespace NumSharp
             var size = shape[0];
             s.Append("[");
 
-            if (size <= 10)
+            if (size <= previewCount * 2)
             {
                 for (int i = 0; i < size; i++)
                 {

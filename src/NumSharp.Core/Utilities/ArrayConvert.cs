@@ -158,6 +158,7 @@ namespace NumSharp.Utilities
                 %
 #else
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
+                case NPTypeCode.Char: return ToByte(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
                 case NPTypeCode.Int32: return ToInt32(sourceArray);
                 case NPTypeCode.Int64: return ToInt64(sourceArray);

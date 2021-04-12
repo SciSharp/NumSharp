@@ -40,18 +40,48 @@ namespace NumSharp
             }
         }
 
+        public static NDArray<bool> operator ==(NDArray left, NDArray right)
+        {
+            if (right is null)
+                return Scalar(ReferenceEquals(left, null)).MakeGeneric<bool>();
+
+            if (left is null)
+                return Scalar(false).MakeGeneric<bool>();
+
+            if (left.Shape.IsEmpty || left.size == 0)
+                return Scalar(false).MakeGeneric<bool>();
+
+            (left, right) = np.CastOperandsIfNeeded(left, right);
+            return left.TensorEngine.Compare(left, right);
+        }
+
+        public static NDArray<bool> operator !=(NDArray left, NDArray right)
+        {
+            if (right is null)
+                return Scalar(ReferenceEquals(left, null)).MakeGeneric<bool>();
+
+            if (left is null)
+                return Scalar(false).MakeGeneric<bool>();
+
+            if (left.Shape.IsEmpty || left.size == 0)
+                return Scalar(false).MakeGeneric<bool>();
+
+            (left, right) = np.CastOperandsIfNeeded(left, right);
+            return !left.TensorEngine.Compare(left, right);
+        }
+
         public static NDArray<bool> operator ==(NDArray left, object right)
         {
             if (right is null)
-                return Scalar<bool>(ReferenceEquals(left, null)).MakeGeneric<bool>();
+                return Scalar(ReferenceEquals(left, null)).MakeGeneric<bool>();
 
             if (left is null)
-                return Scalar<bool>(false).MakeGeneric<bool>();
+                return Scalar(false).MakeGeneric<bool>();
 
             if (left.Shape.IsEmpty || left.size == 0)
-                return Scalar<bool>(false).MakeGeneric<bool>();
-
-            return left.TensorEngine.Compare(left, np.asanyarray(right));
+                return Scalar(false).MakeGeneric<bool>();
+            
+            return  left.TensorEngine.Compare(left, np.asanyarray(right));
         }
 
         /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>

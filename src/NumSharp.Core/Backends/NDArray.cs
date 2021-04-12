@@ -520,7 +520,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (int i = 0; i < ret.Length; i++)
             {
-                // ret[i] = new NDArray(Storage.GetData(index));
+                ret[i] = new NDArray(Storage.GetData(index));
                 iter.Next();
             }
 

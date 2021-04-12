@@ -51,7 +51,7 @@ namespace NumSharp.Backends
         float GetSingle(params int[] indices);
         double GetDouble(params int[] indices);
         ValueType GetAtIndex(int index);
-        T GetAtIndex<T>(int index);
+        unsafe T GetAtIndex<T>(int index) where T : unmanaged;
         T GetValue<T>(params int[] indices) where T : unmanaged;
         ValueType GetValue(params int[] indices);
         ArraySlice<T> GetData<T>() where T : unmanaged;
@@ -61,6 +61,7 @@ namespace NumSharp.Backends
 
         IStorage GetView(params Slice[] slices);
         IStorage GetView(string slicing_notation);
+        IStorage GetViewInternal(params Slice[] slices);
 
         void ReplaceData(Array values);
         void ReplaceData(Array values, Type dtype);

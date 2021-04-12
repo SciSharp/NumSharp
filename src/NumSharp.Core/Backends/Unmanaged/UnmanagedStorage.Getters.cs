@@ -16,56 +16,32 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
         public unsafe ValueType GetValue(params int[] indices)
-        {
-            switch (TypeCode)
+            => _typecode switch
             {
-#if _REGEN1
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(indices));
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
-	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
-	            case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
-	            case NPTypeCode.Int32: return *((int*)Address + _shape.GetOffset(indices));
-	            case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
-	            case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
-	            case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
-	            default:
-		            throw new NotSupportedException();
-#endif
-            }
-        }
-
-        public unsafe ValueType GetAtIndex(int index)
-        {
-#if _REGEN1
-            switch (TypeCode)
-            {
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
-            switch (TypeCode)
-            {
-	            case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Int32: return *((int*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
-	            case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
-	            default:
-		            throw new NotSupportedException();
-            }
-#endif
-        }
+                NPTypeCode.Boolean => *((bool*)Address + _shape.GetOffset(indices)),
+                NPTypeCode.Byte => *((byte*)Address + _shape.GetOffset(indices)),
+                NPTypeCode.Int32 => *((int*)Address + _shape.GetOffset(indices)),
+                NPTypeCode.Int64 => *((long*)Address + _shape.GetOffset(indices)),
+                NPTypeCode.Single => *((float*)Address + _shape.GetOffset(indices)),
+                NPTypeCode.Double => *((double*)Address + _shape.GetOffset(indices)),
+                _ => throw new NotSupportedException()
+            };
 
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe T GetAtIndex<T>(int index) => throw new NotImplementedException(""); // *((T*)Address + _shape.TransformOffset(index));
+        public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
+
+        public unsafe ValueType GetAtIndex(int index)
+            => _typecode switch
+            {
+                NPTypeCode.Boolean => *((bool*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Byte => *((byte*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Int32 => *((int*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Int64 => *((long*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Single => *((float*)Address + _shape.TransformOffset(index)),
+                NPTypeCode.Double => *((double*)Address + _shape.TransformOffset(index)),
+                _ => throw new NotSupportedException()
+            };
+        
 
         /// <summary>
         ///     Gets a subshape based on given <paramref name="indices"/>.

@@ -145,13 +145,22 @@ namespace NumSharp.Backends
             return Allocate(array, new Shape(Enumerable.Range(0, 2).Select(i => x.GetLength(i)).ToArray()));
         }
 
+        protected void _Allocate(Shape shape, IArraySlice values)
+        {
+            _shape = shape;
+            _typecode = values.TypeCode;
+
+            if (_typecode == NPTypeCode.Empty)
+                throw new NotSupportedException($"{values.TypeCode} as a dtype is not supported.");
+
+            SetInternalArray(values);
+            Count = shape.size;
+        }
+
         public static IStorage CreateBroadcastedUnsafe(IArraySlice arraySlice, Shape shape)
         {
-            if (shape.IsEmpty)
-                throw new ArgumentNullException(nameof(shape));
             Storage storage = (Storage)BackendFactory.GetStorage(arraySlice.TypeCode);
-            storage.Shape = shape;
-            storage.SetInternalArray(arraySlice);
+            storage._Allocate(shape, arraySlice);
             return storage;
         }
 
@@ -188,28 +197,62 @@ namespace NumSharp.Backends
         }
 
         public IStorage Cast(Type type)
-        {
-            throw new NotImplementedException();
-        }
+            => Cast(type.GetTypeCode());
 
         public ArraySlice<T> CloneData<T>() where T : unmanaged
         {
-            throw new NotImplementedException();
+            var cloned = CloneData();
+            if (cloned.TypeCode != InfoOf<T>.NPTypeCode)
+                return (ArraySlice<T>)cloned.CastTo<T>();
+
+            return (ArraySlice<T>)cloned;
         }
 
         public IStorage Cast(NPTypeCode typeCode)
         {
-            throw new NotImplementedException();
+            if (_shape.IsEmpty)
+                return new UnmanagedStorage(typeCode);
+
+            if (_typecode == typeCode)
+                return Clone();
+
+            //this also handles slices
+            return Storage.Allocate((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
         }
 
         public IStorage CastIfNecessary(NPTypeCode typeCode)
         {
-            throw new NotImplementedException();
+            if (_shape.IsEmpty || _typecode == typeCode)
+                return this;
+
+            //this also handles slices
+            return Storage.Allocate((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
+        }
+
+        public IStorage CastIfNecessary<T>() where T : unmanaged
+        {
+            if (_shape.IsEmpty || _dtype == typeof(T))
+                return this;
+
+            //this also handles slices
+            return Storage.Allocate((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true, true));
         }
 
         public IArraySlice CloneData()
         {
-            throw new NotImplementedException();
+            //Incase shape is not sliced, we can copy the internal buffer.
+            if (!_shape.IsSliced && !_shape.IsBroadcasted)
+                return _internalArray.Clone();
+
+            if (_shape.IsScalar)
+                return ArraySlice.Scalar(GetValue(0), _typecode);
+
+            //Linear copy of all the sliced items.
+
+            var ret = ArraySlice.Allocate(_internalArray.TypeCode, _shape.size, false);
+            MultiIterator.Assign(Storage.Allocate(ret, _shape.Clean()), this);
+
+            return ret;
         }
 
         public void ExpandDimension(int axis)
@@ -252,15 +295,14 @@ namespace NumSharp.Backends
                     }
                 }
 
-                throw new NotImplementedException("");
-                // return view.GetViewInternal(slices);
+                return view.GetViewInternal(slices);
             }
 
             // slicing without newaxis
             return GetViewInternal(slices);
         }
 
-        IStorage GetViewInternal(params Slice[] slices)
+        public IStorage GetViewInternal(params Slice[] slices)
         {
             // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
             //handle memory slice if possible
@@ -334,8 +376,35 @@ _perform_slice:
             throw new NotImplementedException();
         }
 
-        public T[] ToArray<T>() where T : unmanaged
-            => Read<T>().ToArray();
+        public unsafe T[] ToArray<T>() where T : unmanaged
+        {
+            if (typeof(T).GetTypeCode() != InternalArray.TypeCode)
+                throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
+
+            var src = (T*)Address;
+            var ret = new T[Shape.Size];
+
+            if (Shape.IsContiguous)
+            {
+                fixed (T* dst = ret)
+                {
+                    var len = sizeof(T) * ret.Length;
+                    Buffer.MemoryCopy(src, dst, len, len);
+                }
+            }
+            else
+            {
+                var incr = new NDCoordinatesIncrementor(Shape.dimensions);
+                int[] current = incr.Index;
+                Func<int[], int> getOffset = Shape.GetOffset;
+                int i = 0;
+
+                do ret[i++] = src[getOffset(current)];
+                while (incr.Next() != null);
+            }
+
+            return ret;
+        }
 
         public virtual IStorage Clone()
         {
@@ -390,6 +459,19 @@ _perform_slice:
         {
             if (to_dtype == sourceArray.GetType().GetElementType()) return sourceArray;
             return ArrayConvert.To(sourceArray, to_dtype);
+        }
+
+        /// <summary>
+        ///     Changes the type of <paramref name="sourceArray"/> to <paramref name="to_dtype"/> if necessary.
+        /// </summary>
+        /// <param name="sourceArray">The array to change his type</param>
+        /// <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
+        /// <returns>Returns <see cref="sourceArray"/> or new array with changed type to <see cref="to_dtype"/></returns>
+        [SuppressMessage("ReSharper", "AssignNullToNotNullAttribute")]
+        protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
+        {
+            if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
+            return (ArraySlice<TOut>)sourceArray.CastTo<TOut>();
         }
     }
 }

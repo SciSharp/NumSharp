@@ -10,8 +10,20 @@ namespace NumSharp.Backends
     public abstract partial class Storage
     {
         public ArraySlice<T> GetData<T>() where T : unmanaged
-            => (ArraySlice<T>)_internalArray;
+        {
+            if (!typeof(T).IsValidNPType())
+                throw new NotSupportedException($"Type {typeof(T).Name} is not a valid np.dtype");
 
+            if (!Shape.IsContiguous || Shape.ModifiedStrides)
+                return CloneData<T>();
+
+            var _internalArray = InternalArray;
+            if (_internalArray is ArraySlice<T> ret)
+                return ret;
+
+            return _ChangeTypeOfArray<T>(_internalArray);
+        }
+            
         public IArraySlice GetData()
         {
             return _internalArray;

@@ -319,7 +319,7 @@ namespace NumSharp.UnitTest.Operations
                 //Convert.ToInt32(val).Should().Be(1);
                 Console.WriteLine(val);
             }
-
+            
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
             ret.Array.Should().BeEquivalentTo(a.Array);
         }
