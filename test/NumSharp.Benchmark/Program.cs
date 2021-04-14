@@ -2,7 +2,6 @@
 using System.Reflection;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
-using NumSharp.Benchmark.Unmanaged;
 
 namespace NumSharp.Benchmark
 {
@@ -26,13 +25,13 @@ namespace NumSharp.Benchmark
             }
             else
             {
-//#if DEBUG
-//                IConfig config = new DebugInProcessConfig();
-//#else
-//                IConfig config = null;
-//#endif
-//                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
-                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, ManualConfig.Create(DefaultConfig.Instance).With(ConfigOptions.DisableOptimizationsValidator));
+#if DEBUG
+                IConfig config = new DebugInProcessConfig();
+#else
+                IConfig config = null;
+#endif
+                BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, config);
+                // BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, ManualConfig.Create(DefaultConfig.Instance).With(ConfigOptions.DisableOptimizationsValidator));
             }
 
             if (args?.Length > 0)

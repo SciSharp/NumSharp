@@ -4934,6 +4934,17 @@
             <remarks>If the return type is equal to source type, this method does not return a copy.</remarks>
             <returns>Returns <see cref="!:sourceArray"/> or new array with changed type to <see cref="!:to_dtype"/></returns>
         </member>
+        <member name="T:NumSharp.Backends.SimdEngine">
+            <summary>
+            SIMD Tensor Engine implemented in pure micro-optimized C#.
+            </summary>
+            <summary>
+            SIMD Tensor Engine implemented in pure micro-optimized C#.
+            </summary>
+            <summary>
+            SIMD Tensor Engine implemented in pure micro-optimized C#.
+            </summary>
+        </member>
         <member name="M:NumSharp.Backends.Unmanaged.ArraySlice.Scalar(System.Object)">
             <summary>
                 Wrap a <see cref="!:val"/> inside <see cref="T:NumSharp.Backends.Unmanaged.ArraySlice`1"/>.
