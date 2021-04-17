@@ -24,7 +24,7 @@ namespace NumSharp.Benchmark
         {
             for (int i = 0; i < 1000; i++)
             {
-                var sigmoid = 1.0d / (1.0d + np.exp(-x));
+                var sigmoid = 1.0 / (1.0 + np.exp(0 - x));
             }
         }
     }
