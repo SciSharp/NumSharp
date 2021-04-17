@@ -34,7 +34,8 @@ namespace NumSharp.Backends
         unsafe bool CopyTo<T>(IMemoryBlock<T> block) where T : unmanaged;
         unsafe bool CopyTo<T>(T* address) where T : unmanaged;
         bool CopyTo<T>(T[] array) where T : unmanaged;
-        
+        unsafe bool CopyTo(void* address);
+
         IStorage Clone();
 
         void ExpandDimension(int axis);

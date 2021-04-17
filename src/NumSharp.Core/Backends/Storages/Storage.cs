@@ -52,78 +52,23 @@ namespace NumSharp.Backends
             => throw new NotImplementedException("");
 
         public static IStorage Allocate(object x, NPTypeCode? typeCode = null)
-        {
-            if(!typeCode.HasValue || x.GetType() == typeCode.Value.AsType())
-            {
-                return x switch
-                {
-                    bool bool_x => new StorageOfBoolean(bool_x),
-                    byte byte_x => new StorageOfByte(byte_x),
-                    int int_x => new StorageOfInt32(int_x),
-                    long int_x => new StorageOfInt64(int_x),
-                    float float_x => new StorageOfSingle(float_x),
-                    double double_x => new StorageOfDouble(double_x),
-                    _ => throw new NotImplementedException("")
-                };
-            }
-            else
-            {
-                return typeCode switch
-                {
-                    NPTypeCode.Boolean => new StorageOfBoolean(Convert.ToBoolean(x)),
-                    NPTypeCode.Byte => new StorageOfByte(Convert.ToByte(x)),
-                    NPTypeCode.Int32 => new StorageOfInt32(Convert.ToInt32(x)),
-                    NPTypeCode.Int64 => new StorageOfInt64(Convert.ToInt64(x)),
-                    NPTypeCode.Single => new StorageOfSingle(Convert.ToSingle(x)),
-                    NPTypeCode.Double => new StorageOfDouble(Convert.ToDouble(x)),
-                    _ => throw new NotImplementedException("")
-                };
-            }
-        }
-
+            => BackendFactory.GetStorage(x, typeCode);
 
         public static IStorage Allocate<T>(T x) where T : unmanaged
-            => x switch
-            {
-                bool bool_x => new StorageOfBoolean(bool_x),
-                byte byte_x => new StorageOfByte(byte_x),
-                int int_x => new StorageOfInt32(int_x),
-                long int_x => new StorageOfInt64(int_x),
-                float float_x => new StorageOfSingle(float_x),
-                double double_x => new StorageOfDouble(double_x),
-                _ => throw new NotImplementedException("")
-            };
+            => BackendFactory.GetStorage(x);
 
         public static IStorage Allocate<T>(T[] x, Shape? shape = null) where T : unmanaged
-            => x switch
-            {
-                bool[] bool_x => new StorageOfBoolean(bool_x, shape),
-                byte[] byte_x => new StorageOfByte(byte_x),
-                int[] int_x => new StorageOfInt32(int_x, shape),
-                long[] int_x => new StorageOfInt64(int_x, shape),
-                float[] float_x => new StorageOfSingle(float_x, shape),
-                double[] double_x => new StorageOfDouble(double_x, shape),
-                _ => throw new NotImplementedException("")
-            };
+            => BackendFactory.GetStorage(x, shape);
 
         public static IStorage Allocate(IArraySlice x, Shape shape)
         {
             Storage storage = (Storage)BackendFactory.GetStorage(x.TypeCode);
-            storage.Allocate(x, shape);
+            storage._Allocate(shape, x);
             return storage;
         }
 
         public static IStorage Allocate(ValueType x)
-            => x switch
-            {
-                bool bool_x => new StorageOfBoolean(bool_x),
-                byte byte_x => new StorageOfByte(byte_x),
-                int int_x => new StorageOfInt32(int_x),
-                long long_x => new StorageOfInt64(long_x),
-                float float_x => new StorageOfSingle(float_x),
-                double double_x => new StorageOfDouble(double_x),
-                _ => throw new NotImplementedException("")
-            };
+            => BackendFactory.GetStorage(x);
 
         public unsafe void Allocate(IArraySlice values, Shape shape, bool copy = false)
         {

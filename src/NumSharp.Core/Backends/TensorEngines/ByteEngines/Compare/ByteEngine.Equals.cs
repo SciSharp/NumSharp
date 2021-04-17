@@ -18,22 +18,21 @@ namespace NumSharp.Backends
             Shape retShape = ret.Shape;
             var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
             var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
-
+            var len = ret.size;
             var ret_address = ret.Address;
             if (leftLinear && rightLinear)
             {
-                var len = ret.size;
                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var rval = *rhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = *(lhs_address + i) == rval;
                 }
                 else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var lval = *lhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = lval == *(rhs_address + i);
                 }
                 else
@@ -47,7 +46,7 @@ namespace NumSharp.Backends
                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var rval = *rhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = *(lhs_address + i) == rval;
                 }
                 else
@@ -68,7 +67,7 @@ namespace NumSharp.Backends
                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var lval = *lhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = lval == *(rhs_address + i);
                 }
                 else

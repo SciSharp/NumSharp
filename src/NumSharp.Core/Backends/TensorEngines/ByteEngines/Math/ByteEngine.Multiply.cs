@@ -20,22 +20,21 @@ namespace NumSharp.Backends
             var ret = new NDArray(ret_type, retShape, false);
             var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
             var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
-
+            var len = ret.size;
             var ret_address = (byte*)ret.Address;
             if (leftLinear && rightLinear)
             {
-                var len = ret.size;
                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var rval = *rhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = (byte)(*(lhs_address + i) * rval);
                 }
                 else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var lval = *lhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = (byte)(lval * *(rhs_address + i));
                 }
                 else
@@ -49,7 +48,7 @@ namespace NumSharp.Backends
                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var rval = *rhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = (byte)(*(lhs_address + i) * rval);
                 }
                 else
@@ -70,7 +69,7 @@ namespace NumSharp.Backends
                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar)
                 {
                     var lval = *lhs_address;
-                    for (int i = 0; i < ret.size; i++)
+                    for (int i = 0; i < len; i++)
                         *(ret_address + i) = (byte)(lval + *(rhs_address + i));
                 }
                 else

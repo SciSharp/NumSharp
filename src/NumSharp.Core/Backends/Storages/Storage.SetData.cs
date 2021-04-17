@@ -56,10 +56,9 @@ namespace NumSharp.Backends
             //by now this ndarray is not broadcasted nor sliced
             unsafe
             {
-                throw new NotImplementedException("");
                 //ReSharper disable once RedundantCast
                 //this must be a void* so it'll go through a typed switch.
-                //value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                value.Storage.CastIfNecessary(_typecode).CopyTo((void*)((byte*)_address + _internalArray.ItemLength * offset));
             }
         }
 
