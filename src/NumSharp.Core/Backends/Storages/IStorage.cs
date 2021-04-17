@@ -18,6 +18,7 @@ namespace NumSharp.Backends
         ref Shape ShapeReference { get; }
         int Count { get; set; }
         int DTypeSize { get; }
+        void Reshape(params int[] dimensions);
         void Reshape(Shape shape, bool copy = false);
         void Reshape(ref Shape shape, bool copy = false);
         TensorEngine Engine { get; }

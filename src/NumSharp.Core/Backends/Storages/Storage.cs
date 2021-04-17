@@ -418,5 +418,13 @@ _perform_slice:
             if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
             return (ArraySlice<TOut>)sourceArray.CastTo<TOut>();
         }
+
+        public void Reshape(params int[] dimensions)
+        {
+            if (dimensions == null || dimensions.Length == 0)
+                throw new ArgumentException(nameof(dimensions));
+
+            Reshape(dimensions, false);
+        }
     }
 }
