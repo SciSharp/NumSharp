@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Operations
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
 
-            var np3 = np1 & 2;
+            var np3 = np1 & (byte)2;
 
             Assert.IsTrue(Enumerable.SequenceEqual(new byte[] {0, 2, 2, 0}, np3.Data<byte>()));
         }

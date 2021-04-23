@@ -7,11 +7,11 @@
     <PackageOutputPath>../../packages</PackageOutputPath>
     <Description>This package provides extensions for System.Drawing.Bitmap for creating NDArray and Bitmap with or without copying.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
-    <Copyright>2019 © SciSharp STACK Team</Copyright>
+    <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Added complicated shape and bbp inference mechanism. Added argument 'discardAlpha' to all methods.</PackageReleaseNotes>
-    <AssemblyVersion>0.20.4.0</AssemblyVersion>
-    <FileVersion>0.20.4.0</FileVersion>
+    <AssemblyVersion>0.40.0.0</AssemblyVersion>
+    <FileVersion>0.40.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -21,14 +21,15 @@
     <Product>NumSharp.Bitmap</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp.Bitmap</RootNamespace>
-    <Version>0.20.4</Version>
+    <Version>0.40.0.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <Configurations>Debug;Release;Publish;Debug-Minimal</Configurations>
+    <Configurations>Debug;Release;Publish</Configurations>
+    <PackageVersion>0.40.0</PackageVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -36,73 +37,6 @@
     <Optimize>true</Optimize>
 	<SignAssembly>true</SignAssembly>
   </PropertyGroup>
-
-  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
-    <DefineConstants>NETFRAMEWORK</DefineConstants>
-    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netstandard\d'))">
-    <DefineConstants>NETSTANDARD;CPU_PARALLEL;BIT64</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
-    <DefineConstants>NETCORE</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
-    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
-    <DocumentationFile></DocumentationFile>
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|AnyCPU'">
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
-    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
-    <DocumentationFile />
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <DefineConstants>TRACE;DEBUG;BIT64</DefineConstants>
-    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
-    <DocumentationFile />
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Minimal|x64'">
-    <DefineConstants>TRACE;DEBUG;BIT64</DefineConstants>
-    <NoWarn>1701;1702;IDE1006;0029</NoWarn>
-    <DocumentationFile />
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DocumentationFile></DocumentationFile>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
-    <DocumentationFile />
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <DocumentationFile />
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|x64'">
-    <DocumentationFile />
-  </PropertyGroup>
-
-  <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d'))">
-    <PackageReference Include="System.Memory" Version="4.5.1" />
-  </ItemGroup>
-
-  <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^netcoreapp\d'))">
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="2.0.1" />
-    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
-    <PackageReference Include="System.Memory" Version="4.5.1" />
-  </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="NewFolder\**" />
@@ -141,15 +75,10 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
+    <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
-  </ItemGroup>
-
 </Project>    

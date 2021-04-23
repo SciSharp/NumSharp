@@ -77,6 +77,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Compare()
         {
+            throw new Exception("This test causes memory corruption");
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             (nd < 3).Should().BeOfValues(true, true, false, false, false, false);
 
