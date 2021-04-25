@@ -16,7 +16,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe int GetOffset(int* indices, int ndims)
+        public readonly unsafe int GetOffset(int* indices, int ndims)
         {
             int offset;
             if (!IsSliced)
@@ -116,7 +116,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public unsafe (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)
+        public readonly unsafe (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)
         {
             if (ndims == 0)
                 return (this, 0);
@@ -215,7 +215,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        private unsafe int GetOffset_broadcasted(int* indices, int ndims)
+        private readonly unsafe int GetOffset_broadcasted(int* indices, int ndims)
         {
             int offset;
             var vi = ViewInfo;
@@ -313,7 +313,7 @@ namespace NumSharp
         /// Note: to be used only inside of GetOffset()
         /// </summary>
         [MethodImpl((MethodImplOptions)768)]
-        private unsafe int GetOffset_IgnoreViewInfo(int* indices, int ndims)
+        private readonly unsafe int GetOffset_IgnoreViewInfo(int* indices, int ndims)
         {
             if (dimensions.Length == 0 && ndims == 1)
                 return indices[0];

@@ -24,7 +24,7 @@ namespace NumSharp
         /// <summary>
         ///     True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
         /// </summary>
-        public bool IsSliced
+        public readonly bool IsSliced
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => ViewInfo != null;
@@ -33,7 +33,7 @@ namespace NumSharp
         /// <summary>
         ///     Does this Shape represents a non-sliced and non-broadcasted hence contagious unmanaged memory?
         /// </summary>
-        public bool IsContiguous
+        public readonly bool IsContiguous
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => !IsSliced && !IsBroadcasted;
@@ -42,7 +42,7 @@ namespace NumSharp
         /// <summary>
         ///     Is this Shape a recusive view? (deeper than 1 view)
         /// </summary>
-        public bool IsRecursive
+        public readonly bool IsRecursive
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => ViewInfo != null && ViewInfo.ParentShape.IsEmpty == false;
@@ -64,7 +64,7 @@ namespace NumSharp
         /// <summary>
         ///     Is this shape a broadcast and/or has modified strides?
         /// </summary>
-        public bool IsBroadcasted => BroadcastInfo != null;
+        public readonly bool IsBroadcasted => BroadcastInfo != null;
 
         /// <summary>
         ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
@@ -75,9 +75,9 @@ namespace NumSharp
         /// True if the shape is not initialized.
         /// Note: A scalar shape is not empty.
         /// </summary>
-        public bool IsEmpty => _hashCode == 0;
+        public readonly bool IsEmpty => _hashCode == 0;
 
-        public char Order => layout;
+        public readonly char Order => layout;
 
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
@@ -160,19 +160,19 @@ namespace NumSharp
             return shape;
         }
 
-        public int NDim
+        public readonly int NDim
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => dimensions.Length;
         }
 
-        public int[] Dimensions
+        public readonly int[] Dimensions
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => dimensions;
         }
 
-        public int[] Strides
+        public readonly int[] Strides
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => strides;
@@ -181,7 +181,7 @@ namespace NumSharp
         /// <summary>
         ///     The linear size of this shape.
         /// </summary>
-        public int Size
+        public readonly int Size
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => size;
@@ -346,7 +346,7 @@ namespace NumSharp
 
 
         [MethodImpl((MethodImplOptions)768)]
-        private void _computeStrides()
+        private readonly void _computeStrides()
         {
             if (dimensions.Length == 0)
                 return;
@@ -361,11 +361,11 @@ namespace NumSharp
 
 
         [MethodImpl((MethodImplOptions)768)]
-        private void _computeStrides(int axis)
+        private readonly void _computeStrides(int axis)
         {
             if (dimensions.Length == 0)
                 return;
-
+            
             if (axis == 0)
                 strides[0] = strides[1] * dimensions[1];
             else
@@ -378,7 +378,7 @@ namespace NumSharp
                 }
         }
 
-        public int this[int dim]
+        public readonly int this[int dim]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => dimensions[dim < 0 ? dimensions.Length + dim : dim];
@@ -393,7 +393,7 @@ namespace NumSharp
         /// <returns>The transformed offset.</returns>
         /// <remarks>Avoid using unless it is unclear if shape is sliced or not.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int TransformOffset(int offset)
+        public readonly int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
             if (ViewInfo == null && BroadcastInfo == null)
@@ -415,7 +415,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public int GetOffset(params int[] indices)
+        public readonly int GetOffset(params int[] indices)
         {
             int offset;
             if (!IsSliced)
@@ -513,7 +513,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        internal int GetOffset_1D(int index)
+        internal readonly int GetOffset_1D(int index)
         {
             int offset;
             if (!IsSliced)
@@ -609,7 +609,7 @@ namespace NumSharp
         /// Note: to be used only inside of GetOffset()
         /// </summary>
         [MethodImpl((MethodImplOptions)768)]
-        private int GetOffset_IgnoreViewInfo(params int[] indices)
+        private readonly int GetOffset_IgnoreViewInfo(params int[] indices)
         {
             if (dimensions.Length == 0 && indices.Length == 1)
                 return indices[0];
@@ -634,7 +634,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        private int GetOffset_broadcasted(params int[] indices)
+        private readonly int GetOffset_broadcasted(params int[] indices)
         {
             int offset;
             var vi = ViewInfo;
@@ -704,7 +704,7 @@ namespace NumSharp
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        private int GetOffset_broadcasted_1D(int index)
+        private readonly int GetOffset_broadcasted_1D(int index)
         {
             int offset;
             var vi = ViewInfo;
@@ -775,7 +775,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public (Shape Shape, int Offset) GetSubshape(params int[] indicies)
+        public readonly (Shape Shape, int Offset) GetSubshape(params int[] indicies)
         {
             if (indicies.Length == 0)
                 return (this, 0);
@@ -853,7 +853,7 @@ namespace NumSharp
         /// <param name="offset">the index if you would iterate from 0 to shape.size in row major order</param>
         /// <returns></returns>
         [MethodImpl((MethodImplOptions)768)]
-        public int[] GetCoordinates(int offset)
+        public readonly int[] GetCoordinates(int offset)
         {
             int[] coords = null;
 
@@ -903,7 +903,7 @@ namespace NumSharp
         /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
         /// <remarks>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</remarks>
         [MethodImpl((MethodImplOptions)768)]
-        public int[] GetCoordinatesFromAbsoluteIndex(int offset)
+        public readonly int[] GetCoordinatesFromAbsoluteIndex(int offset)
         {
             if (!IsSliced)
                 return GetCoordinates(offset);
@@ -1095,11 +1095,11 @@ namespace NumSharp
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape Slice(string slicing_notation) =>
+        public readonly Shape Slice(string slicing_notation) =>
             this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
         [MethodImpl((MethodImplOptions)768)]
-        public Shape Slice(params Slice[] input_slices)
+        public readonly Shape Slice(params Slice[] input_slices)
         {
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
@@ -1200,14 +1200,14 @@ namespace NumSharp
 
         #region Deconstructor
 
-        public void Deconstruct(out int dim1, out int dim2)
+        public readonly void Deconstruct(out int dim1, out int dim2)
         {
             var dims = this.dimensions;
             dim1 = dims[0];
             dim2 = dims[1];
         }
 
-        public void Deconstruct(out int dim1, out int dim2, out int dim3)
+        public readonly void Deconstruct(out int dim1, out int dim2, out int dim3)
         {
             var dims = this.dimensions;
             dim1 = dims[0];
@@ -1215,7 +1215,7 @@ namespace NumSharp
             dim3 = dims[2];
         }
 
-        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4)
+        public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4)
         {
             var dims = this.dimensions;
             dim1 = dims[0];
@@ -1224,7 +1224,7 @@ namespace NumSharp
             dim4 = dims[3];
         }
 
-        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5)
+        public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5)
         {
             var dims = this.dimensions;
             dim1 = dims[0];
@@ -1234,7 +1234,7 @@ namespace NumSharp
             dim5 = dims[4];
         }
 
-        public void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5, out int dim6)
+        public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5, out int dim6)
         {
             var dims = this.dimensions;
             dim1 = dims[0];
@@ -1275,7 +1275,7 @@ namespace NumSharp
             return !(a == b);
         }
 
-        public override bool Equals(object obj)
+        public override readonly bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj))
             {
@@ -1293,7 +1293,7 @@ namespace NumSharp
         /// <summary>Indicates whether the current object is equal to another object of the same type.</summary>
         /// <param name="other">An object to compare with this object.</param>
         /// <returns>true if the current object is equal to the <paramref name="other">other</paramref> parameter; otherwise, false.</returns>
-        public bool Equals(Shape other)
+        public readonly bool Equals(Shape other)
         {
             if ((_hashCode == 0 && _hashCode == other._hashCode) || dimensions == null && other.dimensions == null) //they are empty.
                 return true;
@@ -1361,14 +1361,14 @@ namespace NumSharp
 
         /// <summary>Creates a new object that is a copy of the current instance.</summary>
         /// <returns>A new object that is a copy of this instance.</returns>
-        object ICloneable.Clone() =>
+        readonly object ICloneable.Clone() =>
             Clone(true, false, false);
 
         /// <summary>
         ///     Creates a complete copy of this Shape.
         /// </summary>
         /// <param name="deep">Should make a complete deep clone or a shallow if false.</param>
-        public Shape Clone(bool deep = true, bool unview = false, bool unbroadcast = false)
+        public readonly Shape Clone(bool deep = true, bool unview = false, bool unbroadcast = false)
         {
             if (IsEmpty)
                 return default;
@@ -1406,7 +1406,7 @@ namespace NumSharp
         ///     Cleans ViewInfo and returns a newly constructed.
         /// </summary>
         /// <returns></returns>
-        public Shape Clean()
+        public readonly Shape Clean()
         {
             if (IsScalar)
                 return NewScalar();

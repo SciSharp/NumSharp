@@ -20,7 +20,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         /// <param name="unsafe">When true, then guards are skipped.</param>
         [MethodImpl((MethodImplOptions)768)]
-        public Shape Reshape(Shape newShape, bool @unsafe = true)
+        public readonly Shape Reshape(Shape newShape, bool @unsafe = true)
         {
             if (IsBroadcasted)
             {
@@ -53,7 +53,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         [MethodImpl((MethodImplOptions)768)]
-        private void _reshapeBroadcast(ref Shape newShape, bool @unsafe = true)
+        private readonly void _reshapeBroadcast(ref Shape newShape, bool @unsafe = true)
         {
             //handle -1 in reshape
             _inferMissingDimension(ref newShape);
@@ -75,7 +75,7 @@ namespace NumSharp
         }
 
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        private void _inferMissingDimension(ref Shape shape)
+        private readonly void _inferMissingDimension(ref Shape shape)
         {
             var indexOfNegOne = -1;
             int product = 1;
@@ -148,7 +148,7 @@ namespace NumSharp
         /// <param name="axis"></param>
         /// <returns></returns>
         [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
-        public Shape ExpandDimension(int axis)
+        public readonly Shape ExpandDimension(int axis)
         {
             Shape ret;
             if (IsScalar)
