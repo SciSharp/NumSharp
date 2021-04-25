@@ -53,7 +53,7 @@ namespace NumSharp.Backends
             //prepare ret
             var ret = new NDArray(retType, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new NDCoordinatesIncrementor(ref axisedShape);
+            var iterRet = new ValueNDCoordinatesIncrementor(ref axisedShape);
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
 

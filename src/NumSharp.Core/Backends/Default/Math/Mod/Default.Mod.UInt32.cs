@@ -76,7 +76,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -90,7 +90,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -99,7 +99,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -155,7 +155,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -169,7 +169,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -178,7 +178,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -210,7 +210,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -233,7 +233,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -265,7 +265,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -279,7 +279,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -288,7 +288,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -320,7 +320,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -334,7 +334,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -343,7 +343,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -375,7 +375,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -389,7 +389,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -398,7 +398,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -430,7 +430,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -444,7 +444,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -453,7 +453,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -485,7 +485,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -499,7 +499,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -508,7 +508,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -540,7 +540,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -554,7 +554,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -563,7 +563,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -595,7 +595,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -609,7 +609,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -618,7 +618,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -650,7 +650,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -664,7 +664,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -673,7 +673,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -705,7 +705,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -719,7 +719,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -728,7 +728,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -760,7 +760,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -774,7 +774,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -783,7 +783,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -833,7 +833,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -847,7 +847,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -856,7 +856,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -888,7 +888,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -902,7 +902,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -911,7 +911,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -943,7 +943,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -957,7 +957,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -966,7 +966,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -998,7 +998,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1012,7 +1012,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1021,7 +1021,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1053,7 +1053,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1067,7 +1067,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1076,7 +1076,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1108,7 +1108,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1122,7 +1122,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1131,7 +1131,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1163,7 +1163,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1177,7 +1177,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1186,7 +1186,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1218,7 +1218,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1232,7 +1232,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1241,7 +1241,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1273,7 +1273,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1287,7 +1287,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1296,7 +1296,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1328,7 +1328,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1342,7 +1342,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1351,7 +1351,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1383,7 +1383,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1397,7 +1397,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1406,7 +1406,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1438,7 +1438,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1452,7 +1452,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1461,7 +1461,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1511,7 +1511,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1525,7 +1525,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1534,7 +1534,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1566,7 +1566,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1580,7 +1580,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1589,7 +1589,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1621,7 +1621,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1635,7 +1635,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1644,7 +1644,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1676,7 +1676,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1690,7 +1690,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1699,7 +1699,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1731,7 +1731,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1745,7 +1745,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1754,7 +1754,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1786,7 +1786,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1800,7 +1800,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1809,7 +1809,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1841,7 +1841,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1855,7 +1855,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1864,7 +1864,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1896,7 +1896,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1910,7 +1910,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1919,7 +1919,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -1951,7 +1951,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -1965,7 +1965,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -1974,7 +1974,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2006,7 +2006,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2020,7 +2020,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2029,7 +2029,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2061,7 +2061,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2075,7 +2075,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2084,7 +2084,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2116,7 +2116,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2130,7 +2130,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2139,7 +2139,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2189,7 +2189,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2203,7 +2203,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2212,7 +2212,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2244,7 +2244,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2258,7 +2258,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2267,7 +2267,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2299,7 +2299,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2313,7 +2313,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2322,7 +2322,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2354,7 +2354,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2368,7 +2368,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2377,7 +2377,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2409,7 +2409,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2423,7 +2423,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2432,7 +2432,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2464,7 +2464,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2478,7 +2478,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2487,7 +2487,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2519,7 +2519,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2533,7 +2533,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2542,7 +2542,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2574,7 +2574,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2588,7 +2588,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2597,7 +2597,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2629,7 +2629,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2643,7 +2643,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2652,7 +2652,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2684,7 +2684,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2698,7 +2698,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2707,7 +2707,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2739,7 +2739,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2753,7 +2753,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2762,7 +2762,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2794,7 +2794,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2808,7 +2808,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2817,7 +2817,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2867,7 +2867,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2881,7 +2881,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2890,7 +2890,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2922,7 +2922,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2936,7 +2936,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -2945,7 +2945,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -2977,7 +2977,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -2991,7 +2991,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3000,7 +3000,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3032,7 +3032,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3046,7 +3046,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3055,7 +3055,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3087,7 +3087,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3101,7 +3101,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3110,7 +3110,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3142,7 +3142,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3156,7 +3156,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3165,7 +3165,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3197,7 +3197,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3211,7 +3211,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3220,7 +3220,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3252,7 +3252,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3266,7 +3266,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3275,7 +3275,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3307,7 +3307,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3321,7 +3321,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3330,7 +3330,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3362,7 +3362,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3376,7 +3376,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3385,7 +3385,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3417,7 +3417,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3431,7 +3431,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3440,7 +3440,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3472,7 +3472,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3486,7 +3486,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3495,7 +3495,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3545,7 +3545,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3559,7 +3559,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3568,7 +3568,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3600,7 +3600,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3614,7 +3614,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3623,7 +3623,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3655,7 +3655,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3669,7 +3669,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3678,7 +3678,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3710,7 +3710,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3724,7 +3724,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3733,7 +3733,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3765,7 +3765,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3779,7 +3779,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3788,7 +3788,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3820,7 +3820,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3834,7 +3834,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3843,7 +3843,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3875,7 +3875,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3889,7 +3889,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3898,7 +3898,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3930,7 +3930,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3944,7 +3944,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -3953,7 +3953,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -3985,7 +3985,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -3999,7 +3999,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4008,7 +4008,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4040,7 +4040,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4054,7 +4054,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4063,7 +4063,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4095,7 +4095,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4109,7 +4109,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4118,7 +4118,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4150,7 +4150,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4164,7 +4164,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4173,7 +4173,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4223,7 +4223,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4237,7 +4237,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4246,7 +4246,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4278,7 +4278,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4292,7 +4292,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4301,7 +4301,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4333,7 +4333,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4347,7 +4347,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4356,7 +4356,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4388,7 +4388,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4402,7 +4402,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4411,7 +4411,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4443,7 +4443,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4457,7 +4457,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4466,7 +4466,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4498,7 +4498,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4512,7 +4512,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4521,7 +4521,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4553,7 +4553,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4567,7 +4567,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4576,7 +4576,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4608,7 +4608,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4622,7 +4622,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4631,7 +4631,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4663,7 +4663,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4677,7 +4677,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4686,7 +4686,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4718,7 +4718,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4732,7 +4732,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4741,7 +4741,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4773,7 +4773,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4787,7 +4787,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4796,7 +4796,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4828,7 +4828,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4842,7 +4842,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4851,7 +4851,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4901,7 +4901,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4915,7 +4915,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4924,7 +4924,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -4956,7 +4956,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -4970,7 +4970,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -4979,7 +4979,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5011,7 +5011,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5025,7 +5025,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5034,7 +5034,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5066,7 +5066,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5080,7 +5080,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5089,7 +5089,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5121,7 +5121,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5135,7 +5135,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5144,7 +5144,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5176,7 +5176,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5190,7 +5190,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5199,7 +5199,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5231,7 +5231,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5245,7 +5245,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5254,7 +5254,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5286,7 +5286,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5300,7 +5300,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5309,7 +5309,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5341,7 +5341,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5355,7 +5355,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5364,7 +5364,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5396,7 +5396,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5410,7 +5410,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5419,7 +5419,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5451,7 +5451,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5465,7 +5465,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5474,7 +5474,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5506,7 +5506,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5520,7 +5520,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5529,7 +5529,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5579,7 +5579,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5593,7 +5593,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5602,7 +5602,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5634,7 +5634,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5648,7 +5648,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5657,7 +5657,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5689,7 +5689,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5703,7 +5703,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5712,7 +5712,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5744,7 +5744,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5758,7 +5758,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5767,7 +5767,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5799,7 +5799,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5813,7 +5813,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5822,7 +5822,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5854,7 +5854,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5868,7 +5868,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5877,7 +5877,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5909,7 +5909,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5923,7 +5923,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5932,7 +5932,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -5964,7 +5964,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -5978,7 +5978,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -5987,7 +5987,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6019,7 +6019,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6033,7 +6033,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6042,7 +6042,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6074,7 +6074,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6088,7 +6088,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6097,7 +6097,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6129,7 +6129,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6143,7 +6143,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6152,7 +6152,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6184,7 +6184,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6198,7 +6198,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6207,7 +6207,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6257,7 +6257,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6271,7 +6271,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6280,7 +6280,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6312,7 +6312,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6326,7 +6326,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6335,7 +6335,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6367,7 +6367,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6381,7 +6381,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6390,7 +6390,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6422,7 +6422,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6436,7 +6436,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6445,7 +6445,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6477,7 +6477,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6491,7 +6491,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6500,7 +6500,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6532,7 +6532,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6546,7 +6546,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6555,7 +6555,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6587,7 +6587,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6601,7 +6601,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6610,7 +6610,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6642,7 +6642,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6656,7 +6656,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6665,7 +6665,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6697,7 +6697,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6711,7 +6711,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6720,7 +6720,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6752,7 +6752,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6766,7 +6766,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6775,7 +6775,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6807,7 +6807,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6821,7 +6821,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6830,7 +6830,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6862,7 +6862,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6876,7 +6876,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6885,7 +6885,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6935,7 +6935,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -6949,7 +6949,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -6958,7 +6958,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -6990,7 +6990,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7004,7 +7004,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7013,7 +7013,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7045,7 +7045,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7059,7 +7059,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7068,7 +7068,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7100,7 +7100,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7114,7 +7114,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7123,7 +7123,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7155,7 +7155,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7169,7 +7169,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7178,7 +7178,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7210,7 +7210,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7224,7 +7224,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7233,7 +7233,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7265,7 +7265,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7279,7 +7279,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7288,7 +7288,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7320,7 +7320,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7334,7 +7334,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7343,7 +7343,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7375,7 +7375,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7389,7 +7389,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7398,7 +7398,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7430,7 +7430,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7444,7 +7444,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7453,7 +7453,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7485,7 +7485,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7499,7 +7499,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7508,7 +7508,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7540,7 +7540,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7554,7 +7554,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7563,7 +7563,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7613,7 +7613,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7627,7 +7627,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7636,7 +7636,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7668,7 +7668,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7682,7 +7682,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7691,7 +7691,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7723,7 +7723,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7737,7 +7737,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7746,7 +7746,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7778,7 +7778,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7792,7 +7792,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7801,7 +7801,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7833,7 +7833,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7847,7 +7847,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7856,7 +7856,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7888,7 +7888,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7902,7 +7902,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7911,7 +7911,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7943,7 +7943,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -7957,7 +7957,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -7966,7 +7966,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -7998,7 +7998,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -8012,7 +8012,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -8021,7 +8021,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -8053,7 +8053,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -8067,7 +8067,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -8076,7 +8076,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -8108,7 +8108,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -8122,7 +8122,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -8131,7 +8131,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -8163,7 +8163,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -8177,7 +8177,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -8186,7 +8186,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;
@@ -8218,7 +8218,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
@@ -8232,7 +8232,7 @@ namespace NumSharp.Backends
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
@@ -8241,7 +8241,7 @@ namespace NumSharp.Backends
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                var incr = new ValueNDCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 Func<int[], int> rightOffset = rightshape.GetOffset;
                                 Func<int[], int> leftOffset = leftshape.GetOffset;

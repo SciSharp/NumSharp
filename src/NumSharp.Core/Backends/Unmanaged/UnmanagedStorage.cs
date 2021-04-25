@@ -1364,7 +1364,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                var incr = new NDCoordinatesIncrementor(Shape.dimensions);
+                var incr = new ValueNDCoordinatesIncrementor(Shape.dimensions);
                 int[] current = incr.Index;
                 int i = 0;
                 ref Shape shape = ref ShapeReference;

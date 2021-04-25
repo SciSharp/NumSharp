@@ -21,7 +21,7 @@ namespace NumSharp.Backends
             {
                 var addr = (bool*)nd.Address;
                 var shape = nd.Shape;
-                var incr = new NDCoordinatesIncrementor(shape.dimensions);
+                var incr = new ValueNDCoordinatesIncrementor(shape.dimensions);
                 do
                 {
                     if (!(*(addr + shape.GetOffset(incr.Index))))

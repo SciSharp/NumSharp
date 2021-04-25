@@ -35,7 +35,7 @@ namespace NumSharp
             var iter = this.AsIterator<T>();
             var hasNext = iter.HasNext;
             var next = iter.MoveNext;
-            var coorditer = new NDCoordinatesIncrementor(shape);
+            var coorditer = new ValueNDCoordinatesIncrementor(shape);
             var indices = coorditer.Index;
 
             while (hasNext())

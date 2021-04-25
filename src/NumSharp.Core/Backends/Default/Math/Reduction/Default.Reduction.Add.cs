@@ -92,7 +92,7 @@ namespace NumSharp.Backends
 
             //prepare iterators
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new NDCoordinatesIncrementor(ref axedShape);
+            var iterRet = new ValueNDCoordinatesIncrementor(ref axedShape);
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
 

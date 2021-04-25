@@ -36,7 +36,7 @@ namespace NumSharp.Backends
                     
                     //iterate
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -59,7 +59,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -88,7 +88,7 @@ namespace NumSharp.Backends
                     
                     //iterate
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -132,7 +132,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -176,7 +176,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -198,7 +198,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -220,7 +220,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -242,7 +242,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -264,7 +264,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -286,7 +286,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -308,7 +308,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {
@@ -330,7 +330,7 @@ namespace NumSharp.Backends
                     Shape retShape = ret.Shape;
                     
 		            var ret_address = (bool*)ret.Address;
-                    var incr = new NDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
+                    var incr = new ValueNDCoordinatesIncrementor(BroadcastedLeftShape.dimensions); //doesn't matter which side it is.
                     int[] current = incr.Index;
                     do
                     {

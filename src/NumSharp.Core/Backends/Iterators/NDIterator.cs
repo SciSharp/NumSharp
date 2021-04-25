@@ -209,7 +209,7 @@ namespace NumSharp
                     case IteratorType.Tensor:
                     {
                         var hasNext = new Reference<bool>(true);
-                        var iterator = new NDCoordinatesIncrementor(ref shape, _ => hasNext.Value = false);
+                        var iterator = new ValueNDCoordinatesIncrementor(ref shape, delegate(ref ValueNDCoordinatesIncrementor _) { hasNext.Value = false; });
                         Func<int[], int> getOffset = shape.GetOffset;
                         var index = iterator.Index;
 
@@ -331,7 +331,7 @@ namespace NumSharp
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
                     {
-                        var iterator = new NDCoordinatesIncrementor(ref shape, incr => incr.Reset());
+                        var iterator = new ValueNDCoordinatesIncrementor(ref shape, delegate(ref ValueNDCoordinatesIncrementor incr) { incr.Reset(); });
                         var index = iterator.Index;
                         Func<int[], int> getOffset = shape.GetOffset;
                         MoveNext = () =>

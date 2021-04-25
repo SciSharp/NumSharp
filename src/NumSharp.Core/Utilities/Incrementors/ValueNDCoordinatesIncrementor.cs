@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
         public ValueNDCoordinatesIncrementor(ref Shape shape)
         {
             if (shape.IsEmpty || shape.size == 0)
-                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementor with an empty shape.");
 
             dimensions = shape.IsScalar ? new[] {1} : shape.dimensions;
             Index = new int[dimensions.Length];
@@ -32,7 +32,7 @@ namespace NumSharp.Utilities
         public ValueNDCoordinatesIncrementor(int[] dims)
         {
             if (dims == null)
-                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementor with an empty shape.");
 
             if (dims.Length == 0)
                 dims = new int[] {1};
@@ -99,7 +99,7 @@ namespace NumSharp.Utilities
         public ValueNDCoordinatesIncrementorAutoResetting(ref Shape shape)
         {
             if (shape.IsEmpty || shape.size == 0)
-                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementorAutoResetting with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementorAutoResetting with an empty shape.");
 
             dimensions = shape.dimensions;
             Index = new int[dimensions.Length];
@@ -109,7 +109,7 @@ namespace NumSharp.Utilities
         public ValueNDCoordinatesIncrementorAutoResetting(int[] dims)
         {
             if (dims == null)
-                throw new InvalidOperationException("Can't construct NDCoordinatesIncrementorAutoResetting with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementorAutoResetting with an empty shape.");
 
             if (dims.Length == 0)
                 dims = new int[] {1};

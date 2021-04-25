@@ -4,7 +4,7 @@ namespace NumSharp.Utilities
 {
     public class NDOffsetIncrementor
     {
-        private readonly NDCoordinatesIncrementor incr;
+        private readonly ValueNDCoordinatesIncrementor incr;
         private readonly int[] index;
         private bool hasNext;
         private readonly Shape shape;
@@ -12,7 +12,7 @@ namespace NumSharp.Utilities
         public NDOffsetIncrementor(Shape shape)
         {
             this.shape = shape;
-            incr = new NDCoordinatesIncrementor(shape.dimensions);
+            incr = new ValueNDCoordinatesIncrementor(shape.dimensions);
             index = incr.Index;
             hasNext = true;
         }
@@ -56,14 +56,14 @@ namespace NumSharp.Utilities
 
     public class NDOffsetIncrementorAutoresetting
     {
-        private readonly NDCoordinatesIncrementor incr;
+        private readonly ValueNDCoordinatesIncrementor incr;
         private readonly int[] index;
         private readonly Shape shape;
 
         public NDOffsetIncrementorAutoresetting(Shape shape)
         {
             this.shape = shape;
-            incr = new NDCoordinatesIncrementor(shape.dimensions, incrementor => incrementor.Reset());
+            incr = new ValueNDCoordinatesIncrementor(shape.dimensions, (ref ValueNDCoordinatesIncrementor incrementor) => incrementor.Reset());
             index = incr.Index;
         }
 
