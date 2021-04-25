@@ -13,7 +13,7 @@ namespace NumSharp
         /// </summary>
         public unsafe _Unsafe Unsafe => new _Unsafe(this);
 
-        public unsafe struct _Unsafe
+        public readonly unsafe struct _Unsafe
         {
             private readonly NDArray _this;
 
@@ -129,9 +129,9 @@ namespace NumSharp
             ///     Provides the ability to return a pin to the memory address of NDArray.
             /// </summary>
             /// <remarks>Possible only when the ndarray is not sliced.</remarks>
-            public unsafe _Pinning Pin => new _Pinning(_this);
+            public readonly unsafe _Pinning Pin => new _Pinning(_this);
 
-            public struct _Pinning
+            public readonly struct _Pinning
             {
                 private readonly NDArray _this;
                 internal _Pinning(NDArray @this) => _this = @this;
