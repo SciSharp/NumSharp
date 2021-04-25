@@ -19,7 +19,7 @@ namespace NumSharp.Benchmark.Unmanaged
     public class Incrementors
     {
         private Shape shape;
-        private NDOffsetIncrementor iter;
+        private ValueOffsetIncrementor iter;
 
         [GlobalSetup]
         public void Setup()
@@ -27,7 +27,7 @@ namespace NumSharp.Benchmark.Unmanaged
             var _ = ScalarMemoryPool.Instance;
             var __ = InfoOf<byte>.Size;
             shape = new Shape(1, 1, 100_000);
-            iter = new NDOffsetIncrementor(shape);
+            iter = new ValueOffsetIncrementor(shape);
         }
 
         [IterationCleanup]

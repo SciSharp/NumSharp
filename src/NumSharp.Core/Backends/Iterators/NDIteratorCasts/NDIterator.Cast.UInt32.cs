@@ -127,7 +127,7 @@ namespace NumSharp
 
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementor(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                        var iterator = new ValueOffsetIncrementor(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
                         MoveNext = () => convert(*((UInt32*)localBlock.Address + iterator.Next()));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         Reset = () => iterator.Reset();
@@ -240,7 +240,7 @@ namespace NumSharp
                         break;
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementorAutoresetting(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                        var iterator = new ValueOffsetIncrementorAutoresetting(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
                         MoveNext = () => convert(*((UInt32*)localBlock.Address + iterator.Next()));
                         MoveNextReference = () => throw new NotSupportedException("Unable to return references during iteration when casting is involved.");
                         HasNext = () => true;

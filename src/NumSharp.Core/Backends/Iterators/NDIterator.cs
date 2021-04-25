@@ -387,7 +387,7 @@ namespace NumSharp
                         break;
                     case IteratorType.Matrix:
                     case IteratorType.Tensor:
-                        var iterator = new NDOffsetIncrementorAutoresetting(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
+                        var iterator = new ValueOffsetIncrementorAutoresetting(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
                         MoveNext = () => *((TOut*)localBlock.Address + iterator.Next());
                         MoveNextReference = () => ref Unsafe.AsRef<TOut>(((TOut*)localBlock.Address + iterator.Next()));
                         HasNext = () => true;
